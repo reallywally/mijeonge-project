@@ -1,0 +1,304 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=IBM+Plex+Sans+KR:wght@400;500;600&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #9a5a2c; } a:hover { color: #23201c; }
+    input { font-family: inherit; font-size: 14px; color: #23201c; }
+    input::placeholder { color: #a89f92; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; overflow: hidden;">
+
+  <div style="width: 262px; flex-shrink: 0; background: #f4f1ea; border-right: 1px solid #e5dfd5; display: flex; flex-direction: column; gap: 20px; padding: 24px 18px;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <div style="width: 20px; height: 20px; border: 1.5px solid #23201c; border-radius: 2px;"></div>
+      <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">회의록</div>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14px; font-weight: 500;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14"></path>
+        <path d="M5 12h14"></path>
+      </svg>
+      <span>새 회의</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">최근 회의</div>
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="display: flex; flex-direction: column; gap: 5px; min-height: 44px; justify-content: center; padding: 10px 11px; border-radius: 4px;">
+          <div style="font-size: 13.5px; line-height: 1.35;">3월 2주차 제품 회의</div>
+          <div style="font-size: 11.5px; color: #8c847a;">3월 12일</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 5px; min-height: 44px; justify-content: center; padding: 10px 11px; border-radius: 4px;">
+          <div style="font-size: 13.5px; line-height: 1.35;">결제 장애 회고</div>
+          <div style="font-size: 11.5px; color: #8c847a;">3월 8일</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 5px; min-height: 44px; justify-content: center; padding: 10px 11px; border-radius: 4px;">
+          <div style="font-size: 13.5px; line-height: 1.35;">1분기 로드맵 점검</div>
+          <div style="font-size: 11.5px; color: #8c847a;">3월 5일</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; overflow: hidden; display: flex; justify-content: center; padding: 64px 30px 0;">
+    <div style="width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 30px;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 32px; font-weight: 700; letter-spacing: -0.015em;">새 회의</div>
+        <div style="font-size: 14px; line-height: 1.7; color: #57514a;">녹음을 올려서 요약을 받거나, 회의 중에 직접 적으면서 정리할 수 있습니다.</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <div onClick="{{ pickUpload }}" style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 5px; cursor: pointer; background: {{ upBg }}; border: 1.5px solid {{ upBc }};">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{ upIcon }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 11v2"></path>
+            <path d="M8 7v10"></path>
+            <path d="M12 4v16"></path>
+            <path d="M16 8v8"></path>
+            <path d="M20 10v4"></path>
+          </svg>
+          <div style="font-size: 15px; font-weight: 600;">녹음 업로드</div>
+          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a;">m4a · mp3 · wav, 최대 3시간. 화자를 나눠 요약과 결정사항을 뽑아냅니다.</div>
+        </div>
+        <div onClick="{{ pickWrite }}" style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 5px; cursor: pointer; background: {{ wrBg }}; border: 1.5px solid {{ wrBc }};">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{ wrIcon }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path>
+            <path d="M14 6l3 3"></path>
+          </svg>
+          <div style="font-size: 15px; font-weight: 600;">직접 작성</div>
+          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a;">회의 중에 적으면 옆에서 결정된 것과 못 정한 것을 실시간으로 정리합니다.</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ isUpload }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+
+          <sc-if value="{{ phEmpty }}" hint-placeholder-val="{{ true }}">
+            <div onClick="{{ pickFile }}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; height: 208px; border: 1.5px dashed #d6cec1; border-radius: 5px; background: #fdfbf7; cursor: pointer;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 16V4"></path>
+                <path d="M7 9l5-5 5 5"></path>
+                <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"></path>
+              </svg>
+              <div style="font-size: 14px; color: #57514a;">파일을 끌어다 놓거나 클릭해서 선택하세요</div>
+              <div style="font-size: 12px; color: #a89f92;">회의 하나에 파일 하나</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ phPicked }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+              <div style="display: flex; align-items: center; gap: 13px; padding: 15px 16px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 4px; background: #f0ece4;">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 10v4"></path>
+                    <path d="M10 6v12"></path>
+                    <path d="M14 8v8"></path>
+                    <path d="M18 11v2"></path>
+                  </svg>
+                </div>
+                <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                  <div style="font-size: 14px; font-weight: 500;">2026-03-12_제품회의.m4a</div>
+                  <div style="font-size: 12px; color: #8c847a;">52분 14초 · 48.2 MB</div>
+                </div>
+                <div onClick="{{ clearFile }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid #e5dfd5; border-radius: 4px; cursor: pointer;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 6l12 12"></path>
+                    <path d="M18 6L6 18"></path>
+                  </svg>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 11px; padding: 16px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
+                <div onClick="{{ toggleDiar }}" style="display: flex; align-items: center; gap: 11px; min-height: 44px; cursor: pointer;">
+                  <div style="width: 38px; height: 22px; flex-shrink: 0; border-radius: 11px; padding: 2px; display: flex; background: {{ diarTrack }};">
+                    <div style="width: 18px; height: 18px; border-radius: 50%; background: #ffffff; margin-left: {{ diarShift }};"></div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 3px;">
+                    <div style="font-size: 13.5px;">화자 나누기</div>
+                    <div style="font-size: 12px; color: #8c847a;">누가 무슨 말을 했는지 구분해서 근거로 붙입니다</div>
+                  </div>
+                </div>
+                <div style="height: 1px; background: #f0ece4;"></div>
+                <div style="display: flex; align-items: center; gap: 11px; min-height: 44px;">
+                  <div style="display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; font-size: 13px; color: #57514a;">
+                    <span>한국어</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 9l6 6 6-6"></path>
+                    </svg>
+                  </div>
+                  <div style="font-size: 12px; color: #8c847a;">녹음 언어</div>
+                </div>
+              </div>
+
+              <div onClick="{{ start }}" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14.5px; font-weight: 500; cursor: pointer;">
+                <span>요약 만들기</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ phBusy }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
+              <div style="font-size: 13.5px; color: #57514a;">2026-03-12_제품회의.m4a</div>
+              <div style="display: flex; flex-direction: column; gap: 13px;">
+                <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{ st.bg }}; border: 1.5px solid {{ st.bc }};">
+                      <sc-if value="{{ st.done }}" hint-placeholder-val="{{ true }}">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M20 6L9 17l-5-5"></path>
+                        </svg>
+                      </sc-if>
+                      <sc-if value="{{ st.active }}" hint-placeholder-val="{{ true }}">
+                        <div style="width: 7px; height: 7px; border-radius: 50%; background: {{ accent }};"></div>
+                      </sc-if>
+                    </div>
+                    <div style="font-size: 14px; color: {{ st.fg }};">{{ st.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ phDone }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
+              <div style="display: flex; align-items: center; gap: 9px;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: oklch(0.50 0.08 158);">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5"></path>
+                  </svg>
+                </div>
+                <div style="font-size: 14.5px; font-weight: 600;">요약이 만들어졌습니다</div>
+              </div>
+              <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 15px; line-height: 1.85; color: #33302b; text-wrap: pretty;">결제 실패 재시도 정책을 지수 백오프로 바꾸기로 했고, 온보딩 개편은 3월 말 리서치 결과 이후로 미뤘습니다.</div>
+              <div style="display: flex; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 15px; background: oklch(0.95 0.03 158); font-size: 12.5px; color: oklch(0.42 0.07 158);">
+                  <span>결정 3건</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 15px; background: oklch(0.95 0.03 55); font-size: 12.5px; color: {{ accent }};">
+                  <span>미결정 2건</span>
+                </div>
+                <div style="display: flex; align-items: center; height: 30px; padding: 0 11px; border-radius: 15px; background: #f0ece4; font-size: 12.5px; color: #57514a;">
+                  <span>발언 168건</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <div style="display: flex; align-items: center; justify-content: center; height: 44px; padding: 0 18px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14px; font-weight: 500; cursor: pointer;">회의록 열기</div>
+                <div onClick="{{ reset }}" style="display: flex; align-items: center; justify-content: center; height: 44px; padding: 0 16px; border: 1px solid #e5dfd5; border-radius: 4px; font-size: 14px; color: #57514a; cursor: pointer;">다른 파일 올리기</div>
+              </div>
+            </div>
+          </sc-if>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isWrite }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
+            <div style="display: flex; flex-direction: column; gap: 7px;">
+              <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #8c847a;">회의 제목</div>
+              <input placeholder="예: 3월 3주차 제품 회의" style="height: 44px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; outline: none;">
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 7px;">
+                <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #8c847a;">날짜</div>
+                <input placeholder="2026-03-19" style="height: 44px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; outline: none;">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 7px;">
+                <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #8c847a;">참석자</div>
+                <div style="display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4;">
+                  <div style="display: flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 13px; background: #eae4d9; font-size: 12.5px;">김서연</div>
+                  <div style="display: flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 13px; background: #eae4d9; font-size: 12.5px;">박지훈</div>
+                  <input placeholder="이름 추가" style="flex-grow: 1; min-width: 0; height: 26px; border: none; background: transparent; outline: none; font-size: 13px;">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; justify-content: center; height: 46px; padding: 0 20px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14.5px; font-weight: 500; cursor: pointer;">빈 문서로 시작</div>
+            <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a;">적는 동안 오른쪽에서 결정된 것과 못 정한 것을 정리해 줍니다.</div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  componentWillUnmount() {
+    (this.timers || []).forEach(function (t) { clearTimeout(t); });
+    this.timers = [];
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#9a5a2c';
+    var mode = s.mode || 'upload';
+    var phase = s.phase || 'empty';
+    var step = s.step || 0;
+    var diar = s.diar === undefined ? true : !!s.diar;
+
+    var labels = ['음성 인식', '화자 나누기', '요약 작성', '결정·미결정 뽑기'];
+    var steps = labels.map(function (label, i) {
+      var done = i < step;
+      var active = i === step;
+      return {
+        label: label,
+        done: done,
+        active: active,
+        bg: done ? 'oklch(0.50 0.08 158)' : '#ffffff',
+        bc: done ? 'oklch(0.50 0.08 158)' : (active ? accent : '#e5dfd5'),
+        fg: done ? '#57514a' : (active ? '#23201c' : '#a89f92')
+      };
+    });
+
+    return {
+      accent: accent,
+      isUpload: mode === 'upload',
+      isWrite: mode === 'write',
+      upBg: mode === 'upload' ? '#ffffff' : '#fdfbf7',
+      upBc: mode === 'upload' ? accent : '#e5dfd5',
+      upIcon: mode === 'upload' ? accent : '#a89f92',
+      wrBg: mode === 'write' ? '#ffffff' : '#fdfbf7',
+      wrBc: mode === 'write' ? accent : '#e5dfd5',
+      wrIcon: mode === 'write' ? accent : '#a89f92',
+      pickUpload: function () { self.setState({ mode: 'upload' }); },
+      pickWrite: function () { self.setState({ mode: 'write' }); },
+
+      phEmpty: phase === 'empty',
+      phPicked: phase === 'picked',
+      phBusy: phase === 'run',
+      phDone: phase === 'done',
+      steps: steps,
+      diarTrack: diar ? '#23201c' : '#dcd5c9',
+      diarShift: diar ? '16px' : '0px',
+      toggleDiar: function () { self.setState({ diar: !diar }); },
+      pickFile: function () { self.setState({ phase: 'picked' }); },
+      clearFile: function () { self.setState({ phase: 'empty' }); },
+      reset: function () { self.setState({ phase: 'empty', step: 0 }); },
+      start: function () {
+        self.setState({ phase: 'run', step: 0 });
+        self.timers = self.timers || [];
+        [800, 1600, 2500, 3400].forEach(function (ms, i) {
+          self.timers.push(setTimeout(function () {
+            if (i === 3) { self.setState({ phase: 'done', step: 4 }); }
+            else { self.setState({ step: i + 1 }); }
+          }, ms));
+        });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&amp;family=IBM+Plex+Sans+KR:wght@400;500;600&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; }
+    a { color: #3f3f46; } a:hover { color: #18181b; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 820px; background: #faf8f5; color: #2b2b2b; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+
+  <div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 20px; border-bottom: 1.5px solid #2b2b2b;">
+    <div style="width: 22px; height: 22px; border: 1.5px solid #2b2b2b; border-radius: 3px;"></div>
+    <div style="font-family: Gaegu, 'IBM Plex Sans KR', sans-serif; font-size: 21px; font-weight: 700;">회의록</div>
+    <div style="flex-grow: 1;"></div>
+    <div style="width: 132px; height: 26px; border: 1.5px dashed #a8a29e; border-radius: 13px;"></div>
+    <div style="width: 26px; height: 26px; border: 1.5px solid #2b2b2b; border-radius: 50%;"></div>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <div style="width: 236px; flex-shrink: 0; border-right: 1.5px solid #2b2b2b; padding: 18px 16px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-family: Gaegu, 'IBM Plex Sans KR', sans-serif; font-size: 18px; font-weight: 700;">회의 목록</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; flex-direction: column; gap: 7px; padding: 11px; border: 2px solid #2b2b2b; border-radius: 4px; background: #f0ebe3;">
+          <div style="height: 9px; width: 80%; background: #b6b0a8; border-radius: 2px;"></div>
+          <div style="height: 6px; width: 44%; background: #d6d1c9; border-radius: 2px;"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; padding: 11px; border: 1.5px solid #2b2b2b; border-radius: 4px; background: #ffffff;">
+          <div style="height: 9px; width: 66%; background: #d6d3d0; border-radius: 2px;"></div>
+          <div style="height: 6px; width: 40%; background: #e7e5e2; border-radius: 2px;"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; padding: 11px; border: 1.5px solid #2b2b2b; border-radius: 4px; background: #ffffff;">
+          <div style="height: 9px; width: 88%; background: #d6d3d0; border-radius: 2px;"></div>
+          <div style="height: 6px; width: 36%; background: #e7e5e2; border-radius: 2px;"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; padding: 11px; border: 1.5px solid #2b2b2b; border-radius: 4px; background: #ffffff;">
+          <div style="height: 9px; width: 72%; background: #d6d3d0; border-radius: 2px;"></div>
+          <div style="height: 6px; width: 48%; background: #e7e5e2; border-radius: 2px;"></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px; padding: 11px; border: 1.5px solid #2b2b2b; border-radius: 4px; background: #ffffff;">
+          <div style="height: 9px; width: 58%; background: #d6d3d0; border-radius: 2px;"></div>
+          <div style="height: 6px; width: 42%; background: #e7e5e2; border-radius: 2px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; padding: 46px 64px; display: flex; flex-direction: column; gap: 26px;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-family: Gaegu, 'IBM Plex Sans KR', sans-serif; font-size: 36px; font-weight: 700; line-height: 1.15;">제품 로드맵 정기회의</div>
+        <div style="font-size: 13px; color: #78716c;">3월 12일 · 참석 4명 · 52분</div>
+      </div>
+
+      <div style="height: 1.5px; background: #2b2b2b;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-family: Gaegu, 'IBM Plex Sans KR', sans-serif; font-size: 19px; font-weight: 700;">요약</div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div style="height: 10px; width: 100%; background: #ddd9d4; border-radius: 2px;"></div>
+          <div style="height: 10px; width: 96%; background: #ddd9d4; border-radius: 2px;"></div>
+          <div style="height: 10px; width: 91%; background: #ddd9d4; border-radius: 2px;"></div>
+          <div style="height: 10px; width: 58%; background: #ddd9d4; border-radius: 2px;"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <div style="font-family: Gaegu, 'IBM Plex Sans KR', sans-serif; font-size: 19px; font-weight: 700;">결정된 것</div>
+          <div style="font-size: 13px; color: #78716c;">3</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 11px; height: 11px; flex-shrink: 0; background: #2b2b2b; border-radius: 2px;"></div>
+            <div style="height: 10px; flex-grow: 1; max-width: 620px; background: #ddd9d4; border-radius: 2px;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 11px; height: 11px; flex-shrink: 0; background: #2b2b2b; border-radius: 2px;"></div>
+            <div style="height: 10px; flex-grow: 1; max-width: 540px; background: #ddd9d4; border-radius: 2px;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 11px; height: 11px; flex-shrink: 0; background: #2b2b2b; border-radius: 2px;"></div>
+            <div style="height: 10px; flex-grow: 1; max-width: 660px; background: #ddd9d4; border-radius: 2px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <div style="font-family: Gaegu, 'IBM Plex Sans KR', sans-serif; font-size: 19px; font-weight: 700;">아직 못 정한 것</div>
+          <div style="font-size: 13px; color: #78716c;">2</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 11px; height: 11px; flex-shrink: 0; border: 1.5px dashed #2b2b2b; border-radius: 2px;"></div>
+            <div style="height: 10px; flex-grow: 1; max-width: 580px; background: #eae7e3; border-radius: 2px;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 11px; height: 11px; flex-shrink: 0; border: 1.5px dashed #2b2b2b; border-radius: 2px;"></div>
+            <div style="height: 10px; flex-grow: 1; max-width: 500px; background: #eae7e3; border-radius: 2px;"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="position: absolute; right: 32px; bottom: 28px; display: flex; align-items: center; gap: 9px; padding: 12px 20px; border: 1.5px solid #2b2b2b; border-radius: 24px; background: #ffffff;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2b2b2b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-5.5A8 8 0 0 1 11 4h2a8 8 0 0 1 8 8z"></path>
+    </svg>
+    <div style="font-size: 14px;">회의 내용 물어보기</div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
