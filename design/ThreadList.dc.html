@@ -1,0 +1,312 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=IBM+Plex+Sans+KR:wght@400;500;600&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #9a5a2c; } a:hover { color: #23201c; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 11px; padding: 0 22px; border-bottom: 1px solid #e5dfd5;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <div style="width: 19px; height: 19px; border: 1.5px solid #23201c; border-radius: 2px;"></div>
+      <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 18px; font-weight: 700; letter-spacing: -0.01em;">회의록</div>
+    </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6l6 6-6 6"></path>
+    </svg>
+    <div style="display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: #23201c;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8c847a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
+      </svg>
+      <span>결제 안정화</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; cursor: pointer;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="M7 10l5 5 5-5"></path>
+        <path d="M4 20h16"></path>
+      </svg>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13.5px; font-weight: 500; cursor: pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14"></path>
+        <path d="M5 12h14"></path>
+      </svg>
+      <span>회의 추가</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <div style="width: 240px; flex-shrink: 0; border-right: 1px solid #e5dfd5; background: #f8f6f1; display: flex; flex-direction: column; gap: 20px; padding: 22px 16px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 9px 11px; border: 1px solid #d6cec1; border-radius: 4px; background: #ffffff; cursor: pointer;">
+        <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+          <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">프로젝트</div>
+          <div style="font-size: 14px; font-weight: 600; line-height: 1.3;">결제 안정화</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8c847a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M7 9l5-5 5 5"></path>
+          <path d="M7 15l5 5 5-5"></path>
+        </svg>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 4px; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M6 3h9l4 4v14H6z"></path>
+            <path d="M9 9h7"></path>
+            <path d="M9 13h7"></path>
+            <path d="M9 17h4"></path>
+          </svg>
+          <div style="flex-grow: 1; font-size: 14px;">회의록</div>
+          <div style="font-size: 11.5px; color: #8c847a;">8</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 4px; background: #ffffff; border: 1px solid #d6cec1; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#23201c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M4 6h11"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 18h8"></path>
+            <circle cx="19" cy="6" r="2"></circle>
+            <circle cx="16" cy="18" r="2"></circle>
+          </svg>
+          <div style="flex-grow: 1; font-size: 14px; font-weight: 600;">안건</div>
+          <div style="font-size: 11.5px; color: {{ accent }};">{{ openTotal }}</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 4px; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M4 6.5h16V20H4z"></path>
+            <path d="M4 10.5h16"></path>
+            <path d="M8.5 4v4"></path>
+            <path d="M15.5 4v4"></path>
+          </svg>
+          <div style="flex-grow: 1; font-size: 14px;">일정관리</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #e5dfd5;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 11px;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">눈여겨볼 것</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5dfd5; border-left: 3px solid {{ accent }}; border-radius: 4px; background: #fdfbf7;">
+          <div style="font-size: 12.5px; line-height: 1.6; color: #57514a; text-wrap: pretty;">3번 이상 미뤄진 안건이 {{ stuckCount }}건 있습니다.</div>
+          <div onClick="{{ pickStuck }}" style="display: flex; align-items: center; min-height: 30px; font-size: 12px; color: {{ accent }}; cursor: pointer;">그 안건만 보기</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="height: 46px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 26px; border-bottom: 1px solid #e5dfd5;">
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">안건</div>
+        <div style="font-size: 11.5px; color: #a89f92;">총 {{ total }}건</div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; justify-content: center; padding: 26px 26px 0;">
+        <div style="width: 100%; max-width: 880px; display: flex; flex-direction: column; gap: 18px;">
+
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 28px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em;">안건</div>
+            <div style="font-size: 13px; line-height: 1.7; color: #8c847a; text-wrap: pretty;">회의가 아니라 안건 기준으로 봅니다. 한 안건이 여러 회의에 걸쳐 어떻게 움직였는지가 이력 수로 보입니다.</div>
+          </div>
+
+          <div style="display: flex; gap: 6px;">
+            <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+              <div onClick="{{ tb.pick }}" style="display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border: 1px solid {{ tb.bc }}; border-radius: 18px; background: {{ tb.bg }}; font-size: 12.5px; font-weight: {{ tb.weight }}; color: {{ tb.fg }}; cursor: pointer;">
+                <span>{{ tb.label }}</span>
+                <span style="color: {{ tb.numFg }};">{{ tb.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 16px; border-bottom: 1px solid #e5dfd5; background: #f8f6f1; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #8c847a;">
+              <div style="flex-grow: 1; min-width: 0;">안건</div>
+              <div style="width: 128px; flex-shrink: 0;">상태</div>
+              <div style="width: 96px; flex-shrink: 0;">담당자</div>
+              <div style="width: 92px; flex-shrink: 0;">마지막 회의</div>
+              <div style="width: 46px; flex-shrink: 0; text-align: right;">이력</div>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+              <div onClick="{{ r.tap }}" style="display: flex; flex-direction: column; border-bottom: 1px solid #f0ece4; background: {{ r.bg }}; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 16px;">
+                  <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 9px;">
+                    <div style="width: 4px; height: 26px; flex-shrink: 0; border-radius: 2px; background: {{ r.stripe }};"></div>
+                    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                      <div style="font-size: 13.5px; line-height: 1.45; font-weight: {{ r.weight }}; text-wrap: pretty;">{{ r.title }}</div>
+                      <div style="font-size: 11.5px; color: #a89f92;">{{ r.sub }}</div>
+                    </div>
+                  </div>
+                  <div style="width: 128px; flex-shrink: 0;">
+                    <div style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; background: {{ r.badgeBg }}; font-size: 11.5px; color: {{ r.badgeFg }};">
+                      <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.badgeFg }};"></div>
+                      <span>{{ r.badge }}</span>
+                    </div>
+                  </div>
+                  <div style="width: 96px; flex-shrink: 0; font-size: 12.5px; color: {{ r.ownerFg }};">{{ r.owner }}</div>
+                  <div style="width: 92px; flex-shrink: 0; font-size: 12.5px; color: #8c847a;">{{ r.last }}</div>
+                  <div style="width: 46px; flex-shrink: 0; text-align: right; font-size: 12.5px; color: #57514a;">{{ r.hist }}</div>
+                </div>
+                <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; flex-direction: column; gap: 9px; padding: 0 16px 16px 45px;">
+                    <sc-for list="{{ r.trail }}" as="tr" hint-placeholder-count="3">
+                      <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="width: 62px; flex-shrink: 0; font-size: 11.5px; color: #a89f92; padding-top: 3px;">{{ tr.date }}</div>
+                        <div style="display: flex; align-items: center; height: 22px; flex-shrink: 0; padding: 0 8px; border-radius: 3px; background: {{ tr.tagBg }}; font-size: 11px; font-weight: 600; color: {{ tr.tagFg }};">{{ tr.tag }}</div>
+                        <div style="flex-grow: 1; min-width: 0; font-size: 13px; line-height: 1.6; color: {{ tr.fg }}; text-decoration: {{ tr.deco }}; text-wrap: pretty;">{{ tr.text }}</div>
+                      </div>
+                    </sc-for>
+                    <div style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 12.5px; color: #57514a; align-self: flex-start; cursor: pointer;">
+                      <span>안건 전체 이력 보기</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 6l6 6-6 6"></path>
+                      </svg>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noRows }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; align-items: center; justify-content: center; height: 110px; font-size: 13px; color: #8c847a;">해당하는 안건이 없습니다.</div>
+            </sc-if>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  data() {
+    return [
+      { id: 't1', title: '알림 채널을 하나로 합칠지', state: 'open', defers: 3, owner: null, last: '3월 12일', hist: 4,
+        sub: '푸시·이메일·인앱 통합 · 2월 20일에 처음 나옴',
+        trail: [
+          { date: '3월 12일', kind: 'defer', text: '전사 알림 구조 문제라 결제 회의에서 정할 범위가 아니라는 의견' },
+          { date: '3월 5일', kind: 'defer', text: '작업량 추정이 안 되어 미룸' },
+          { date: '2월 20일', kind: 'raise', text: '같은 실패로 푸시와 메일이 따로 나가 사용자가 중복으로 받는다' }
+        ] },
+      { id: 't5', title: '배포 시간대를 트래픽이 낮은 새벽으로 옮길지', state: 'open', defers: 3, owner: null, last: '3월 8일', hist: 3,
+        sub: '온콜 부담 분배가 쟁점 · 1월 8일에 처음 나옴',
+        trail: [
+          { date: '3월 8일', kind: 'defer', text: '팀별 온콜 부담이 달라 합의하지 못함' },
+          { date: '2월 13일', kind: 'defer', text: '이중화 논의에 묻혀 다루지 못함' },
+          { date: '1월 8일', kind: 'raise', text: '장애 여섯 건 중 네 건이 배포 두 시간 안에 발생' }
+        ] },
+      { id: 't4', title: '재시도가 모두 실패했을 때 구독을 자동 해지할지', state: 'open', defers: 1, owner: '박지훈', last: '3월 12일', hist: 2,
+        sub: '약관 검토 필요 · 정책팀 확인 대기',
+        trail: [
+          { date: '3월 12일', kind: 'defer', text: '약관 문제가 걸려 정책팀 확인 후로 보류' },
+          { date: '3월 12일', kind: 'raise', text: '재시도가 모두 실패한 구독을 어떻게 할지 물음' }
+        ] },
+      { id: 't2', title: '결제 재시도 정책', state: 'decided', defers: 0, owner: '김서연', last: '3월 19일', hist: 4,
+        sub: '지수 백오프(1분 → 10분 → 1시간) · 세부 1건',
+        trail: [
+          { date: '3월 19일', kind: 'refine', text: '1시간 시도까지 실패하면 더 재시도하지 않는다' },
+          { date: '3월 12일', kind: 'change', text: '지수 백오프(1분 → 10분 → 1시간)로 한다' },
+          { date: '2월 27일', kind: 'decide', text: '재시도는 결제 건당 최대 3회로 제한한다', dead: true }
+        ] },
+      { id: 't3', title: '결제 실패 알림 발송 시점', state: 'decided', defers: 0, owner: '박지훈', last: '3월 12일', hist: 1,
+        sub: '3회차 재시도 이후에만 발송',
+        trail: [
+          { date: '3월 12일', kind: 'decide', text: '3회차 재시도 이후에만 발송한다' }
+        ] },
+      { id: 't6', title: '커넥션 풀 사용률 80% 임계 알림', state: 'decided', defers: 0, owner: '정하늘', last: '3월 8일', hist: 1,
+        sub: '완료 · 3월 15일 반영됨',
+        trail: [
+          { date: '3월 8일', kind: 'decide', text: '커넥션 풀 사용률 80%에서 알림을 보낸다' }
+        ] },
+      { id: 't7', title: '롤백 절차 문서화와 온콜 교육', state: 'decided', defers: 0, owner: '박지훈', last: '3월 8일', hist: 1,
+        sub: '진행 중 · 3월 20일 기한',
+        trail: [
+          { date: '3월 8일', kind: 'decide', text: '롤백 절차를 문서로 만들고 온콜 교육에 포함한다' }
+        ] }
+    ];
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#9a5a2c';
+    var tab = s.tab || 'all';
+    var all = this.data();
+
+    var TAG = {
+      decide: { label: '결정', bg: 'oklch(0.95 0.03 158)', fg: 'oklch(0.50 0.08 158)' },
+      change: { label: '변경', bg: '#e4e0d6', fg: '#23201c' },
+      refine: { label: '세부', bg: '#eae4d9', fg: '#57514a' },
+      defer: { label: '미룸', bg: '#f4ece3', fg: accent },
+      raise: { label: '제기', bg: '#f4f1ea', fg: '#8c847a' }
+    };
+
+    var opens = all.filter(function (t) { return t.state === 'open'; });
+    var decided = all.filter(function (t) { return t.state === 'decided'; });
+    var stuck = all.filter(function (t) { return t.defers >= 3; });
+
+    var pool = tab === 'open' ? opens : (tab === 'decided' ? decided : (tab === 'stuck' ? stuck : all));
+
+    var rows = pool.map(function (t) {
+      var isOpen = t.state === 'open';
+      var exp = s.row === t.id;
+      return {
+        title: t.title,
+        sub: t.sub,
+        badge: isOpen ? (t.defers + '번 미뤄짐') : '결정됨',
+        badgeBg: isOpen ? '#f4ece3' : 'oklch(0.95 0.03 158)',
+        badgeFg: isOpen ? accent : 'oklch(0.50 0.08 158)',
+        stripe: isOpen ? accent : 'oklch(0.50 0.08 158)',
+        owner: t.owner || '미정',
+        ownerFg: t.owner ? '#23201c' : '#a89f92',
+        last: t.last,
+        hist: t.hist,
+        bg: exp ? '#fdfbf7' : '#ffffff',
+        weight: exp ? 600 : 400,
+        expanded: exp,
+        tap: function () { self.setState({ row: exp ? null : t.id }); },
+        trail: t.trail.map(function (x) {
+          var tg = TAG[x.kind];
+          return { date: x.date, tag: tg.label, tagBg: tg.bg, tagFg: tg.fg, text: x.text,
+            fg: x.dead ? '#a89f92' : '#33302b', deco: x.dead ? 'line-through' : 'none' };
+        })
+      };
+    });
+
+    var mk = function (id, label, n) {
+      var sel = tab === id;
+      return {
+        label: label, n: n,
+        bg: sel ? '#23201c' : '#ffffff',
+        fg: sel ? '#faf8f4' : '#57514a',
+        numFg: sel ? '#c8bfae' : '#a89f92',
+        bc: sel ? '#23201c' : '#e5dfd5',
+        weight: sel ? 600 : 400,
+        pick: function () { self.setState({ tab: id, row: null }); }
+      };
+    };
+
+    return {
+      accent: accent,
+      tabs: [mk('all', '전체', all.length), mk('open', '미결정', opens.length), mk('decided', '결정됨', decided.length), mk('stuck', '3번 이상 미뤄짐', stuck.length)],
+      rows: rows,
+      noRows: rows.length === 0,
+      total: pool.length,
+      openTotal: opens.length,
+      stuckCount: stuck.length,
+      pickStuck: function () { self.setState({ tab: 'stuck', row: null }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
