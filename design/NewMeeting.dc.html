@@ -11,224 +11,357 @@
   <style>
     body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: #9a5a2c; } a:hover { color: #23201c; }
-    input { font-family: inherit; font-size: 14px; color: #23201c; }
+    input { font-family: inherit; font-size: 13.5px; color: #23201c; }
     input::placeholder { color: #a89f92; }
   </style>
 </helmet>
-<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; overflow: hidden;">
+<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; flex-direction: column; overflow: hidden;">
 
-  <div style="width: 262px; flex-shrink: 0; background: #f4f1ea; border-right: 1px solid #e5dfd5; display: flex; flex-direction: column; gap: 20px; padding: 24px 18px;">
-    <div style="display: flex; align-items: center; gap: 9px;">
-      <div style="width: 20px; height: 20px; border: 1.5px solid #23201c; border-radius: 2px;"></div>
-      <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">회의록</div>
-    </div>
-    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14px; font-weight: 500;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 5v14"></path>
-        <path d="M5 12h14"></path>
+  <div style="height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 11px; padding: 0 22px; border-bottom: 1px solid #e5dfd5;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 4px; cursor: pointer;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5"></path>
+        <path d="M11 5l-7 7 7 7"></path>
       </svg>
-      <span>새 회의</span>
     </div>
-    <div style="display: flex; flex-direction: column; gap: 8px;">
-      <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">최근 회의</div>
-      <div style="display: flex; flex-direction: column; gap: 3px;">
-        <div style="display: flex; flex-direction: column; gap: 5px; min-height: 44px; justify-content: center; padding: 10px 11px; border-radius: 4px;">
-          <div style="font-size: 13.5px; line-height: 1.35;">3월 2주차 제품 회의</div>
-          <div style="font-size: 11.5px; color: #8c847a;">3월 12일</div>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 5px; min-height: 44px; justify-content: center; padding: 10px 11px; border-radius: 4px;">
-          <div style="font-size: 13.5px; line-height: 1.35;">결제 장애 회고</div>
-          <div style="font-size: 11.5px; color: #8c847a;">3월 8일</div>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 5px; min-height: 44px; justify-content: center; padding: 10px 11px; border-radius: 4px;">
-          <div style="font-size: 13.5px; line-height: 1.35;">1분기 로드맵 점검</div>
-          <div style="font-size: 11.5px; color: #8c847a;">3월 5일</div>
-        </div>
-      </div>
+    <div style="display: flex; align-items: center; gap: 7px; min-height: 34px; font-size: 13.5px; color: #57514a; cursor: pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8c847a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
+      </svg>
+      <span>{{ projName }}</span>
     </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6l6 6-6 6"></path>
+    </svg>
+    <div style="font-size: 13.5px; color: #23201c;">새 회의</div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 0 9px; height: 24px; border-radius: 12px; background: #f0ece4; font-size: 11.5px; color: #8c847a;">
+      <div style="width: 5px; height: 5px; border-radius: 50%; background: oklch(0.50 0.08 158);"></div>
+      <span>자동 저장됨</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13.5px; font-weight: 500; cursor: pointer;">저장</div>
   </div>
 
-  <div style="flex-grow: 1; min-width: 0; overflow: hidden; display: flex; justify-content: center; padding: 64px 30px 0;">
-    <div style="width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 30px;">
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <div style="width: 240px; flex-shrink: 0; border-right: 1px solid #e5dfd5; background: #f8f6f1; display: flex; flex-direction: column; gap: 20px; padding: 22px 16px; overflow: hidden;">
 
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 32px; font-weight: 700; letter-spacing: -0.015em;">새 회의</div>
-        <div style="font-size: 14px; line-height: 1.7; color: #57514a;">녹음을 올려서 요약을 받거나, 회의 중에 직접 적으면서 정리할 수 있습니다.</div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
-        <div onClick="{{ pickUpload }}" style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 5px; cursor: pointer; background: {{ upBg }}; border: 1.5px solid {{ upBc }};">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{ upIcon }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 11v2"></path>
-            <path d="M8 7v10"></path>
-            <path d="M12 4v16"></path>
-            <path d="M16 8v8"></path>
-            <path d="M20 10v4"></path>
-          </svg>
-          <div style="font-size: 15px; font-weight: 600;">녹음 업로드</div>
-          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a;">m4a · mp3 · wav, 최대 3시간. 화자를 나눠 요약과 결정사항을 뽑아냅니다.</div>
-        </div>
-        <div onClick="{{ pickWrite }}" style="display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 5px; cursor: pointer; background: {{ wrBg }}; border: 1.5px solid {{ wrBc }};">
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="{{ wrIcon }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path>
-            <path d="M14 6l3 3"></path>
-          </svg>
-          <div style="font-size: 15px; font-weight: 600;">직접 작성</div>
-          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a;">회의 중에 적으면 옆에서 결정된 것과 못 정한 것을 실시간으로 정리합니다.</div>
-        </div>
-      </div>
-
-      <sc-if value="{{ isUpload }}" hint-placeholder-val="{{ true }}">
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-
-          <sc-if value="{{ phEmpty }}" hint-placeholder-val="{{ true }}">
-            <div onClick="{{ pickFile }}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; height: 208px; border: 1.5px dashed #d6cec1; border-radius: 5px; background: #fdfbf7; cursor: pointer;">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 16V4"></path>
-                <path d="M7 9l5-5 5 5"></path>
-                <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"></path>
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">작성 방식</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div onClick="{{ pickWrite }}" style="display: flex; flex-direction: column; gap: 7px; padding: 14px; border-radius: 5px; cursor: pointer; background: {{ wrBg }}; border: 1.5px solid {{ wrBc }};">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="{{ wrIcon }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path>
+                <path d="M14 6l3 3"></path>
               </svg>
-              <div style="font-size: 14px; color: #57514a;">파일을 끌어다 놓거나 클릭해서 선택하세요</div>
-              <div style="font-size: 12px; color: #a89f92;">회의 하나에 파일 하나</div>
+              <div style="font-size: 14px; font-weight: 600;">직접 작성</div>
+            </div>
+            <div style="font-size: 12px; line-height: 1.6; color: #8c847a;">회의 중에 적으면서 오른쪽에 정리합니다.</div>
+          </div>
+          <div onClick="{{ pickUpload }}" style="display: flex; flex-direction: column; gap: 7px; padding: 14px; border-radius: 5px; cursor: pointer; background: {{ upBg }}; border: 1.5px solid {{ upBc }};">
+            <div style="display: flex; align-items: center; gap: 9px;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="{{ upIcon }}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 11v2"></path>
+                <path d="M8 7v10"></path>
+                <path d="M12 4v16"></path>
+                <path d="M16 8v8"></path>
+                <path d="M20 10v4"></path>
+              </svg>
+              <div style="font-size: 14px; font-weight: 600;">녹음 업로드</div>
+            </div>
+            <div style="font-size: 12px; line-height: 1.6; color: #8c847a;">끝난 회의의 녹음을 올려 요약을 받습니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #e5dfd5;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">회의 정보</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 11.5px; color: #8c847a;">날짜</div>
+          <div style="display: flex; align-items: center; min-height: 38px; padding: 0 11px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 13.5px;">3월 19일 (목) 오후 2시</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 11.5px; color: #8c847a;">참석자</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <sc-for list="{{ people }}" as="pe" hint-placeholder-count="4">
+              <div onClick="{{ pe.toggle }}" style="display: flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 10px; border-radius: 17px; background: {{ pe.bg }}; border: 1px solid {{ pe.bc }}; font-size: 12.5px; color: {{ pe.fg }}; cursor: pointer;">
+                <span>{{ pe.name }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="height: 46px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 26px; border-bottom: 1px solid #e5dfd5;">
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">회의 내용</div>
+        <div style="flex-grow: 1;"></div>
+        <sc-if value="{{ isWrite }}" hint-placeholder-val="{{ true }}">
+          <div onClick="{{ catchUp }}" style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid #d6cec1; border-radius: 4px; background: #ffffff; font-size: 12.5px; color: #23201c; cursor: pointer;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#23201c" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"></path>
+            </svg>
+            <span>{{ catchLabel }}</span>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; justify-content: center; padding: 30px 26px 0;">
+        <div style="width: 100%; max-width: 660px; display: flex; flex-direction: column; gap: 18px;">
+
+          <sc-if value="{{ isWrite }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 18px;">
+              <div contentEditable="true" style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 30px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; color: {{ titleColor }}; outline: none;">{{ titleText }}</div>
+              <div style="height: 1px; background: #e5dfd5;"></div>
+              <div contentEditable="true" style="min-height: 420px; white-space: pre-line; font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 16.5px; line-height: 2.0; color: {{ bodyColor }}; outline: none; text-wrap: pretty;">{{ bodyText }}</div>
             </div>
           </sc-if>
 
-          <sc-if value="{{ phPicked }}" hint-placeholder-val="{{ true }}">
-            <div style="display: flex; flex-direction: column; gap: 14px;">
-              <div style="display: flex; align-items: center; gap: 13px; padding: 15px 16px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
-                <div style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 4px; background: #f0ece4;">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6 10v4"></path>
-                    <path d="M10 6v12"></path>
-                    <path d="M14 8v8"></path>
-                    <path d="M18 11v2"></path>
-                  </svg>
-                </div>
-                <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
-                  <div style="font-size: 14px; font-weight: 500;">2026-03-12_제품회의.m4a</div>
-                  <div style="font-size: 12px; color: #8c847a;">52분 14초 · 48.2 MB</div>
-                </div>
-                <div onClick="{{ clearFile }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid #e5dfd5; border-radius: 4px; cursor: pointer;">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6 6l12 12"></path>
-                    <path d="M18 6L6 18"></path>
-                  </svg>
-                </div>
-              </div>
+          <sc-if value="{{ isUpload }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 16px;">
 
-              <div style="display: flex; flex-direction: column; gap: 11px; padding: 16px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
-                <div onClick="{{ toggleDiar }}" style="display: flex; align-items: center; gap: 11px; min-height: 44px; cursor: pointer;">
-                  <div style="width: 38px; height: 22px; flex-shrink: 0; border-radius: 11px; padding: 2px; display: flex; background: {{ diarTrack }};">
-                    <div style="width: 18px; height: 18px; border-radius: 50%; background: #ffffff; margin-left: {{ diarShift }};"></div>
+              <sc-if value="{{ phEmpty }}" hint-placeholder-val="{{ true }}">
+                <div onClick="{{ pickFile }}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; height: 260px; border: 1.5px dashed #d6cec1; border-radius: 5px; background: #fdfbf7; cursor: pointer;">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 16V4"></path>
+                    <path d="M7 9l5-5 5 5"></path>
+                    <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"></path>
+                  </svg>
+                  <div style="font-size: 14px; color: #57514a;">파일을 끌어다 놓거나 클릭해서 선택하세요</div>
+                  <div style="font-size: 12px; color: #a89f92;">m4a · mp3 · wav, 최대 3시간</div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ phPicked }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                  <div style="display: flex; align-items: center; gap: 13px; padding: 15px 16px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
+                    <div style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 4px; background: #f0ece4;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 10v4"></path>
+                        <path d="M10 6v12"></path>
+                        <path d="M14 8v8"></path>
+                        <path d="M18 11v2"></path>
+                      </svg>
+                    </div>
+                    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                      <div style="font-size: 14px; font-weight: 500;">2026-03-19_제품회의.m4a</div>
+                      <div style="font-size: 12px; color: #8c847a;">47분 02초 · 43.6 MB</div>
+                    </div>
+                    <div onClick="{{ clearFile }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid #e5dfd5; border-radius: 4px; cursor: pointer;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 6l12 12"></path>
+                        <path d="M18 6L6 18"></path>
+                      </svg>
+                    </div>
                   </div>
-                  <div style="display: flex; flex-direction: column; gap: 3px;">
+                  <div onClick="{{ toggleDiar }}" style="display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 0 16px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff; cursor: pointer;">
+                    <div style="width: 38px; height: 22px; flex-shrink: 0; border-radius: 11px; padding: 2px; display: flex; background: {{ diarTrack }};">
+                      <div style="width: 18px; height: 18px; border-radius: 50%; background: #ffffff; margin-left: {{ diarShift }};"></div>
+                    </div>
                     <div style="font-size: 13.5px;">화자 나누기</div>
-                    <div style="font-size: 12px; color: #8c847a;">누가 무슨 말을 했는지 구분해서 근거로 붙입니다</div>
+                    <div style="font-size: 12px; color: #8c847a;">누가 무슨 말을 했는지 근거로 붙입니다</div>
+                  </div>
+                  <div onClick="{{ start }}" style="display: flex; align-items: center; justify-content: center; height: 46px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14.5px; font-weight: 500; cursor: pointer;">요약 만들기</div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ phBusy }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
+                  <div style="font-size: 13.5px; color: #57514a;">2026-03-19_제품회의.m4a</div>
+                  <div style="display: flex; flex-direction: column; gap: 13px;">
+                    <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+                      <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{ st.bg }}; border: 1.5px solid {{ st.bc }};">
+                          <sc-if value="{{ st.done }}" hint-placeholder-val="{{ true }}">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M20 6L9 17l-5-5"></path>
+                            </svg>
+                          </sc-if>
+                          <sc-if value="{{ st.active }}" hint-placeholder-val="{{ true }}">
+                            <div style="width: 7px; height: 7px; border-radius: 50%; background: {{ accent }};"></div>
+                          </sc-if>
+                        </div>
+                        <div style="font-size: 14px; color: {{ st.fg }};">{{ st.label }}</div>
+                      </div>
+                    </sc-for>
                   </div>
                 </div>
-                <div style="height: 1px; background: #f0ece4;"></div>
-                <div style="display: flex; align-items: center; gap: 11px; min-height: 44px;">
-                  <div style="display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; font-size: 13px; color: #57514a;">
-                    <span>한국어</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M6 9l6 6 6-6"></path>
+              </sc-if>
+
+              <sc-if value="{{ phDone }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 18px;">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <div style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: oklch(0.50 0.08 158);">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 6L9 17l-5-5"></path>
+                      </svg>
+                    </div>
+                    <div style="font-size: 14px; color: #57514a;">요약이 만들어졌습니다. 오른쪽에 잡아낸 항목이 올라왔습니다.</div>
+                  </div>
+                  <div contentEditable="true" style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 30px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; outline: none;">3월 3주차 제품 회의</div>
+                  <div style="height: 1px; background: #e5dfd5;"></div>
+                  <div contentEditable="true" style="white-space: pre-line; font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 16.5px; line-height: 2.0; color: #33302b; outline: none; text-wrap: pretty;">재시도 정책을 손보기로 했다. 실패 직후 세 번을 연속으로 재시도하면 카드사가 어뷰징으로 판단한다는 지표가 공유됐고, 간격을 두는 쪽으로 정리했다.
+알림 채널을 하나로 합치자는 안도 나왔지만 전사 구조라 오늘 결론을 내지 못했다.</div>
+                </div>
+              </sc-if>
+
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 360px; flex-shrink: 0; border-left: 1px solid #e5dfd5; background: #f8f6f1; display: flex; flex-direction: column; overflow: hidden;">
+
+      <div style="flex-shrink: 0; max-height: 60%; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 11px; padding: 20px 18px; border-bottom: 1px solid #e5dfd5;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">등록하기</div>
+
+        <div style="display: flex; gap: 3px; padding: 3px; border-radius: 5px; background: #eae4d9;">
+          <div onClick="{{ kindDec }}" style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: 4px; background: {{ decTab.bg }}; font-size: 13px; font-weight: {{ decTab.weight }}; color: {{ decTab.fg }}; box-shadow: {{ decTab.sh }}; cursor: pointer;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="{{ decTab.icon }}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+            <span>결정사항</span>
+          </div>
+          <div onClick="{{ kindOpen }}" style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: 4px; background: {{ openTab.bg }}; font-size: 13px; font-weight: {{ openTab.weight }}; color: {{ openTab.fg }}; box-shadow: {{ openTab.sh }}; cursor: pointer;">
+            <div style="width: 6px; height: 6px; border-radius: 50%; background: {{ openTab.icon }};"></div>
+            <span>미결정사항</span>
+          </div>
+        </div>
+
+        <input id="nm-item" onKeyDown="{{ onKey }}" placeholder="{{ inputPh }}" style="height: 44px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; outline: none;">
+
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div onClick="{{ toggleOwner }}" style="display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 13px; border: 1px solid {{ ownerBc }}; border-radius: 4px; background: #ffffff; cursor: pointer;">
+            <sc-if value="{{ hasOwner }}" hint-placeholder-val="{{ true }}">
+              <div style="width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 11px; display: flex; align-items: center; justify-content: center;">{{ ownerCh }}</div>
+            </sc-if>
+            <sc-if value="{{ noOwner }}" hint-placeholder-val="{{ true }}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                <circle cx="12" cy="8" r="3.4"></circle>
+                <path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path>
+              </svg>
+            </sc-if>
+            <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; color: {{ ownerFg }};">{{ ownerLabel }}</div>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; transform: rotate({{ ownerRot }}deg);">
+              <path d="M6 9l6 6 6-6"></path>
+            </svg>
+          </div>
+          <sc-if value="{{ ownerOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 2px; padding: 7px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
+              <sc-for list="{{ ownerRows }}" as="ow" hint-placeholder-count="4">
+                <div onClick="{{ ow.pick }}" style="display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 9px; border-radius: 4px; background: {{ ow.bg }}; cursor: pointer;">
+                  <div style="width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 11px; display: flex; align-items: center; justify-content: center;">{{ ow.ch }}</div>
+                  <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; font-weight: {{ ow.weight }};">{{ ow.name }}</div>
+                  <sc-if value="{{ ow.sel }}" hint-placeholder-val="{{ true }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#23201c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                      <path d="M20 6L9 17l-5-5"></path>
+                    </svg>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <div style="padding: 4px 2px;"><div style="height: 1px; background: #e5dfd5;"></div></div>
+              <div onClick="{{ clearOwner }}" style="display: flex; align-items: center; min-height: 44px; padding: 0 9px; border-radius: 4px; font-size: 13.5px; color: #57514a; cursor: pointer;">담당자 없이 등록</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div onClick="{{ add }}" style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 44px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14px; font-weight: 500; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+          <span>{{ addLabel }}</span>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 18px; padding: 18px;">
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">결정된 것</div>
+            <div style="font-size: 11px; font-weight: 600; color: oklch(0.50 0.08 158);">{{ decCount }}</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <sc-for list="{{ decItems }}" as="d" hint-placeholder-count="2">
+              <div style="display: flex; flex-direction: column; gap: 9px; padding: 12px 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff;">
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                  <div style="width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; border-radius: 50%; background: oklch(0.95 0.03 158); display: flex; align-items: center; justify-content: center;">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M20 6L9 17l-5-5"></path>
                     </svg>
                   </div>
-                  <div style="font-size: 12px; color: #8c847a;">녹음 언어</div>
-                </div>
-              </div>
-
-              <div onClick="{{ start }}" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14.5px; font-weight: 500; cursor: pointer;">
-                <span>요약 만들기</span>
-              </div>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ phBusy }}" hint-placeholder-val="{{ true }}">
-            <div style="display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
-              <div style="font-size: 13.5px; color: #57514a;">2026-03-12_제품회의.m4a</div>
-              <div style="display: flex; flex-direction: column; gap: 13px;">
-                <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: {{ st.bg }}; border: 1.5px solid {{ st.bc }};">
-                      <sc-if value="{{ st.done }}" hint-placeholder-val="{{ true }}">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M20 6L9 17l-5-5"></path>
-                        </svg>
-                      </sc-if>
-                      <sc-if value="{{ st.active }}" hint-placeholder-val="{{ true }}">
-                        <div style="width: 7px; height: 7px; border-radius: 50%; background: {{ accent }};"></div>
-                      </sc-if>
-                    </div>
-                    <div style="font-size: 14px; color: {{ st.fg }};">{{ st.label }}</div>
+                  <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; line-height: 1.55; text-wrap: pretty;">{{ d.text }}</div>
+                  <div onClick="{{ d.remove }}" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 4px; cursor: pointer;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 6l12 12"></path>
+                      <path d="M18 6L6 18"></path>
+                    </svg>
                   </div>
-                </sc-for>
-              </div>
-            </div>
-          </sc-if>
-
-          <sc-if value="{{ phDone }}" hint-placeholder-val="{{ true }}">
-            <div style="display: flex; flex-direction: column; gap: 15px; padding: 22px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
-              <div style="display: flex; align-items: center; gap: 9px;">
-                <div style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: oklch(0.50 0.08 158);">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 6L9 17l-5-5"></path>
-                  </svg>
                 </div>
-                <div style="font-size: 14.5px; font-weight: 600;">요약이 만들어졌습니다</div>
-              </div>
-              <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 15px; line-height: 1.85; color: #33302b; text-wrap: pretty;">결제 실패 재시도 정책을 지수 백오프로 바꾸기로 했고, 온보딩 개편은 3월 말 리서치 결과 이후로 미뤘습니다.</div>
-              <div style="display: flex; gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 15px; background: oklch(0.95 0.03 158); font-size: 12.5px; color: oklch(0.42 0.07 158);">
-                  <span>결정 3건</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 15px; background: oklch(0.95 0.03 55); font-size: 12.5px; color: {{ accent }};">
-                  <span>미결정 2건</span>
-                </div>
-                <div style="display: flex; align-items: center; height: 30px; padding: 0 11px; border-radius: 15px; background: #f0ece4; font-size: 12.5px; color: #57514a;">
-                  <span>발언 168건</span>
+                <div style="display: flex; align-items: center; gap: 7px; padding-left: 28px;">
+                  <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; background: {{ d.ownerBg }}; font-size: 12px; color: {{ d.ownerFg }};">
+                    <div style="width: 18px; height: 18px; border-radius: 50%; background: {{ d.avBg }}; color: #57514a; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ d.ownerCh }}</div>
+                    <span>{{ d.ownerName }}</span>
+                  </div>
+                  <sc-if value="{{ d.auto }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; align-items: center; height: 26px; padding: 0 8px; border-radius: 13px; border: 1px solid #e5dfd5; font-size: 11.5px; color: #8c847a;">자동으로 잡아냄</div>
+                  </sc-if>
+                  <div style="flex-grow: 1;"></div>
+                  <div onClick="{{ d.flip }}" style="display: flex; align-items: center; height: 26px; font-size: 11.5px; color: {{ accent }}; cursor: pointer;">미결정으로</div>
                 </div>
               </div>
-              <div style="display: flex; gap: 8px;">
-                <div style="display: flex; align-items: center; justify-content: center; height: 44px; padding: 0 18px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14px; font-weight: 500; cursor: pointer;">회의록 열기</div>
-                <div onClick="{{ reset }}" style="display: flex; align-items: center; justify-content: center; height: 44px; padding: 0 16px; border: 1px solid #e5dfd5; border-radius: 4px; font-size: 14px; color: #57514a; cursor: pointer;">다른 파일 올리기</div>
-              </div>
-            </div>
-          </sc-if>
-
-        </div>
-      </sc-if>
-
-      <sc-if value="{{ isWrite }}" hint-placeholder-val="{{ true }}">
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-          <div style="display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff;">
-            <div style="display: flex; flex-direction: column; gap: 7px;">
-              <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #8c847a;">회의 제목</div>
-              <input placeholder="예: 3월 3주차 제품 회의" style="height: 44px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; outline: none;">
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
-              <div style="display: flex; flex-direction: column; gap: 7px;">
-                <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #8c847a;">날짜</div>
-                <input placeholder="2026-03-19" style="height: 44px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; outline: none;">
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 7px;">
-                <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #8c847a;">참석자</div>
-                <div style="display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4;">
-                  <div style="display: flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 13px; background: #eae4d9; font-size: 12.5px;">김서연</div>
-                  <div style="display: flex; align-items: center; height: 26px; padding: 0 9px; border-radius: 13px; background: #eae4d9; font-size: 12.5px;">박지훈</div>
-                  <input placeholder="이름 추가" style="flex-grow: 1; min-width: 0; height: 26px; border: none; background: transparent; outline: none; font-size: 13px;">
-                </div>
-              </div>
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="display: flex; align-items: center; justify-content: center; height: 46px; padding: 0 20px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14.5px; font-weight: 500; cursor: pointer;">빈 문서로 시작</div>
-            <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a;">적는 동안 오른쪽에서 결정된 것과 못 정한 것을 정리해 줍니다.</div>
+            </sc-for>
+            <sc-if value="{{ decEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="padding: 13px 14px; border: 1px dashed #d6cec1; border-radius: 4px; font-size: 12.5px; line-height: 1.6; color: #8c847a;">정해진 것을 위에서 등록하면 여기에 쌓입니다.</div>
+            </sc-if>
           </div>
         </div>
-      </sc-if>
 
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">아직 못 정한 것</div>
+            <div style="font-size: 11px; font-weight: 600; color: {{ accent }};">{{ openCount }}</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <sc-for list="{{ openItems }}" as="o" hint-placeholder-count="1">
+              <div style="display: flex; flex-direction: column; gap: 9px; padding: 12px 13px 12px 11px; border: 1px solid #e5dfd5; border-left: 3px solid {{ accent }}; border-radius: 4px; background: #fdfbf7;">
+                <div style="display: flex; align-items: flex-start; gap: 10px;">
+                  <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; line-height: 1.55; text-wrap: pretty;">{{ o.text }}</div>
+                  <div onClick="{{ o.remove }}" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 4px; cursor: pointer;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 6l12 12"></path>
+                      <path d="M18 6L6 18"></path>
+                    </svg>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 7px;">
+                  <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; background: {{ o.ownerBg }}; font-size: 12px; color: {{ o.ownerFg }};">
+                    <div style="width: 18px; height: 18px; border-radius: 50%; background: {{ o.avBg }}; color: #57514a; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ o.ownerCh }}</div>
+                    <span>{{ o.ownerName }}</span>
+                  </div>
+                  <sc-if value="{{ o.auto }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; align-items: center; height: 26px; padding: 0 8px; border-radius: 13px; border: 1px solid #e5dfd5; font-size: 11.5px; color: #8c847a;">자동으로 잡아냄</div>
+                  </sc-if>
+                  <div style="flex-grow: 1;"></div>
+                  <div onClick="{{ o.flip }}" style="display: flex; align-items: center; height: 26px; font-size: 11.5px; color: oklch(0.50 0.08 158); cursor: pointer;">결정으로</div>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ openEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="padding: 13px 14px; border: 1px dashed #d6cec1; border-radius: 4px; font-size: 12.5px; line-height: 1.6; color: #8c847a;">결론을 못 낸 것을 남겨 두면 다음 회의로 넘어갑니다.</div>
+            </sc-if>
+          </div>
+        </div>
+
+      </div>
     </div>
+
   </div>
 </div>
 </x-dc>
@@ -239,41 +372,133 @@ class Component extends DCLogic {
     this.timers = [];
   }
 
+  staff() {
+    return [
+      { id: 'u1', name: '김서연', ch: '김' },
+      { id: 'u2', name: '박지훈', ch: '박' },
+      { id: 'u3', name: '이도현', ch: '이' },
+      { id: 'u4', name: '정하늘', ch: '정' }
+    ];
+  }
+
+  person(id) {
+    return this.staff().filter(function (x) { return x.id === id; })[0] || null;
+  }
+
   renderVals() {
     var self = this;
     var s = this.state || {};
     var accent = this.props.accent || '#9a5a2c';
-    var mode = s.mode || 'upload';
+    var mode = s.mode || 'write';
     var phase = s.phase || 'empty';
     var step = s.step || 0;
     var diar = s.diar === undefined ? true : !!s.diar;
+    var kind = s.kind || 'dec';
+    var ownerId = s.owner || null;
+    var ownerOpen = !!s.ownerOpen;
+    var items = s.items || [];
+    var seq = s.seq || 0;
+    var written = !!s.written;
+    var att = s.att || { u1: true, u2: true };
 
     var labels = ['음성 인식', '화자 나누기', '요약 작성', '결정·미결정 뽑기'];
     var steps = labels.map(function (label, i) {
       var done = i < step;
       var active = i === step;
       return {
-        label: label,
-        done: done,
-        active: active,
+        label: label, done: done, active: active,
         bg: done ? 'oklch(0.50 0.08 158)' : '#ffffff',
         bc: done ? 'oklch(0.50 0.08 158)' : (active ? accent : '#e5dfd5'),
         fg: done ? '#57514a' : (active ? '#23201c' : '#a89f92')
       };
     });
 
+    var setItems = function (next, extra) {
+      var patch = { items: next };
+      if (extra) { for (var k in extra) { patch[k] = extra[k]; } }
+      self.setState(patch);
+    };
+
+    var decorate = function (it) {
+      var who = self.person(it.owner);
+      return {
+        text: it.text,
+        auto: !!it.auto,
+        ownerName: who ? who.name : '담당자 미정',
+        ownerCh: who ? who.ch : '?',
+        ownerBg: who ? '#eae4d9' : 'transparent',
+        ownerFg: who ? '#23201c' : '#8c847a',
+        avBg: who ? '#e8e2d7' : '#f0ece4',
+        remove: function () {
+          setItems(items.filter(function (x) { return x.id !== it.id; }));
+        },
+        flip: function () {
+          setItems(items.map(function (x) {
+            return x.id === it.id ? { id: x.id, kind: x.kind === 'dec' ? 'open' : 'dec', text: x.text, owner: x.owner, auto: x.auto } : x;
+          }));
+        }
+      };
+    };
+
+    var decItems = items.filter(function (x) { return x.kind === 'dec'; }).map(decorate);
+    var openItems = items.filter(function (x) { return x.kind === 'open'; }).map(decorate);
+
+    var addItem = function () {
+      var el = document.getElementById('nm-item');
+      var v = el && el.value ? el.value.trim() : '';
+      if (!v) { return; }
+      el.value = '';
+      setItems(items.concat([{ id: 'i' + (seq + 1), kind: kind, text: v, owner: ownerId, auto: false }]), { seq: seq + 1, owner: null, ownerOpen: false });
+    };
+
+    var who = this.person(ownerId);
+
     return {
       accent: accent,
-      isUpload: mode === 'upload',
+      projName: '결제 안정화',
+
       isWrite: mode === 'write',
-      upBg: mode === 'upload' ? '#ffffff' : '#fdfbf7',
-      upBc: mode === 'upload' ? accent : '#e5dfd5',
-      upIcon: mode === 'upload' ? accent : '#a89f92',
-      wrBg: mode === 'write' ? '#ffffff' : '#fdfbf7',
+      isUpload: mode === 'upload',
+      wrBg: mode === 'write' ? '#ffffff' : 'transparent',
       wrBc: mode === 'write' ? accent : '#e5dfd5',
       wrIcon: mode === 'write' ? accent : '#a89f92',
-      pickUpload: function () { self.setState({ mode: 'upload' }); },
+      upBg: mode === 'upload' ? '#ffffff' : 'transparent',
+      upBc: mode === 'upload' ? accent : '#e5dfd5',
+      upIcon: mode === 'upload' ? accent : '#a89f92',
       pickWrite: function () { self.setState({ mode: 'write' }); },
+      pickUpload: function () { self.setState({ mode: 'upload' }); },
+
+      people: this.staff().map(function (pe) {
+        var on = !!att[pe.id];
+        return {
+          name: pe.name,
+          bg: on ? '#eae4d9' : 'transparent',
+          bc: on ? '#eae4d9' : '#d6cec1',
+          fg: on ? '#23201c' : '#8c847a',
+          toggle: function () {
+            var next = {};
+            for (var k in att) { next[k] = att[k]; }
+            next[pe.id] = !on;
+            self.setState({ att: next });
+          }
+        };
+      }),
+
+      titleText: written ? '3월 3주차 제품 회의' : '회의 제목을 적어 주세요',
+      titleColor: written ? '#23201c' : '#a89f92',
+      bodyText: written ? '재시도 정책 이야기부터. 실패 직후 세 번 연속으로 재시도하는 지금 방식은 카드사에서 어뷰징으로 본다는 게 확인됐다. 간격을 두는 쪽으로 정리.\n알림 채널을 아예 하나로 합치자는 얘기도 나왔는데 전사 구조라 오늘 결론은 못 냄.' : '여기에 회의 내용을 적으세요. 오른쪽에서 결정된 것과 못 정한 것을 등록하면서 정리할 수 있습니다.',
+      bodyColor: written ? '#33302b' : '#a89f92',
+      catchLabel: written ? '적은 내용에서 잡아내기' : '예시 내용 채우기',
+      catchUp: function () {
+        if (!written) { self.setState({ written: true }); return; }
+        var have = {};
+        items.forEach(function (x) { have[x.text] = true; });
+        var found = [
+          { id: 'a1', kind: 'dec', text: '재시도 간격을 두는 쪽으로 정리한다', owner: null, auto: true },
+          { id: 'a2', kind: 'open', text: '알림 채널을 하나로 합칠지', owner: null, auto: true }
+        ].filter(function (x) { return !have[x.text]; });
+        if (found.length) { setItems(items.concat(found)); }
+      },
 
       phEmpty: phase === 'empty',
       phPicked: phase === 'picked',
@@ -285,17 +510,72 @@ class Component extends DCLogic {
       toggleDiar: function () { self.setState({ diar: !diar }); },
       pickFile: function () { self.setState({ phase: 'picked' }); },
       clearFile: function () { self.setState({ phase: 'empty' }); },
-      reset: function () { self.setState({ phase: 'empty', step: 0 }); },
       start: function () {
         self.setState({ phase: 'run', step: 0 });
         self.timers = self.timers || [];
         [800, 1600, 2500, 3400].forEach(function (ms, i) {
           self.timers.push(setTimeout(function () {
-            if (i === 3) { self.setState({ phase: 'done', step: 4 }); }
-            else { self.setState({ step: i + 1 }); }
+            if (i === 3) {
+              var cur = (self.state || {}).items || [];
+              var add = [
+                { id: 'r1', kind: 'dec', text: '결제 재시도를 지수 백오프로 변경한다', owner: 'u1', auto: true },
+                { id: 'r2', kind: 'dec', text: '실패 알림은 3회차 재시도 이후에만 발송한다', owner: 'u2', auto: true },
+                { id: 'r3', kind: 'open', text: '알림 채널을 하나로 합칠지', owner: null, auto: true }
+              ];
+              self.setState({ phase: 'done', step: 4, items: cur.concat(add) });
+            } else { self.setState({ step: i + 1 }); }
           }, ms));
         });
-      }
+      },
+
+      decTab: {
+        bg: kind === 'dec' ? '#ffffff' : 'transparent',
+        fg: kind === 'dec' ? '#23201c' : '#8c847a',
+        weight: kind === 'dec' ? 600 : 400,
+        icon: kind === 'dec' ? 'oklch(0.50 0.08 158)' : '#a89f92',
+        sh: kind === 'dec' ? '0 1px 2px rgba(35, 32, 28, 0.10)' : 'none'
+      },
+      openTab: {
+        bg: kind === 'open' ? '#ffffff' : 'transparent',
+        fg: kind === 'open' ? '#23201c' : '#8c847a',
+        weight: kind === 'open' ? 600 : 400,
+        icon: kind === 'open' ? accent : '#a89f92',
+        sh: kind === 'open' ? '0 1px 2px rgba(35, 32, 28, 0.10)' : 'none'
+      },
+      kindDec: function () { self.setState({ kind: 'dec' }); },
+      kindOpen: function () { self.setState({ kind: 'open' }); },
+      inputPh: kind === 'dec' ? '무엇을 정했나요' : '무엇을 못 정했나요',
+      addLabel: kind === 'dec' ? '결정사항 등록' : '미결정사항 등록',
+
+      hasOwner: !!who,
+      noOwner: !who,
+      ownerCh: who ? who.ch : '',
+      ownerLabel: who ? who.name : '담당자 지정',
+      ownerFg: who ? '#23201c' : '#8c847a',
+      ownerBc: ownerOpen ? '#d6cec1' : '#e5dfd5',
+      ownerRot: ownerOpen ? 180 : 0,
+      ownerOpen: ownerOpen,
+      toggleOwner: function () { self.setState({ ownerOpen: !ownerOpen }); },
+      clearOwner: function () { self.setState({ owner: null, ownerOpen: false }); },
+      ownerRows: this.staff().map(function (pe) {
+        var sel = pe.id === ownerId;
+        return {
+          name: pe.name, ch: pe.ch, sel: sel,
+          bg: sel ? '#f4f1ea' : 'transparent',
+          weight: sel ? 600 : 400,
+          pick: function () { self.setState({ owner: pe.id, ownerOpen: false }); }
+        };
+      }),
+
+      add: addItem,
+      onKey: function (e) { if (e && e.key === 'Enter') { addItem(); } },
+
+      decItems: decItems,
+      openItems: openItems,
+      decCount: decItems.length,
+      openCount: openItems.length,
+      decEmpty: decItems.length === 0,
+      openEmpty: openItems.length === 0
     };
   }
 }

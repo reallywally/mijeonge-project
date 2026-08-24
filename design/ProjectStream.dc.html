@@ -1,0 +1,201 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=IBM+Plex+Sans+KR:wght@400;500;600&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #9a5a2c; } a:hover { color: #23201c; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; overflow: hidden;">
+
+  <div style="width: 262px; flex-shrink: 0; background: #f4f1ea; border-right: 1px solid #e5dfd5; display: flex; flex-direction: column; gap: 20px; padding: 24px 18px; overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <div style="width: 20px; height: 20px; border: 1.5px solid #23201c; border-radius: 2px;"></div>
+      <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;">회의록</div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 14px; font-weight: 500; cursor: pointer;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14"></path>
+        <path d="M5 12h14"></path>
+      </svg>
+      <span>새 기록 시작</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 9px; min-height: 0;">
+      <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">기록</div>
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="display: flex; flex-direction: column; gap: 6px; min-height: 44px; justify-content: center; padding: 11px 12px; border-radius: 4px; background: #ffffff; border: 1px solid #d6cec1; cursor: pointer;">
+          <div style="font-size: 14px; font-weight: 600; line-height: 1.35;">결제 안정화</div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <div style="font-size: 11.5px; color: #8c847a;">회의 12번 · 마지막 3월 12일</div>
+            <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: {{ accent }};">
+              <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ accent }};"></div>
+              <span>미결정 3</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; min-height: 44px; justify-content: center; padding: 11px 12px; border-radius: 4px; cursor: pointer;">
+          <div style="font-size: 14px; line-height: 1.35;">온보딩 개편</div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <div style="font-size: 11.5px; color: #8c847a;">회의 5번 · 마지막 3월 5일</div>
+            <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: {{ accent }};">
+              <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ accent }};"></div>
+              <span>미결정 1</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; min-height: 44px; justify-content: center; padding: 11px 12px; border-radius: 4px; cursor: pointer;">
+          <div style="font-size: 14px; line-height: 1.35;">검색 품질</div>
+          <div style="font-size: 11.5px; color: #8c847a;">회의 3번 · 마지막 2월 20일</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column;">
+
+    <div style="height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 11px; padding: 0 30px; border-bottom: 1px solid #e5dfd5;">
+      <div style="font-size: 12.5px; color: #8c847a;">1월 8일부터 이어 쓰는 기록</div>
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 13px; border: 1px solid #d6cec1; border-radius: 4px; background: #ffffff; font-size: 13px; font-weight: 500; cursor: pointer;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#23201c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 5v14"></path>
+          <path d="M5 12h14"></path>
+        </svg>
+        <span>회의 이어 쓰기</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; cursor: pointer;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v12"></path>
+          <path d="M7 10l5 5 5-5"></path>
+          <path d="M4 20h16"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; overflow: hidden; display: flex; justify-content: center; padding: 44px 30px 0;">
+      <div style="width: 100%; max-width: 748px; display: flex; flex-direction: column; gap: 28px;">
+
+        <div style="display: flex; flex-direction: column; gap: 11px;">
+          <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 35px; font-weight: 700; line-height: 1.28; letter-spacing: -0.015em; text-wrap: pretty;">결제 안정화</div>
+          <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 16.5px; line-height: 1.9; color: #33302b; text-wrap: pretty;">결제 실패와 장애 대응을 다루는 회의를 1월 8일부터 이어서 적고 있다. 아래는 지금까지 정해진 것과, 회의마다 무엇이 바뀌었는지를 적은 기록이다.</div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 13px; padding: 20px 22px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">지금 합의된 상태</div>
+            <div style="flex-grow: 1;"></div>
+            <div style="font-size: 11.5px; color: #a89f92;">3월 12일 회의 기준</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: flex-start; gap: 11px;">
+              <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; background: oklch(0.95 0.03 158); display: flex; align-items: center; justify-content: center;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6L9 17l-5-5"></path>
+                </svg>
+              </div>
+              <div style="flex-grow: 1; min-width: 0; font-size: 14.5px; line-height: 1.6; text-wrap: pretty;">결제 재시도는 지수 백오프 — 1분 → 10분 → 1시간</div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 11px;">
+              <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; background: oklch(0.95 0.03 158); display: flex; align-items: center; justify-content: center;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6L9 17l-5-5"></path>
+                </svg>
+              </div>
+              <div style="flex-grow: 1; min-width: 0; font-size: 14.5px; line-height: 1.6; text-wrap: pretty;">실패 알림은 3회차 재시도 이후에만 발송</div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 11px;">
+              <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; border: 1px solid #d6cec1; display: flex; align-items: center; justify-content: center;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 12h12"></path>
+                </svg>
+              </div>
+              <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+                <div style="font-size: 14.5px; line-height: 1.6; color: #a89f92; text-decoration: line-through; text-wrap: pretty;">실패한 결제는 즉시 3회 재시도</div>
+                <div style="font-size: 11.5px; color: #a89f92;">3월 12일 회의에서 바뀜</div>
+              </div>
+            </div>
+          </div>
+          <div style="height: 1px; background: #e5dfd5;"></div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="width: 6px; height: 6px; border-radius: 50%; background: {{ accent }};"></div>
+            <div style="font-size: 13px; color: #57514a;">미결정 3개 — 알림 채널 통합, 자동 해지, 배포 시간대</div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0;">
+
+          <div style="display: flex; gap: 18px;">
+            <div style="width: 62px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 2px;">
+              <div style="font-size: 12.5px; font-weight: 600; color: #57514a;">3월 12일</div>
+              <div style="font-size: 11.5px; color: #a89f92;">52분</div>
+            </div>
+            <div style="width: 1px; flex-shrink: 0; background: #e5dfd5;"></div>
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 0 0 26px;">
+              <div style="font-size: 16px; font-weight: 600; line-height: 1.45;">3월 2주차 제품 회의</div>
+              <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 16.5px; line-height: 1.9; color: #33302b; text-wrap: pretty;">재시도 정책을 지수 백오프로 바꿨다. 실패 직후 세 번을 연속으로 재시도하면 카드사가 어뷰징으로 판단한다는 지표가 근거였다. 온보딩 개편은 리서치 결과 이후로 미뤘다.</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 7px;">
+                <div style="display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 8px 11px; border-radius: 4px; background: oklch(0.95 0.03 158); font-size: 12px; color: oklch(0.50 0.08 158); cursor: pointer;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5"></path>
+                  </svg>
+                  <span>결정된 것 3</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 8px 11px; border-radius: 4px; background: #ffffff; border: 1px solid {{ accent }}; font-size: 12px; color: {{ accent }}; cursor: pointer;">
+                  <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ accent }};"></div>
+                  <span>미결정 2</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 8px 11px; border-radius: 4px; background: #ffffff; border: 1px solid #e5dfd5; font-size: 12px; color: #57514a; cursor: pointer;">
+                  <span>바뀐 결정 1</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 18px;">
+            <div style="width: 62px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; padding-top: 2px;">
+              <div style="font-size: 12.5px; font-weight: 600; color: #57514a;">3월 8일</div>
+              <div style="font-size: 11.5px; color: #a89f92;">38분</div>
+            </div>
+            <div style="width: 1px; flex-shrink: 0; background: #e5dfd5;"></div>
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 16px; font-weight: 600; line-height: 1.45;">결제 장애 회고</div>
+              <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 16.5px; line-height: 1.9; color: #33302b; text-wrap: pretty;">커넥션 풀 고갈로 20분간 결제가 실패했다. 알림이 늦어 대응 시작까지 11분이 걸린 점이 문제로 지적됐고, 임계값 조정과 롤백 절차 문서화를 먼저 하기로 했다.</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 7px;">
+                <div style="display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 8px 11px; border-radius: 4px; background: oklch(0.95 0.03 158); font-size: 12px; color: oklch(0.50 0.08 158); cursor: pointer;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5"></path>
+                  </svg>
+                  <span>결정된 것 2</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 8px 11px; border-radius: 4px; background: #ffffff; border: 1px solid {{ accent }}; font-size: 12px; color: {{ accent }}; cursor: pointer;">
+                  <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ accent }};"></div>
+                  <span>미결정 1</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent || '#9a5a2c' };
+  }
+}
+</script>
+</body>
+</html>
