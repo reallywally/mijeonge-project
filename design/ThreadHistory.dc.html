@@ -11,6 +11,8 @@
   <style>
     body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: #9a5a2c; } a:hover { color: #23201c; }
+    input { font-family: inherit; font-size: 13px; color: #23201c; }
+    input::placeholder { color: #a89f92; }
   </style>
 </helmet>
 <div style="width: 1440px; height: 900px; background: #f0ece4; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
@@ -40,8 +42,8 @@
         </div>
       </div>
 
-      <div style="display: flex; gap: 6px;">
-        <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
           <div onClick="{{ tb.pick }}" style="display: flex; align-items: center; height: 34px; padding: 0 13px; border: 1px solid {{ tb.bc }}; border-radius: 17px; background: {{ tb.bg }}; font-size: 12.5px; font-weight: {{ tb.weight }}; color: {{ tb.fg }}; cursor: pointer;">{{ tb.label }}</div>
         </sc-for>
       </div>
@@ -64,7 +66,7 @@
         <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
           <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">지금 합의된 내용</div>
           <sc-if value="{{ t.settled }}" hint-placeholder-val="{{ true }}">
-            <div style="display: flex; flex-direction: column; gap: 11px;">
+            <div style="display: flex; flex-direction: column; gap: 13px;">
               <div style="display: flex; align-items: flex-start; gap: 11px;">
                 <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; background: oklch(0.95 0.03 158); display: flex; align-items: center; justify-content: center;">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -73,14 +75,29 @@
                 </div>
                 <div style="flex-grow: 1; min-width: 0; font-size: 15.5px; line-height: 1.6; text-wrap: pretty;">{{ t.current }}</div>
               </div>
-              <sc-for list="{{ t.subs }}" as="sb" hint-placeholder-count="1">
-                <div style="display: flex; align-items: flex-start; gap: 10px; margin-left: 30px; padding-left: 13px; border-left: 2px solid #e5dfd5;">
-                  <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px;">
-                    <div style="font-size: 14px; line-height: 1.6; color: #33302b; text-wrap: pretty;">{{ sb.text }}</div>
-                    <div style="font-size: 11.5px; color: #a89f92;">세부 · {{ sb.at }}</div>
-                  </div>
+              <sc-if value="{{ t.hasDetail }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 7px; margin-left: 30px; padding-left: 14px; border-left: 2px solid #e5dfd5;">
+                  <sc-for list="{{ t.detail }}" as="dl" hint-placeholder-count="3">
+                    <div style="font-size: 14px; line-height: 1.65; color: #33302b; text-wrap: pretty;">{{ dl.line }}</div>
+                  </sc-for>
+                  <div style="font-size: 11.5px; color: #a89f92;">조건별 상세 — 이 결정 안에 함께 적힌 줄입니다</div>
                 </div>
-              </sc-for>
+              </sc-if>
+              <sc-if value="{{ t.hasSubs }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; gap: 7px; margin-left: 30px;">
+                  <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">따로 떼어낸 하위 안건</div>
+                  <sc-for list="{{ t.subs }}" as="sb" hint-placeholder-count="1">
+                    <div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 9px 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; cursor: pointer;">
+                      <div style="width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: {{ sb.dot }};"></div>
+                      <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; line-height: 1.5; text-wrap: pretty;">{{ sb.text }}</div>
+                      <div style="flex-shrink: 0; font-size: 11.5px; color: #a89f92;">{{ sb.at }}</div>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                        <path d="M9 6l6 6-6 6"></path>
+                      </svg>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <sc-if value="{{ t.hasOwner }}" hint-placeholder-val="{{ true }}">
                   <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; background: #eae4d9; font-size: 12px;">
@@ -109,6 +126,33 @@
           <div style="display: flex; align-items: center; gap: 9px;">
             <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">회의별 이력</div>
             <div style="font-size: 11.5px; font-weight: 600; color: #57514a;">{{ t.count }}</div>
+            <div style="font-size: 11.5px; color: #a89f92;">각 줄이 그 회의의 기록이기도 합니다 — 회의록을 따로 쓰지 않습니다</div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 11px; padding: 16px 18px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">회의 없이 처리</div>
+              </div>
+              <div style="font-size: 12px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">회의를 다시 잡지 않고 담당자 확인만으로 처리한 경우입니다. 남기면 이 안건의 이력에 회의 밖 줄로 올라가고, 어느 회의에도 붙지 않습니다.</div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <sc-for list="{{ outKinds }}" as="ok" hint-placeholder-count="3">
+                  <div onClick="{{ ok.pick }}" style="display: flex; align-items: center; height: 32px; padding: 0 13px; border: 1px solid {{ ok.bc }}; border-radius: 16px; background: {{ ok.bg }}; font-size: 12.5px; font-weight: {{ ok.weight }}; color: {{ ok.fg }}; cursor: pointer;">{{ ok.label }}</div>
+                </sc-for>
+              </div>
+              <input id="th-text" placeholder="{{ outPh }}" style="height: 42px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; font-size: 14px; outline: none;">
+              <input id="th-note" placeholder="근거 — 무엇을 확인했나요 (선택)" style="height: 40px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; outline: none;">
+              <div style="display: flex; flex-direction: column; gap: 7px;">
+                <div style="font-size: 11.5px; color: #8c847a;">처리한 사람</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <sc-for list="{{ outStaff }}" as="os" hint-placeholder-count="4">
+                    <div onClick="{{ os.pick }}" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 5px; border: 1px solid {{ os.bc }}; border-radius: 17px; background: {{ os.bg }}; font-size: 12.5px; color: {{ os.fg }}; cursor: pointer;">
+                      <div style="width: 22px; height: 22px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10.5px; display: flex; align-items: center; justify-content: center;">{{ os.ch }}</div>
+                      <span>{{ os.name }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div onClick="{{ addOut }}" style="display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 15px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start;">이력에 남기기</div>
           </div>
 
           <div style="display: flex; flex-direction: column;">
@@ -120,11 +164,29 @@
                 </div>
                 <div style="width: 1px; flex-shrink: 0; background: #e5dfd5;"></div>
                 <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; padding: 0 0 22px;">
-                  <div style="display: flex; align-items: center; gap: 8px;">
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; height: 23px; padding: 0 9px; border-radius: 3px; background: {{ e.tagBg }}; font-size: 11.5px; font-weight: 600; color: {{ e.tagFg }};">{{ e.tag }}</div>
+                    <sc-if value="{{ e.outside }}" hint-placeholder-val="{{ true }}">
+                      <div style="display: flex; align-items: center; height: 23px; padding: 0 9px; border: 1px dashed #d6cec1; border-radius: 3px; font-size: 11.5px; color: #8c847a;">회의 밖</div>
+                    </sc-if>
                     <div style="font-size: 12px; color: #a89f92;">{{ e.meeting }}</div>
+                    <sc-if value="{{ e.hasMeeting }}" hint-placeholder-val="{{ true }}">
+                      <div style="display: flex; align-items: center; gap: 4px; height: 23px; font-size: 11.5px; color: #57514a; cursor: pointer;">
+                        <span>그 회의 보기</span>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 6l6 6-6 6"></path>
+                        </svg>
+                      </div>
+                    </sc-if>
                   </div>
                   <div style="font-size: 14.5px; line-height: 1.6; color: {{ e.fg }}; text-decoration: {{ e.deco }}; text-wrap: pretty;">{{ e.text }}</div>
+                  <sc-if value="{{ e.hasDetail }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; flex-direction: column; gap: 5px; padding-left: 13px; border-left: 2px solid #e5dfd5;">
+                      <sc-for list="{{ e.detail }}" as="dd" hint-placeholder-count="3">
+                        <div style="font-size: 13px; line-height: 1.65; color: #57514a; text-wrap: pretty;">{{ dd.line }}</div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
                   <sc-if value="{{ e.hasNote }}" hint-placeholder-val="{{ true }}">
                     <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">{{ e.note }}</div>
                   </sc-if>
@@ -135,15 +197,10 @@
                         <span>{{ e.owner }}</span>
                       </div>
                     </sc-if>
-                    <div onClick="{{ e.toggle }}" style="display: flex; align-items: center; gap: 6px; height: 26px; font-size: 11.5px; color: #57514a; cursor: pointer;">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate({{ e.rot }}deg);">
-                        <path d="M6 9l6 6 6-6"></path>
-                      </svg>
-                      <span>근거 발언</span>
-                    </div>
                   </div>
-                  <sc-if value="{{ e.expanded }}" hint-placeholder-val="{{ true }}">
-                    <div style="padding: 11px 0 2px 14px; border-left: 2px solid #e5dfd5; display: flex; flex-direction: column; gap: 7px;">
+                  <sc-if value="{{ e.hasQuote }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding: 2px 0 2px 14px; border-left: 2px solid #e5dfd5; display: flex; flex-direction: column; gap: 6px;">
+                      <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #a89f92;">근거 발언</div>
                       <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 14.5px; line-height: 1.8; color: #57514a; text-wrap: pretty;">{{ e.quote }}</div>
                       <div style="font-size: 11.5px; color: #a89f92;">{{ e.who }}</div>
                     </div>
@@ -161,22 +218,53 @@
 </x-dc>
 <script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
+  staff() {
+    return [
+      { id: 'u1', name: '김서연', ch: '김' },
+      { id: 'u2', name: '박지훈', ch: '박' },
+      { id: 'u3', name: '이도현', ch: '이' },
+      { id: 'u4', name: '정하늘', ch: '정' }
+    ];
+  }
+
   data() {
     return [
       {
         id: 't2',
-        label: '결정 → 변경 → 세부',
+        label: '조건별로 갈리는 결정',
         title: '결제 재시도 정책',
         state: 'decided',
-        current: '재시도는 지수 백오프(1분 → 10분 → 1시간)로 한다',
+        current: '결제 실패는 원인에 따라 지수 백오프로 재시도한다',
+        detail: [
+          '일반 실패 — 1분 → 10분 → 1시간, 최대 3회',
+          '5xx 응답 — 최대 4회까지',
+          '잔액 부족 — 재시도하지 않고 바로 알림',
+          '1시간 시도까지 실패하면 더 재시도하지 않는다'
+        ],
         owner: '김서연',
-        settledAt: '3월 12일 회의에서 정해짐',
-        subs: [{ text: '1시간 시도까지 실패하면 더 재시도하지 않는다', at: '3월 19일 회의' }],
+        settledAt: '3월 12일 회의에서 정해지고 3월 19일에 세부가 붙음',
+        subs: [{ text: '재시도를 모두 소진한 구독을 자동 해지할지', at: '3월 12일에 분리', state: 'decided' }],
         events: [
           { kind: 'refine', date: '3월 19일', short: '31분', meeting: '3월 3주차 제품 회의', text: '1시간 시도까지 실패하면 더 재시도하지 않는다', owner: '김서연', quote: '무한정 붙잡고 있을 이유가 없습니다. 1시간까지 안 되면 손 떼는 게 맞아요.', who: '김서연 · 14:22' },
-          { kind: 'change', date: '3월 12일', short: '52분', meeting: '3월 2주차 제품 회의', text: '재시도는 지수 백오프(1분 → 10분 → 1시간)로 한다', note: '이전 결정(최대 3회 즉시 재시도)을 대체했습니다.', owner: '김서연', quote: '지금은 실패하면 곧바로 세 번을 때립니다. 카드사 쪽에서 그걸 어뷰징으로 보고 아예 막아버려요.', who: '김서연 · 12:04' },
+          { kind: 'split', date: '3월 12일', short: '52분', meeting: '3월 2주차 제품 회의', text: '재시도를 모두 소진한 구독의 처리는 따로 안건으로 올렸다', note: '이 결정 안에 두기엔 약관 확인까지 따로 쫓아다녀야 해서 분리했습니다.' },
+          { kind: 'change', date: '3월 12일', short: '52분', meeting: '3월 2주차 제품 회의', text: '실패 원인에 따라 지수 백오프로 재시도한다', detail: ['일반 실패 — 1분 → 10분 → 1시간, 최대 3회', '5xx 응답 — 최대 4회까지', '잔액 부족 — 재시도하지 않고 바로 알림'], note: '이전 결정(최대 3회 즉시 재시도)을 대체했습니다.', owner: '김서연', quote: '지금은 실패하면 곧바로 세 번을 때립니다. 카드사 쪽에서 그걸 어뷰징으로 보고 아예 막아버려요.', who: '김서연 · 12:04' },
           { kind: 'decide', date: '2월 27일', short: '31분', meeting: '재시도 정책 리뷰', text: '재시도는 결제 건당 최대 3회로 제한한다', dead: true, owner: '김서연', quote: '상한이 없으면 장애 때 재시도가 스스로 부하를 만듭니다.', who: '김서연 · 09:41' },
           { kind: 'raise', date: '1월 8일', short: '46분', meeting: '결제 안정화 킥오프', text: '재시도를 몇 번까지 할지 정해야 한다', quote: '실패하면 무조건 다시 시도하는데, 몇 번까지가 맞는지는 아무도 모릅니다.', who: '정하늘 · 22:10' }
+        ]
+      },
+      {
+        id: 't4',
+        label: '회의 없이 정해진 안건',
+        title: '재시도가 모두 실패했을 때 구독을 자동 해지할지',
+        state: 'decided',
+        current: '재시도를 모두 소진하면 구독을 자동 해지한다',
+        owner: '박지훈',
+        settledAt: '3월 21일 · 회의를 다시 잡지 않고 담당자 확인으로 정해짐',
+        events: [
+          { kind: 'decide', date: '3월 21일', short: '—', meeting: '회의 없이 처리', outside: true, text: '약관상 걸리는 것이 없어 자동 해지하기로 함', note: '정책팀 확인 결과를 담당자가 그대로 반영했습니다. 회의를 다시 잡지 않았고, 이 줄은 어느 회의에도 붙지 않습니다.', owner: '박지훈' },
+          { kind: 'defer', date: '3월 12일', short: '52분', meeting: '3월 2주차 제품 회의', text: '약관 문제가 걸려 정책팀 확인 후로 보류', quote: '해지까지 자동으로 하면 약관을 다시 봐야 합니다. 오늘은 못 정합니다.', who: '박지훈 · 33:18' },
+          { kind: 'split', date: '3월 12일', short: '52분', meeting: '3월 2주차 제품 회의', text: '재시도 정책에서 떼어 별도 안건으로 올렸다', note: '결정 하나 안에 묻어두면 약관 확인이 누구 일인지 흐려집니다.' },
+          { kind: 'raise', date: '3월 12일', short: '52분', meeting: '3월 2주차 제품 회의', text: '재시도가 모두 실패한 구독을 어떻게 할지 물음', quote: '세 번 다 실패하면 그 구독은 어떻게 되나요?', who: '정하늘 · 30:02' }
         ]
       },
       {
@@ -217,11 +305,22 @@ class Component extends DCLogic {
       decide: { label: '결정', bg: 'oklch(0.95 0.03 158)', fg: 'oklch(0.50 0.08 158)' },
       change: { label: '변경', bg: '#e4e0d6', fg: '#23201c' },
       refine: { label: '세부 추가', bg: '#eae4d9', fg: '#57514a' },
+      split: { label: '하위 안건으로 분리', bg: '#f4f1ea', fg: '#8c847a' },
       defer: { label: '미룸', bg: '#f4ece3', fg: accent },
       raise: { label: '제기', bg: '#ffffff', fg: '#8c847a' }
     };
 
-    var defers = cur.events.filter(function (e) { return e.kind === 'defer'; }).length;
+    var ext = (s.ext && s.ext[cur.id]) || [];
+    var over = (s.over && s.over[cur.id]) || null;
+    var events = ext.concat(cur.events);
+    var defers = events.filter(function (e) { return e.kind === 'defer'; }).length;
+    var detail = cur.detail || [];
+    var subs = cur.subs || [];
+    var settled = cur.state === 'decided' || (!!over && over.kind === 'decide');
+    var outKind = s.outKind || 'decide';
+    var outOwnerId = s.outOwner || null;
+    var outOwner = this.staff().filter(function (x) { return x.id === outOwnerId; })[0] || null;
+    var KIND_LABEL = { decide: '결정', refine: '세부 추가', defer: '미룸' };
 
     return {
       accent: accent,
@@ -233,41 +332,89 @@ class Component extends DCLogic {
           fg: sel ? '#faf8f4' : '#57514a',
           bc: sel ? '#23201c' : '#e5dfd5',
           weight: sel ? 600 : 400,
-          pick: function () { self.setState({ tid: x.id, ev: null }); }
+          pick: function () { self.setState({ tid: x.id }); }
         };
       }),
       t: {
         title: cur.title,
-        stateLabel: cur.state === 'decided' ? '결정됨' : ('미결정 · ' + defers + '번 미뤄짐'),
-        stateBg: cur.state === 'decided' ? 'oklch(0.95 0.03 158)' : '#f4ece3',
-        stateFg: cur.state === 'decided' ? 'oklch(0.50 0.08 158)' : accent,
-        metaLabel: '회의 ' + cur.events.length + '번에 걸쳐 다뤄짐',
-        settled: cur.state === 'decided',
-        unsettled: cur.state !== 'decided',
-        current: cur.current || '',
-        subs: cur.subs || [],
-        hasOwner: !!cur.owner,
-        owner: cur.owner || '',
-        ownerCh: (cur.owner || '?').charAt(0),
-        settledAt: cur.settledAt || '',
+        stateLabel: settled ? '결정됨' : ('미결정 · ' + defers + '번 미뤄짐'),
+        stateBg: settled ? 'oklch(0.95 0.03 158)' : '#f4ece3',
+        stateFg: settled ? 'oklch(0.50 0.08 158)' : accent,
+        metaLabel: '이력 ' + events.length + '건',
+        settled: settled,
+        unsettled: !settled,
+        current: (over && over.kind === 'decide') ? over.text : (cur.current || ''),
+        hasDetail: detail.length > 0,
+        detail: detail.map(function (x) { return { line: x }; }),
+        hasSubs: subs.length > 0,
+        subs: subs.map(function (x) {
+          return { text: x.text, at: x.at, dot: x.state === 'decided' ? 'oklch(0.50 0.08 158)' : accent };
+        }),
+        hasOwner: !!((over && over.kind === 'decide' && over.owner) || cur.owner),
+        owner: (over && over.kind === 'decide' && over.owner) ? over.owner : (cur.owner || ''),
+        ownerCh: (((over && over.kind === 'decide' && over.owner) ? over.owner : cur.owner) || '?').charAt(0),
+        settledAt: (over && over.kind === 'decide') ? '방금 · 회의 없이 담당자 확인으로 정해짐' : (cur.settledAt || ''),
         nextLabel: cur.next || '',
-        deferLabel: defers + '번 미뤄졌고, 처음 나온 지 ' + cur.events.length + '번의 회의가 지났습니다.',
-        count: cur.events.length
+        deferLabel: defers + '번 미뤄졌고, 처음 나온 뒤 이력이 ' + events.length + '건 쌓였습니다.',
+        count: events.length
       },
-      events: cur.events.map(function (e, i) {
-        var key = cur.id + ':' + i;
-        var isOpen = s.ev === key;
+
+      outPh: outKind === 'decide' ? '한 줄로 — 어떻게 정했나요'
+        : (outKind === 'refine' ? '한 줄로 — 무엇을 더 정했나요' : '한 줄로 — 어디까지 갔나요'),
+      outKinds: ['decide', 'refine', 'defer'].map(function (k) {
+        var sel = outKind === k;
+        return {
+          label: KIND_LABEL[k],
+          bg: sel ? '#23201c' : '#ffffff',
+          fg: sel ? '#faf8f4' : '#57514a',
+          bc: sel ? '#23201c' : '#e5dfd5',
+          weight: sel ? 600 : 400,
+          pick: function () { self.setState({ outKind: k }); }
+        };
+      }),
+      outStaff: this.staff().map(function (pe) {
+        var sel = pe.id === outOwnerId;
+        return {
+          name: pe.name, ch: pe.ch,
+          bg: sel ? '#f4f1ea' : '#ffffff',
+          fg: sel ? '#23201c' : '#57514a',
+          bc: sel ? '#d6cec1' : '#e5dfd5',
+          pick: function () { self.setState({ outOwner: sel ? null : pe.id }); }
+        };
+      }),
+      addOut: function () {
+        var el = document.getElementById('th-text');
+        var v = el && el.value ? el.value.trim() : '';
+        if (!v) { return; }
+        el.value = '';
+        var ne = document.getElementById('th-note');
+        var note = ne && ne.value ? ne.value.trim() : '';
+        if (ne) { ne.value = ''; }
+        var row = { kind: outKind, date: '방금', short: '—', meeting: '회의 없이 처리', outside: true,
+          text: v, note: note, owner: outOwner ? outOwner.name : null };
+        var nx = {}; for (var k in (s.ext || {})) { nx[k] = s.ext[k]; }
+        nx[cur.id] = [row].concat(ext);
+        var no = {}; for (var k2 in (s.over || {})) { no[k2] = s.over[k2]; }
+        if (outKind === 'decide') { no[cur.id] = { kind: 'decide', text: v, owner: outOwner ? outOwner.name : null }; }
+        self.setState({ ext: nx, over: no, outOwner: null });
+      },
+
+      events: events.map(function (e, i) {
         var tag = TAG[e.kind];
+        var det = e.detail || [];
         return {
           date: e.date, short: e.short, meeting: e.meeting, text: e.text,
           tag: tag.label, tagBg: tag.bg, tagFg: tag.fg,
+          outside: !!e.outside,
+          hasMeeting: !e.outside,
           fg: e.dead ? '#a89f92' : '#23201c',
           deco: e.dead ? 'line-through' : 'none',
+          hasDetail: det.length > 0,
+          detail: det.map(function (x) { return { line: x }; }),
           hasNote: !!e.note, note: e.note || '',
           hasOwner: !!e.owner, owner: e.owner || '', ownerCh: (e.owner || '?').charAt(0),
-          expanded: isOpen, rot: isOpen ? 180 : 0,
-          quote: e.quote, who: e.who,
-          toggle: function () { self.setState({ ev: isOpen ? null : key }); }
+          hasQuote: !!e.quote,
+          quote: e.quote || '', who: e.who || ''
         };
       })
     };

@@ -11,9 +11,12 @@
   <style>
     body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: #9a5a2c; } a:hover { color: #23201c; }
+    input, select { font-family: inherit; font-size: 13px; color: #23201c; }
+    input::placeholder { color: #a89f92; }
+    select { appearance: none; -webkit-appearance: none; }
   </style>
 </helmet>
-<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; flex-direction: column; overflow: hidden;">
+<div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; flex-direction: column; position: relative; overflow: hidden;">
 
   <div style="height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 11px; padding: 0 22px; border-bottom: 1px solid #e5dfd5;">
     <div style="display: flex; align-items: center; gap: 9px;">
@@ -37,12 +40,13 @@
         <path d="M4 20h16"></path>
       </svg>
     </div>
-    <div style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13.5px; font-weight: 500; cursor: pointer;">
+    <div style="display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 14px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 13.5px; color: #57514a; cursor: pointer;">회의 추가</div>
+    <div onClick="{{ openReg }}" style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13.5px; font-weight: 500; cursor: pointer;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 5v14"></path>
         <path d="M5 12h14"></path>
       </svg>
-      <span>회의 추가</span>
+      <span>안건 추가</span>
     </div>
   </div>
 
@@ -61,16 +65,6 @@
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 3px;">
-        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 4px; cursor: pointer;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
-            <path d="M6 3h9l4 4v14H6z"></path>
-            <path d="M9 9h7"></path>
-            <path d="M9 13h7"></path>
-            <path d="M9 17h4"></path>
-          </svg>
-          <div style="flex-grow: 1; font-size: 14px;">회의록</div>
-          <div style="font-size: 11.5px; color: #8c847a;">8</div>
-        </div>
         <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 4px; background: #ffffff; border: 1px solid #d6cec1; cursor: pointer;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#23201c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
             <path d="M4 6h11"></path>
@@ -97,6 +91,10 @@
 
       <div style="display: flex; flex-direction: column; gap: 11px;">
         <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">눈여겨볼 것</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5dfd5; border-left: 3px solid #c8bfae; border-radius: 4px; background: #fdfbf7;">
+          <div style="font-size: 12.5px; line-height: 1.6; color: #57514a; text-wrap: pretty;">아직 회의에서 다루지 않은 안건이 {{ queuedCount }}건 있습니다.</div>
+          <div onClick="{{ pickQueued }}" style="display: flex; align-items: center; min-height: 30px; font-size: 12px; color: #57514a; cursor: pointer;">그 안건만 보기</div>
+        </div>
         <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5dfd5; border-left: 3px solid {{ accent }}; border-radius: 4px; background: #fdfbf7;">
           <div style="font-size: 12.5px; line-height: 1.6; color: #57514a; text-wrap: pretty;">3번 이상 미뤄진 안건이 {{ stuckCount }}건 있습니다.</div>
           <div onClick="{{ pickStuck }}" style="display: flex; align-items: center; min-height: 30px; font-size: 12px; color: {{ accent }}; cursor: pointer;">그 안건만 보기</div>
@@ -107,76 +105,100 @@
     <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
       <div style="height: 46px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 26px; border-bottom: 1px solid #e5dfd5;">
         <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">안건</div>
-        <div style="font-size: 11.5px; color: #a89f92;">총 {{ total }}건</div>
+        <div style="font-size: 11.5px; color: #a89f92;">{{ rangeLabel }}</div>
       </div>
 
       <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; justify-content: center; padding: 26px 26px 0;">
-        <div style="width: 100%; max-width: 880px; display: flex; flex-direction: column; gap: 18px;">
+        <div style="width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 16px;">
 
-          <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; flex-direction: column; gap: 9px;">
             <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 28px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em;">안건</div>
-            <div style="font-size: 13px; line-height: 1.7; color: #8c847a; text-wrap: pretty;">회의가 아니라 안건 기준으로 봅니다. 한 안건이 여러 회의에 걸쳐 어떻게 움직였는지가 이력 수로 보입니다.</div>
+            <div style="font-size: 13px; line-height: 1.7; color: #8c847a; text-wrap: pretty;">오른쪽 위 안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다. 회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.</div>
           </div>
 
-          <div style="display: flex; gap: 6px;">
-            <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
-              <div onClick="{{ tb.pick }}" style="display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border: 1px solid {{ tb.bc }}; border-radius: 18px; background: {{ tb.bg }}; font-size: 12.5px; font-weight: {{ tb.weight }}; color: {{ tb.fg }}; cursor: pointer;">
-                <span>{{ tb.label }}</span>
-                <span style="color: {{ tb.numFg }};">{{ tb.n }}</span>
+          <div style="display: flex; flex-direction: column; gap: 12px; padding: 15px 17px; border: 1px solid #e5dfd5; border-radius: 5px; background: #f8f6f1;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 52px; flex-shrink: 0; font-size: 11.5px; color: #8c847a;">제목</div>
+              <input id="tl-q" placeholder="안건 제목에 들어가는 말" style="flex-grow: 1; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; outline: none;">
+              <div style="flex-shrink: 0; font-size: 11.5px; color: #8c847a;">담당자</div>
+              <div style="position: relative; width: 132px; flex-shrink: 0;">
+                <select value="{{ ownerValue }}" onChange="{{ onOwner }}" style="width: 100%; height: 38px; padding: 0 30px 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; outline: none; cursor: pointer;">
+                  <sc-for list="{{ ownerOptions }}" as="oo" hint-placeholder-count="6">
+                    <option value="{{ oo.value }}">{{ oo.label }}</option>
+                  </sc-for>
+                </select>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8c847a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 11px; top: 13px; pointer-events: none;">
+                  <path d="M6 9l6 6 6-6"></path>
+                </svg>
               </div>
-            </sc-for>
+              <div onClick="{{ doSearch }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 12.5px; font-weight: 500; cursor: pointer;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="6.5"></circle>
+                  <path d="M16 16l4 4"></path>
+                </svg>
+                <span>조회</span>
+              </div>
+              <div onClick="{{ doReset }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 12.5px; color: #57514a; cursor: pointer;">초기화</div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+              <div style="width: 52px; flex-shrink: 0; font-size: 11.5px; color: #8c847a; padding-top: 8px;">상태</div>
+              <div style="flex-grow: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px;">
+                <sc-for list="{{ stateChips }}" as="sc" hint-placeholder-count="5">
+                  <div onClick="{{ sc.pick }}" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid {{ sc.bc }}; border-radius: 16px; background: {{ sc.bg }}; font-size: 12px; font-weight: {{ sc.weight }}; color: {{ sc.fg }}; cursor: pointer;">
+                    <span>{{ sc.label }}</span>
+                    <span style="color: {{ sc.numFg }};">{{ sc.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
           </div>
 
           <div style="display: flex; flex-direction: column; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff; overflow: hidden;">
-            <div style="display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 16px; border-bottom: 1px solid #e5dfd5; background: #f8f6f1; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #8c847a;">
+            <div style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 16px; border-bottom: 1px solid #e5dfd5; background: #f8f6f1; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #8c847a;">
               <div style="flex-grow: 1; min-width: 0;">안건</div>
-              <div style="width: 128px; flex-shrink: 0;">상태</div>
-              <div style="width: 96px; flex-shrink: 0;">담당자</div>
-              <div style="width: 92px; flex-shrink: 0;">마지막 회의</div>
-              <div style="width: 46px; flex-shrink: 0; text-align: right;">이력</div>
+              <div style="width: 124px; flex-shrink: 0;">상태</div>
+              <div style="width: 84px; flex-shrink: 0;">담당자</div>
+              <div style="width: 84px; flex-shrink: 0;">마지막 회의</div>
+              <div style="width: 40px; flex-shrink: 0; text-align: right;">이력</div>
             </div>
-            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
-              <div onClick="{{ r.tap }}" style="display: flex; flex-direction: column; border-bottom: 1px solid #f0ece4; background: {{ r.bg }}; cursor: pointer;">
-                <div style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 10px 16px;">
-                  <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 9px;">
-                    <div style="width: 4px; height: 26px; flex-shrink: 0; border-radius: 2px; background: {{ r.stripe }};"></div>
-                    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
-                      <div style="font-size: 13.5px; line-height: 1.45; font-weight: {{ r.weight }}; text-wrap: pretty;">{{ r.title }}</div>
-                      <div style="font-size: 11.5px; color: #a89f92;">{{ r.sub }}</div>
-                    </div>
-                  </div>
-                  <div style="width: 128px; flex-shrink: 0;">
-                    <div style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; background: {{ r.badgeBg }}; font-size: 11.5px; color: {{ r.badgeFg }};">
-                      <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.badgeFg }};"></div>
-                      <span>{{ r.badge }}</span>
-                    </div>
-                  </div>
-                  <div style="width: 96px; flex-shrink: 0; font-size: 12.5px; color: {{ r.ownerFg }};">{{ r.owner }}</div>
-                  <div style="width: 92px; flex-shrink: 0; font-size: 12.5px; color: #8c847a;">{{ r.last }}</div>
-                  <div style="width: 46px; flex-shrink: 0; text-align: right; font-size: 12.5px; color: #57514a;">{{ r.hist }}</div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 16px; border-bottom: 1px solid #f0ece4; cursor: pointer;">
+                <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 9px;">
+                  <div style="width: 4px; height: 22px; flex-shrink: 0; border-radius: 2px; background: {{ r.stripe }};"></div>
+                  <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.title }}</div>
                 </div>
-                <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ true }}">
-                  <div style="display: flex; flex-direction: column; gap: 9px; padding: 0 16px 16px 45px;">
-                    <sc-for list="{{ r.trail }}" as="tr" hint-placeholder-count="3">
-                      <div style="display: flex; align-items: flex-start; gap: 10px;">
-                        <div style="width: 62px; flex-shrink: 0; font-size: 11.5px; color: #a89f92; padding-top: 3px;">{{ tr.date }}</div>
-                        <div style="display: flex; align-items: center; height: 22px; flex-shrink: 0; padding: 0 8px; border-radius: 3px; background: {{ tr.tagBg }}; font-size: 11px; font-weight: 600; color: {{ tr.tagFg }};">{{ tr.tag }}</div>
-                        <div style="flex-grow: 1; min-width: 0; font-size: 13px; line-height: 1.6; color: {{ tr.fg }}; text-decoration: {{ tr.deco }}; text-wrap: pretty;">{{ tr.text }}</div>
-                      </div>
-                    </sc-for>
-                    <div style="display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 12.5px; color: #57514a; align-self: flex-start; cursor: pointer;">
-                      <span>안건 전체 이력 보기</span>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M9 6l6 6-6 6"></path>
-                      </svg>
-                    </div>
+                <div style="width: 124px; flex-shrink: 0;">
+                  <div style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; background: {{ r.badgeBg }}; font-size: 11.5px; color: {{ r.badgeFg }};">
+                    <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.badgeFg }};"></div>
+                    <span>{{ r.badge }}</span>
                   </div>
-                </sc-if>
+                </div>
+                <div style="width: 84px; flex-shrink: 0; font-size: 12.5px; color: {{ r.ownerFg }};">{{ r.owner }}</div>
+                <div style="width: 84px; flex-shrink: 0; font-size: 12.5px; color: #8c847a;">{{ r.last }}</div>
+                <div style="width: 40px; flex-shrink: 0; text-align: right; font-size: 12.5px; color: #57514a;">{{ r.hist }}</div>
               </div>
             </sc-for>
             <sc-if value="{{ noRows }}" hint-placeholder-val="{{ true }}">
-              <div style="display: flex; align-items: center; justify-content: center; height: 110px; font-size: 13px; color: #8c847a;">해당하는 안건이 없습니다.</div>
+              <div style="display: flex; align-items: center; justify-content: center; height: 110px; font-size: 13px; color: #8c847a;">조회 조건에 맞는 안건이 없습니다.</div>
             </sc-if>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 10px; padding-bottom: 26px;">
+            <div style="font-size: 12px; color: #a89f92;">{{ rangeLabel }}</div>
+            <div style="flex-grow: 1;"></div>
+            <div onClick="{{ prevPage }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid {{ prevBc }}; border-radius: 4px; background: #ffffff; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ prevFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 6l-6 6 6 6"></path>
+              </svg>
+            </div>
+            <sc-for list="{{ pages }}" as="pg" hint-placeholder-count="2">
+              <div onClick="{{ pg.pick }}" style="display: flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; padding: 0 8px; border: 1px solid {{ pg.bc }}; border-radius: 4px; background: {{ pg.bg }}; font-size: 12.5px; font-weight: {{ pg.weight }}; color: {{ pg.fg }}; cursor: pointer;">{{ pg.n }}</div>
+            </sc-for>
+            <div onClick="{{ nextPage }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid {{ nextBc }}; border-radius: 4px; background: #ffffff; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ nextFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 6l6 6-6 6"></path>
+              </svg>
+            </div>
           </div>
 
         </div>
@@ -184,54 +206,72 @@
     </div>
 
   </div>
+
+  <sc-if value="{{ regOpen }}" hint-placeholder-val="{{ true }}">
+    <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(35, 32, 28, 0.42); display: flex; align-items: center; justify-content: center;">
+      <div style="width: 560px; border-radius: 6px; background: #faf8f4; box-shadow: 0 30px 70px rgba(35, 32, 28, 0.32); display: flex; flex-direction: column; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 18px 22px; border-bottom: 1px solid #e5dfd5;">
+          <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 19px; font-weight: 700; letter-spacing: -0.01em;">안건 추가</div>
+          <div style="flex-grow: 1;"></div>
+          <div onClick="{{ closeReg }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 4px; cursor: pointer;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 6l12 12"></path>
+              <path d="M18 6L6 18"></path>
+            </svg>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 14px; padding: 22px;">
+          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">회의와 무관하게 먼저 등록해 둡니다. 등록만 된 안건은 대기 상태로, 다음 회의에서 고를 후보가 됩니다.</div>
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <div style="font-size: 11.5px; color: #8c847a;">무엇을 정해야 하나요</div>
+            <input id="tl-title" placeholder="예: 결제 실패 안내 문구를 어떤 톤으로 쓸지" style="height: 44px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 14px; outline: none;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <div style="font-size: 11.5px; color: #8c847a;">담당자 (선택)</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <sc-for list="{{ ownerChips }}" as="oc" hint-placeholder-count="4">
+                <div onClick="{{ oc.pick }}" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 5px; border: 1px solid {{ oc.bc }}; border-radius: 17px; background: {{ oc.bg }}; font-size: 12.5px; color: {{ oc.fg }}; cursor: pointer;">
+                  <div style="width: 22px; height: 22px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10.5px; display: flex; align-items: center; justify-content: center;">{{ oc.ch }}</div>
+                  <span>{{ oc.name }}</span>
+                </div>
+              </sc-for>
+              <div onClick="{{ clearRegOwner }}" style="display: flex; align-items: center; height: 34px; padding: 0 12px; border: 1px solid {{ noneBc }}; border-radius: 17px; background: {{ noneBg }}; font-size: 12.5px; color: {{ noneFg }}; cursor: pointer;">미정</div>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 16px 22px; border-top: 1px solid #e5dfd5; background: #f8f6f1;">
+          <div style="flex-grow: 1;"></div>
+          <div onClick="{{ closeReg }}" style="display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 15px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 13px; color: #57514a; cursor: pointer;">취소</div>
+          <div onClick="{{ addThread }}" style="display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 18px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13px; font-weight: 500; cursor: pointer;">저장</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
 </div>
 </x-dc>
-<script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"perPage":{"editor":"int","default":5,"min":3,"max":10,"section":"목록"},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
+  staff() {
+    return [
+      { id: 'u1', name: '김서연', ch: '김' },
+      { id: 'u2', name: '박지훈', ch: '박' },
+      { id: 'u3', name: '이도현', ch: '이' },
+      { id: 'u4', name: '정하늘', ch: '정' }
+    ];
+  }
+
   data() {
     return [
-      { id: 't1', title: '알림 채널을 하나로 합칠지', state: 'open', defers: 3, owner: null, last: '3월 12일', hist: 4,
-        sub: '푸시·이메일·인앱 통합 · 2월 20일에 처음 나옴',
-        trail: [
-          { date: '3월 12일', kind: 'defer', text: '전사 알림 구조 문제라 결제 회의에서 정할 범위가 아니라는 의견' },
-          { date: '3월 5일', kind: 'defer', text: '작업량 추정이 안 되어 미룸' },
-          { date: '2월 20일', kind: 'raise', text: '같은 실패로 푸시와 메일이 따로 나가 사용자가 중복으로 받는다' }
-        ] },
-      { id: 't5', title: '배포 시간대를 트래픽이 낮은 새벽으로 옮길지', state: 'open', defers: 3, owner: null, last: '3월 8일', hist: 3,
-        sub: '온콜 부담 분배가 쟁점 · 1월 8일에 처음 나옴',
-        trail: [
-          { date: '3월 8일', kind: 'defer', text: '팀별 온콜 부담이 달라 합의하지 못함' },
-          { date: '2월 13일', kind: 'defer', text: '이중화 논의에 묻혀 다루지 못함' },
-          { date: '1월 8일', kind: 'raise', text: '장애 여섯 건 중 네 건이 배포 두 시간 안에 발생' }
-        ] },
-      { id: 't4', title: '재시도가 모두 실패했을 때 구독을 자동 해지할지', state: 'open', defers: 1, owner: '박지훈', last: '3월 12일', hist: 2,
-        sub: '약관 검토 필요 · 정책팀 확인 대기',
-        trail: [
-          { date: '3월 12일', kind: 'defer', text: '약관 문제가 걸려 정책팀 확인 후로 보류' },
-          { date: '3월 12일', kind: 'raise', text: '재시도가 모두 실패한 구독을 어떻게 할지 물음' }
-        ] },
-      { id: 't2', title: '결제 재시도 정책', state: 'decided', defers: 0, owner: '김서연', last: '3월 19일', hist: 4,
-        sub: '지수 백오프(1분 → 10분 → 1시간) · 세부 1건',
-        trail: [
-          { date: '3월 19일', kind: 'refine', text: '1시간 시도까지 실패하면 더 재시도하지 않는다' },
-          { date: '3월 12일', kind: 'change', text: '지수 백오프(1분 → 10분 → 1시간)로 한다' },
-          { date: '2월 27일', kind: 'decide', text: '재시도는 결제 건당 최대 3회로 제한한다', dead: true }
-        ] },
-      { id: 't3', title: '결제 실패 알림 발송 시점', state: 'decided', defers: 0, owner: '박지훈', last: '3월 12일', hist: 1,
-        sub: '3회차 재시도 이후에만 발송',
-        trail: [
-          { date: '3월 12일', kind: 'decide', text: '3회차 재시도 이후에만 발송한다' }
-        ] },
-      { id: 't6', title: '커넥션 풀 사용률 80% 임계 알림', state: 'decided', defers: 0, owner: '정하늘', last: '3월 8일', hist: 1,
-        sub: '완료 · 3월 15일 반영됨',
-        trail: [
-          { date: '3월 8일', kind: 'decide', text: '커넥션 풀 사용률 80%에서 알림을 보낸다' }
-        ] },
-      { id: 't7', title: '롤백 절차 문서화와 온콜 교육', state: 'decided', defers: 0, owner: '박지훈', last: '3월 8일', hist: 1,
-        sub: '진행 중 · 3월 20일 기한',
-        trail: [
-          { date: '3월 8일', kind: 'decide', text: '롤백 절차를 문서로 만들고 온콜 교육에 포함한다' }
-        ] }
+      { id: 't8', title: '결제 실패 안내 문구를 어떤 톤으로 쓸지', state: 'queued', defers: 0, owner: null, last: '—', hist: 0 },
+      { id: 't9', title: 'PG사 이중화 1차 적용 범위', state: 'queued', defers: 0, owner: '이도현', last: '—', hist: 0 },
+      { id: 't1', title: '알림 채널을 하나로 합칠지', state: 'open', defers: 3, owner: null, last: '3월 12일', hist: 4 },
+      { id: 't5', title: '배포 시간대를 트래픽이 낮은 새벽으로 옮길지', state: 'open', defers: 3, owner: null, last: '3월 8일', hist: 3 },
+      { id: 't4', title: '재시도가 모두 실패했을 때 구독을 자동 해지할지', state: 'decided', defers: 1, owner: '박지훈', last: '3월 21일', hist: 3 },
+      { id: 't2', title: '결제 재시도 정책', state: 'decided', defers: 0, owner: '김서연', last: '3월 19일', hist: 4 },
+      { id: 't3', title: '결제 실패 알림 발송 시점', state: 'decided', defers: 0, owner: '박지훈', last: '3월 12일', hist: 1 },
+      { id: 't6', title: '커넥션 풀 사용률 80% 임계 알림', state: 'decided', defers: 0, owner: '정하늘', last: '3월 8일', hist: 1 },
+      { id: 't7', title: '롤백 절차 문서화와 온콜 교육', state: 'decided', defers: 0, owner: '박지훈', last: '3월 8일', hist: 1 }
     ];
   }
 
@@ -239,51 +279,57 @@ class Component extends DCLogic {
     var self = this;
     var s = this.state || {};
     var accent = this.props.accent || '#9a5a2c';
-    var tab = s.tab || 'all';
-    var all = this.data();
+    var per = this.props.perPage || 5;
+    var added = s.added || [];
+    var all = added.concat(this.data());
+    var q = s.q || '';
+    var st = s.st || 'all';
+    var ow = s.ow || 'all';
+    var page = s.page || 1;
+    var regOwnerId = s.regOwner || null;
+    var ownerRec = this.staff().filter(function (x) { return x.id === regOwnerId; })[0] || null;
 
-    var TAG = {
-      decide: { label: '결정', bg: 'oklch(0.95 0.03 158)', fg: 'oklch(0.50 0.08 158)' },
-      change: { label: '변경', bg: '#e4e0d6', fg: '#23201c' },
-      refine: { label: '세부', bg: '#eae4d9', fg: '#57514a' },
-      defer: { label: '미룸', bg: '#f4ece3', fg: accent },
-      raise: { label: '제기', bg: '#f4f1ea', fg: '#8c847a' }
+    var byState = function (t, key) {
+      if (key === 'all') { return true; }
+      if (key === 'stuck') { return t.defers >= 3; }
+      return t.state === key;
     };
 
-    var opens = all.filter(function (t) { return t.state === 'open'; });
-    var decided = all.filter(function (t) { return t.state === 'decided'; });
-    var stuck = all.filter(function (t) { return t.defers >= 3; });
+    var counts = {
+      all: all.length,
+      queued: all.filter(function (t) { return t.state === 'queued'; }).length,
+      open: all.filter(function (t) { return t.state === 'open'; }).length,
+      decided: all.filter(function (t) { return t.state === 'decided'; }).length,
+      stuck: all.filter(function (t) { return t.defers >= 3; }).length
+    };
 
-    var pool = tab === 'open' ? opens : (tab === 'decided' ? decided : (tab === 'stuck' ? stuck : all));
-
-    var rows = pool.map(function (t) {
-      var isOpen = t.state === 'open';
-      var exp = s.row === t.id;
-      return {
-        title: t.title,
-        sub: t.sub,
-        badge: isOpen ? (t.defers + '번 미뤄짐') : '결정됨',
-        badgeBg: isOpen ? '#f4ece3' : 'oklch(0.95 0.03 158)',
-        badgeFg: isOpen ? accent : 'oklch(0.50 0.08 158)',
-        stripe: isOpen ? accent : 'oklch(0.50 0.08 158)',
-        owner: t.owner || '미정',
-        ownerFg: t.owner ? '#23201c' : '#a89f92',
-        last: t.last,
-        hist: t.hist,
-        bg: exp ? '#fdfbf7' : '#ffffff',
-        weight: exp ? 600 : 400,
-        expanded: exp,
-        tap: function () { self.setState({ row: exp ? null : t.id }); },
-        trail: t.trail.map(function (x) {
-          var tg = TAG[x.kind];
-          return { date: x.date, tag: tg.label, tagBg: tg.bg, tagFg: tg.fg, text: x.text,
-            fg: x.dead ? '#a89f92' : '#33302b', deco: x.dead ? 'line-through' : 'none' };
-        })
-      };
+    var filtered = all.filter(function (t) {
+      if (q && t.title.indexOf(q) < 0) { return false; }
+      if (!byState(t, st)) { return false; }
+      if (ow === 'all') { return true; }
+      if (ow === 'none') { return !t.owner; }
+      return t.owner === ow;
     });
 
-    var mk = function (id, label, n) {
-      var sel = tab === id;
+    var total = filtered.length;
+    var pageCount = total === 0 ? 1 : Math.ceil(total / per);
+    var cur = page > pageCount ? pageCount : page;
+    var start = (cur - 1) * per;
+    var slice = filtered.slice(start, start + per);
+
+    var setFilter = function (patch) {
+      patch.page = 1;
+      self.setState(patch);
+    };
+
+    var badgeOf = function (t) {
+      if (t.state === 'queued') { return { label: '다음 회의 대기', bg: '#eae4d9', fg: '#57514a', stripe: '#c8bfae' }; }
+      if (t.state === 'open') { return { label: t.defers + '번 미뤄짐', bg: '#f4ece3', fg: accent, stripe: accent }; }
+      return { label: '결정됨', bg: 'oklch(0.95 0.03 158)', fg: 'oklch(0.50 0.08 158)', stripe: 'oklch(0.50 0.08 158)' };
+    };
+
+    var chip = function (key, label, n) {
+      var sel = st === key;
       return {
         label: label, n: n,
         bg: sel ? '#23201c' : '#ffffff',
@@ -291,19 +337,108 @@ class Component extends DCLogic {
         numFg: sel ? '#c8bfae' : '#a89f92',
         bc: sel ? '#23201c' : '#e5dfd5',
         weight: sel ? 600 : 400,
-        pick: function () { self.setState({ tab: id, row: null }); }
+        pick: function () { setFilter({ st: key }); }
       };
     };
 
+    var pages = [];
+    for (var i = 1; i <= pageCount; i++) {
+      pages.push((function (n) {
+        var sel = n === cur;
+        return {
+          n: n,
+          bg: sel ? '#23201c' : '#ffffff',
+          fg: sel ? '#faf8f4' : '#57514a',
+          bc: sel ? '#23201c' : '#e5dfd5',
+          weight: sel ? 600 : 400,
+          pick: function () { self.setState({ page: n }); }
+        };
+      })(i));
+    }
+
     return {
       accent: accent,
-      tabs: [mk('all', '전체', all.length), mk('open', '미결정', opens.length), mk('decided', '결정됨', decided.length), mk('stuck', '3번 이상 미뤄짐', stuck.length)],
-      rows: rows,
-      noRows: rows.length === 0,
-      total: pool.length,
-      openTotal: opens.length,
-      stuckCount: stuck.length,
-      pickStuck: function () { self.setState({ tab: 'stuck', row: null }); }
+      rows: slice.map(function (t) {
+        var bd = badgeOf(t);
+        return {
+          title: t.title,
+          badge: bd.label, badgeBg: bd.bg, badgeFg: bd.fg, stripe: bd.stripe,
+          owner: t.owner || '미정',
+          ownerFg: t.owner ? '#23201c' : '#a89f92',
+          last: t.last,
+          hist: t.hist
+        };
+      }),
+      noRows: slice.length === 0,
+      rangeLabel: total === 0 ? '0건' : ('총 ' + total + '건 중 ' + (start + 1) + '–' + (start + slice.length) + '건'),
+      openTotal: counts.open,
+      queuedCount: counts.queued,
+      stuckCount: counts.stuck,
+      pickQueued: function () { setFilter({ st: 'queued' }); },
+      pickStuck: function () { setFilter({ st: 'stuck' }); },
+
+      stateChips: [
+        chip('all', '전체', counts.all),
+        chip('queued', '대기', counts.queued),
+        chip('open', '미결정', counts.open),
+        chip('decided', '결정됨', counts.decided),
+        chip('stuck', '3번 이상 미뤄짐', counts.stuck)
+      ],
+      ownerValue: ow,
+      ownerOptions: [{ value: 'all', label: '전체' }]
+        .concat(this.staff().map(function (pe) { return { value: pe.name, label: pe.name }; }))
+        .concat([{ value: 'none', label: '미정' }]),
+      onOwner: function (e) {
+        var v = e && e.target ? e.target.value : 'all';
+        setFilter({ ow: v });
+      },
+
+      doSearch: function () {
+        var el = document.getElementById('tl-q');
+        setFilter({ q: el && el.value ? el.value.trim() : '' });
+      },
+      doReset: function () {
+        var el = document.getElementById('tl-q');
+        if (el) { el.value = ''; }
+        setFilter({ q: '', st: 'all', ow: 'all' });
+      },
+
+      pages: pages,
+      prevBc: cur > 1 ? '#d6cec1' : '#f0ece4',
+      prevFg: cur > 1 ? '#57514a' : '#c8bfae',
+      nextBc: cur < pageCount ? '#d6cec1' : '#f0ece4',
+      nextFg: cur < pageCount ? '#57514a' : '#c8bfae',
+      prevPage: function () { if (cur > 1) { self.setState({ page: cur - 1 }); } },
+      nextPage: function () { if (cur < pageCount) { self.setState({ page: cur + 1 }); } },
+
+      regOpen: !!s.regOpen,
+      openReg: function () { self.setState({ regOpen: true }); },
+      closeReg: function () { self.setState({ regOpen: false, regOwner: null }); },
+      clearRegOwner: function () { self.setState({ regOwner: null }); },
+      noneBg: ownerRec ? '#ffffff' : '#f4f1ea',
+      noneFg: ownerRec ? '#8c847a' : '#23201c',
+      noneBc: ownerRec ? '#e5dfd5' : '#d6cec1',
+      ownerChips: this.staff().map(function (pe) {
+        var sel = pe.id === regOwnerId;
+        return {
+          name: pe.name, ch: pe.ch,
+          bg: sel ? '#f4f1ea' : '#ffffff',
+          fg: sel ? '#23201c' : '#57514a',
+          bc: sel ? '#d6cec1' : '#e5dfd5',
+          pick: function () { self.setState({ regOwner: sel ? null : pe.id }); }
+        };
+      }),
+      addThread: function () {
+        var el = document.getElementById('tl-title');
+        var v = el && el.value ? el.value.trim() : '';
+        if (!v) { return; }
+        el.value = '';
+        self.setState({
+          added: [{ id: 'n' + (added.length + 1), title: v, state: 'queued', defers: 0,
+            owner: ownerRec ? ownerRec.name : null, last: '—', hist: 0 }].concat(added),
+          regOpen: false, regOwner: null, st: 'all', ow: 'all', q: '', page: 1
+        });
+      }
     };
   }
 }
