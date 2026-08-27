@@ -104,12 +104,12 @@ function submitThread() {
 <template>
   <AppShell>
     <template #actions>
-      <Button variant="outline" size="icon" class="size-[34px]">
-        <Download class="size-[15px]" />
+      <Button variant="outline" size="icon">
+        <Download class="size-4" />
       </Button>
-      <Button variant="outline" class="h-9">회의 추가</Button>
-      <Button class="h-9" @click="addOpen = true">
-        <Plus class="size-3.5" />
+      <Button variant="outline">회의 추가</Button>
+      <Button @click="addOpen = true">
+        <Plus class="size-4" />
         안건 추가
       </Button>
     </template>
@@ -117,20 +117,20 @@ function submitThread() {
     <template #aside>
       <div class="h-px bg-border" />
       <div class="flex flex-col gap-3">
-        <div class="text-[11px] font-semibold tracking-[0.09em] text-muted-foreground">눈여겨볼 것</div>
-        <div class="flex flex-col gap-2 rounded-md border border-border border-l-[3px] border-l-line-strong bg-card/60 px-[13px] py-3">
-          <p class="text-[12.5px] leading-relaxed text-secondary-foreground text-pretty">
+        <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
+        <div class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm">
+          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             아직 회의에서 다루지 않은 안건이 {{ counts.queued }}건 있습니다.
           </p>
-          <button type="button" class="min-h-[30px] text-left text-xs text-secondary-foreground" @click="pickState('queued')">
+          <button type="button" class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline" @click="pickState('queued')">
             그 안건만 보기
           </button>
         </div>
-        <div class="flex flex-col gap-2 rounded-md border border-border border-l-[3px] border-l-brand bg-card/60 px-[13px] py-3">
-          <p class="text-[12.5px] leading-relaxed text-secondary-foreground text-pretty">
+        <div class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm">
+          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             3번 이상 미뤄진 안건이 {{ counts.stuck }}건 있습니다.
           </p>
-          <button type="button" class="min-h-[30px] text-left text-xs text-brand" @click="pickState('stuck')">
+          <button type="button" class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline" @click="pickState('stuck')">
             그 안건만 보기
           </button>
         </div>
@@ -138,32 +138,32 @@ function submitThread() {
     </template>
 
     <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
-      <span class="text-[11.5px] font-semibold tracking-[0.09em] text-muted-foreground">안건</span>
-      <span class="text-[11.5px] text-subtle">{{ rangeLabel }}</span>
+      <span class="text-xs font-medium text-muted-foreground">안건</span>
+      <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
     </div>
 
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
       <div class="flex w-full max-w-[900px] flex-col gap-4">
         <header class="flex flex-col gap-2.5">
-          <h1 class="font-serif text-[28px] leading-tight font-bold tracking-[-0.015em]">안건</h1>
-          <p class="text-[13px] leading-[1.7] text-muted-foreground text-pretty">
+          <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
+          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             오른쪽 위 안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다.
             회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
           </p>
         </header>
 
-        <section class="flex flex-col gap-3 rounded-lg border border-border bg-panel px-[17px] py-[15px]">
+        <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">
           <div class="flex items-center gap-2.5">
-            <span class="w-[52px] shrink-0 text-[11.5px] text-muted-foreground">제목</span>
+            <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
             <Input
               v-model="titleDraft"
               placeholder="안건 제목에 들어가는 말"
-              class="h-[38px] grow bg-card"
+              class="grow bg-background"
               @keyup.enter="search"
             />
-            <span class="shrink-0 text-[11.5px] text-muted-foreground">담당자</span>
+            <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
             <Select v-model="ownerFilter" @update:model-value="resetPage">
-              <SelectTrigger class="h-[38px] w-[132px] shrink-0 bg-card">
+              <SelectTrigger class="w-[132px] shrink-0 bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -172,44 +172,44 @@ function submitThread() {
                 <SelectItem value="none">미정</SelectItem>
               </SelectContent>
             </Select>
-            <Button class="h-[38px] shrink-0" @click="search">
-              <Search class="size-3.5" />
+            <Button class="shrink-0" @click="search">
+              <Search class="size-4" />
               조회
             </Button>
-            <Button variant="outline" class="h-[38px] shrink-0 bg-card" @click="resetAll">초기화</Button>
+            <Button variant="outline" class="shrink-0" @click="resetAll">초기화</Button>
           </div>
 
           <div class="flex items-start gap-2.5">
-            <span class="w-[52px] shrink-0 pt-2 text-[11.5px] text-muted-foreground">상태</span>
+            <span class="w-[52px] shrink-0 pt-2 text-sm text-muted-foreground">상태</span>
             <div class="flex grow flex-wrap gap-1.5">
               <button
                 v-for="c in stateChips"
                 :key="c.key"
                 type="button"
-                class="flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors"
+                class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors"
                 :class="
                   stateFilter === c.key
-                    ? 'border-primary bg-primary font-semibold text-primary-foreground'
-                    : 'border-border bg-card text-secondary-foreground'
+                    ? 'border-primary bg-primary text-primary-foreground shadow'
+                    : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
                 "
                 @click="pickState(c.key)"
               >
                 {{ c.label }}
-                <span :class="stateFilter === c.key ? 'text-primary-foreground/60' : 'text-subtle'">{{ c.n }}</span>
+                <span :class="stateFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'">{{ c.n }}</span>
               </button>
             </div>
           </div>
         </section>
 
-        <div class="overflow-hidden rounded-lg border border-border bg-card">
+        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
           <Table>
             <TableHeader>
-              <TableRow class="bg-panel hover:bg-panel">
-                <TableHead class="h-10 text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">안건</TableHead>
-                <TableHead class="h-10 w-[124px] text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">상태</TableHead>
-                <TableHead class="h-10 w-[84px] text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">담당자</TableHead>
-                <TableHead class="h-10 w-[84px] text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">마지막 회의</TableHead>
-                <TableHead class="h-10 w-10 text-right text-[11.5px] font-semibold tracking-[0.04em] text-muted-foreground">이력</TableHead>
+              <TableRow class="bg-muted/50 hover:bg-muted/50">
+                <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
+                <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground">상태</TableHead>
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">담당자</TableHead>
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">마지막 회의</TableHead>
+                <TableHead class="h-10 w-10 text-right text-xs font-medium text-muted-foreground">이력</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -219,25 +219,25 @@ function submitThread() {
                     <span
                       class="h-[22px] w-1 shrink-0 rounded-full"
                       :class="{
-                        'bg-line-strong': row.thread.state === 'queued',
-                        'bg-brand': row.thread.state === 'open',
-                        'bg-ok': row.thread.state === 'decided',
+                        'bg-border': row.thread.state === 'queued',
+                        'bg-primary': row.thread.state === 'open',
+                        'bg-muted-foreground/40': row.thread.state === 'decided',
                       }"
                     />
-                    <span class="min-w-0 truncate text-[13.5px]">{{ row.thread.title }}</span>
+                    <span class="min-w-0 truncate text-sm">{{ row.thread.title }}</span>
                   </div>
                 </TableCell>
                 <TableCell>
                   <ThreadStateBadge :state="row.thread.state" :defer-count="row.deferCount" />
                 </TableCell>
-                <TableCell class="text-[12.5px]" :class="row.ownerName ? '' : 'text-subtle'">
+                <TableCell class="text-sm" :class="row.ownerName ? '' : 'text-muted-foreground'">
                   {{ row.ownerName ?? '미정' }}
                 </TableCell>
-                <TableCell class="text-[12.5px] text-muted-foreground">{{ row.lastMeetingLabel }}</TableCell>
-                <TableCell class="text-right text-[12.5px] text-secondary-foreground">{{ row.entryCount }}</TableCell>
+                <TableCell class="text-sm text-muted-foreground">{{ row.lastMeetingLabel }}</TableCell>
+                <TableCell class="text-right text-sm text-muted-foreground">{{ row.entryCount }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="5" class="h-[110px] text-center text-[13px] text-muted-foreground">
+                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
                   조회 조건에 맞는 안건이 없습니다.
                 </TableCell>
               </TableRow>
@@ -246,23 +246,23 @@ function submitThread() {
         </div>
 
         <div class="flex items-center gap-2.5 pb-[26px]">
-          <span class="text-xs text-subtle">{{ rangeLabel }}</span>
+          <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
           <div class="grow" />
-          <Button variant="outline" size="icon" class="size-[34px] bg-card" :disabled="current <= 1" @click="page = current - 1">
-            <ChevronLeft class="size-3.5" />
+          <Button variant="outline" size="icon" :disabled="current <= 1" @click="page = current - 1">
+            <ChevronLeft class="size-4" />
           </Button>
           <Button
             v-for="n in pageCount"
             :key="n"
             :variant="n === current ? 'default' : 'outline'"
-            class="size-[34px] p-0 text-[12.5px]"
-            :class="n === current ? '' : 'bg-card'"
+            size="icon"
+            class="text-xs"
             @click="page = n"
           >
             {{ n }}
           </Button>
-          <Button variant="outline" size="icon" class="size-[34px] bg-card" :disabled="current >= pageCount" @click="page = current + 1">
-            <ChevronRight class="size-3.5" />
+          <Button variant="outline" size="icon" :disabled="current >= pageCount" @click="page = current + 1">
+            <ChevronRight class="size-4" />
           </Button>
         </div>
       </div>
@@ -271,26 +271,25 @@ function submitThread() {
     <Dialog v-model:open="addOpen">
       <DialogContent class="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle class="font-serif text-[19px] tracking-[-0.01em]">안건 추가</DialogTitle>
-          <DialogDescription class="text-[12.5px] leading-relaxed text-pretty">
+          <DialogTitle>안건 추가</DialogTitle>
+          <DialogDescription class="text-pretty">
             회의와 무관하게 먼저 등록해 둡니다. 등록만 된 안건은 대기 상태로, 다음 회의에서 고를 후보가 됩니다.
           </DialogDescription>
         </DialogHeader>
 
         <div class="flex flex-col gap-3.5 py-1">
           <div class="flex flex-col gap-2">
-            <Label class="text-[11.5px] font-normal text-muted-foreground">무엇을 정해야 하나요</Label>
+            <Label>무엇을 정해야 하나요</Label>
             <Input
               v-model="newTitle"
               placeholder="예: 결제 실패 안내 문구를 어떤 톤으로 쓸지"
-              class="h-11 bg-card text-sm"
               @keyup.enter="submitThread"
             />
           </div>
           <div class="flex flex-col gap-2">
-            <Label class="text-[11.5px] font-normal text-muted-foreground">담당자 (선택)</Label>
+            <Label>담당자 (선택)</Label>
             <Select v-model="newOwner">
-              <SelectTrigger class="h-10 w-[180px] bg-card">
+              <SelectTrigger class="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -302,7 +301,7 @@ function submitThread() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" class="bg-card" @click="addOpen = false">취소</Button>
+          <Button variant="outline" @click="addOpen = false">취소</Button>
           <Button :disabled="!newTitle.trim()" @click="submitThread">저장</Button>
         </DialogFooter>
       </DialogContent>
