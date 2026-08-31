@@ -35,11 +35,9 @@
       <path d="M9 6l6 6-6 6"></path>
     </svg>
     <div style="font-size: 13.5px; color: #23201c;">새 회의</div>
-    <div style="display: flex; align-items: center; gap: 6px; padding: 0 9px; height: 24px; border-radius: 12px; background: #f0ece4; font-size: 11.5px; color: #8c847a;">
-      <div style="width: 5px; height: 5px; border-radius: 50%; background: oklch(0.50 0.08 158);"></div>
-      <span>자동 저장됨</span>
-    </div>
     <div style="flex-grow: 1;"></div>
+    <div style="font-size: 11.5px; color: #a89f92;">{{ doneLabel }}</div>
+    <div style="display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 14px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 13.5px; color: #57514a; cursor: pointer;">취소</div>
     <div style="display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13.5px; font-weight: 500; cursor: pointer;">저장</div>
   </div>
 
@@ -170,33 +168,33 @@
                   </div>
                 </sc-if>
 
-                <sc-if value="{{ c.hasResult }}" hint-placeholder-val="{{ true }}">
+                <sc-for list="{{ c.resList }}" as="r" hint-placeholder-count="1">
                   <div style="display: flex; flex-direction: column; gap: 9px; padding: 14px 15px; border-radius: 4px; background: #f8f6f1;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                      <div style="display: flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 3px; background: {{ c.resTagBg }}; font-size: 11px; font-weight: 600; color: {{ c.resTagFg }};">{{ c.resTag }}</div>
+                      <div style="display: flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 3px; background: {{ r.tagBg }}; font-size: 11px; font-weight: 600; color: {{ r.tagFg }};">{{ r.tag }}</div>
                       <div style="font-size: 11px; color: #a89f92;">이 회의의 기록이자 이 안건의 이력</div>
                       <div style="flex-grow: 1;"></div>
-                      <div onClick="{{ c.undo }}" style="display: flex; align-items: center; height: 24px; font-size: 11.5px; color: #8c847a; cursor: pointer;">되돌리기</div>
+                      <div onClick="{{ r.undo }}" style="display: flex; align-items: center; height: 24px; font-size: 11.5px; color: #8c847a; cursor: pointer;">되돌리기</div>
                     </div>
-                    <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 17px; line-height: 1.7; color: #23201c; text-wrap: pretty;">{{ c.resText }}</div>
-                    <sc-if value="{{ c.resHasDetail }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 17px; line-height: 1.7; color: #23201c; text-wrap: pretty;">{{ r.text }}</div>
+                    <sc-if value="{{ r.hasDetail }}" hint-placeholder-val="{{ true }}">
                       <div style="display: flex; flex-direction: column; gap: 5px; padding-left: 12px; border-left: 2px solid #e5dfd5;">
-                        <sc-for list="{{ c.resDetail }}" as="d" hint-placeholder-count="2">
+                        <sc-for list="{{ r.detail }}" as="d" hint-placeholder-count="2">
                           <div style="font-size: 13.5px; line-height: 1.65; color: #33302b; text-wrap: pretty;">{{ d.line }}</div>
                         </sc-for>
                       </div>
                     </sc-if>
-                    <sc-if value="{{ c.resHasNote }}" hint-placeholder-val="{{ true }}">
-                      <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">{{ c.resNote }}</div>
+                    <sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ true }}">
+                      <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">{{ r.note }}</div>
                     </sc-if>
-                    <sc-if value="{{ c.resHasOwner }}" hint-placeholder-val="{{ true }}">
+                    <sc-if value="{{ r.hasOwner }}" hint-placeholder-val="{{ true }}">
                       <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; background: #eae4d9; font-size: 12px; align-self: flex-start;">
-                        <div style="width: 18px; height: 18px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ c.resOwnerCh }}</div>
-                        <span>{{ c.resOwner }}</span>
+                        <div style="width: 18px; height: 18px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ r.ownerCh }}</div>
+                        <span>{{ r.owner }}</span>
                       </div>
                     </sc-if>
                   </div>
-                </sc-if>
+                </sc-for>
               </div>
             </sc-for>
           </div>
@@ -358,7 +356,7 @@ class Component extends DCLogic {
     var chosen = s.chosen || ['t9', 't1', 't2'];
     var forms = s.forms || {};
     var owners = s.owners || {};
-    var results = s.results || {};
+    var lines = s.lines || [];
     var newKind = s.newKind || 'dec';
     var extra = s.extra || [];
     var staff = this.staff();
@@ -400,23 +398,24 @@ class Component extends DCLogic {
       self.setState({ owners: no });
     };
 
-    var doneCount = 0;
-    for (var rk in results) { doneCount++; }
+    var touched = [];
+    for (var li = 0; li < lines.length; li++) {
+      if (touched.indexOf(lines[li].threadId) < 0) { touched.push(lines[li].threadId); }
+    }
 
     var cands = all.filter(function (t) { return chosen.indexOf(t.id) >= 0; }).map(function (t) {
       var undecided = t.state !== 'decided';
       var acts = undecided
-        ? [{ k: 'decide', label: '이번에 정함' }, { k: 'defer', label: '이번에도 못 정함' }]
+        ? [{ k: 'decide', label: '이번에 정함' }, { k: 'defer', label: t.defers > 0 ? '이번에도 못 정함' : '이번에 못 정함' }]
         : [{ k: 'refine', label: '세부 추가' }, { k: 'change', label: '결정 변경' }, { k: 'split', label: '하위 안건으로 분리' }];
       var f = forms[t.id] || null;
-      var res = results[t.id] || null;
+      var own = lines.filter(function (l) { return l.threadId === t.id; });
       var needsOwner = f !== 'defer';
       var needsDetail = f === 'decide' || f === 'refine' || f === 'change';
       var tag = f ? TAG[f] : TAG.decide;
       var bd = badgeOf(t);
       var ownerId = owners[t.id] || null;
       var ownerRec = staff.filter(function (x) { return x.id === ownerId; })[0] || null;
-      var resDet = res && res.detail ? res.detail : [];
 
       return {
         id: t.id,
@@ -497,32 +496,36 @@ class Component extends DCLogic {
             self.setState({
               forms: nf,
               extra: extra.concat([{ id: sid, title: v, state: 'open', defers: 0, last: t.title + ' 에서 떼어냄 · 이번 회의' }]),
-              chosen: chosen.concat([sid])
+              chosen: chosen.concat([sid]),
+              lines: lines.concat([
+                { threadId: t.id, kind: 'split', text: v + ' — 따로 안건으로 올렸다', detail: [], note: note, owner: null },
+                { threadId: sid, kind: 'raise', text: v, detail: [], note: '', owner: who }
+              ])
             });
             return;
           }
-          var nr = {};
-          for (var k2 in results) { nr[k2] = results[k2]; }
-          nr[t.id] = { kind: f, text: v, detail: det, note: note, owner: who };
-          self.setState({ forms: nf, results: nr });
+          self.setState({
+            forms: nf,
+            lines: lines.concat([{ threadId: t.id, kind: f, text: v, detail: det, note: note, owner: who }])
+          });
         },
-        hasResult: !!res,
-        resTag: res ? TAG[res.kind].label : '',
-        resTagBg: res ? TAG[res.kind].bg : '',
-        resTagFg: res ? TAG[res.kind].fg : '',
-        resText: res ? res.text : '',
-        resHasDetail: resDet.length > 0,
-        resDetail: resDet.map(function (x) { return { line: x }; }),
-        resHasNote: !!(res && res.note),
-        resNote: res && res.note ? res.note : '',
-        resHasOwner: !!(res && res.owner),
-        resOwner: res && res.owner ? res.owner : '',
-        resOwnerCh: ((res && res.owner) || '?').charAt(0),
-        undo: function () {
-          var nr = {};
-          for (var k in results) { if (k !== t.id) nr[k] = results[k]; }
-          self.setState({ results: nr });
-        }
+        resList: own.map(function (ln) {
+          var tg = TAG[ln.kind];
+          return {
+            tag: tg.label, tagBg: tg.bg, tagFg: tg.fg,
+            text: ln.text,
+            hasDetail: ln.detail.length > 0,
+            detail: ln.detail.map(function (x) { return { line: x }; }),
+            hasNote: !!ln.note,
+            note: ln.note,
+            hasOwner: !!ln.owner,
+            owner: ln.owner || '',
+            ownerCh: (ln.owner || '?').charAt(0),
+            undo: function () {
+              self.setState({ lines: lines.filter(function (x) { return x !== ln; }) });
+            }
+          };
+        })
       };
     });
 
@@ -530,7 +533,9 @@ class Component extends DCLogic {
       accent: accent,
       pickedCount: chosen.length,
       noneChosen: chosen.length === 0,
-      doneLabel: doneCount === 0 ? '아직 남긴 줄이 없습니다' : (doneCount + '개 안건에 줄을 남겼습니다'),
+      doneLabel: lines.length === 0
+        ? '아직 남긴 줄이 없습니다'
+        : (touched.length + '개 안건에 줄 ' + lines.length + '개를 남겼습니다'),
       cands: cands,
 
       pickerOpen: !!s.pickerOpen,
@@ -596,13 +601,10 @@ class Component extends DCLogic {
         if (!v) { return; }
         el.value = '';
         var nid = 'n' + (extra.length + 1);
-        var nr = {};
-        for (var k in results) { nr[k] = results[k]; }
-        nr[nid] = { kind: newKind === 'dec' ? 'decide' : 'raise', text: v, detail: [], note: '', owner: null };
         self.setState({
           extra: extra.concat([{ id: nid, title: v, state: newKind === 'dec' ? 'decided' : 'open', defers: 0, last: '이번 회의에서 처음 나옴' }]),
           chosen: chosen.concat([nid]),
-          results: nr,
+          lines: lines.concat([{ threadId: nid, kind: newKind === 'dec' ? 'decide' : 'raise', text: v, detail: [], note: '', owner: null }]),
           newOpen: false
         });
       }

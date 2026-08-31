@@ -117,7 +117,9 @@ function submitThread() {
       <Button variant="outline" size="icon">
         <Download class="size-4" />
       </Button>
-      <Button variant="outline">회의 추가</Button>
+      <Button variant="outline" as-child>
+        <RouterLink to="/meetings/new">회의 추가</RouterLink>
+      </Button>
       <Button @click="addOpen = true">
         <Plus class="size-4" />
         안건 추가

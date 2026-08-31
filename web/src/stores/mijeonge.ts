@@ -5,6 +5,7 @@ import type {
   Entry,
   EntryKind,
   Meeting,
+  MeetingInput,
   Member,
   Project,
   SubThreadRow,
@@ -192,10 +193,15 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
   }
 
   let seq = 0
-  function addThread(title: string, ownerId: string | null) {
+  function nextId(prefix: string) {
     seq += 1
+    return `${prefix}${seq}`
+  }
+
+  function addThread(title: string, ownerId: string | null) {
+    const id = nextId('new')
     allThreads.value.unshift({
-      id: `new${seq}`,
+      id,
       projectId: currentProject.value.id,
       title,
       state: 'queued',
@@ -203,6 +209,74 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
       parentThreadId: null,
       createdAt: new Date().toISOString().slice(0, 10),
     })
+    return id
+  }
+
+  /**
+   * 회의 하나를 그 회의에서 안건에 남긴 줄과 함께 저장한다.
+   *
+   * 회의가 짊어지는 것은 날짜 · 참석자 · 메모뿐이다. 회의록 본문은 없고,
+   * 안건에 남긴 줄이 그대로 그 회의의 기록이 된다.
+   * 안건 상태는 남긴 줄에서 따라온다 — 결정 · 변경이면 결정됨, 그 밖이면 대기에서 미결정으로.
+   */
+  function saveMeeting(input: MeetingInput) {
+    const meetingId = nextId('nm')
+
+    /* tempId → 실제 id. 하위 안건의 부모도 이 회의에서 등록한 안건일 수 있어 함께 옮긴다. */
+    const realId = new Map<string, string>()
+    const resolve = (id: string) => realId.get(id) ?? id
+    for (const nt of input.newThreads) {
+      const id = nextId('nt')
+      realId.set(nt.tempId, id)
+      allThreads.value.unshift({
+        id,
+        projectId: currentProject.value.id,
+        title: nt.title,
+        state: 'queued',
+        ownerId: nt.ownerId,
+        parentThreadId: nt.parentThreadId ? resolve(nt.parentThreadId) : null,
+        createdAt: input.date,
+      })
+    }
+
+    allMeetings.value.unshift({
+      id: meetingId,
+      projectId: currentProject.value.id,
+      title: input.title,
+      date: input.date,
+      attendeeIds: input.attendeeIds,
+      memos: input.memos.map((m, i) => ({
+        id: `${meetingId}-m${i + 1}`,
+        text: m.text,
+        promotedThreadId: m.promotedTempId ? resolve(m.promotedTempId) : null,
+      })),
+    })
+
+    for (const e of input.entries) {
+      const threadId = resolve(e.threadId)
+      allEntries.value.push({
+        id: nextId('nme'),
+        threadId,
+        meetingId,
+        kind: e.kind,
+        text: e.text,
+        detail: e.detail,
+        note: e.note,
+        ownerId: e.ownerId,
+        createdAt: input.date,
+      })
+
+      const thread = allThreads.value.find((t) => t.id === threadId)
+      if (!thread) continue
+      if (e.kind === 'decide' || e.kind === 'change') {
+        thread.state = 'decided'
+        if (e.ownerId) thread.ownerId = e.ownerId
+      } else if (thread.state === 'queued') {
+        thread.state = 'open'
+      }
+    }
+
+    return meetingId
   }
 
 
@@ -252,6 +326,7 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
     entriesOfThread,
     threadDetail,
     addThread,
+    saveMeeting,
     addOutsideEntry,
   }
 })

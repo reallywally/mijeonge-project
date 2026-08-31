@@ -9,6 +9,11 @@ const router = createRouter({
       name: 'threads',
       component: () => import('@/views/ThreadListView.vue'),
     },
+    {
+      path: '/meetings/new',
+      name: 'meeting-new',
+      component: () => import('@/views/NewMeetingView.vue'),
+    },
   ],
 })
 

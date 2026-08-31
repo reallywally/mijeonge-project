@@ -118,3 +118,36 @@ export interface ThreadDetail {
   settledOwnerName: string | null
   subThreads: SubThreadRow[]
 }
+
+/**
+ * 새 회의 화면이 저장할 때 넘기는 것.
+ *
+ * 회의 중에 처음 등록한 안건은 아직 id 가 없어 화면에서만 쓰는 tempId 로 가리킨다.
+ * 저장할 때 실제 id 를 받고, entries 와 memos 의 tempId 도 그것으로 바뀐다.
+ */
+export interface NewThreadInput {
+  tempId: string
+  title: string
+  ownerId: string | null
+  parentThreadId: string | null
+}
+
+export interface MeetingEntryInput {
+  /** 실제 안건 id 또는 NewThreadInput.tempId */
+  threadId: string
+  kind: EntryKind
+  text: string
+  detail: string[]
+  note: string
+  ownerId: string | null
+}
+
+export interface MeetingInput {
+  title: string
+  /** YYYY-MM-DD */
+  date: string
+  attendeeIds: string[]
+  newThreads: NewThreadInput[]
+  entries: MeetingEntryInput[]
+  memos: { text: string; promotedTempId: string | null }[]
+}
