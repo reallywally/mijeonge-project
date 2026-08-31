@@ -82,3 +82,39 @@ export interface ThreadRow {
   entryCount: number
   lastMeetingLabel: string
 }
+
+/** 안건 이력 한 줄 — Entry 에 화면에서 필요한 것만 붙였다 */
+export interface ThreadEvent {
+  entry: Entry
+  /** null = 회의 밖 처리 */
+  meeting: Meeting | null
+  /** 이 줄이 놓이는 날짜. 회의에 붙은 줄이면 그 회의의 날짜다 */
+  at: string
+  ownerName: string | null
+  /** 뒤에 온 결정에 밀려난 줄 — 취소선으로 남는다 */
+  superseded: boolean
+}
+
+/** 이 안건에서 떼어낸 하위 안건 */
+export interface SubThreadRow {
+  thread: Thread
+  splitAtLabel: string
+}
+
+/** 안건 상세 한 화면 — 지금 합의된 내용 + 회의별 이력 */
+export interface ThreadDetail {
+  thread: Thread
+  ownerName: string | null
+  events: ThreadEvent[]
+  deferCount: number
+  /** 결정 · 변경 줄이 하나라도 있는가 */
+  settled: boolean
+  /** 마지막 결정 · 변경의 한 줄 요약 */
+  current: string
+  /** 그 결정의 조건별 상세 + 그 뒤에 붙은 세부 추가 */
+  detail: string[]
+  /** 언제 · 어디서 정해졌는지 */
+  settledLabel: string
+  settledOwnerName: string | null
+  subThreads: SubThreadRow[]
+}

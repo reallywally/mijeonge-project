@@ -1,6 +1,18 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { Entry, Meeting, Member, Project, Thread, ThreadRow } from '@/types/domain'
+import { monthDay } from '@/lib/date'
+import type {
+  Entry,
+  EntryKind,
+  Meeting,
+  Member,
+  Project,
+  SubThreadRow,
+  Thread,
+  ThreadDetail,
+  ThreadEvent,
+  ThreadRow,
+} from '@/types/domain'
 
 /** 목업 데이터 — 캔버스의 예시와 같은 내용이다. 백엔드가 붙으면 이 파일만 바뀐다. */
 
@@ -80,11 +92,6 @@ const entries: Entry[] = [
   { id: 'e19', threadId: 't7', meetingId: 'mt3', kind: 'decide', text: '롤백 절차를 문서로 만들고 온콜 교육에 포함한다', detail: [], note: '', ownerId: 'u2', createdAt: '2026-03-08' },
 ]
 
-function monthDay(iso: string) {
-  const [, m, d] = iso.split('-')
-  return `${Number(m)}월 ${Number(d)}일`
-}
-
 export const useMijeongeStore = defineStore('mijeonge', () => {
   const allMembers = ref<Member[]>(members)
   const currentProject = ref<Project>(project)
@@ -115,6 +122,75 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
     }),
   )
 
+  const meetingById = (id: string | null) =>
+    id ? (allMeetings.value.find((m) => m.id === id) ?? null) : null
+
+  /**
+   * 안건 하나를 한 화면에 필요한 모양으로 조립한다.
+   *
+   * 이력은 새 줄이 위로 온다. 정렬 기준은 createdAt 이 아니라 "그 줄이 놓이는 날짜"다 —
+   * 회의에 붙은 줄은 그 회의의 날짜에 놓인다. 같은 회의에 남긴 줄끼리는 등록한 순서를 뒤집는다.
+   */
+  function threadDetail(threadId: string): ThreadDetail | null {
+    const thread = allThreads.value.find((t) => t.id === threadId)
+    if (!thread) return null
+
+    const ordered = allEntries.value
+      .map((entry, seqNo) => ({ entry, seqNo }))
+      .filter((x) => x.entry.threadId === threadId)
+      .map((x) => {
+        const meeting = meetingById(x.entry.meetingId)
+        return { ...x, meeting, at: meeting?.date ?? x.entry.createdAt }
+      })
+      .sort((a, b) => b.at.localeCompare(a.at) || b.seqNo - a.seqNo)
+
+    /* 결정 · 변경은 뒤에 온 것이 앞의 것을 대체한다. 위에서부터 첫 줄만 살아 있다. */
+    let decisionSeen = false
+    const events: ThreadEvent[] = ordered.map((x) => {
+      const decides = x.entry.kind === 'decide' || x.entry.kind === 'change'
+      const superseded = decides && decisionSeen
+      if (decides) decisionSeen = true
+      return {
+        entry: x.entry,
+        meeting: x.meeting,
+        at: x.at,
+        ownerName: memberName(x.entry.ownerId),
+        superseded,
+      }
+    })
+
+    const decisionAt = events.findIndex((e) => !e.superseded && (e.entry.kind === 'decide' || e.entry.kind === 'change'))
+    const decision = decisionAt >= 0 ? events[decisionAt] : null
+    /* 결정보다 나중에 붙은 세부 추가는 그 결정의 상세로 올라간다 (오래된 것부터) */
+    const refines = decision ? events.slice(0, decisionAt).filter((e) => e.entry.kind === 'refine') : []
+
+    const subThreads: SubThreadRow[] = allThreads.value
+      .filter((t) => t.parentThreadId === threadId)
+      .map((t) => ({ thread: t, splitAtLabel: `${monthDay(t.createdAt)}에 분리` }))
+
+    return {
+      thread,
+      ownerName: memberName(thread.ownerId),
+      events,
+      deferCount: events.filter((e) => e.entry.kind === 'defer').length,
+      settled: decision !== null,
+      current: decision?.entry.text ?? '',
+      detail: decision
+        ? [...decision.entry.detail, ...refines.map((e) => e.entry.text).reverse()]
+        : [],
+      settledLabel: decision ? settledLabel(decision, refines[0] ?? null) : '',
+      settledOwnerName: decision ? (decision.ownerName ?? memberName(thread.ownerId)) : null,
+      subThreads,
+    }
+  }
+
+  function settledLabel(decision: ThreadEvent, lastRefine: ThreadEvent | null) {
+    const where = decision.meeting
+      ? `${monthDay(decision.at)} 회의에서 정해`
+      : `${monthDay(decision.at)} · 회의를 다시 잡지 않고 담당자 확인으로 정해`
+    return lastRefine ? `${where}지고 ${monthDay(lastRefine.at)}에 세부가 붙음` : `${where}짐`
+  }
+
   let seq = 0
   function addThread(title: string, ownerId: string | null) {
     seq += 1
@@ -129,5 +205,53 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
     })
   }
 
-  return { allMembers, currentProject, allMeetings, allThreads, allEntries, rows, memberName, entriesOfThread, addThread }
+
+  /**
+   * 회의 없이 담당자 확인만으로 처리한 줄. meetingId 가 없어 어느 회의에도 붙지 않는다.
+   * 결정으로 남기면 안건 상태와 담당자까지 그 자리에서 바뀐다.
+   */
+  function addOutsideEntry(
+    threadId: string,
+    kind: Extract<EntryKind, 'decide' | 'refine' | 'defer'>,
+    text: string,
+    note: string,
+    ownerId: string | null,
+  ) {
+    seq += 1
+    allEntries.value.push({
+      id: `ne${seq}`,
+      threadId,
+      meetingId: null,
+      kind,
+      text,
+      detail: [],
+      note,
+      ownerId,
+      createdAt: new Date().toISOString().slice(0, 10),
+    })
+
+    const thread = allThreads.value.find((t) => t.id === threadId)
+    if (!thread) return
+    if (kind === 'decide') {
+      thread.state = 'decided'
+      if (ownerId) thread.ownerId = ownerId
+    } else if (thread.state === 'queued') {
+      thread.state = 'open'
+    }
+  }
+
+  return {
+    allMembers,
+    currentProject,
+    allMeetings,
+    allThreads,
+    allEntries,
+    rows,
+    memberName,
+    meetingById,
+    entriesOfThread,
+    threadDetail,
+    addThread,
+    addOutsideEntry,
+  }
 })

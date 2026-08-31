@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -83,6 +84,15 @@ function resetAll() {
 function pickState(key: typeof stateFilter.value) {
   stateFilter.value = key
   resetPage()
+}
+
+/* 안건 상세 — 목록을 그대로 두고 그 위에 띄운다 */
+const detailId = ref<string | null>(null)
+const detailOpen = ref(false)
+
+function openThread(id: string) {
+  detailId.value = id
+  detailOpen.value = true
 }
 
 /* 안건 추가 팝업 */
@@ -213,7 +223,12 @@ function submitThread() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="row in pageRows" :key="row.thread.id" class="h-12 cursor-pointer">
+              <TableRow
+                v-for="row in pageRows"
+                :key="row.thread.id"
+                class="h-12 cursor-pointer"
+                @click="openThread(row.thread.id)"
+              >
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <span
@@ -224,7 +239,9 @@ function submitThread() {
                         'bg-muted-foreground/40': row.thread.state === 'decided',
                       }"
                     />
-                    <span class="min-w-0 truncate text-sm">{{ row.thread.title }}</span>
+                    <button type="button" class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline">
+                      {{ row.thread.title }}
+                    </button>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -267,6 +284,8 @@ function submitThread() {
         </div>
       </div>
     </div>
+
+    <ThreadDetailDialog v-model:open="detailOpen" :thread-id="detailId" @open-thread="openThread" />
 
     <Dialog v-model:open="addOpen">
       <DialogContent class="sm:max-w-[560px]">
