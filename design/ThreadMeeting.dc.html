@@ -11,9 +11,10 @@
   <style>
     body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     a { color: #9a5a2c; } a:hover { color: #23201c; }
-    input, textarea { font-family: inherit; font-size: 13px; color: #23201c; }
+    input, textarea, select { font-family: inherit; font-size: 13px; color: #23201c; }
     input::placeholder, textarea::placeholder { color: #a89f92; }
     textarea { resize: none; }
+    select { appearance: none; -webkit-appearance: none; }
   </style>
 </helmet>
 <div style="width: 1440px; height: 900px; background: #faf8f4; color: #23201c; display: flex; flex-direction: column; position: relative; overflow: hidden;">
@@ -279,7 +280,7 @@
 
   <sc-if value="{{ pickerOpen }}" hint-placeholder-val="{{ true }}">
     <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(35, 32, 28, 0.42); display: flex; align-items: center; justify-content: center;">
-      <div style="width: 720px; height: 620px; border-radius: 6px; background: #faf8f4; box-shadow: 0 30px 70px rgba(35, 32, 28, 0.32); display: flex; flex-direction: column; overflow: hidden;">
+      <div style="width: 900px; height: 690px; border-radius: 6px; background: #faf8f4; box-shadow: 0 30px 70px rgba(35, 32, 28, 0.32); display: flex; flex-direction: column; overflow: hidden;">
         <div style="flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 18px 22px; border-bottom: 1px solid #e5dfd5;">
           <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 19px; font-weight: 700; letter-spacing: -0.01em;">등록된 안건</div>
           <div style="font-size: 12px; color: #a89f92;">결제 안정화 · {{ poolCount }}건</div>
@@ -291,13 +292,57 @@
             </svg>
           </div>
         </div>
-        <div style="flex-shrink: 0; padding: 14px 22px 0;">
-          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">이번 회의에서 다룰 것만 고르고 추가를 누르세요. 대기 안건이 위에 있습니다.</div>
-        </div>
-        <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px 22px;">
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            <sc-for list="{{ pool }}" as="p" hint-placeholder-count="7">
-              <div onClick="{{ p.toggle }}" style="display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 9px 11px; border-radius: 4px; background: {{ p.bg }}; cursor: pointer;">
+
+        <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 14px; padding: 16px 22px;">
+          <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">이번 회의에서 다룰 것만 고르고 추가를 누르세요. 페이지를 넘기거나 조건을 바꿔도 고른 것은 그대로 남습니다.</div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px; padding: 15px 17px; border: 1px solid #e5dfd5; border-radius: 5px; background: #f8f6f1;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 52px; flex-shrink: 0; font-size: 11.5px; color: #8c847a;">제목</div>
+              <input id="tm-pq" placeholder="안건 제목에 들어가는 말" style="flex-grow: 1; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; outline: none;">
+              <div style="flex-shrink: 0; font-size: 11.5px; color: #8c847a;">담당자</div>
+              <div style="position: relative; width: 132px; flex-shrink: 0;">
+                <select value="{{ pickOwnerValue }}" onChange="{{ onPickOwner }}" style="width: 100%; height: 38px; padding: 0 30px 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; outline: none; cursor: pointer;">
+                  <sc-for list="{{ pickOwnerOptions }}" as="oo" hint-placeholder-count="6">
+                    <option value="{{ oo.value }}">{{ oo.label }}</option>
+                  </sc-for>
+                </select>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8c847a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 11px; top: 13px; pointer-events: none;">
+                  <path d="M6 9l6 6 6-6"></path>
+                </svg>
+              </div>
+              <div onClick="{{ doPickSearch }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 12.5px; font-weight: 500; cursor: pointer;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="6.5"></circle>
+                  <path d="M16 16l4 4"></path>
+                </svg>
+                <span>조회</span>
+              </div>
+              <div onClick="{{ doPickReset }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 13px; border: 1px solid #e5dfd5; border-radius: 4px; background: #ffffff; font-size: 12.5px; color: #57514a; cursor: pointer;">초기화</div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+              <div style="width: 52px; flex-shrink: 0; font-size: 11.5px; color: #8c847a; padding-top: 8px;">상태</div>
+              <div style="flex-grow: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px;">
+                <sc-for list="{{ pickChips }}" as="sc" hint-placeholder-count="5">
+                  <div onClick="{{ sc.pick }}" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid {{ sc.bc }}; border-radius: 16px; background: {{ sc.bg }}; font-size: 12px; font-weight: {{ sc.weight }}; color: {{ sc.fg }}; cursor: pointer;">
+                    <span>{{ sc.label }}</span>
+                    <span style="color: {{ sc.numFg }};">{{ sc.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; border: 1px solid #e5dfd5; border-radius: 5px; background: #ffffff; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 16px; border-bottom: 1px solid #e5dfd5; background: #f8f6f1; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #8c847a;">
+              <div style="width: 18px; flex-shrink: 0;"></div>
+              <div style="flex-grow: 1; min-width: 0;">안건</div>
+              <div style="width: 124px; flex-shrink: 0;">상태</div>
+              <div style="width: 84px; flex-shrink: 0;">담당자</div>
+              <div style="width: 84px; flex-shrink: 0;">마지막 회의</div>
+            </div>
+            <sc-for list="{{ pool }}" as="p" hint-placeholder-count="5">
+              <div onClick="{{ p.toggle }}" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px; border-bottom: 1px solid #f0ece4; background: {{ p.bg }}; cursor: pointer;">
                 <div style="width: 18px; height: 18px; flex-shrink: 0; border: 1.5px solid {{ p.boxBc }}; border-radius: 3px; background: {{ p.boxBg }}; display: flex; align-items: center; justify-content: center;">
                   <sc-if value="{{ p.on }}" hint-placeholder-val="{{ true }}">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#faf8f4" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
@@ -305,15 +350,44 @@
                     </svg>
                   </sc-if>
                 </div>
-                <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
-                  <div style="font-size: 13.5px; line-height: 1.45; text-wrap: pretty;">{{ p.title }}</div>
-                  <div style="font-size: 11px; color: #a89f92;">{{ p.meta }}</div>
+                <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                  <div style="font-size: 13.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ p.title }}</div>
+                  <div style="font-size: 11px; color: #a89f92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ p.meta }}</div>
                 </div>
-                <div style="flex-shrink: 0; display: flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; background: {{ p.badgeBg }}; font-size: 11px; color: {{ p.badgeFg }};">{{ p.badge }}</div>
+                <div style="width: 124px; flex-shrink: 0;">
+                  <div style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; background: {{ p.badgeBg }}; font-size: 11.5px; color: {{ p.badgeFg }};">
+                    <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ p.badgeFg }};"></div>
+                    <span>{{ p.badge }}</span>
+                  </div>
+                </div>
+                <div style="width: 84px; flex-shrink: 0; font-size: 12.5px; color: {{ p.ownerFg }};">{{ p.owner }}</div>
+                <div style="width: 84px; flex-shrink: 0; font-size: 12.5px; color: #8c847a;">{{ p.last }}</div>
               </div>
             </sc-for>
+            <sc-if value="{{ noPool }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; align-items: center; justify-content: center; height: 110px; font-size: 13px; color: #8c847a;">조회 조건에 맞는 안건이 없습니다.</div>
+            </sc-if>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="font-size: 12px; color: #a89f92;">{{ pickRangeLabel }}</div>
+            <div style="flex-grow: 1;"></div>
+            <div onClick="{{ pickPrev }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid {{ pickPrevBc }}; border-radius: 4px; background: #ffffff; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ pickPrevFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 6l-6 6 6 6"></path>
+              </svg>
+            </div>
+            <sc-for list="{{ pickPages }}" as="pg" hint-placeholder-count="2">
+              <div onClick="{{ pg.pick }}" style="display: flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; padding: 0 8px; border: 1px solid {{ pg.bc }}; border-radius: 4px; background: {{ pg.bg }}; font-size: 12.5px; font-weight: {{ pg.weight }}; color: {{ pg.fg }}; cursor: pointer;">{{ pg.n }}</div>
+            </sc-for>
+            <div onClick="{{ pickNext }}" style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid {{ pickNextBc }}; border-radius: 4px; background: #ffffff; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ pickNextFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 6l6 6-6 6"></path>
+              </svg>
+            </div>
           </div>
         </div>
+
         <div style="flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 16px 22px; border-top: 1px solid #e5dfd5; background: #f8f6f1;">
           <div style="font-size: 12.5px; color: #57514a;">{{ stageLabel }}</div>
           <div style="flex-grow: 1;"></div>
@@ -330,13 +404,13 @@
 class Component extends DCLogic {
   threads() {
     return [
-      { id: 't9', title: 'PG사 이중화 1차 적용 범위', state: 'queued', defers: 0, last: '3월 17일 등록 · 아직 다룬 적 없음' },
-      { id: 't8', title: '결제 실패 안내 문구를 어떤 톤으로 쓸지', state: 'queued', defers: 0, last: '3월 18일 등록 · 아직 다룬 적 없음' },
-      { id: 't1', title: '알림 채널을 하나로 합칠지', state: 'open', defers: 2, last: '3월 12일 회의에서 미룸' },
-      { id: 't5', title: '배포 시간대를 트래픽이 낮은 새벽으로 옮길지', state: 'open', defers: 2, last: '3월 8일 회의에서 미룸' },
-      { id: 't4', title: '재시도가 모두 실패했을 때 구독을 자동 해지할지', state: 'open', defers: 1, last: '3월 12일 회의에서 미룸' },
-      { id: 't2', title: '결제 재시도 정책', state: 'decided', defers: 0, last: '3월 12일 회의에서 변경 · 이력 3' },
-      { id: 't3', title: '결제 실패 알림 발송 시점', state: 'decided', defers: 0, last: '3월 12일 회의에서 결정 · 이력 1' }
+      { id: 't9', title: 'PG사 이중화 1차 적용 범위', state: 'queued', defers: 0, owner: '이도현', lastShort: '—', last: '3월 17일 등록 · 아직 다룬 적 없음' },
+      { id: 't8', title: '결제 실패 안내 문구를 어떤 톤으로 쓸지', state: 'queued', defers: 0, owner: null, lastShort: '—', last: '3월 18일 등록 · 아직 다룬 적 없음' },
+      { id: 't1', title: '알림 채널을 하나로 합칠지', state: 'open', defers: 2, owner: null, lastShort: '3월 12일', last: '3월 12일 회의에서 미룸' },
+      { id: 't5', title: '배포 시간대를 트래픽이 낮은 새벽으로 옮길지', state: 'open', defers: 2, owner: null, lastShort: '3월 8일', last: '3월 8일 회의에서 미룸' },
+      { id: 't4', title: '재시도가 모두 실패했을 때 구독을 자동 해지할지', state: 'open', defers: 1, owner: '박지훈', lastShort: '3월 12일', last: '3월 12일 회의에서 미룸' },
+      { id: 't2', title: '결제 재시도 정책', state: 'decided', defers: 0, owner: '김서연', lastShort: '3월 12일', last: '3월 12일 회의에서 변경 · 이력 3' },
+      { id: 't3', title: '결제 실패 알림 발송 시점', state: 'decided', defers: 0, owner: '박지훈', lastShort: '3월 12일', last: '3월 12일 회의에서 결정 · 이력 1' }
     ];
   }
 
@@ -358,6 +432,10 @@ class Component extends DCLogic {
     var owners = s.owners || {};
     var lines = s.lines || [];
     var newKind = s.newKind || 'dec';
+    var pq = s.pq || '';
+    var pst = s.pst || 'all';
+    var pow = s.pow || 'all';
+    var PICK_PER = 5;
     var extra = s.extra || [];
     var staff = this.staff();
     var all = this.threads().concat(extra);
@@ -495,7 +573,7 @@ class Component extends DCLogic {
             var sid = 'x' + (extra.length + 1);
             self.setState({
               forms: nf,
-              extra: extra.concat([{ id: sid, title: v, state: 'open', defers: 0, last: t.title + ' 에서 떼어냄 · 이번 회의' }]),
+              extra: extra.concat([{ id: sid, title: v, state: 'open', defers: 0, owner: who, lastShort: '이번 회의', last: t.title + ' 에서 떼어냄 · 이번 회의' }]),
               chosen: chosen.concat([sid]),
               lines: lines.concat([
                 { threadId: t.id, kind: 'split', text: v + ' — 따로 안건으로 올렸다', detail: [], note: note, owner: null },
@@ -529,6 +607,63 @@ class Component extends DCLogic {
       };
     });
 
+    /* 팝업의 게시판 — 제목 · 상태 · 담당자로 걸러 5건씩 넘긴다 */
+    var byState = function (t, key) {
+      if (key === 'all') { return true; }
+      if (key === 'stuck') { return t.defers >= 3; }
+      return t.state === key;
+    };
+    var pickCounts = {
+      all: all.length,
+      queued: all.filter(function (t) { return t.state === 'queued'; }).length,
+      open: all.filter(function (t) { return t.state === 'open'; }).length,
+      decided: all.filter(function (t) { return t.state === 'decided'; }).length,
+      stuck: all.filter(function (t) { return t.defers >= 3; }).length
+    };
+    var pickFiltered = all.filter(function (t) {
+      if (pq && t.title.indexOf(pq) < 0) { return false; }
+      if (!byState(t, pst)) { return false; }
+      if (pow === 'all') { return true; }
+      if (pow === 'none') { return !t.owner; }
+      return t.owner === pow;
+    });
+    var pickTotal = pickFiltered.length;
+    var pickPageCount = pickTotal === 0 ? 1 : Math.ceil(pickTotal / PICK_PER);
+    var pickCur = (s.ppage || 1) > pickPageCount ? pickPageCount : (s.ppage || 1);
+    var pickStart = (pickCur - 1) * PICK_PER;
+    var pickSlice = pickFiltered.slice(pickStart, pickStart + PICK_PER);
+
+    var setPick = function (patch) {
+      patch.ppage = 1;
+      self.setState(patch);
+    };
+    var pickChip = function (key, label, n) {
+      var sel = pst === key;
+      return {
+        label: label, n: n,
+        bg: sel ? '#23201c' : '#ffffff',
+        fg: sel ? '#faf8f4' : '#57514a',
+        numFg: sel ? '#c8bfae' : '#a89f92',
+        bc: sel ? '#23201c' : '#e5dfd5',
+        weight: sel ? 600 : 400,
+        pick: function () { setPick({ pst: key }); }
+      };
+    };
+    var pickPages = [];
+    for (var pi = 1; pi <= pickPageCount; pi++) {
+      pickPages.push((function (n) {
+        var sel = n === pickCur;
+        return {
+          n: n,
+          bg: sel ? '#23201c' : '#ffffff',
+          fg: sel ? '#faf8f4' : '#57514a',
+          bc: sel ? '#23201c' : '#e5dfd5',
+          weight: sel ? 600 : 400,
+          pick: function () { self.setState({ ppage: n }); }
+        };
+      })(pi));
+    }
+
     return {
       accent: accent,
       pickedCount: chosen.length,
@@ -539,17 +674,24 @@ class Component extends DCLogic {
       cands: cands,
 
       pickerOpen: !!s.pickerOpen,
-      openPicker: function () { self.setState({ pickerOpen: true, stage: chosen }); },
+      openPicker: function () {
+        var el = document.getElementById('tm-pq');
+        if (el) { el.value = ''; }
+        self.setState({ pickerOpen: true, stage: chosen, pq: '', pst: 'all', pow: 'all', ppage: 1 });
+      },
       closePicker: function () { self.setState({ pickerOpen: false }); },
       commitPicker: function () { self.setState({ chosen: stage, pickerOpen: false }); },
       poolCount: all.length,
       stageLabel: stage.length + '건 선택',
-      pool: all.map(function (t) {
+      pool: pickSlice.map(function (t) {
         var on = stage.indexOf(t.id) >= 0;
         var bd = badgeOf(t);
         return {
           title: t.title, meta: t.last, on: on,
           badge: bd.label, badgeBg: bd.bg, badgeFg: bd.fg,
+          owner: t.owner || '미정',
+          ownerFg: t.owner ? '#23201c' : '#a89f92',
+          last: t.lastShort || '이번 회의',
           bg: on ? '#f4f1ea' : 'transparent',
           boxBg: on ? '#23201c' : '#ffffff',
           boxBc: on ? '#23201c' : '#d6cec1',
@@ -560,6 +702,40 @@ class Component extends DCLogic {
           }
         };
       }),
+      noPool: pickSlice.length === 0,
+      pickChips: [
+        pickChip('all', '전체', pickCounts.all),
+        pickChip('queued', '대기', pickCounts.queued),
+        pickChip('open', '미결정', pickCounts.open),
+        pickChip('decided', '결정됨', pickCounts.decided),
+        pickChip('stuck', '3번 이상 미뤄짐', pickCounts.stuck)
+      ],
+      pickOwnerValue: pow,
+      pickOwnerOptions: [{ value: 'all', label: '전체' }]
+        .concat(staff.map(function (pe) { return { value: pe.name, label: pe.name }; }))
+        .concat([{ value: 'none', label: '미정' }]),
+      onPickOwner: function (e) {
+        setPick({ pow: e && e.target ? e.target.value : 'all' });
+      },
+      doPickSearch: function () {
+        var el = document.getElementById('tm-pq');
+        setPick({ pq: el && el.value ? el.value.trim() : '' });
+      },
+      doPickReset: function () {
+        var el = document.getElementById('tm-pq');
+        if (el) { el.value = ''; }
+        setPick({ pq: '', pst: 'all', pow: 'all' });
+      },
+      pickRangeLabel: pickTotal === 0
+        ? '0건'
+        : ('총 ' + pickTotal + '건 중 ' + (pickStart + 1) + '–' + (pickStart + pickSlice.length) + '건'),
+      pickPages: pickPages,
+      pickPrevBc: pickCur > 1 ? '#d6cec1' : '#f0ece4',
+      pickPrevFg: pickCur > 1 ? '#57514a' : '#c8bfae',
+      pickNextBc: pickCur < pickPageCount ? '#d6cec1' : '#f0ece4',
+      pickNextFg: pickCur < pickPageCount ? '#57514a' : '#c8bfae',
+      pickPrev: function () { if (pickCur > 1) { self.setState({ ppage: pickCur - 1 }); } },
+      pickNext: function () { if (pickCur < pickPageCount) { self.setState({ ppage: pickCur + 1 }); } },
 
       memos: memos.map(function (m) {
         var done = !!promoted[m.id];
@@ -573,7 +749,7 @@ class Component extends DCLogic {
             np[m.id] = true;
             self.setState({
               promoted: np,
-              extra: extra.concat([{ id: 'p' + m.id, title: m.text, state: 'queued', defers: 0, last: '이 회의 메모에서 올림 · 아직 다룬 적 없음' }])
+              extra: extra.concat([{ id: 'p' + m.id, title: m.text, state: 'queued', defers: 0, owner: null, lastShort: '—', last: '이 회의 메모에서 올림 · 아직 다룬 적 없음' }])
             });
           }
         };
@@ -602,7 +778,7 @@ class Component extends DCLogic {
         el.value = '';
         var nid = 'n' + (extra.length + 1);
         self.setState({
-          extra: extra.concat([{ id: nid, title: v, state: newKind === 'dec' ? 'decided' : 'open', defers: 0, last: '이번 회의에서 처음 나옴' }]),
+          extra: extra.concat([{ id: nid, title: v, state: newKind === 'dec' ? 'decided' : 'open', defers: 0, owner: null, lastShort: '이번 회의', last: '이번 회의에서 처음 나옴' }]),
           chosen: chosen.concat([nid]),
           lines: lines.concat([{ threadId: nid, kind: newKind === 'dec' ? 'decide' : 'raise', text: v, detail: [], note: '', owner: null }]),
           newOpen: false
