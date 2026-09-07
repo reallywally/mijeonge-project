@@ -119,6 +119,38 @@ export interface ThreadDetail {
   subThreads: SubThreadRow[]
 }
 
+/** 회의 목록 한 행 — 그 회의에 붙은 Entry 를 세어 얻는다 */
+export interface MeetingRow {
+  meeting: Meeting
+  attendeeNames: string[]
+  /** 그 회의에서 다룬 안건 수 */
+  threadCount: number
+  /** 결정 · 변경 줄 수 */
+  decidedCount: number
+  /** 미룸 줄 수 */
+  deferredCount: number
+  dateLabel: string
+}
+
+/** 회의 하나에서 안건 하나에 남긴 줄들 */
+export interface MeetingThreadLines {
+  thread: Thread
+  /** 안건 전체에서 미뤄진 횟수 — 상태 배지가 쓴다 */
+  deferCount: number
+  lines: { entry: Entry; ownerName: string | null }[]
+}
+
+/** 회의 하나 보기 — 회의록 본문은 없다. 그날 안건에 남긴 줄이 그대로 기록이다. */
+export interface MeetingDetail {
+  meeting: Meeting
+  attendeeNames: string[]
+  threads: MeetingThreadLines[]
+  entryCount: number
+  decidedCount: number
+  deferredCount: number
+  dateLabel: string
+}
+
 /**
  * 새 회의 화면이 저장할 때 넘기는 것.
  *

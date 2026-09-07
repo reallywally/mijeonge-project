@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Check, Info, Plus, X } from 'lucide-vue-next'
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Info, Plus, Search, X } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
@@ -11,6 +11,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { monthDay } from '@/lib/date'
 import { useMijeongeStore } from '@/stores/mijeonge'
@@ -46,6 +48,10 @@ interface PickRow {
   title: string
   state: ThreadState
   deferCount: number
+  ownerId: string | null
+  ownerName: string | null
+  lastMeetingLabel: string
+  /** 담은 카드에 한 줄로 붙는 내력 */
   meta: string
 }
 
@@ -58,6 +64,9 @@ const pool = computed<PickRow[]>(() => {
     title: nt.title,
     state: 'queued' as ThreadState,
     deferCount: 0,
+    ownerId: nt.ownerId,
+    ownerName: store.memberName(nt.ownerId),
+    lastMeetingLabel: '이번 회의',
     meta: nt.parentThreadId
       ? `${titleOf(nt.parentThreadId)} 에서 떼어냄 · 이번 회의`
       : '이번 회의에서 등록 · 아직 다룬 적 없음',
@@ -69,6 +78,9 @@ const pool = computed<PickRow[]>(() => {
       title: r.thread.title,
       state: r.thread.state,
       deferCount: r.deferCount,
+      ownerId: r.thread.ownerId,
+      ownerName: r.ownerName,
+      lastMeetingLabel: r.lastMeetingLabel,
       meta:
         r.thread.state === 'queued'
           ? `${monthDay(r.thread.createdAt)} 등록 · 아직 다룬 적 없음`
@@ -104,6 +116,7 @@ const staged = ref<string[]>([])
 
 function openPicker() {
   staged.value = [...picked.value]
+  resetPickQuery()
   pickerOpen.value = true
 }
 function toggleStaged(id: string) {
@@ -115,6 +128,73 @@ function commitPicker() {
   const kept = picked.value.filter((id) => staged.value.includes(id))
   picked.value = [...kept, ...staged.value.filter((id) => !kept.includes(id))]
   pickerOpen.value = false
+}
+
+/* 팝업 안의 조회 조건 — 안건 목록 화면과 같은 제목 · 상태 · 담당자다 */
+const pickTitleDraft = ref('')
+const pickQuery = ref('')
+const pickState = ref<'all' | 'queued' | 'open' | 'decided' | 'stuck'>('all')
+const pickOwner = ref<string>('all')
+const pickPage = ref(1)
+const PICK_PER_PAGE = 5
+
+const pickCounts = computed(() => ({
+  all: pool.value.length,
+  queued: pool.value.filter((p) => p.state === 'queued').length,
+  open: pool.value.filter((p) => p.state === 'open').length,
+  decided: pool.value.filter((p) => p.state === 'decided').length,
+  stuck: pool.value.filter((p) => p.deferCount >= 3).length,
+}))
+
+const pickStateChips = computed(() => [
+  { key: 'all' as const, label: '전체', n: pickCounts.value.all },
+  { key: 'queued' as const, label: '대기', n: pickCounts.value.queued },
+  { key: 'open' as const, label: '미결정', n: pickCounts.value.open },
+  { key: 'decided' as const, label: '결정됨', n: pickCounts.value.decided },
+  { key: 'stuck' as const, label: '3번 이상 미뤄짐', n: pickCounts.value.stuck },
+])
+
+function matchesPickState(row: PickRow) {
+  if (pickState.value === 'all') return true
+  if (pickState.value === 'stuck') return row.deferCount >= 3
+  return row.state === pickState.value
+}
+function matchesPickOwner(row: PickRow) {
+  if (pickOwner.value === 'all') return true
+  if (pickOwner.value === 'none') return row.ownerId === null
+  return row.ownerId === pickOwner.value
+}
+
+const pickFiltered = computed(() =>
+  pool.value.filter(
+    (p) => p.title.includes(pickQuery.value) && matchesPickState(p) && matchesPickOwner(p),
+  ),
+)
+
+const pickPageCount = computed(() => Math.max(1, Math.ceil(pickFiltered.value.length / PICK_PER_PAGE)))
+const pickCurrent = computed(() => Math.min(pickPage.value, pickPageCount.value))
+const pickStart = computed(() => (pickCurrent.value - 1) * PICK_PER_PAGE)
+const pickRows = computed(() => pickFiltered.value.slice(pickStart.value, pickStart.value + PICK_PER_PAGE))
+const pickRangeLabel = computed(() =>
+  pickFiltered.value.length === 0
+    ? '0건'
+    : `총 ${pickFiltered.value.length}건 중 ${pickStart.value + 1}–${pickStart.value + pickRows.value.length}건`,
+)
+
+function pickSearch() {
+  pickQuery.value = pickTitleDraft.value.trim()
+  pickPage.value = 1
+}
+function resetPickQuery() {
+  pickTitleDraft.value = ''
+  pickQuery.value = ''
+  pickState.value = 'all'
+  pickOwner.value = 'all'
+  pickPage.value = 1
+}
+function pickStateFilter(key: typeof pickState.value) {
+  pickState.value = key
+  pickPage.value = 1
 }
 
 /**
@@ -286,7 +366,8 @@ function save() {
     entries: lines.value,
     memos: memos.value.map((m) => ({ text: m.text, promotedTempId: m.promotedTempId })),
   })
-  router.push('/threads')
+  /* 저장하면 방금 만든 회의가 맨 위에 올라와 있는 회의 목록으로 돌아간다 */
+  router.push('/meetings')
 }
 
 const STRIPE: Record<ThreadState, string> = {
@@ -300,7 +381,7 @@ const STRIPE: Record<ThreadState, string> = {
   <AppShell>
     <template #actions>
       <span class="text-xs text-muted-foreground">{{ doneLabel }}</span>
-      <Button variant="outline" @click="router.push('/threads')">취소</Button>
+      <Button variant="outline" @click="router.push('/meetings')">취소</Button>
       <Button :disabled="!canSave" @click="save">저장</Button>
     </template>
 
@@ -609,39 +690,133 @@ const STRIPE: Record<ThreadState, string> = {
     </div>
 
     <Dialog v-model:open="pickerOpen">
-      <DialogContent class="flex max-h-[86vh] flex-col gap-0 p-0 sm:max-w-[720px]">
+      <DialogContent class="flex max-h-[86vh] flex-col gap-0 p-0 sm:max-w-[880px]">
         <DialogHeader class="shrink-0 gap-2 border-b border-border px-[22px] py-[18px] pr-[52px] text-left">
           <DialogTitle>등록된 안건</DialogTitle>
           <DialogDescription class="text-pretty">
             {{ store.currentProject.name }} · {{ pool.length }}건. 이번 회의에서 다룰 것만 고르고 추가를 누르세요.
-            대기 안건이 위에 있습니다.
+            페이지를 넘겨도 고른 것은 그대로 남습니다.
           </DialogDescription>
         </DialogHeader>
 
-        <div class="flex min-h-0 grow flex-col gap-0.5 overflow-y-auto px-3 py-3">
-          <div
-            v-for="p in pool"
-            :key="p.id"
-            role="checkbox"
-            :aria-checked="staged.includes(p.id)"
-            tabindex="0"
-            class="flex min-h-[52px] cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            :class="staged.includes(p.id) ? 'bg-accent' : ''"
-            @click="toggleStaged(p.id)"
-            @keydown.enter.prevent="toggleStaged(p.id)"
-            @keydown.space.prevent="toggleStaged(p.id)"
-          >
-            <Checkbox
-              :model-value="staged.includes(p.id)"
-              aria-hidden="true"
-              tabindex="-1"
-              class="pointer-events-none shrink-0"
-            />
-            <div class="flex min-w-0 grow flex-col gap-1">
-              <span class="text-sm leading-snug text-pretty">{{ p.title }}</span>
-              <span class="text-xs text-muted-foreground">{{ p.meta }}</span>
+        <div class="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-[22px] py-4">
+          <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">
+            <div class="flex items-center gap-2.5">
+              <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
+              <Input
+                v-model="pickTitleDraft"
+                placeholder="안건 제목에 들어가는 말"
+                class="grow bg-background"
+                @keyup.enter="pickSearch"
+              />
+              <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
+              <Select v-model="pickOwner" @update:model-value="pickPage = 1">
+                <SelectTrigger class="w-[132px] shrink-0 bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+                  <SelectItem value="none">미정</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button class="shrink-0" @click="pickSearch">
+                <Search class="size-4" />
+                조회
+              </Button>
+              <Button variant="outline" class="shrink-0" @click="resetPickQuery">초기화</Button>
             </div>
-            <ThreadStateBadge :state="p.state" :defer-count="p.deferCount" class="shrink-0" />
+
+            <div class="flex items-start gap-2.5">
+              <span class="w-[52px] shrink-0 pt-2 text-sm text-muted-foreground">상태</span>
+              <div class="flex grow flex-wrap gap-1.5">
+                <button
+                  v-for="c in pickStateChips"
+                  :key="c.key"
+                  type="button"
+                  class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors"
+                  :class="
+                    pickState === c.key
+                      ? 'border-primary bg-primary text-primary-foreground shadow'
+                      : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
+                  "
+                  @click="pickStateFilter(c.key)"
+                >
+                  {{ c.label }}
+                  <span :class="pickState === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'">{{ c.n }}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow class="bg-muted/50 hover:bg-muted/50">
+                  <TableHead class="h-10 w-10" />
+                  <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
+                  <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground">상태</TableHead>
+                  <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">담당자</TableHead>
+                  <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">마지막 회의</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow
+                  v-for="p in pickRows"
+                  :key="p.id"
+                  class="h-12 cursor-pointer"
+                  :class="staged.includes(p.id) ? 'bg-accent hover:bg-accent' : ''"
+                  @click="toggleStaged(p.id)"
+                >
+                  <TableCell @click.stop>
+                    <Checkbox
+                      :model-value="staged.includes(p.id)"
+                      :aria-label="p.title"
+                      @update:model-value="toggleStaged(p.id)"
+                    />
+                  </TableCell>
+                  <TableCell class="min-w-0">
+                    <div class="flex min-w-0 flex-col gap-0.5">
+                      <span class="truncate text-sm">{{ p.title }}</span>
+                      <span class="truncate text-xs text-muted-foreground">{{ p.meta }}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <ThreadStateBadge :state="p.state" :defer-count="p.deferCount" />
+                  </TableCell>
+                  <TableCell class="text-sm" :class="p.ownerName ? '' : 'text-muted-foreground'">
+                    {{ p.ownerName ?? '미정' }}
+                  </TableCell>
+                  <TableCell class="text-sm text-muted-foreground">{{ p.lastMeetingLabel }}</TableCell>
+                </TableRow>
+                <TableRow v-if="pickRows.length === 0" class="hover:bg-transparent">
+                  <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                    조회 조건에 맞는 안건이 없습니다.
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          <div class="flex items-center gap-2.5">
+            <span class="text-xs text-muted-foreground">{{ pickRangeLabel }}</span>
+            <div class="grow" />
+            <Button variant="outline" size="icon" :disabled="pickCurrent <= 1" @click="pickPage = pickCurrent - 1">
+              <ChevronLeft class="size-4" />
+            </Button>
+            <Button
+              v-for="n in pickPageCount"
+              :key="n"
+              :variant="n === pickCurrent ? 'default' : 'outline'"
+              size="icon"
+              class="text-xs"
+              @click="pickPage = n"
+            >
+              {{ n }}
+            </Button>
+            <Button variant="outline" size="icon" :disabled="pickCurrent >= pickPageCount" @click="pickPage = pickCurrent + 1">
+              <ChevronRight class="size-4" />
+            </Button>
           </div>
         </div>
 

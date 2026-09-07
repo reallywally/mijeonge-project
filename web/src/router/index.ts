@@ -10,6 +10,11 @@ const router = createRouter({
       component: () => import('@/views/ThreadListView.vue'),
     },
     {
+      path: '/meetings',
+      name: 'meetings',
+      component: () => import('@/views/MeetingListView.vue'),
+    },
+    {
       path: '/meetings/new',
       name: 'meeting-new',
       component: () => import('@/views/NewMeetingView.vue'),

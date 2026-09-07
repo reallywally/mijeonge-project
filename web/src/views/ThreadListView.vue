@@ -117,13 +117,6 @@ function submitThread() {
       <Button variant="outline" size="icon">
         <Download class="size-4" />
       </Button>
-      <Button variant="outline" as-child>
-        <RouterLink to="/meetings/new">회의 추가</RouterLink>
-      </Button>
-      <Button @click="addOpen = true">
-        <Plus class="size-4" />
-        안건 추가
-      </Button>
     </template>
 
     <template #aside>
@@ -156,12 +149,18 @@ function submitThread() {
 
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
       <div class="flex w-full max-w-[900px] flex-col gap-4">
-        <header class="flex flex-col gap-2.5">
-          <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            오른쪽 위 안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다.
-            회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
-          </p>
+        <header class="flex items-start gap-4">
+          <div class="flex min-w-0 grow flex-col gap-2.5">
+            <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
+            <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+              안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다.
+              회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
+            </p>
+          </div>
+          <Button class="shrink-0" @click="addOpen = true">
+            <Plus class="size-4" />
+            안건 추가
+          </Button>
         </header>
 
         <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">

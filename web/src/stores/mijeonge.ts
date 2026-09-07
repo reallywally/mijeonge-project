@@ -5,7 +5,10 @@ import type {
   Entry,
   EntryKind,
   Meeting,
+  MeetingDetail,
   MeetingInput,
+  MeetingRow,
+  MeetingThreadLines,
   Member,
   Project,
   SubThreadRow,
@@ -125,6 +128,69 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
 
   const meetingById = (id: string | null) =>
     id ? (allMeetings.value.find((m) => m.id === id) ?? null) : null
+
+  const entriesOfMeeting = (meetingId: string) =>
+    allEntries.value.filter((e) => e.meetingId === meetingId)
+
+  /** 회의 목록. 회의는 늘 최근 것이 위다 — 지난 회의에 뒤늦게 적는 경우가 있어 날짜로 다시 세운다. */
+  const meetingRows = computed<MeetingRow[]>(() =>
+    allMeetings.value
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map((meeting) => {
+        const own = entriesOfMeeting(meeting.id)
+        return {
+          meeting,
+          attendeeNames: meeting.attendeeIds
+            .map((id) => memberName(id))
+            .filter((n): n is string => n !== null),
+          threadCount: new Set(own.map((e) => e.threadId)).size,
+          decidedCount: own.filter((e) => e.kind === 'decide' || e.kind === 'change').length,
+          deferredCount: own.filter((e) => e.kind === 'defer').length,
+          dateLabel: monthDay(meeting.date),
+        }
+      }),
+  )
+
+  /**
+   * 회의 하나를 한 화면에 필요한 모양으로 조립한다.
+   *
+   * 회의가 가진 것은 날짜 · 참석자 · 메모뿐이다. 본문에 해당하는 것은 그날 안건에 남긴 줄이라,
+   * 그 줄을 안건별로 묶어 준다. 안건 안에서는 남긴 순서를 그대로 둔다.
+   */
+  function meetingDetail(meetingId: string): MeetingDetail | null {
+    const meeting = allMeetings.value.find((m) => m.id === meetingId)
+    if (!meeting) return null
+
+    const threads: MeetingThreadLines[] = []
+    for (const entry of entriesOfMeeting(meetingId)) {
+      const thread = allThreads.value.find((t) => t.id === entry.threadId)
+      if (!thread) continue
+      let group = threads.find((g) => g.thread.id === thread.id)
+      if (!group) {
+        group = {
+          thread,
+          deferCount: allEntries.value.filter((e) => e.threadId === thread.id && e.kind === 'defer').length,
+          lines: [],
+        }
+        threads.push(group)
+      }
+      group.lines.push({ entry, ownerName: memberName(entry.ownerId) })
+    }
+
+    const own = entriesOfMeeting(meetingId)
+    return {
+      meeting,
+      attendeeNames: meeting.attendeeIds
+        .map((id) => memberName(id))
+        .filter((n): n is string => n !== null),
+      threads,
+      entryCount: own.length,
+      decidedCount: own.filter((e) => e.kind === 'decide' || e.kind === 'change').length,
+      deferredCount: own.filter((e) => e.kind === 'defer').length,
+      dateLabel: monthDay(meeting.date),
+    }
+  }
 
   /**
    * 안건 하나를 한 화면에 필요한 모양으로 조립한다.
@@ -323,6 +389,8 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
     rows,
     memberName,
     meetingById,
+    meetingRows,
+    meetingDetail,
     entriesOfThread,
     threadDetail,
     addThread,
