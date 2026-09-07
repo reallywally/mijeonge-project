@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarDays, ChevronRight, ChevronsUpDown, FolderClosed, ListTree } from 'lucide-vue-next'
+import { CalendarDays, CalendarRange, ChevronRight, ChevronsUpDown, FolderClosed, ListTree } from 'lucide-vue-next'
 import { useMijeongeStore } from '@/stores/mijeonge'
 
 const store = useMijeongeStore()
@@ -44,8 +44,17 @@ const store = useMijeongeStore()
             <span class="grow">안건</span>
             <span class="text-xs text-muted-foreground">{{ store.rows.filter((r) => r.thread.state === 'open').length }}</span>
           </RouterLink>
-          <span class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm text-muted-foreground">
+          <RouterLink
+            to="/meetings"
+            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
+            active-class="bg-accent font-medium text-accent-foreground"
+          >
             <CalendarDays class="size-4 shrink-0" />
+            <span class="grow">회의</span>
+            <span class="text-xs text-muted-foreground">{{ store.allMeetings.length }}</span>
+          </RouterLink>
+          <span class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm text-muted-foreground">
+            <CalendarRange class="size-4 shrink-0" />
             <span class="grow">일정관리</span>
           </span>
         </nav>

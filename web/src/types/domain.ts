@@ -82,3 +82,104 @@ export interface ThreadRow {
   entryCount: number
   lastMeetingLabel: string
 }
+
+/** 안건 이력 한 줄 — Entry 에 화면에서 필요한 것만 붙였다 */
+export interface ThreadEvent {
+  entry: Entry
+  /** null = 회의 밖 처리 */
+  meeting: Meeting | null
+  /** 이 줄이 놓이는 날짜. 회의에 붙은 줄이면 그 회의의 날짜다 */
+  at: string
+  ownerName: string | null
+  /** 뒤에 온 결정에 밀려난 줄 — 취소선으로 남는다 */
+  superseded: boolean
+}
+
+/** 이 안건에서 떼어낸 하위 안건 */
+export interface SubThreadRow {
+  thread: Thread
+  splitAtLabel: string
+}
+
+/** 안건 상세 한 화면 — 지금 합의된 내용 + 회의별 이력 */
+export interface ThreadDetail {
+  thread: Thread
+  ownerName: string | null
+  events: ThreadEvent[]
+  deferCount: number
+  /** 결정 · 변경 줄이 하나라도 있는가 */
+  settled: boolean
+  /** 마지막 결정 · 변경의 한 줄 요약 */
+  current: string
+  /** 그 결정의 조건별 상세 + 그 뒤에 붙은 세부 추가 */
+  detail: string[]
+  /** 언제 · 어디서 정해졌는지 */
+  settledLabel: string
+  settledOwnerName: string | null
+  subThreads: SubThreadRow[]
+}
+
+/** 회의 목록 한 행 — 그 회의에 붙은 Entry 를 세어 얻는다 */
+export interface MeetingRow {
+  meeting: Meeting
+  attendeeNames: string[]
+  /** 그 회의에서 다룬 안건 수 */
+  threadCount: number
+  /** 결정 · 변경 줄 수 */
+  decidedCount: number
+  /** 미룸 줄 수 */
+  deferredCount: number
+  dateLabel: string
+}
+
+/** 회의 하나에서 안건 하나에 남긴 줄들 */
+export interface MeetingThreadLines {
+  thread: Thread
+  /** 안건 전체에서 미뤄진 횟수 — 상태 배지가 쓴다 */
+  deferCount: number
+  lines: { entry: Entry; ownerName: string | null }[]
+}
+
+/** 회의 하나 보기 — 회의록 본문은 없다. 그날 안건에 남긴 줄이 그대로 기록이다. */
+export interface MeetingDetail {
+  meeting: Meeting
+  attendeeNames: string[]
+  threads: MeetingThreadLines[]
+  entryCount: number
+  decidedCount: number
+  deferredCount: number
+  dateLabel: string
+}
+
+/**
+ * 새 회의 화면이 저장할 때 넘기는 것.
+ *
+ * 회의 중에 처음 등록한 안건은 아직 id 가 없어 화면에서만 쓰는 tempId 로 가리킨다.
+ * 저장할 때 실제 id 를 받고, entries 와 memos 의 tempId 도 그것으로 바뀐다.
+ */
+export interface NewThreadInput {
+  tempId: string
+  title: string
+  ownerId: string | null
+  parentThreadId: string | null
+}
+
+export interface MeetingEntryInput {
+  /** 실제 안건 id 또는 NewThreadInput.tempId */
+  threadId: string
+  kind: EntryKind
+  text: string
+  detail: string[]
+  note: string
+  ownerId: string | null
+}
+
+export interface MeetingInput {
+  title: string
+  /** YYYY-MM-DD */
+  date: string
+  attendeeIds: string[]
+  newThreads: NewThreadInput[]
+  entries: MeetingEntryInput[]
+  memos: { text: string; promotedTempId: string | null }[]
+}

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -85,6 +86,15 @@ function pickState(key: typeof stateFilter.value) {
   resetPage()
 }
 
+/* 안건 상세 — 목록을 그대로 두고 그 위에 띄운다 */
+const detailId = ref<string | null>(null)
+const detailOpen = ref(false)
+
+function openThread(id: string) {
+  detailId.value = id
+  detailOpen.value = true
+}
+
 /* 안건 추가 팝업 */
 const addOpen = ref(false)
 const newTitle = ref('')
@@ -106,11 +116,6 @@ function submitThread() {
     <template #actions>
       <Button variant="outline" size="icon">
         <Download class="size-4" />
-      </Button>
-      <Button variant="outline">회의 추가</Button>
-      <Button @click="addOpen = true">
-        <Plus class="size-4" />
-        안건 추가
       </Button>
     </template>
 
@@ -144,12 +149,18 @@ function submitThread() {
 
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
       <div class="flex w-full max-w-[900px] flex-col gap-4">
-        <header class="flex flex-col gap-2.5">
-          <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            오른쪽 위 안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다.
-            회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
-          </p>
+        <header class="flex items-start gap-4">
+          <div class="flex min-w-0 grow flex-col gap-2.5">
+            <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
+            <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+              안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다.
+              회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
+            </p>
+          </div>
+          <Button class="shrink-0" @click="addOpen = true">
+            <Plus class="size-4" />
+            안건 추가
+          </Button>
         </header>
 
         <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">
@@ -213,7 +224,12 @@ function submitThread() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="row in pageRows" :key="row.thread.id" class="h-12 cursor-pointer">
+              <TableRow
+                v-for="row in pageRows"
+                :key="row.thread.id"
+                class="h-12 cursor-pointer"
+                @click="openThread(row.thread.id)"
+              >
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <span
@@ -224,7 +240,9 @@ function submitThread() {
                         'bg-muted-foreground/40': row.thread.state === 'decided',
                       }"
                     />
-                    <span class="min-w-0 truncate text-sm">{{ row.thread.title }}</span>
+                    <button type="button" class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline">
+                      {{ row.thread.title }}
+                    </button>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -267,6 +285,8 @@ function submitThread() {
         </div>
       </div>
     </div>
+
+    <ThreadDetailDialog v-model:open="detailOpen" :thread-id="detailId" @open-thread="openThread" />
 
     <Dialog v-model:open="addOpen">
       <DialogContent class="sm:max-w-[560px]">
