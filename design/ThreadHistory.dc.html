@@ -7,35 +7,35 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=IBM+Plex+Sans+KR:wght@400;500;600&amp;display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&amp;display=swap">
   <style>
     body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-    a { color: #9a5a2c; } a:hover { color: #23201c; }
-    input { font-family: inherit; font-size: 13px; color: #23201c; }
-    input::placeholder { color: #a89f92; }
+    a { color: #171717; } a:hover { color: #0a0a0a; }
+    input { font-family: inherit; font-size: 13px; color: #0a0a0a; }
+    input::placeholder { color: #737373; }
   </style>
 </helmet>
-<div style="width: 1440px; height: 900px; background: #f0ece4; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
+<div style="width: 1440px; height: 900px; background: #e5e5e5; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
 
   <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(35, 32, 28, 0.45);"></div>
 
-  <div style="position: relative; width: 1000px; height: 780px; border-radius: 6px; background: #faf8f4; color: #23201c; box-shadow: 0 30px 70px rgba(35, 32, 28, 0.32); display: flex; flex-direction: column; overflow: hidden;">
+  <div style="position: relative; width: 1000px; height: 780px; border-radius: 10px; background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); color: #0a0a0a; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; overflow: hidden;">
 
-    <div style="flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; padding: 22px 26px 16px; border-bottom: 1px solid #e5dfd5;">
+    <div style="flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; padding: 22px 26px 16px; border-bottom: 1px solid #e5e5e5;">
       <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #8c847a;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8c847a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #737373;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
           </svg>
           <span>결제 안정화</span>
         </div>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 6l6 6-6 6"></path>
         </svg>
-        <div style="font-size: 12.5px; color: #57514a;">안건</div>
+        <div style="font-size: 12.5px; color: #737373;">안건</div>
         <div style="flex-grow: 1;"></div>
-        <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 4px; cursor: pointer;">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; cursor: pointer;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 6l12 12"></path>
             <path d="M18 6L6 18"></path>
           </svg>
@@ -44,7 +44,7 @@
 
       <div style="display: flex; gap: 6px; flex-wrap: wrap;">
         <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
-          <div onClick="{{ tb.pick }}" style="display: flex; align-items: center; height: 34px; padding: 0 13px; border: 1px solid {{ tb.bc }}; border-radius: 17px; background: {{ tb.bg }}; font-size: 12.5px; font-weight: {{ tb.weight }}; color: {{ tb.fg }}; cursor: pointer;">{{ tb.label }}</div>
+          <div onClick="{{ tb.pick }}" style="display: flex; align-items: center; height: 34px; padding: 0 13px; border: 1px solid {{ tb.bc }}; border-radius: 8px; background: {{ tb.bg }}; font-size: 12.5px; font-weight: {{ tb.weight }}; color: {{ tb.fg }}; cursor: pointer;">{{ tb.label }}</div>
         </sc-for>
       </div>
     </div>
@@ -54,44 +54,44 @@
 
         <div style="display: flex; flex-direction: column; gap: 14px;">
           <div style="display: flex; align-items: center; gap: 9px;">
-            <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; background: {{ t.stateBg }}; font-size: 12px; color: {{ t.stateFg }};">
+            <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 8px; background: {{ t.stateBg }}; font-size: 12px; color: {{ t.stateFg }};">
               <div style="width: 6px; height: 6px; border-radius: 50%; background: {{ t.stateFg }};"></div>
               <span>{{ t.stateLabel }}</span>
             </div>
-            <div style="font-size: 12px; color: #a89f92;">{{ t.metaLabel }}</div>
+            <div style="font-size: 12px; color: #737373;">{{ t.metaLabel }}</div>
           </div>
-          <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 30px; font-weight: 700; line-height: 1.3; letter-spacing: -0.015em; text-wrap: pretty;">{{ t.title }}</div>
+          <div style="font-size: 30px; font-weight: 600; line-height: 1.3; letter-spacing: -0.025em; text-wrap: pretty;">{{ t.title }}</div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
-          <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">지금 합의된 내용</div>
+        <div style="display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border: 1px solid #e5e5e5; border-radius: 10px; background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+          <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">지금 합의된 내용</div>
           <sc-if value="{{ t.settled }}" hint-placeholder-val="{{ true }}">
             <div style="display: flex; flex-direction: column; gap: 13px;">
               <div style="display: flex; align-items: flex-start; gap: 11px;">
-                <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; background: oklch(0.95 0.03 158); display: flex; align-items: center; justify-content: center;">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="oklch(0.50 0.08 158)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; background: #f5f5f5; display: flex; align-items: center; justify-content: center;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 6L9 17l-5-5"></path>
                   </svg>
                 </div>
                 <div style="flex-grow: 1; min-width: 0; font-size: 15.5px; line-height: 1.6; text-wrap: pretty;">{{ t.current }}</div>
               </div>
               <sc-if value="{{ t.hasDetail }}" hint-placeholder-val="{{ true }}">
-                <div style="display: flex; flex-direction: column; gap: 7px; margin-left: 30px; padding-left: 14px; border-left: 2px solid #e5dfd5;">
+                <div style="display: flex; flex-direction: column; gap: 7px; margin-left: 30px; padding-left: 14px; border-left: 2px solid #e5e5e5;">
                   <sc-for list="{{ t.detail }}" as="dl" hint-placeholder-count="3">
-                    <div style="font-size: 14px; line-height: 1.65; color: #33302b; text-wrap: pretty;">{{ dl.line }}</div>
+                    <div style="font-size: 14px; line-height: 1.65; color: #0a0a0a; text-wrap: pretty;">{{ dl.line }}</div>
                   </sc-for>
-                  <div style="font-size: 11.5px; color: #a89f92;">조건별 상세 — 이 결정 안에 함께 적힌 줄입니다</div>
+                  <div style="font-size: 11.5px; color: #737373;">조건별 상세 — 이 결정 안에 함께 적힌 줄입니다</div>
                 </div>
               </sc-if>
               <sc-if value="{{ t.hasSubs }}" hint-placeholder-val="{{ true }}">
                 <div style="display: flex; flex-direction: column; gap: 7px; margin-left: 30px;">
-                  <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">따로 떼어낸 하위 안건</div>
+                  <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">따로 떼어낸 하위 안건</div>
                   <sc-for list="{{ t.subs }}" as="sb" hint-placeholder-count="1">
-                    <div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 9px 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; cursor: pointer;">
+                    <div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 9px 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; cursor: pointer;">
                       <div style="width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: {{ sb.dot }};"></div>
                       <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; line-height: 1.5; text-wrap: pretty;">{{ sb.text }}</div>
-                      <div style="flex-shrink: 0; font-size: 11.5px; color: #a89f92;">{{ sb.at }}</div>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a89f92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                      <div style="flex-shrink: 0; font-size: 11.5px; color: #737373;">{{ sb.at }}</div>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
                         <path d="M9 6l6 6-6 6"></path>
                       </svg>
                     </div>
@@ -100,12 +100,12 @@
               </sc-if>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <sc-if value="{{ t.hasOwner }}" hint-placeholder-val="{{ true }}">
-                  <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; background: #eae4d9; font-size: 12px;">
-                    <div style="width: 18px; height: 18px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ t.ownerCh }}</div>
+                  <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 8px; background: #f5f5f5; font-size: 12px;">
+                    <div style="width: 18px; height: 18px; border-radius: 50%; background: #f5f5f5; color: #737373; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ t.ownerCh }}</div>
                     <span>{{ t.owner }}</span>
                   </div>
                 </sc-if>
-                <div style="font-size: 11.5px; color: #8c847a;">{{ t.settledAt }}</div>
+                <div style="font-size: 11.5px; color: #737373;">{{ t.settledAt }}</div>
               </div>
             </div>
           </sc-if>
@@ -115,65 +115,65 @@
                 <div style="width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; border-radius: 50%; border: 1.5px solid {{ accent }}; display: flex; align-items: center; justify-content: center;">
                   <div style="width: 6px; height: 6px; border-radius: 50%; background: {{ accent }};"></div>
                 </div>
-                <div style="flex-grow: 1; min-width: 0; font-size: 15.5px; line-height: 1.6; color: #57514a; text-wrap: pretty;">아직 정해지지 않았습니다. {{ t.nextLabel }}</div>
+                <div style="flex-grow: 1; min-width: 0; font-size: 15.5px; line-height: 1.6; color: #737373; text-wrap: pretty;">아직 정해지지 않았습니다. {{ t.nextLabel }}</div>
               </div>
-              <div style="font-size: 12px; color: #a89f92;">{{ t.deferLabel }}</div>
+              <div style="font-size: 12px; color: #737373;">{{ t.deferLabel }}</div>
             </div>
           </sc-if>
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 13px;">
           <div style="display: flex; align-items: center; gap: 9px;">
-            <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">회의별 이력</div>
-            <div style="font-size: 11.5px; font-weight: 600; color: #57514a;">{{ t.count }}</div>
-            <div style="font-size: 11.5px; color: #a89f92;">각 줄이 그 회의의 기록이기도 합니다 — 회의록을 따로 쓰지 않습니다</div>
+            <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">회의별 이력</div>
+            <div style="font-size: 11.5px; font-weight: 600; color: #737373;">{{ t.count }}</div>
+            <div style="font-size: 11.5px; color: #737373;">각 줄이 그 회의의 기록이기도 합니다 — 회의록을 따로 쓰지 않습니다</div>
           </div>
 
-          <div style="display: flex; flex-direction: column; gap: 11px; padding: 16px 18px; border: 1px solid #d6cec1; border-radius: 5px; background: #ffffff;">
+          <div style="display: flex; flex-direction: column; gap: 11px; padding: 16px 18px; border: 1px solid #e5e5e5; border-radius: 10px; background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #8c847a;">회의 없이 처리</div>
+                <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">회의 없이 처리</div>
               </div>
-              <div style="font-size: 12px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">회의를 다시 잡지 않고 담당자 확인만으로 처리한 경우입니다. 남기면 이 안건의 이력에 회의 밖 줄로 올라가고, 어느 회의에도 붙지 않습니다.</div>
+              <div style="font-size: 12px; line-height: 1.65; color: #737373; text-wrap: pretty;">회의를 다시 잡지 않고 담당자 확인만으로 처리한 경우입니다. 남기면 이 안건의 이력에 회의 밖 줄로 올라가고, 어느 회의에도 붙지 않습니다.</div>
               <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                 <sc-for list="{{ outKinds }}" as="ok" hint-placeholder-count="3">
-                  <div onClick="{{ ok.pick }}" style="display: flex; align-items: center; height: 32px; padding: 0 13px; border: 1px solid {{ ok.bc }}; border-radius: 16px; background: {{ ok.bg }}; font-size: 12.5px; font-weight: {{ ok.weight }}; color: {{ ok.fg }}; cursor: pointer;">{{ ok.label }}</div>
+                  <div onClick="{{ ok.pick }}" style="display: flex; align-items: center; height: 32px; padding: 0 13px; border: 1px solid {{ ok.bc }}; border-radius: 8px; background: {{ ok.bg }}; font-size: 12.5px; font-weight: {{ ok.weight }}; color: {{ ok.fg }}; cursor: pointer;">{{ ok.label }}</div>
                 </sc-for>
               </div>
-              <input id="th-text" placeholder="{{ outPh }}" style="height: 42px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; font-size: 14px; outline: none;">
-              <input id="th-note" placeholder="근거 — 무엇을 확인했나요 (선택)" style="height: 40px; padding: 0 12px; border: 1px solid #e5dfd5; border-radius: 4px; background: #faf8f4; outline: none;">
+              <input id="th-text" placeholder="{{ outPh }}" style="height: 42px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 14px; outline: none;">
+              <input id="th-note" placeholder="근거 — 무엇을 확인했나요 (선택)" style="height: 40px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; outline: none;">
               <div style="display: flex; flex-direction: column; gap: 7px;">
-                <div style="font-size: 11.5px; color: #8c847a;">처리한 사람</div>
+                <div style="font-size: 11.5px; color: #737373;">처리한 사람</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 6px;">
                   <sc-for list="{{ outStaff }}" as="os" hint-placeholder-count="4">
-                    <div onClick="{{ os.pick }}" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 5px; border: 1px solid {{ os.bc }}; border-radius: 17px; background: {{ os.bg }}; font-size: 12.5px; color: {{ os.fg }}; cursor: pointer;">
-                      <div style="width: 22px; height: 22px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10.5px; display: flex; align-items: center; justify-content: center;">{{ os.ch }}</div>
+                    <div onClick="{{ os.pick }}" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 5px; border: 1px solid {{ os.bc }}; border-radius: 8px; background: {{ os.bg }}; font-size: 12.5px; color: {{ os.fg }}; cursor: pointer;">
+                      <div style="width: 22px; height: 22px; border-radius: 50%; background: #f5f5f5; color: #737373; font-size: 10.5px; display: flex; align-items: center; justify-content: center;">{{ os.ch }}</div>
                       <span>{{ os.name }}</span>
                     </div>
                   </sc-for>
                 </div>
               </div>
-              <div onClick="{{ addOut }}" style="display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 15px; border-radius: 4px; background: #23201c; color: #faf8f4; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start;">이력에 남기기</div>
+              <div onClick="{{ addOut }}" style="display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 15px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 13px; font-weight: 500; cursor: pointer; align-self: flex-start;">이력에 남기기</div>
           </div>
 
           <div style="display: flex; flex-direction: column;">
             <sc-for list="{{ events }}" as="e" hint-placeholder-count="4">
               <div style="display: flex; gap: 16px;">
                 <div style="width: 74px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-top: 1px;">
-                  <div style="font-size: 12.5px; font-weight: 600; color: #57514a;">{{ e.date }}</div>
-                  <div style="font-size: 11px; color: #a89f92;">{{ e.short }}</div>
+                  <div style="font-size: 12.5px; font-weight: 600; color: #737373;">{{ e.date }}</div>
+                  <div style="font-size: 11px; color: #737373;">{{ e.short }}</div>
                 </div>
-                <div style="width: 1px; flex-shrink: 0; background: #e5dfd5;"></div>
+                <div style="width: 1px; flex-shrink: 0; background: #e5e5e5;"></div>
                 <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; padding: 0 0 22px;">
                   <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                    <div style="display: flex; align-items: center; height: 23px; padding: 0 9px; border-radius: 3px; background: {{ e.tagBg }}; font-size: 11.5px; font-weight: 600; color: {{ e.tagFg }};">{{ e.tag }}</div>
+                    <div style="display: flex; align-items: center; height: 23px; padding: 0 9px; border-radius: 6px; background: {{ e.tagBg }}; font-size: 11.5px; font-weight: 600; color: {{ e.tagFg }};">{{ e.tag }}</div>
                     <sc-if value="{{ e.outside }}" hint-placeholder-val="{{ true }}">
-                      <div style="display: flex; align-items: center; height: 23px; padding: 0 9px; border: 1px dashed #d6cec1; border-radius: 3px; font-size: 11.5px; color: #8c847a;">회의 밖</div>
+                      <div style="display: flex; align-items: center; height: 23px; padding: 0 9px; border: 1px dashed #e5e5e5; border-radius: 6px; font-size: 11.5px; color: #737373;">회의 밖</div>
                     </sc-if>
-                    <div style="font-size: 12px; color: #a89f92;">{{ e.meeting }}</div>
+                    <div style="font-size: 12px; color: #737373;">{{ e.meeting }}</div>
                     <sc-if value="{{ e.hasMeeting }}" hint-placeholder-val="{{ true }}">
-                      <div style="display: flex; align-items: center; gap: 4px; height: 23px; font-size: 11.5px; color: #57514a; cursor: pointer;">
+                      <div style="display: flex; align-items: center; gap: 4px; height: 23px; font-size: 11.5px; color: #737373; cursor: pointer;">
                         <span>그 회의 보기</span>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#57514a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M9 6l6 6-6 6"></path>
                         </svg>
                       </div>
@@ -181,28 +181,28 @@
                   </div>
                   <div style="font-size: 14.5px; line-height: 1.6; color: {{ e.fg }}; text-decoration: {{ e.deco }}; text-wrap: pretty;">{{ e.text }}</div>
                   <sc-if value="{{ e.hasDetail }}" hint-placeholder-val="{{ true }}">
-                    <div style="display: flex; flex-direction: column; gap: 5px; padding-left: 13px; border-left: 2px solid #e5dfd5;">
+                    <div style="display: flex; flex-direction: column; gap: 5px; padding-left: 13px; border-left: 2px solid #e5e5e5;">
                       <sc-for list="{{ e.detail }}" as="dd" hint-placeholder-count="3">
-                        <div style="font-size: 13px; line-height: 1.65; color: #57514a; text-wrap: pretty;">{{ dd.line }}</div>
+                        <div style="font-size: 13px; line-height: 1.65; color: #737373; text-wrap: pretty;">{{ dd.line }}</div>
                       </sc-for>
                     </div>
                   </sc-if>
                   <sc-if value="{{ e.hasNote }}" hint-placeholder-val="{{ true }}">
-                    <div style="font-size: 12.5px; line-height: 1.65; color: #8c847a; text-wrap: pretty;">{{ e.note }}</div>
+                    <div style="font-size: 12.5px; line-height: 1.65; color: #737373; text-wrap: pretty;">{{ e.note }}</div>
                   </sc-if>
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <sc-if value="{{ e.hasOwner }}" hint-placeholder-val="{{ true }}">
-                      <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; background: #eae4d9; font-size: 12px;">
-                        <div style="width: 18px; height: 18px; border-radius: 50%; background: #e8e2d7; color: #57514a; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ e.ownerCh }}</div>
+                      <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 8px; background: #f5f5f5; font-size: 12px;">
+                        <div style="width: 18px; height: 18px; border-radius: 50%; background: #f5f5f5; color: #737373; font-size: 10px; display: flex; align-items: center; justify-content: center;">{{ e.ownerCh }}</div>
                         <span>{{ e.owner }}</span>
                       </div>
                     </sc-if>
                   </div>
                   <sc-if value="{{ e.hasQuote }}" hint-placeholder-val="{{ true }}">
-                    <div style="padding: 2px 0 2px 14px; border-left: 2px solid #e5dfd5; display: flex; flex-direction: column; gap: 6px;">
-                      <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #a89f92;">근거 발언</div>
-                      <div style="font-family: 'Gowun Batang', 'Nanum Myeongjo', serif; font-size: 14.5px; line-height: 1.8; color: #57514a; text-wrap: pretty;">{{ e.quote }}</div>
-                      <div style="font-size: 11.5px; color: #a89f92;">{{ e.who }}</div>
+                    <div style="padding: 2px 0 2px 14px; border-left: 2px solid #e5e5e5; display: flex; flex-direction: column; gap: 6px;">
+                      <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">근거 발언</div>
+                      <div style="font-size: 14.5px; line-height: 1.8; color: #737373; text-wrap: pretty;">{{ e.quote }}</div>
+                      <div style="font-size: 11.5px; color: #737373;">{{ e.who }}</div>
                     </div>
                   </sc-if>
                 </div>
@@ -216,7 +216,7 @@
   </div>
 </div>
 </x-dc>
-<script data-dc-script data-props='{"accent":{"editor":"color","default":"#9a5a2c","options":["#9a5a2c","#8a5f8f","#3f6b8a","#7a6a2f"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   staff() {
     return [
@@ -297,17 +297,17 @@ class Component extends DCLogic {
   renderVals() {
     var self = this;
     var s = this.state || {};
-    var accent = this.props.accent || '#9a5a2c';
+    var accent = this.props.accent || '#e7000b';
     var list = this.data();
     var cur = list.filter(function (x) { return x.id === (s.tid || 't2'); })[0] || list[0];
 
     var TAG = {
-      decide: { label: '결정', bg: 'oklch(0.95 0.03 158)', fg: 'oklch(0.50 0.08 158)' },
-      change: { label: '변경', bg: '#e4e0d6', fg: '#23201c' },
-      refine: { label: '세부 추가', bg: '#eae4d9', fg: '#57514a' },
-      split: { label: '하위 안건으로 분리', bg: '#f4f1ea', fg: '#8c847a' },
-      defer: { label: '미룸', bg: '#f4ece3', fg: accent },
-      raise: { label: '제기', bg: '#ffffff', fg: '#8c847a' }
+      decide: { label: '결정', bg: '#171717', fg: '#fafafa' },
+      change: { label: '변경', bg: '#171717', fg: '#fafafa' },
+      refine: { label: '세부 추가', bg: '#f5f5f5', fg: '#171717' },
+      split: { label: '하위 안건으로 분리', bg: '#f5f5f5', fg: '#171717' },
+      defer: { label: '미룸', bg: accent, fg: '#fafafa' },
+      raise: { label: '제기', bg: '#ffffff', fg: '#0a0a0a' }
     };
 
     var ext = (s.ext && s.ext[cur.id]) || [];
@@ -328,9 +328,9 @@ class Component extends DCLogic {
         var sel = x.id === cur.id;
         return {
           label: x.label,
-          bg: sel ? '#23201c' : '#ffffff',
-          fg: sel ? '#faf8f4' : '#57514a',
-          bc: sel ? '#23201c' : '#e5dfd5',
+          bg: sel ? '#0a0a0a' : '#ffffff',
+          fg: sel ? '#ffffff' : '#737373',
+          bc: sel ? '#0a0a0a' : '#e5e5e5',
           weight: sel ? 600 : 400,
           pick: function () { self.setState({ tid: x.id }); }
         };
@@ -338,8 +338,8 @@ class Component extends DCLogic {
       t: {
         title: cur.title,
         stateLabel: settled ? '결정됨' : ('미결정 · ' + defers + '번 미뤄짐'),
-        stateBg: settled ? 'oklch(0.95 0.03 158)' : '#f4ece3',
-        stateFg: settled ? 'oklch(0.50 0.08 158)' : accent,
+        stateBg: settled ? '#171717' : accent,
+        stateFg: '#fafafa',
         metaLabel: '이력 ' + events.length + '건',
         settled: settled,
         unsettled: !settled,
@@ -348,7 +348,7 @@ class Component extends DCLogic {
         detail: detail.map(function (x) { return { line: x }; }),
         hasSubs: subs.length > 0,
         subs: subs.map(function (x) {
-          return { text: x.text, at: x.at, dot: x.state === 'decided' ? 'oklch(0.50 0.08 158)' : accent };
+          return { text: x.text, at: x.at, dot: x.state === 'decided' ? '#171717' : accent };
         }),
         hasOwner: !!((over && over.kind === 'decide' && over.owner) || cur.owner),
         owner: (over && over.kind === 'decide' && over.owner) ? over.owner : (cur.owner || ''),
@@ -365,9 +365,9 @@ class Component extends DCLogic {
         var sel = outKind === k;
         return {
           label: KIND_LABEL[k],
-          bg: sel ? '#23201c' : '#ffffff',
-          fg: sel ? '#faf8f4' : '#57514a',
-          bc: sel ? '#23201c' : '#e5dfd5',
+          bg: sel ? '#0a0a0a' : '#ffffff',
+          fg: sel ? '#ffffff' : '#737373',
+          bc: sel ? '#0a0a0a' : '#e5e5e5',
           weight: sel ? 600 : 400,
           pick: function () { self.setState({ outKind: k }); }
         };
@@ -376,9 +376,9 @@ class Component extends DCLogic {
         var sel = pe.id === outOwnerId;
         return {
           name: pe.name, ch: pe.ch,
-          bg: sel ? '#f4f1ea' : '#ffffff',
-          fg: sel ? '#23201c' : '#57514a',
-          bc: sel ? '#d6cec1' : '#e5dfd5',
+          bg: sel ? '#f5f5f5' : '#ffffff',
+          fg: sel ? '#0a0a0a' : '#737373',
+          bc: sel ? '#e5e5e5' : '#e5e5e5',
           pick: function () { self.setState({ outOwner: sel ? null : pe.id }); }
         };
       }),
@@ -407,7 +407,7 @@ class Component extends DCLogic {
           tag: tag.label, tagBg: tag.bg, tagFg: tag.fg,
           outside: !!e.outside,
           hasMeeting: !e.outside,
-          fg: e.dead ? '#a89f92' : '#23201c',
+          fg: e.dead ? '#737373' : '#0a0a0a',
           deco: e.dead ? 'line-through' : 'none',
           hasDetail: det.length > 0,
           detail: det.map(function (x) { return { line: x }; }),

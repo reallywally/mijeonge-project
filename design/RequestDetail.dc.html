@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #171717; } a:hover { color: #0a0a0a; }
+    input, textarea { font-family: inherit; font-size: 13px; color: #0a0a0a; }
+    textarea::placeholder { color: #737373; }
+    textarea { resize: none; }
+  </style>
+</helmet>
+<div style="width: 1440px; min-height: 1420px; background: #333333; display: flex; justify-content: center; padding: 30px 0;">
+
+  <div style="width: 1000px; align-self: flex-start; border-radius: 10px; background: #ffffff; color: #0a0a0a; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; overflow: hidden;">
+
+    <div style="position: relative; display: flex; align-items: center; gap: 10px; padding: 16px 60px 16px 26px; border-bottom: 1px solid #e5e5e5;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
+      </svg>
+      <div style="font-size: 11.5px; color: #737373;">결제 안정화</div>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 6l6 6-6 6"></path>
+      </svg>
+      <div style="font-size: 11.5px;">요청</div>
+      <div style="position: absolute; right: 16px; top: 14px; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 6l12 12"></path>
+          <path d="M18 6L6 18"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: center; padding: 26px;">
+      <div style="width: 100%; max-width: 780px; display: flex; flex-direction: column; gap: 26px;">
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 24px; font-weight: 600; line-height: 1.35; letter-spacing: -0.025em; text-wrap: pretty;">결제 실패 데이터 정리</div>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #737373;">
+            <span>데이터 정리</span>
+            <span>·</span>
+            <span>정하늘 → 박지훈</span>
+            <span>·</span>
+            <span>3월 26일까지</span>
+            <span>·</span>
+            <sc-for list="{{ stateOptions }}" as="so" hint-placeholder-count="3">
+              <div onClick="{{ so.pick }}" style="display: flex; align-items: center; height: 22px; padding: 0 9px; border: 1px solid {{ so.bc }}; border-radius: 6px; background: {{ so.bg }}; font-size: 11.5px; font-weight: 600; color: {{ so.fg }}; cursor: pointer;">{{ so.label }}</div>
+            </sc-for>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #737373; cursor: pointer;">
+            <span>안건 <span style="color: #0a0a0a; text-decoration: underline; text-underline-offset: 3px;">결제 재시도 정책</span> 의 3월 19일 결정에서 나왔습니다</span>
+          </div>
+        </div>
+
+        <div style="height: 1px; background: #e5e5e5;"></div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.07em; color: #737373;">정리된 요청</div>
+            <div style="display: flex; align-items: center; height: 21px; padding: 0 8px; border-radius: 6px; background: {{ badgeBg }}; font-size: 11px; font-weight: 600; color: {{ badgeFg }};">{{ badgeLabel }}</div>
+            <div style="flex-grow: 1;"></div>
+            <sc-if value="{{ isDraft }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ doSummarize }}" style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: #0a0a0a; cursor: pointer;">다시 정리</div>
+              <div onClick="{{ doConfirm }}" style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">이대로 확정</div>
+            </sc-if>
+            <sc-if value="{{ isConfirmed }}" hint-placeholder-val="{{ true }}">
+              <div style="font-size: 11.5px; color: #737373;">정하늘이 3월 22일에 확정</div>
+              <div onClick="{{ doSummarize }}" style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: #0a0a0a; cursor: pointer;">다시 정리</div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; line-height: 1.75; color: #737373; text-wrap: pretty;">아직 정리되지 않았습니다. 댓글 {{ n }}개가 오갔습니다.</div>
+              <div onClick="{{ doSummarize }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 14px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">오간 이야기 정리하기</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasSpec }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+
+              <sc-if value="{{ isStale }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="flex-grow: 1; min-width: 0; font-size: 12.5px; line-height: 1.6; color: {{ accent }}; text-wrap: pretty;">정리한 뒤로 댓글 {{ staleN }}개가 더 달렸습니다.</div>
+                  <div onClick="{{ doSummarize }}" style="flex-shrink: 0; display: flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 8px; background: {{ accent }}; color: #fafafa; font-size: 12px; cursor: pointer;">다시 정리</div>
+                </div>
+              </sc-if>
+
+              <div style="display: flex; flex-direction: column; gap: 9px;">
+                <sc-for list="{{ points }}" as="p" hint-placeholder-count="4">
+                  <div style="display: flex; align-items: flex-start; gap: 11px;">
+                    <div style="width: 4px; height: 4px; flex-shrink: 0; margin-top: 10px; border-radius: 9999px; background: #0a0a0a;"></div>
+                    <div style="flex-grow: 1; min-width: 0; font-size: 14px; line-height: 1.75; color: #0a0a0a; text-wrap: pretty;">{{ p.text }}</div>
+                  </div>
+                </sc-for>
+              </div>
+
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="height: 1px; background: #e5e5e5;"></div>
+
+        <div style="display: flex; flex-direction: column; gap: 18px;">
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.07em; color: #737373;">주고받은 이야기</div>
+            <div style="font-size: 11.5px; color: #737373;">{{ commentLabel }}</div>
+          </div>
+
+          <sc-for list="{{ comments }}" as="c" hint-placeholder-count="6">
+            <div style="display: flex; align-items: flex-start; gap: 11px;">
+              <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 9999px; background: #f5f5f5; color: #737373; font-size: 11px; display: flex; align-items: center; justify-content: center;">{{ c.ch }}</div>
+              <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <div style="font-size: 12.5px; font-weight: 600;">{{ c.name }}</div>
+                  <div style="font-size: 11.5px; color: #737373;">{{ c.at }}</div>
+                </div>
+                <div style="font-size: 13.5px; line-height: 1.75; color: #0a0a0a; text-wrap: pretty;">{{ c.text }}</div>
+              </div>
+            </div>
+          </sc-for>
+
+          <div style="display: flex; align-items: flex-start; gap: 11px; padding-top: 4px;">
+            <div style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 9999px; background: #f5f5f5; color: #737373; font-size: 11px; display: flex; align-items: center; justify-content: center;">박</div>
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px;">
+              <textarea id="rd-c" rows="2" placeholder="댓글 쓰기" style="width: 100%; box-sizing: border-box; padding: 10px 13px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 13.5px; line-height: 1.7; outline: none;"></textarea>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="flex-grow: 1; font-size: 11.5px; color: #737373;">여기서 결론이 안 나면 안건으로 올리세요.</div>
+                <div onClick="{{ promote }}" style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: #0a0a0a; cursor: pointer;">안건으로 올리기</div>
+                <div onClick="{{ addComment }}" style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">댓글 남기기</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"stage":{"editor":"enum","default":"초안","options":["정리 전","초안","확정"],"section":"정리"},"$preview":{"width":1440,"height":1420}}'>
+class Component extends DCLogic {
+  seed() {
+    return [
+      { name: '정하늘', ch: '정', at: '3월 21일 10:14', text: '3월 결제 실패 건 데이터 좀 정리해 주실 수 있을까요?' },
+      { name: '박지훈', ch: '박', at: '3월 21일 10:31', text: '어떤 데이터를 말씀하시는 걸까요? 실패 로그 원본인지, 사유별로 몇 건인지 세어 놓은 것인지에 따라 작업이 완전히 달라서요.' },
+      { name: '정하늘', ch: '정', at: '3월 21일 10:40', text: '사유별로 몇 건인지가 궁금해요. 이번 주 회의에서 재시도 정책 얘기할 때 근거로 쓰려고 합니다.' },
+      { name: '박지훈', ch: '박', at: '3월 21일 11:02', text: '기간은 어떻게 잡을까요? 3월 전체면 PG사가 두 곳 섞여 있는데, 나눠서 드리는 게 나을까요?' },
+      { name: '정하늘', ch: '정', at: '3월 21일 11:15', text: '3월 1일부터 20일까지요. PG사는 나눠 주시면 좋겠습니다.' },
+      { name: '김서연', ch: '김', at: '3월 21일 13:47', text: '실패한 뒤 재시도로 살아난 비율도 같이 보면 좋을 것 같은데요. 그게 있어야 재시도 횟수를 늘릴지 말지 얘기가 됩니다.' },
+      { name: '정하늘', ch: '정', at: '3월 21일 14:02', text: '그것도 넣어 주세요.' },
+      { name: '박지훈', ch: '박', at: '3월 21일 14:20', text: '알겠습니다. 형식은 시트로 드리면 될까요?' }
+    ];
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#e7000b';
+
+    var tweak = this.props.stage || '초안';
+    var fromTweak = tweak === '정리 전' ? 'none' : (tweak === '확정' ? 'confirmed' : 'draft');
+    var stage = s.stage || fromTweak;
+    var stale = s.stale || 0;
+    var prog = s.prog || 'doing';
+
+    var comments = this.seed().concat(s.added || []);
+    var n = comments.length;
+
+    var badge = { label: '정리 중', bg: '#f5f5f5', fg: '#171717' };
+    if (stage === 'confirmed' && stale === 0) { badge = { label: '확정', bg: '#171717', fg: '#fafafa' }; }
+    if (stage === 'draft' && stale === 0) { badge = { label: '초안', bg: '#f5f5f5', fg: '#171717' }; }
+    if (stale > 0) { badge = { label: '다시 정리 필요', bg: accent, fg: '#fafafa' }; }
+
+    var progOpt = function (key, label) {
+      var sel = prog === key;
+      return {
+        label: label,
+        bg: sel ? '#171717' : '#ffffff',
+        bc: sel ? '#171717' : '#e5e5e5',
+        fg: sel ? '#fafafa' : '#737373',
+        pick: function () { self.setState({ prog: key }); }
+      };
+    };
+
+    return {
+      accent: accent,
+      n: n,
+      commentLabel: n + '개',
+
+      stateOptions: [
+        progOpt('todo', '요청됨'),
+        progOpt('doing', '하는 중'),
+        progOpt('done', '완료')
+      ],
+
+      comments: comments.map(function (c) {
+        return { name: c.name, ch: c.ch, at: c.at, text: c.text };
+      }),
+
+      addComment: function () {
+        var el = document.getElementById('rd-c');
+        var v = el && el.value ? el.value.trim() : '';
+        if (!v) { return; }
+        el.value = '';
+        self.setState({
+          added: (s.added || []).concat([{ name: '박지훈', ch: '박', at: '지금', text: v }]),
+          stage: stage,
+          stale: stage === 'none' ? 0 : stale + 1
+        });
+      },
+      promote: function () { self.setState({}); },
+
+      isEmpty: stage === 'none',
+      hasSpec: stage !== 'none',
+      isDraft: stage === 'draft',
+      isConfirmed: stage === 'confirmed',
+      isStale: stale > 0,
+      staleN: stale,
+      badgeLabel: badge.label,
+      badgeBg: badge.bg,
+      badgeFg: badge.fg,
+
+      points: [
+        { text: '2026년 3월 1일 ~ 3월 20일 결제 실패 건을 실패 사유별로 센다.' },
+        { text: 'PG사(토스페이먼츠 / 나이스페이)는 나눠서 낸다.' },
+        { text: '실패한 뒤 재시도로 성공한 건의 비율도 함께 낸다.' },
+        { text: '3월 26일 회의 전까지 집계표 한 장으로 받는다.' },
+        { text: '전달 형식은 아직 안 정했다 — 시트로 드릴지 물었고 답이 없다.' }
+      ],
+
+      doSummarize: function () { self.setState({ stage: stage === 'none' ? 'draft' : stage, stale: 0 }); },
+      doConfirm: function () { self.setState({ stage: 'confirmed', stale: 0 }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
