@@ -183,3 +183,94 @@ export interface MeetingInput {
   entries: MeetingEntryInput[]
   memos: { text: string; promotedTempId: string | null }[]
 }
+
+/**
+ * 요청 — 안건과 나란히 서는 두 번째 레코드.
+ *
+ * 안건이 "정해야 할 것"이라면 요청은 "누가 해주면 끝나는 것"이다. 데이터 정리, 확인 부탁 같은
+ * 자잘한 일이라 회의를 거치지 않는다. 그래서 상태도 안건의 queued/open/decided 와 겹치지 않는
+ * 세 가지뿐이고, 오가는 이야기는 Entry 처럼 종류를 붙이지 않고 그냥 댓글로 쌓는다.
+ */
+
+export type RequestKind =
+  | 'data' // 데이터 정리
+  | 'check' // 확인
+  | 'etc'
+
+export type RequestState =
+  | 'todo' // 요청됨
+  | 'doing' // 하는 중
+  | 'done'
+
+/**
+ * 요청 내용이 어디까지 좁혀졌는가.
+ * 요청이 멈추는 가장 흔한 자리가 "무엇을 해달라는 건지 아직 모름"이라 목록에서도 보여준다.
+ */
+export type SpecState =
+  | 'none' // 아직 정리하지 않음
+  | 'draft' // 뽑아 두었지만 사람이 확정하지 않음
+  | 'confirmed'
+  | 'stale' // 확정·정리 뒤에 댓글이 더 달렸다
+
+export interface Request {
+  id: string
+  projectId: string
+  /** 처음에는 "결제 실패 데이터 정리" 수준의 한 줄이다. 내용은 댓글로 좁힌다. */
+  title: string
+  kind: RequestKind
+  state: RequestState
+  requesterId: string
+  assigneeId: string | null
+  /** YYYY-MM-DD */
+  dueDate: string | null
+  /** 어느 안건의 어느 줄에서 나왔는지. 회의에서 정한 것이 일로 이어지는 고리다. */
+  sourceEntryId: string | null
+  spec: RequestSpec | null
+  createdAt: string
+}
+
+/** 오간 댓글에서 뽑아낸 요청 내용. 칸을 나누지 않고 불릿 한 목록으로 둔다. */
+export interface RequestSpec {
+  points: string[]
+  /** 기계가 뽑은 것은 언제나 초안이고, 사람이 확정해야 담당자가 이걸 기준으로 일한다. */
+  confirmed: boolean
+  confirmedById: string | null
+  confirmedAt: string | null
+  /** 이 정리를 뽑을 때 읽은 댓글 수. 그 뒤로 더 달렸는지는 이 값으로 안다. */
+  fromCommentCount: number
+}
+
+/** 요청에 붙는 말. 안건의 Entry 와 달리 종류도 대댓글도 없다. */
+export interface RequestComment {
+  id: string
+  requestId: string
+  authorId: string
+  text: string
+  /** ISO datetime */
+  createdAt: string
+}
+
+/** 목록 한 행에 필요한, 계산해서 얻는 값들 */
+export interface RequestRow {
+  request: Request
+  requesterName: string
+  assigneeName: string | null
+  commentCount: number
+  specState: SpecState
+  dueLabel: string
+}
+
+/** 요청 하나 보기 — 정리된 내용 + 주고받은 이야기 */
+export interface RequestDetail {
+  request: Request
+  requesterName: string
+  assigneeName: string | null
+  comments: { comment: RequestComment; authorName: string; atLabel: string }[]
+  specState: SpecState
+  /** 정리한 뒤로 더 달린 댓글 수 */
+  staleCount: number
+  dueLabel: string
+  /** 이 요청을 낳은 안건과 그 줄 */
+  sourceThread: Thread | null
+  sourceLabel: string
+}
