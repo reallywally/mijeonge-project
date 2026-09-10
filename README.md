@@ -24,6 +24,11 @@
 
 
 
-&nbsp;
+### 개발환경
 
-&nbsp;
+- 프론트: vue
+- 백: fastapi
+- db: postgresql 또는 supabase
+
+- 간트차트: dhtmlx-gantt v10 Community
+
