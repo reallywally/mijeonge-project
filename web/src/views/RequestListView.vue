@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useMijeongeStore } from '@/stores/mijeonge'
 import type { RequestRow } from '@/types/domain'
@@ -152,13 +153,15 @@ function openThread(id: string) {
 /* 요청 추가 팝업 — 받는 것은 제목 한 줄과 담당자뿐이다. 나머지는 댓글로 좁힌다. */
 const addOpen = ref(false)
 const newTitle = ref('')
+const newDetail = ref('')
 const newAssignee = ref<string>('none')
 
 function submitRequest() {
   const title = newTitle.value.trim()
   if (!title) return
-  store.addRequest(title, newAssignee.value === 'none' ? null : newAssignee.value)
+  store.addRequest(title, newAssignee.value === 'none' ? null : newAssignee.value, newDetail.value)
   newTitle.value = ''
+  newDetail.value = ''
   newAssignee.value = 'none'
   addOpen.value = false
   scope.value = 'all'
@@ -373,7 +376,7 @@ function submitRequest() {
         <DialogHeader>
           <DialogTitle>요청 추가</DialogTitle>
           <DialogDescription class="text-pretty">
-            한 줄만 적으면 됩니다. 무엇을 해달라는 것인지는 댓글로 좁히고, 오간 이야기는 요청 안에서 정리됩니다.
+            제목 한 줄이면 등록됩니다. 지금 아는 것을 상세 내용에 적어 두면 주고받는 횟수가 줄어듭니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -385,6 +388,16 @@ function submitRequest() {
               v-model="newTitle"
               placeholder="예: 3월 결제 실패 데이터 정리"
               @keyup.enter="submitRequest"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <Label for="request-detail">상세 내용 (선택)</Label>
+            <Textarea
+              id="request-detail"
+              v-model="newDetail"
+              rows="4"
+              placeholder="기간 · 범위 · 언제까지 필요한지 등 지금 아는 것"
+              class="resize-none"
             />
           </div>
           <div class="flex flex-col gap-2">

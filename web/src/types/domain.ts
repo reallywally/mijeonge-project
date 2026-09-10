@@ -210,8 +210,10 @@ export type SpecState =
 export interface Request {
   id: string
   projectId: string
-  /** 처음에는 "결제 실패 데이터 정리" 수준의 한 줄이다. 내용은 댓글로 좁힌다. */
+  /** 처음에는 "결제 실패 데이터 정리" 수준의 한 줄이다. */
   title: string
+  /** 등록할 때 적어 둔 상세 내용. 게시판의 본문 자리다. 없으면 빈 문자열. */
+  body: string
   state: RequestState
   requesterId: string
   assigneeId: string | null

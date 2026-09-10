@@ -90,6 +90,15 @@ function promote() {
 
           <div class="h-px bg-border" />
 
+          <p v-if="detail.request.body" class="text-[15px] leading-relaxed whitespace-pre-line text-pretty">
+            {{ detail.request.body }}
+          </p>
+          <p v-else class="text-sm text-muted-foreground">
+            상세 내용 없이 제목만 올라온 요청입니다.
+          </p>
+
+          <div class="h-px bg-border" />
+
           <section class="flex flex-col gap-3.5">
             <div class="flex items-center gap-2.5">
               <span class="text-xs font-medium tracking-wider text-muted-foreground">정리된 요청</span>
@@ -153,7 +162,7 @@ function promote() {
                   <span class="text-xs font-semibold">{{ c.authorName }}</span>
                   <span class="text-xs text-muted-foreground">{{ c.atLabel }}</span>
                 </div>
-                <p class="text-sm leading-relaxed text-pretty">{{ c.comment.text }}</p>
+                <p class="text-sm leading-relaxed whitespace-pre-line text-pretty">{{ c.comment.text }}</p>
               </div>
             </div>
 

@@ -103,7 +103,7 @@ const entries: Entry[] = [
 ]
 
 const requests: Request[] = [
-  { id: 'rq1', projectId: 'p1', title: '결제 실패 데이터 정리', state: 'doing', requesterId: 'u4', assigneeId: 'u2', dueDate: '2026-03-26', sourceEntryId: 'e3', createdAt: '2026-03-21',
+  { id: 'rq1', projectId: 'p1', title: '결제 실패 데이터 정리', body: '3월 결제 실패 건 데이터 좀 정리해 주실 수 있을까요?\n이번 주 회의에서 재시도 정책 얘기할 때 근거로 쓰려고 합니다.', state: 'doing', requesterId: 'u4', assigneeId: 'u2', dueDate: '2026-03-26', sourceEntryId: 'e3', createdAt: '2026-03-21',
     spec: {
       points: [
         '2026년 3월 1일 ~ 3월 20일 결제 실패 건을 실패 사유별로 센다.',
@@ -112,24 +112,23 @@ const requests: Request[] = [
         '3월 26일 회의 전까지 집계표 한 장으로 받는다.',
         '전달 형식은 아직 안 정했다 — 시트로 드릴지 물었고 답이 없다.',
       ],
-      confirmed: false, confirmedById: null, confirmedAt: null, fromCommentCount: 8,
+      confirmed: false, confirmedById: null, confirmedAt: null, fromCommentCount: 7,
     } },
-  { id: 'rq2', projectId: 'p1', title: '3월 정산서 숫자 한번 봐주세요', state: 'doing', requesterId: 'u2', assigneeId: 'u1', dueDate: '2026-03-24', sourceEntryId: null, createdAt: '2026-03-20',
-    spec: { points: ['3월 정산서의 환불 반영액이 결제 원장과 맞는지 본다.', '어긋나면 어느 건이 어긋났는지까지 짚어 준다.'], confirmed: true, confirmedById: 'u2', confirmedAt: '2026-03-20', fromCommentCount: 3 } },
-  { id: 'rq3', projectId: 'p1', title: '알림 발송 로그 2월치도 필요합니다', state: 'doing', requesterId: 'u1', assigneeId: 'u2', dueDate: '2026-03-27', sourceEntryId: null, createdAt: '2026-03-19',
-    spec: { points: ['2월 알림 발송 로그를 채널별로 뽑는다.', '중복 발송으로 보이는 건은 따로 표시한다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-19', fromCommentCount: 4 } },
-  { id: 'rq4', projectId: 'p1', title: '배포 체크리스트가 최신인지 확인', state: 'todo', requesterId: 'u4', assigneeId: null, dueDate: null, sourceEntryId: null, createdAt: '2026-03-22', spec: null },
-  { id: 'rq5', projectId: 'p1', title: '온콜 담당표 이번 분기 것 맞는지', state: 'todo', requesterId: 'u3', assigneeId: 'u4', dueDate: '2026-03-25', sourceEntryId: null, createdAt: '2026-03-22', spec: null },
-  { id: 'rq6', projectId: 'p1', title: '테스트 계정 정리해 주세요', state: 'todo', requesterId: 'u1', assigneeId: 'u3', dueDate: '2026-03-30', sourceEntryId: null, createdAt: '2026-03-21',
-    spec: { points: ['스테이징에 쌓인 테스트 계정 중 3개월 넘게 안 쓴 것을 지운다.', '지우기 전에 목록을 한 번 공유한다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-21', fromCommentCount: 2 } },
-  { id: 'rq7', projectId: 'p1', title: '구독 해지 사유 코드 목록 뽑아주세요', state: 'done', requesterId: 'u2', assigneeId: 'u3', dueDate: '2026-03-20', sourceEntryId: 'e8', createdAt: '2026-03-17',
-    spec: { points: ['해지 사유 코드와 뜻을 표로 정리한다.', '자동 해지로 붙는 코드가 어느 것인지 표시한다.'], confirmed: true, confirmedById: 'u2', confirmedAt: '2026-03-17', fromCommentCount: 2 } },
-  { id: 'rq8', projectId: 'p1', title: 'PG사 계약서 사본 어디 있는지', state: 'done', requesterId: 'u1', assigneeId: 'u4', dueDate: '2026-03-18', sourceEntryId: null, createdAt: '2026-03-14',
-    spec: { points: ['토스페이먼츠 · 나이스페이 계약서 사본 위치를 알려준다.', '접근 권한이 없으면 권한까지 열어 준다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-15', fromCommentCount: 4 } },
+  { id: 'rq2', projectId: 'p1', title: '3월 정산서 숫자 한번 봐주세요', body: '3월 정산서 숫자 한번 봐주세요. 환불 반영이 이상한 것 같습니다.', state: 'doing', requesterId: 'u2', assigneeId: 'u1', dueDate: '2026-03-24', sourceEntryId: null, createdAt: '2026-03-20',
+    spec: { points: ['3월 정산서의 환불 반영액이 결제 원장과 맞는지 본다.', '어긋나면 어느 건이 어긋났는지까지 짚어 준다.'], confirmed: true, confirmedById: 'u2', confirmedAt: '2026-03-20', fromCommentCount: 2 } },
+  { id: 'rq3', projectId: 'p1', title: '알림 발송 로그 2월치도 필요합니다', body: '알림 발송 로그 2월치도 필요합니다.', state: 'doing', requesterId: 'u1', assigneeId: 'u2', dueDate: '2026-03-27', sourceEntryId: null, createdAt: '2026-03-19',
+    spec: { points: ['2월 알림 발송 로그를 채널별로 뽑는다.', '중복 발송으로 보이는 건은 따로 표시한다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-19', fromCommentCount: 3 } },
+  { id: 'rq4', projectId: 'p1', title: '배포 체크리스트가 최신인지 확인', body: '배포 체크리스트가 지난 분기 것 같은데 한번 봐주실 분 계실까요?', state: 'todo', requesterId: 'u4', assigneeId: null, dueDate: null, sourceEntryId: null, createdAt: '2026-03-22', spec: null },
+  { id: 'rq5', projectId: 'p1', title: '온콜 담당표 이번 분기 것 맞는지', body: '온콜 담당표가 이번 분기 것으로 맞는지 확인 부탁드립니다.', state: 'todo', requesterId: 'u3', assigneeId: 'u4', dueDate: '2026-03-25', sourceEntryId: null, createdAt: '2026-03-22', spec: null },
+  { id: 'rq6', projectId: 'p1', title: '테스트 계정 정리해 주세요', body: '스테이징 테스트 계정이 너무 많이 쌓였습니다. 정리 부탁드려요.', state: 'todo', requesterId: 'u1', assigneeId: 'u3', dueDate: '2026-03-30', sourceEntryId: null, createdAt: '2026-03-21',
+    spec: { points: ['스테이징에 쌓인 테스트 계정 중 3개월 넘게 안 쓴 것을 지운다.', '지우기 전에 목록을 한 번 공유한다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-21', fromCommentCount: 1 } },
+  { id: 'rq7', projectId: 'p1', title: '구독 해지 사유 코드 목록 뽑아주세요', body: '구독 해지 사유 코드 목록 좀 뽑아주세요. 자동 해지 붙일 때 필요합니다.', state: 'done', requesterId: 'u2', assigneeId: 'u3', dueDate: '2026-03-20', sourceEntryId: 'e8', createdAt: '2026-03-17',
+    spec: { points: ['해지 사유 코드와 뜻을 표로 정리한다.', '자동 해지로 붙는 코드가 어느 것인지 표시한다.'], confirmed: true, confirmedById: 'u2', confirmedAt: '2026-03-17', fromCommentCount: 1 } },
+  { id: 'rq8', projectId: 'p1', title: 'PG사 계약서 사본 어디 있는지', body: 'PG사 계약서 사본 어디 있는지 아시는 분?', state: 'done', requesterId: 'u1', assigneeId: 'u4', dueDate: '2026-03-18', sourceEntryId: null, createdAt: '2026-03-14',
+    spec: { points: ['토스페이먼츠 · 나이스페이 계약서 사본 위치를 알려준다.', '접근 권한이 없으면 권한까지 열어 준다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-15', fromCommentCount: 3 } },
 ]
 
 const requestComments: RequestComment[] = [
-  { id: 'rc1', requestId: 'rq1', authorId: 'u4', text: '3월 결제 실패 건 데이터 좀 정리해 주실 수 있을까요?', createdAt: '2026-03-21T10:14' },
   { id: 'rc2', requestId: 'rq1', authorId: 'u2', text: '어떤 데이터를 말씀하시는 걸까요? 실패 로그 원본인지, 사유별로 몇 건인지 세어 놓은 것인지에 따라 작업이 완전히 달라서요.', createdAt: '2026-03-21T10:31' },
   { id: 'rc3', requestId: 'rq1', authorId: 'u4', text: '사유별로 몇 건인지가 궁금해요. 이번 주 회의에서 재시도 정책 얘기할 때 근거로 쓰려고 합니다.', createdAt: '2026-03-21T10:40' },
   { id: 'rc4', requestId: 'rq1', authorId: 'u2', text: '기간은 어떻게 잡을까요? 3월 전체면 PG사가 두 곳 섞여 있는데, 나눠서 드리는 게 나을까요?', createdAt: '2026-03-21T11:02' },
@@ -138,26 +137,20 @@ const requestComments: RequestComment[] = [
   { id: 'rc7', requestId: 'rq1', authorId: 'u4', text: '그것도 넣어 주세요.', createdAt: '2026-03-21T14:02' },
   { id: 'rc8', requestId: 'rq1', authorId: 'u2', text: '알겠습니다. 형식은 시트로 드리면 될까요?', createdAt: '2026-03-21T14:20' },
 
-  { id: 'rc9', requestId: 'rq2', authorId: 'u2', text: '3월 정산서 숫자 한번 봐주세요. 환불 반영이 이상한 것 같습니다.', createdAt: '2026-03-20T09:10' },
   { id: 'rc10', requestId: 'rq2', authorId: 'u1', text: '어느 항목이 이상한가요? 전체를 다 대조하려면 시간이 좀 걸려서요.', createdAt: '2026-03-20T09:22' },
   { id: 'rc11', requestId: 'rq2', authorId: 'u2', text: '환불 반영액만요. 결제 원장이랑 맞는지 보시면 됩니다.', createdAt: '2026-03-20T09:30' },
 
-  { id: 'rc12', requestId: 'rq3', authorId: 'u1', text: '알림 발송 로그 2월치도 필요합니다.', createdAt: '2026-03-19T11:00' },
   { id: 'rc13', requestId: 'rq3', authorId: 'u2', text: '채널별로 나눠 드릴까요?', createdAt: '2026-03-19T11:12' },
   { id: 'rc14', requestId: 'rq3', authorId: 'u1', text: '네, 채널별로요. 중복으로 나간 것 같은 건도 표시해 주시면 좋겠습니다.', createdAt: '2026-03-19T11:20' },
   { id: 'rc15', requestId: 'rq3', authorId: 'u2', text: '알겠습니다.', createdAt: '2026-03-19T11:25' },
   { id: 'rc16', requestId: 'rq3', authorId: 'u1', text: '아 그리고 1월치도 같이 볼 수 있을까요? 2월만 보면 추세를 모르겠어서요.', createdAt: '2026-03-23T09:05' },
   { id: 'rc17', requestId: 'rq3', authorId: 'u2', text: '1월은 로그 보존 기간이 지나서 없을 수도 있습니다. 확인해 볼게요.', createdAt: '2026-03-23T09:40' },
 
-  { id: 'rc18', requestId: 'rq4', authorId: 'u4', text: '배포 체크리스트가 지난 분기 것 같은데 한번 봐주실 분 계실까요?', createdAt: '2026-03-22T16:30' },
 
-  { id: 'rc19', requestId: 'rq6', authorId: 'u1', text: '스테이징 테스트 계정이 너무 많이 쌓였습니다. 정리 부탁드려요.', createdAt: '2026-03-21T15:00' },
   { id: 'rc20', requestId: 'rq6', authorId: 'u3', text: '3개월 넘게 안 쓴 것 기준으로 지우겠습니다. 지우기 전에 목록 공유할게요.', createdAt: '2026-03-21T15:20' },
 
-  { id: 'rc21', requestId: 'rq7', authorId: 'u2', text: '구독 해지 사유 코드 목록 좀 뽑아주세요. 자동 해지 붙일 때 필요합니다.', createdAt: '2026-03-17T10:00' },
   { id: 'rc22', requestId: 'rq7', authorId: 'u3', text: '코드랑 뜻 표로 만들어 드리겠습니다. 자동 해지로 붙는 것도 표시할게요.', createdAt: '2026-03-17T10:15' },
 
-  { id: 'rc23', requestId: 'rq8', authorId: 'u1', text: 'PG사 계약서 사본 어디 있는지 아시는 분?', createdAt: '2026-03-14T13:00' },
   { id: 'rc24', requestId: 'rq8', authorId: 'u4', text: '법무 드라이브에 있습니다. 두 곳 다 필요하신가요?', createdAt: '2026-03-14T13:30' },
   { id: 'rc25', requestId: 'rq8', authorId: 'u1', text: '네 둘 다요. 그런데 저는 그 드라이브 권한이 없는 것 같습니다.', createdAt: '2026-03-14T14:00' },
   { id: 'rc26', requestId: 'rq8', authorId: 'u4', text: '권한까지 열어 드리겠습니다.', createdAt: '2026-03-15T09:00' },
@@ -166,7 +159,7 @@ const requestComments: RequestComment[] = [
 /**
  * 정리하기를 눌렀을 때 나올 내용.
  *
- * 진짜로는 서버가 요청 제목 + 댓글 전부 + (있으면) 출처 안건의 줄을 Claude 에 한 번 넘기고
+ * 진짜로는 서버가 요청 제목 + 본문 + 댓글 전부 + (있으면) 출처 안건의 줄을 Claude 에 한 번 넘기고
  * 이 불릿 목록을 돌려받는다. 아직 서버가 없어서 목업이 미리 적어 둔 것을 쓴다.
  */
 const draftPoints: Record<string, string[]> = {
@@ -540,13 +533,14 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
     }
   }
 
-  /** 한 줄만 받아 등록한다. 무엇을 해달라는 것인지는 댓글로 좁힌다. */
-  function addRequest(title: string, assigneeId: string | null) {
+  /** 제목 한 줄만 있으면 등록된다. 상세 내용은 게시판 본문처럼 요청에 그대로 붙는다. */
+  function addRequest(title: string, assigneeId: string | null, body = '') {
     const id = nextId('nrq')
     allRequests.value.unshift({
       id,
       projectId: currentProject.value.id,
       title,
+      body: body.trim(),
       state: 'todo',
       requesterId: currentMemberId.value,
       assigneeId,
@@ -571,7 +565,7 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
   /**
    * 오간 댓글을 요청 내용으로 정리한다.
    *
-   * 진짜로는 서버가 Claude 를 한 번 불러 불릿 목록을 받아온다. 여기서는 목업이 미리 적어 둔
+   * 진짜로는 서버가 제목 · 본문 · 댓글을 Claude 에 넘겨 불릿 목록을 받아온다. 여기서는 목업이 미리 적어 둔
    * 것을 쓰고, 없으면 아직 정리할 만큼 이야기가 오가지 않았다고 본다.
    * 무엇을 뽑든 결과는 언제나 초안이다 — 확정은 사람이 한다.
    */
