@@ -123,38 +123,18 @@
       <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; justify-content: center; padding: 26px 26px 0;">
         <div style="width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 16px;">
 
-          <div style="display: flex; flex-direction: column; gap: 9px;">
-            <div style="font-size: 24px; font-weight: 600; line-height: 1.3; letter-spacing: -0.025em;">요청</div>
-            <div style="font-size: 13px; line-height: 1.7; color: #737373; text-wrap: pretty;">회의에서 정할 일이 아니라 누가 해주면 끝나는 일입니다. 데이터 정리, 확인 부탁 같은 것들이 여기 쌓입니다. 한 줄로 적어 두고 나머지는 댓글로 주고받습니다 — 오간 이야기는 요청 안에서 정리됩니다.</div>
-          </div>
-
-          <div style="display: flex; align-items: center; gap: 9px; padding: 13px 15px; border: 1px solid #e5e5e5; border-radius: 10px; background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{{ accent }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
-              <path d="M12 5v14"></path>
-              <path d="M5 12h14"></path>
-            </svg>
-            <input id="rq-new" placeholder="요청 한 줄 적기 — 예: 3월 결제 실패 데이터 정리" style="flex-grow: 1; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 13.5px; outline: none;">
-            <div style="position: relative; width: 116px; flex-shrink: 0;">
-              <select value="{{ newKind }}" onChange="{{ onNewKind }}" style="width: 100%; height: 38px; padding: 0 28px 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; outline: none; cursor: pointer;">
-                <sc-for list="{{ kindOptions }}" as="ko" hint-placeholder-count="3">
-                  <option value="{{ ko.value }}">{{ ko.label }}</option>
-                </sc-for>
-              </select>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 13px; pointer-events: none;">
-                <path d="M6 9l6 6 6-6"></path>
-              </svg>
+          <div style="display: flex; align-items: flex-start; gap: 16px;">
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px;">
+              <div style="font-size: 24px; font-weight: 600; line-height: 1.3; letter-spacing: -0.025em;">요청</div>
+              <div style="font-size: 13px; line-height: 1.7; color: #737373; text-wrap: pretty;">회의에서 정할 일이 아니라 누가 해주면 끝나는 일입니다. 데이터 정리, 확인 부탁 같은 것들이 여기 쌓입니다. 한 줄로 적어 두고 나머지는 댓글로 주고받습니다 — 오간 이야기는 요청 안에서 정리됩니다.</div>
             </div>
-            <div style="position: relative; width: 116px; flex-shrink: 0;">
-              <select value="{{ newOwner }}" onChange="{{ onNewOwner }}" style="width: 100%; height: 38px; padding: 0 28px 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; outline: none; cursor: pointer;">
-                <sc-for list="{{ newOwnerOptions }}" as="no" hint-placeholder-count="5">
-                  <option value="{{ no.value }}">{{ no.label }}</option>
-                </sc-for>
-              </select>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 13px; pointer-events: none;">
-                <path d="M6 9l6 6 6-6"></path>
+            <div onClick="{{ openReg }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 13.5px; font-weight: 500; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fafafa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
               </svg>
+              <span>요청 추가</span>
             </div>
-            <div onClick="{{ addRequest }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 38px; padding: 0 16px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">등록</div>
           </div>
 
           <div style="display: flex; align-items: center; gap: 6px;">
@@ -201,17 +181,6 @@
                 </sc-for>
               </div>
             </div>
-            <div style="display: flex; align-items: flex-start; gap: 10px;">
-              <div style="width: 52px; flex-shrink: 0; font-size: 11.5px; color: #737373; padding-top: 8px;">종류</div>
-              <div style="flex-grow: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px;">
-                <sc-for list="{{ kindChips }}" as="kc" hint-placeholder-count="4">
-                  <div onClick="{{ kc.pick }}" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid {{ kc.bc }}; border-radius: 8px; background: {{ kc.bg }}; font-size: 12px; font-weight: {{ kc.weight }}; color: {{ kc.fg }}; cursor: pointer;">
-                    <span>{{ kc.label }}</span>
-                    <span style="color: {{ kc.numFg }};">{{ kc.n }}</span>
-                  </div>
-                </sc-for>
-              </div>
-            </div>
           </div>
 
           <div style="display: flex; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 10px; background: #ffffff; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); overflow: hidden;">
@@ -227,7 +196,6 @@
               <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px; border-bottom: 1px solid #e5e5e5; cursor: pointer;">
                 <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 9px;">
                   <div style="width: 4px; height: 24px; flex-shrink: 0; border-radius: 9999px; background: {{ r.stripe }};"></div>
-                  <div style="flex-shrink: 0; display: flex; align-items: center; height: 21px; padding: 0 8px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fafafa; font-size: 10.5px; color: #737373;">{{ r.kind }}</div>
                   <div style="flex-grow: 1; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.title }}</div>
                 </div>
                 <div style="width: 84px; flex-shrink: 0;">
@@ -271,36 +239,71 @@
 
   </div>
 
+  <sc-if value="{{ regOpen }}" hint-placeholder-val="{{ true }}">
+    <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center;">
+      <div style="width: 560px; border-radius: 10px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; flex-direction: column; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 18px 22px; border-bottom: 1px solid #e5e5e5;">
+          <div style="font-size: 18px; font-weight: 600; letter-spacing: -0.025em;">요청 추가</div>
+          <div style="flex-grow: 1;"></div>
+          <div onClick="{{ closeReg }}" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 6l12 12"></path>
+              <path d="M18 6L6 18"></path>
+            </svg>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 14px; padding: 22px;">
+          <div style="font-size: 12.5px; line-height: 1.65; color: #737373; text-wrap: pretty;">한 줄만 적으면 됩니다. 무엇을 해달라는 것인지는 댓글로 좁히고, 오간 이야기는 요청 안에서 정리됩니다.</div>
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <div style="font-size: 11.5px; color: #737373;">무엇을 부탁하나요</div>
+            <input id="rq-title" placeholder="예: 3월 결제 실패 데이터 정리" style="height: 44px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 14px; outline: none;">
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <div style="font-size: 11.5px; color: #737373;">담당자 (선택)</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <sc-for list="{{ ownerChips }}" as="oc" hint-placeholder-count="4">
+                <div onClick="{{ oc.pick }}" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 5px; border: 1px solid {{ oc.bc }}; border-radius: 8px; background: {{ oc.bg }}; font-size: 12.5px; color: {{ oc.fg }}; cursor: pointer;">
+                  <div style="width: 22px; height: 22px; border-radius: 9999px; background: #f5f5f5; color: #737373; font-size: 10.5px; display: flex; align-items: center; justify-content: center;">{{ oc.ch }}</div>
+                  <span>{{ oc.name }}</span>
+                </div>
+              </sc-for>
+              <div onClick="{{ clearRegOwner }}" style="display: flex; align-items: center; height: 34px; padding: 0 12px; border: 1px solid {{ noneBc }}; border-radius: 8px; background: {{ noneBg }}; font-size: 12.5px; color: {{ noneFg }}; cursor: pointer;">미정</div>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 16px 22px; border-top: 1px solid #e5e5e5; background: #fafafa;">
+          <div style="flex-grow: 1;"></div>
+          <div onClick="{{ closeReg }}" style="display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 15px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 13px; color: #0a0a0a; cursor: pointer;">취소</div>
+          <div onClick="{{ addRequest }}" style="display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 18px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 13px; font-weight: 500; cursor: pointer;">저장</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
 </div>
 </x-dc>
 <script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"perPage":{"editor":"int","default":5,"min":3,"max":10,"section":"목록"},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   staff() {
     return [
-      { id: 'u1', name: '김서연' },
-      { id: 'u2', name: '박지훈' },
-      { id: 'u3', name: '이도현' },
-      { id: 'u4', name: '정하늘' }
+      { id: 'u1', name: '김서연', ch: '김' },
+      { id: 'u2', name: '박지훈', ch: '박' },
+      { id: 'u3', name: '이도현', ch: '이' },
+      { id: 'u4', name: '정하늘', ch: '정' }
     ];
   }
 
   data() {
     return [
-      { id: 'r1', title: '결제 실패 데이터 정리', kind: 'data', spec: 'draft', state: 'doing', owner: '박지훈', from: '정하늘', due: '3월 26일', comments: 8 },
-      { id: 'r2', title: '3월 정산서 숫자 한번 봐주세요', kind: 'check', spec: 'fixed', state: 'doing', owner: '김서연', from: '박지훈', due: '3월 24일', comments: 3 },
-      { id: 'r3', title: '알림 발송 로그 2월치도 필요합니다', kind: 'data', spec: 'stale', state: 'doing', owner: '박지훈', from: '김서연', due: '3월 27일', comments: 6 },
-      { id: 'r4', title: '배포 체크리스트가 최신인지 확인', kind: 'check', spec: 'draft', state: 'todo', owner: null, from: '정하늘', due: null, comments: 1 },
-      { id: 'r5', title: '온콜 담당표 이번 분기 것 맞는지', kind: 'check', spec: 'draft', state: 'todo', owner: '정하늘', from: '이도현', due: '3월 25일', comments: 0 },
-      { id: 'r6', title: '테스트 계정 정리해 주세요', kind: 'etc', spec: 'fixed', state: 'todo', owner: '이도현', from: '김서연', due: '3월 30일', comments: 2 },
-      { id: 'r7', title: '구독 해지 사유 코드 목록 뽑아주세요', kind: 'data', spec: 'fixed', state: 'done', owner: '이도현', from: '박지훈', due: '3월 20일', comments: 2 },
-      { id: 'r8', title: 'PG사 계약서 사본 어디 있는지', kind: 'etc', spec: 'fixed', state: 'done', owner: '정하늘', from: '김서연', due: '3월 18일', comments: 4 }
+      { id: 'r1', title: '결제 실패 데이터 정리', spec: 'draft', state: 'doing', owner: '박지훈', from: '정하늘', due: '3월 26일', comments: 8 },
+      { id: 'r2', title: '3월 정산서 숫자 한번 봐주세요', spec: 'fixed', state: 'doing', owner: '김서연', from: '박지훈', due: '3월 24일', comments: 3 },
+      { id: 'r3', title: '알림 발송 로그 2월치도 필요합니다', spec: 'stale', state: 'doing', owner: '박지훈', from: '김서연', due: '3월 27일', comments: 6 },
+      { id: 'r4', title: '배포 체크리스트가 최신인지 확인', spec: 'draft', state: 'todo', owner: null, from: '정하늘', due: null, comments: 1 },
+      { id: 'r5', title: '온콜 담당표 이번 분기 것 맞는지', spec: 'draft', state: 'todo', owner: '정하늘', from: '이도현', due: '3월 25일', comments: 0 },
+      { id: 'r6', title: '테스트 계정 정리해 주세요', spec: 'fixed', state: 'todo', owner: '이도현', from: '김서연', due: '3월 30일', comments: 2 },
+      { id: 'r7', title: '구독 해지 사유 코드 목록 뽑아주세요', spec: 'fixed', state: 'done', owner: '이도현', from: '박지훈', due: '3월 20일', comments: 2 },
+      { id: 'r8', title: 'PG사 계약서 사본 어디 있는지', spec: 'fixed', state: 'done', owner: '정하늘', from: '김서연', due: '3월 18일', comments: 4 }
     ];
-  }
-
-  kindLabel(k) {
-    if (k === 'data') { return '데이터 정리'; }
-    if (k === 'check') { return '확인'; }
-    return '기타';
   }
 
   renderVals() {
@@ -313,10 +316,11 @@ class Component extends DCLogic {
     var all = added.concat(this.data());
     var q = s.q || '';
     var st = s.st || 'all';
-    var kd = s.kd || 'all';
     var ow = s.ow || 'all';
     var scope = s.scope || 'all';
     var page = s.page || 1;
+    var regOwnerId = s.regOwner || null;
+    var regOwnerRec = this.staff().filter(function (x) { return x.id === regOwnerId; })[0] || null;
 
     var inScope = function (t) {
       if (scope === 'mine') { return t.owner === me; }
@@ -331,9 +335,7 @@ class Component extends DCLogic {
       todo: scoped.filter(function (t) { return t.state === 'todo'; }).length,
       doing: scoped.filter(function (t) { return t.state === 'doing'; }).length,
       done: scoped.filter(function (t) { return t.state === 'done'; }).length,
-      data: scoped.filter(function (t) { return t.kind === 'data'; }).length,
-      check: scoped.filter(function (t) { return t.kind === 'check'; }).length,
-      etc: scoped.filter(function (t) { return t.kind === 'etc'; }).length
+      unspecced: scoped.filter(function (t) { return t.spec !== 'fixed'; }).length
     };
 
     var filtered = scoped.filter(function (t) {
@@ -341,7 +343,6 @@ class Component extends DCLogic {
       if (st === 'draft' && t.spec === 'fixed') { return false; }
       if (st === 'idle' && !(t.state === 'todo' && t.comments === 0)) { return false; }
       if (st !== 'all' && st !== 'draft' && st !== 'idle' && t.state !== st) { return false; }
-      if (kd !== 'all' && t.kind !== kd) { return false; }
       if (ow === 'all') { return true; }
       if (ow === 'none') { return !t.owner; }
       return t.owner === ow;
@@ -418,7 +419,6 @@ class Component extends DCLogic {
         var stt = stateOf(t);
         return {
           title: t.title,
-          kind: self.kindLabel(t.kind),
           spec: sp.label, specBg: sp.bg, specFg: sp.fg,
           stateLabel: stt.label, stateFg: stt.fg, stripe: stt.stripe,
           owner: t.owner || '미정',
@@ -433,8 +433,8 @@ class Component extends DCLogic {
       liveCount: all.filter(function (t) { return t.state !== 'done'; }).length,
       draftCount: all.filter(function (t) { return t.spec !== 'fixed'; }).length,
       idleCount: all.filter(function (t) { return t.state === 'todo' && t.comments === 0; }).length,
-      pickDraft: function () { setFilter({ scope: 'all', st: 'draft', kd: 'all', ow: 'all', q: '' }); },
-      pickIdle: function () { setFilter({ scope: 'all', st: 'idle', kd: 'all', ow: 'all', q: '' }); },
+      pickDraft: function () { setFilter({ scope: 'all', st: 'draft', ow: 'all', q: '' }); },
+      pickIdle: function () { setFilter({ scope: 'all', st: 'idle', ow: 'all', q: '' }); },
 
       scopeTabs: [
         tab('all', '전체 요청', all.length),
@@ -446,13 +446,7 @@ class Component extends DCLogic {
         chip('todo', '요청됨', counts.todo, st, function () { setFilter({ st: 'todo' }); }),
         chip('doing', '하는 중', counts.doing, st, function () { setFilter({ st: 'doing' }); }),
         chip('done', '완료', counts.done, st, function () { setFilter({ st: 'done' }); }),
-        chip('draft', '내용 정리 중', scoped.filter(function (t) { return t.spec !== 'fixed'; }).length, st, function () { setFilter({ st: 'draft' }); })
-      ],
-      kindChips: [
-        chip('all', '전체', counts.all, kd, function () { setFilter({ kd: 'all' }); }),
-        chip('data', '데이터 정리', counts.data, kd, function () { setFilter({ kd: 'data' }); }),
-        chip('check', '확인', counts.check, kd, function () { setFilter({ kd: 'check' }); }),
-        chip('etc', '기타', counts.etc, kd, function () { setFilter({ kd: 'etc' }); })
+        chip('draft', '내용 정리 중', counts.unspecced, st, function () { setFilter({ st: 'draft' }); })
       ],
       ownerValue: ow,
       ownerOptions: [{ value: 'all', label: '전체' }]
@@ -470,31 +464,35 @@ class Component extends DCLogic {
       doReset: function () {
         var el = document.getElementById('rq-q');
         if (el) { el.value = ''; }
-        setFilter({ q: '', st: 'all', kd: 'all', ow: 'all', scope: 'all' });
+        setFilter({ q: '', st: 'all', ow: 'all', scope: 'all' });
       },
 
-      newKind: s.newKind || 'data',
-      kindOptions: [
-        { value: 'data', label: '데이터 정리' },
-        { value: 'check', label: '확인' },
-        { value: 'etc', label: '기타' }
-      ],
-      onNewKind: function (e) { self.setState({ newKind: e && e.target ? e.target.value : 'data' }); },
-      newOwner: s.newOwner || 'none',
-      newOwnerOptions: [{ value: 'none', label: '담당자 미정' }]
-        .concat(this.staff().map(function (pe) { return { value: pe.name, label: pe.name }; })),
-      onNewOwner: function (e) { self.setState({ newOwner: e && e.target ? e.target.value : 'none' }); },
+      regOpen: !!s.regOpen,
+      openReg: function () { self.setState({ regOpen: true }); },
+      closeReg: function () { self.setState({ regOpen: false, regOwner: null }); },
+      clearRegOwner: function () { self.setState({ regOwner: null }); },
+      noneBg: regOwnerRec ? '#ffffff' : '#f5f5f5',
+      noneFg: regOwnerRec ? '#737373' : '#0a0a0a',
+      noneBc: '#e5e5e5',
+      ownerChips: this.staff().map(function (pe) {
+        var sel = pe.id === regOwnerId;
+        return {
+          name: pe.name, ch: pe.ch,
+          bg: sel ? '#f5f5f5' : '#ffffff',
+          fg: sel ? '#0a0a0a' : '#737373',
+          bc: '#e5e5e5',
+          pick: function () { self.setState({ regOwner: sel ? null : pe.id }); }
+        };
+      }),
       addRequest: function () {
-        var el = document.getElementById('rq-new');
+        var el = document.getElementById('rq-title');
         var v = el && el.value ? el.value.trim() : '';
         if (!v) { return; }
         el.value = '';
-        var k = s.newKind || 'data';
-        var o = s.newOwner || 'none';
         self.setState({
-          added: [{ id: 'n' + (added.length + 1), title: v, kind: k, spec: 'draft', state: 'todo',
-            owner: o === 'none' ? null : o, from: me, due: null, comments: 0 }].concat(added),
-          scope: 'all', st: 'all', kd: 'all', ow: 'all', q: '', page: 1
+          added: [{ id: 'n' + (added.length + 1), title: v, spec: 'draft', state: 'todo',
+            owner: regOwnerRec ? regOwnerRec.name : null, from: me, due: null, comments: 0 }].concat(added),
+          regOpen: false, regOwner: null, scope: 'all', st: 'all', ow: 'all', q: '', page: 1
         });
       },
 

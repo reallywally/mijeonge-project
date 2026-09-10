@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Sparkles } from 'lucide-vue-next'
-import RequestKindLabel from '@/components/app/RequestKindLabel.vue'
 import RequestSpecBadge from '@/components/app/RequestSpecBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
@@ -59,7 +58,6 @@ function promote() {
               {{ detail.request.title }}
             </DialogTitle>
             <DialogDescription class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <RequestKindLabel :kind="detail.request.kind" />
               <span>{{ detail.requesterName }} → {{ detail.assigneeName ?? '담당자 미정' }}</span>
               <span aria-hidden="true">·</span>
               <span>{{ detail.request.dueDate ? `${detail.dueLabel}까지` : '기한 없음' }}</span>

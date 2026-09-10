@@ -3,16 +3,17 @@ import { computed, ref } from 'vue'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import RequestDetailDialog from '@/components/app/RequestDetailDialog.vue'
-import RequestKindLabel from '@/components/app/RequestKindLabel.vue'
 import RequestSpecBadge from '@/components/app/RequestSpecBadge.vue'
 import RequestStateBadge from '@/components/app/RequestStateBadge.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useMijeongeStore } from '@/stores/mijeonge'
-import type { RequestKind, RequestRow } from '@/types/domain'
+import type { RequestRow } from '@/types/domain'
 
 const store = useMijeongeStore()
 
@@ -23,7 +24,6 @@ const scope = ref<'all' | 'mine' | 'sent'>('all')
 const titleDraft = ref('')
 const query = ref('')
 const stateFilter = ref<'all' | 'todo' | 'doing' | 'done' | 'unspecced'>('all')
-const kindFilter = ref<'all' | RequestKind>('all')
 const assigneeFilter = ref<string>('all')
 const page = ref(1)
 const perPage = 5
@@ -50,9 +50,6 @@ const counts = computed(() => ({
   doing: scoped.value.filter((r) => r.request.state === 'doing').length,
   done: scoped.value.filter((r) => r.request.state === 'done').length,
   unspecced: scoped.value.filter((r) => r.specState !== 'confirmed').length,
-  data: scoped.value.filter((r) => r.request.kind === 'data').length,
-  check: scoped.value.filter((r) => r.request.kind === 'check').length,
-  etc: scoped.value.filter((r) => r.request.kind === 'etc').length,
 }))
 
 const stateChips = computed(() => [
@@ -61,13 +58,6 @@ const stateChips = computed(() => [
   { key: 'doing' as const, label: '하는 중', n: counts.value.doing },
   { key: 'done' as const, label: '완료', n: counts.value.done },
   { key: 'unspecced' as const, label: '내용 정리 중', n: counts.value.unspecced },
-])
-
-const kindChips = computed(() => [
-  { key: 'all' as const, label: '전체', n: counts.value.all },
-  { key: 'data' as const, label: '데이터 정리', n: counts.value.data },
-  { key: 'check' as const, label: '확인', n: counts.value.check },
-  { key: 'etc' as const, label: '기타', n: counts.value.etc },
 ])
 
 function matchesState(row: RequestRow) {
@@ -87,8 +77,7 @@ const filtered = computed(() =>
     (r) =>
       r.request.title.includes(query.value) &&
       matchesState(r) &&
-      matchesAssignee(r) &&
-      (kindFilter.value === 'all' || r.request.kind === kindFilter.value),
+      matchesAssignee(r),
   ),
 )
 
@@ -119,7 +108,6 @@ function resetAll() {
   titleDraft.value = ''
   query.value = ''
   stateFilter.value = 'all'
-  kindFilter.value = 'all'
   assigneeFilter.value = 'all'
   resetPage()
 }
@@ -129,10 +117,6 @@ function pickScope(key: typeof scope.value) {
 }
 function pickState(key: typeof stateFilter.value) {
   stateFilter.value = key
-  resetPage()
-}
-function pickKind(key: typeof kindFilter.value) {
-  kindFilter.value = key
   resetPage()
 }
 function showUnspecced() {
@@ -165,16 +149,18 @@ function openThread(id: string) {
   threadOpen.value = true
 }
 
-/* 한 줄 등록 — 자잘한 요청은 팝업을 띄울 만큼 적을 게 없다. 나머지는 댓글로 좁힌다. */
+/* 요청 추가 팝업 — 받는 것은 제목 한 줄과 담당자뿐이다. 나머지는 댓글로 좁힌다. */
+const addOpen = ref(false)
 const newTitle = ref('')
-const newKind = ref<RequestKind>('data')
 const newAssignee = ref<string>('none')
 
 function submitRequest() {
   const title = newTitle.value.trim()
   if (!title) return
-  store.addRequest(title, newKind.value, newAssignee.value === 'none' ? null : newAssignee.value)
+  store.addRequest(title, newAssignee.value === 'none' ? null : newAssignee.value)
   newTitle.value = ''
+  newAssignee.value = 'none'
+  addOpen.value = false
   scope.value = 'all'
   resetAll()
 }
@@ -218,44 +204,20 @@ function submitRequest() {
 
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
       <div class="flex w-full max-w-[900px] flex-col gap-4">
-        <header class="flex flex-col gap-2.5">
-          <h1 class="text-2xl font-semibold tracking-tight">요청</h1>
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            회의에서 정할 일이 아니라 누가 해주면 끝나는 일입니다. 데이터 정리, 확인 부탁 같은 것들이
-            여기 쌓입니다. 한 줄로 적어 두고 나머지는 댓글로 주고받습니다 — 오간 이야기는 요청 안에서
-            정리됩니다.
-          </p>
+        <header class="flex items-start gap-4">
+          <div class="flex min-w-0 grow flex-col gap-2.5">
+            <h1 class="text-2xl font-semibold tracking-tight">요청</h1>
+            <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+              회의에서 정할 일이 아니라 누가 해주면 끝나는 일입니다. 데이터 정리, 확인 부탁 같은 것들이
+              여기 쌓입니다. 한 줄로 적어 두고 나머지는 댓글로 주고받습니다 — 오간 이야기는 요청 안에서
+              정리됩니다.
+            </p>
+          </div>
+          <Button class="shrink-0" @click="addOpen = true">
+            <Plus class="size-4" />
+            요청 추가
+          </Button>
         </header>
-
-        <div class="flex items-center gap-2.5 rounded-lg border border-border bg-card px-[13px] py-2.5 shadow-sm">
-          <Plus class="size-4 shrink-0 text-muted-foreground" />
-          <Input
-            v-model="newTitle"
-            placeholder="요청 한 줄 적기 — 예: 3월 결제 실패 데이터 정리"
-            class="grow"
-            @keyup.enter="submitRequest"
-          />
-          <Select v-model="newKind">
-            <SelectTrigger class="w-[124px] shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="data">데이터 정리</SelectItem>
-              <SelectItem value="check">확인</SelectItem>
-              <SelectItem value="etc">기타</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select v-model="newAssignee">
-            <SelectTrigger class="w-[124px] shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">담당자 미정</SelectItem>
-              <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button class="shrink-0" :disabled="newTitle.trim().length === 0" @click="submitRequest">등록</Button>
-        </div>
 
         <div class="flex items-center gap-1.5">
           <button
@@ -323,26 +285,6 @@ function submitRequest() {
             </div>
           </div>
 
-          <div class="flex items-start gap-2.5">
-            <span class="w-[52px] shrink-0 pt-2 text-sm text-muted-foreground">종류</span>
-            <div class="flex grow flex-wrap gap-1.5">
-              <button
-                v-for="c in kindChips"
-                :key="c.key"
-                type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors"
-                :class="
-                  kindFilter === c.key
-                    ? 'border-primary bg-primary text-primary-foreground shadow'
-                    : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
-                "
-                @click="pickKind(c.key)"
-              >
-                {{ c.label }}
-                <span :class="kindFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'">{{ c.n }}</span>
-              </button>
-            </div>
-          </div>
         </section>
 
         <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
@@ -374,7 +316,6 @@ function submitRequest() {
                         'bg-muted-foreground/40': row.request.state === 'done',
                       }"
                     />
-                    <RequestKindLabel :kind="row.request.kind" />
                     <button type="button" class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline">
                       {{ row.request.title }}
                     </button>
@@ -426,5 +367,45 @@ function submitRequest() {
 
     <RequestDetailDialog v-model:open="detailOpen" :request-id="detailId" @open-thread="openThread" />
     <ThreadDetailDialog v-model:open="threadOpen" :thread-id="threadId" @open-thread="openThread" />
+
+    <Dialog v-model:open="addOpen">
+      <DialogContent class="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>요청 추가</DialogTitle>
+          <DialogDescription class="text-pretty">
+            한 줄만 적으면 됩니다. 무엇을 해달라는 것인지는 댓글로 좁히고, 오간 이야기는 요청 안에서 정리됩니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="flex flex-col gap-3.5 py-1">
+          <div class="flex flex-col gap-2">
+            <Label for="request-title">무엇을 부탁하나요</Label>
+            <Input
+              id="request-title"
+              v-model="newTitle"
+              placeholder="예: 3월 결제 실패 데이터 정리"
+              @keyup.enter="submitRequest"
+            />
+          </div>
+          <div class="flex flex-col gap-2">
+            <Label for="request-assignee">담당자 (선택)</Label>
+            <Select id="request-assignee" v-model="newAssignee">
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">미정</SelectItem>
+                <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="addOpen = false">취소</Button>
+          <Button :disabled="newTitle.trim().length === 0" @click="submitRequest">저장</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </AppShell>
 </template>

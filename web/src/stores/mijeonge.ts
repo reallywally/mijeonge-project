@@ -14,7 +14,6 @@ import type {
   Request,
   RequestComment,
   RequestDetail,
-  RequestKind,
   RequestRow,
   RequestState,
   SpecState,
@@ -104,7 +103,7 @@ const entries: Entry[] = [
 ]
 
 const requests: Request[] = [
-  { id: 'rq1', projectId: 'p1', title: '결제 실패 데이터 정리', kind: 'data', state: 'doing', requesterId: 'u4', assigneeId: 'u2', dueDate: '2026-03-26', sourceEntryId: 'e3', createdAt: '2026-03-21',
+  { id: 'rq1', projectId: 'p1', title: '결제 실패 데이터 정리', state: 'doing', requesterId: 'u4', assigneeId: 'u2', dueDate: '2026-03-26', sourceEntryId: 'e3', createdAt: '2026-03-21',
     spec: {
       points: [
         '2026년 3월 1일 ~ 3월 20일 결제 실패 건을 실패 사유별로 센다.',
@@ -115,17 +114,17 @@ const requests: Request[] = [
       ],
       confirmed: false, confirmedById: null, confirmedAt: null, fromCommentCount: 8,
     } },
-  { id: 'rq2', projectId: 'p1', title: '3월 정산서 숫자 한번 봐주세요', kind: 'check', state: 'doing', requesterId: 'u2', assigneeId: 'u1', dueDate: '2026-03-24', sourceEntryId: null, createdAt: '2026-03-20',
+  { id: 'rq2', projectId: 'p1', title: '3월 정산서 숫자 한번 봐주세요', state: 'doing', requesterId: 'u2', assigneeId: 'u1', dueDate: '2026-03-24', sourceEntryId: null, createdAt: '2026-03-20',
     spec: { points: ['3월 정산서의 환불 반영액이 결제 원장과 맞는지 본다.', '어긋나면 어느 건이 어긋났는지까지 짚어 준다.'], confirmed: true, confirmedById: 'u2', confirmedAt: '2026-03-20', fromCommentCount: 3 } },
-  { id: 'rq3', projectId: 'p1', title: '알림 발송 로그 2월치도 필요합니다', kind: 'data', state: 'doing', requesterId: 'u1', assigneeId: 'u2', dueDate: '2026-03-27', sourceEntryId: null, createdAt: '2026-03-19',
+  { id: 'rq3', projectId: 'p1', title: '알림 발송 로그 2월치도 필요합니다', state: 'doing', requesterId: 'u1', assigneeId: 'u2', dueDate: '2026-03-27', sourceEntryId: null, createdAt: '2026-03-19',
     spec: { points: ['2월 알림 발송 로그를 채널별로 뽑는다.', '중복 발송으로 보이는 건은 따로 표시한다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-19', fromCommentCount: 4 } },
-  { id: 'rq4', projectId: 'p1', title: '배포 체크리스트가 최신인지 확인', kind: 'check', state: 'todo', requesterId: 'u4', assigneeId: null, dueDate: null, sourceEntryId: null, createdAt: '2026-03-22', spec: null },
-  { id: 'rq5', projectId: 'p1', title: '온콜 담당표 이번 분기 것 맞는지', kind: 'check', state: 'todo', requesterId: 'u3', assigneeId: 'u4', dueDate: '2026-03-25', sourceEntryId: null, createdAt: '2026-03-22', spec: null },
-  { id: 'rq6', projectId: 'p1', title: '테스트 계정 정리해 주세요', kind: 'etc', state: 'todo', requesterId: 'u1', assigneeId: 'u3', dueDate: '2026-03-30', sourceEntryId: null, createdAt: '2026-03-21',
+  { id: 'rq4', projectId: 'p1', title: '배포 체크리스트가 최신인지 확인', state: 'todo', requesterId: 'u4', assigneeId: null, dueDate: null, sourceEntryId: null, createdAt: '2026-03-22', spec: null },
+  { id: 'rq5', projectId: 'p1', title: '온콜 담당표 이번 분기 것 맞는지', state: 'todo', requesterId: 'u3', assigneeId: 'u4', dueDate: '2026-03-25', sourceEntryId: null, createdAt: '2026-03-22', spec: null },
+  { id: 'rq6', projectId: 'p1', title: '테스트 계정 정리해 주세요', state: 'todo', requesterId: 'u1', assigneeId: 'u3', dueDate: '2026-03-30', sourceEntryId: null, createdAt: '2026-03-21',
     spec: { points: ['스테이징에 쌓인 테스트 계정 중 3개월 넘게 안 쓴 것을 지운다.', '지우기 전에 목록을 한 번 공유한다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-21', fromCommentCount: 2 } },
-  { id: 'rq7', projectId: 'p1', title: '구독 해지 사유 코드 목록 뽑아주세요', kind: 'data', state: 'done', requesterId: 'u2', assigneeId: 'u3', dueDate: '2026-03-20', sourceEntryId: 'e8', createdAt: '2026-03-17',
+  { id: 'rq7', projectId: 'p1', title: '구독 해지 사유 코드 목록 뽑아주세요', state: 'done', requesterId: 'u2', assigneeId: 'u3', dueDate: '2026-03-20', sourceEntryId: 'e8', createdAt: '2026-03-17',
     spec: { points: ['해지 사유 코드와 뜻을 표로 정리한다.', '자동 해지로 붙는 코드가 어느 것인지 표시한다.'], confirmed: true, confirmedById: 'u2', confirmedAt: '2026-03-17', fromCommentCount: 2 } },
-  { id: 'rq8', projectId: 'p1', title: 'PG사 계약서 사본 어디 있는지', kind: 'etc', state: 'done', requesterId: 'u1', assigneeId: 'u4', dueDate: '2026-03-18', sourceEntryId: null, createdAt: '2026-03-14',
+  { id: 'rq8', projectId: 'p1', title: 'PG사 계약서 사본 어디 있는지', state: 'done', requesterId: 'u1', assigneeId: 'u4', dueDate: '2026-03-18', sourceEntryId: null, createdAt: '2026-03-14',
     spec: { points: ['토스페이먼츠 · 나이스페이 계약서 사본 위치를 알려준다.', '접근 권한이 없으면 권한까지 열어 준다.'], confirmed: true, confirmedById: 'u1', confirmedAt: '2026-03-15', fromCommentCount: 4 } },
 ]
 
@@ -541,14 +540,13 @@ export const useMijeongeStore = defineStore('mijeonge', () => {
     }
   }
 
-  /** 한 줄만 받아 등록한다. 나머지는 댓글로 좁힌다 — 자잘한 요청은 등록이 싸야 한다. */
-  function addRequest(title: string, kind: RequestKind, assigneeId: string | null) {
+  /** 한 줄만 받아 등록한다. 무엇을 해달라는 것인지는 댓글로 좁힌다. */
+  function addRequest(title: string, assigneeId: string | null) {
     const id = nextId('nrq')
     allRequests.value.unshift({
       id,
       projectId: currentProject.value.id,
       title,
-      kind,
       state: 'todo',
       requesterId: currentMemberId.value,
       assigneeId,

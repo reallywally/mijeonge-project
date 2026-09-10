@@ -192,11 +192,6 @@ export interface MeetingInput {
  * 세 가지뿐이고, 오가는 이야기는 Entry 처럼 종류를 붙이지 않고 그냥 댓글로 쌓는다.
  */
 
-export type RequestKind =
-  | 'data' // 데이터 정리
-  | 'check' // 확인
-  | 'etc'
-
 export type RequestState =
   | 'todo' // 요청됨
   | 'doing' // 하는 중
@@ -217,7 +212,6 @@ export interface Request {
   projectId: string
   /** 처음에는 "결제 실패 데이터 정리" 수준의 한 줄이다. 내용은 댓글로 좁힌다. */
   title: string
-  kind: RequestKind
   state: RequestState
   requesterId: string
   assigneeId: string | null
