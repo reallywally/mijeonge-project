@@ -1,0 +1,451 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #171717; } a:hover { color: #0a0a0a; }
+    input, select { font-family: inherit; font-size: 13px; color: #0a0a0a; }
+    input::placeholder { color: #737373; }
+    select { appearance: none; -webkit-appearance: none; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #ffffff; color: #0a0a0a; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+
+  <div style="height: 58px; flex-shrink: 0; display: flex; align-items: center; gap: 11px; padding: 0 22px; border-bottom: 1px solid #e5e5e5;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <div style="width: 19px; height: 19px; border: 1.5px solid #171717; border-radius: 6px;"></div>
+      <div style="font-size: 18px; font-weight: 600; letter-spacing: -0.025em;">회의록</div>
+    </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6l6 6-6 6"></path>
+    </svg>
+    <div style="display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: #0a0a0a;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
+      </svg>
+      <span>한화손보 차세대</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; cursor: pointer;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="M7 10l5 5 5-5"></path>
+        <path d="M4 20h16"></path>
+      </svg>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 13.5px; font-weight: 500; cursor: pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fafafa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14"></path>
+        <path d="M5 12h14"></path>
+      </svg>
+      <span>작업 추가</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <div style="width: 240px; flex-shrink: 0; border-right: 1px solid #e5e5e5; background: #fafafa; display: flex; flex-direction: column; gap: 20px; padding: 22px 16px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 9px 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; cursor: pointer;">
+        <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+          <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">프로젝트</div>
+          <div style="font-size: 14px; font-weight: 600; line-height: 1.3;">한화손보 차세대</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M7 9l5-5 5 5"></path>
+          <path d="M7 15l5 5 5-5"></path>
+        </svg>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 8px; background: #ffffff; border: 1px solid #e5e5e5; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M4 6.5h16V20H4z"></path>
+            <path d="M4 10.5h16"></path>
+            <path d="M8.5 4v4"></path>
+            <path d="M15.5 4v4"></path>
+          </svg>
+          <div style="flex-grow: 1; font-size: 14px; font-weight: 600;">작업</div>
+          <div style="font-size: 11.5px; color: #737373;">18</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 8px; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M4 6h11"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 18h8"></path>
+            <circle cx="19" cy="6" r="2"></circle>
+            <circle cx="16" cy="18" r="2"></circle>
+          </svg>
+          <div style="flex-grow: 1; font-size: 14px;">안건</div>
+          <div style="font-size: 11.5px; color: #737373;">9</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 11px 12px; border-radius: 8px; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <circle cx="9" cy="8" r="2.6"></circle>
+            <path d="M4 19c0-3 2.2-5 5-5s5 2 5 5"></path>
+            <path d="M15.5 6.2a2.6 2.6 0 0 1 0 5"></path>
+            <path d="M17 14.4c1.8.7 3 2.4 3 4.6"></path>
+          </svg>
+          <div style="flex-grow: 1; font-size: 14px;">회의</div>
+          <div style="font-size: 11.5px; color: #737373;">6</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #e5e5e5;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 11px;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">막대 읽는 법</div>
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 13px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="width: 34px; height: 8px; flex-shrink: 0; border-radius: 9999px; background: #d4d4d4;"></div>
+            <div style="font-size: 12px; color: #737373;">묶음 작업 · 자식들의 기간</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="width: 34px; height: 16px; flex-shrink: 0; border-radius: 6px; background: #e5e5e5; overflow: hidden;">
+              <div style="width: 60%; height: 100%; background: #171717;"></div>
+            </div>
+            <div style="font-size: 12px; color: #737373;">진행 중 · 채운 만큼 진척</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="width: 34px; height: 16px; flex-shrink: 0; border-radius: 6px; background: #171717;"></div>
+            <div style="font-size: 12px; color: #737373;">완료</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <div style="width: 34px; height: 16px; flex-shrink: 0; border: 1px dashed {{ accent }}; border-radius: 6px; background: #ffffff;"></div>
+            <div style="font-size: 12px; color: #737373;">기간 미정 · 막대가 없습니다</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+
+      <div style="height: 44px; flex-shrink: 0; display: flex; align-items: stretch; gap: 2px; padding: 0 26px; border-bottom: 1px solid #e5e5e5;">
+        <div style="display: flex; align-items: center; gap: 7px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 13px; color: #737373; cursor: pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7h16"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 17h10"></path>
+          </svg>
+          <span>목록</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 7px; padding: 0 12px; border-bottom: 2px solid #171717; font-size: 13px; font-weight: 600; color: #0a0a0a; cursor: pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 6.5h9"></path>
+            <path d="M7 12h12"></path>
+            <path d="M5 17.5h8"></path>
+          </svg>
+          <span>간트차트</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 7px; padding: 0 12px; border-bottom: 2px solid transparent; font-size: 13px; color: #737373; cursor: pointer;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 5h4.5v14H4.5z"></path>
+            <path d="M15 5h4.5v9H15z"></path>
+          </svg>
+          <span>칸반보드</span>
+        </div>
+      </div>
+
+      <div style="height: 54px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 20px; border-bottom: 1px solid #e5e5e5;">
+        <div style="position: relative; width: 208px;">
+          <input id="tg-q" value="{{ q }}" onChange="{{ onQ }}" placeholder="작업 검색" style="width: 100%; height: 34px; padding: 0 12px 0 32px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 11px; top: 11px; pointer-events: none;">
+            <circle cx="11" cy="11" r="6.5"></circle>
+            <path d="M16 16l4 4"></path>
+          </svg>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <sc-for list="{{ ownerChips }}" as="oc" hint-placeholder-count="4">
+            <div onClick="{{ oc.pick }}" style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid {{ oc.bc }}; border-radius: 9999px; background: {{ oc.bg }}; font-size: 11.5px; color: {{ oc.fg }}; cursor: pointer;">{{ oc.ch }}</div>
+          </sc-for>
+        </div>
+        <div style="flex-grow: 1;"></div>
+        <div style="font-size: 12px; color: #737373;">{{ rangeLabel }}</div>
+        <div style="display: flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fafafa;">
+          <sc-for list="{{ scales }}" as="sr" hint-placeholder-count="2">
+            <div onClick="{{ sr.pick }}" style="display: flex; align-items: center; justify-content: center; height: 26px; padding: 0 12px; border-radius: 6px; background: {{ sr.bg }}; font-size: 12px; font-weight: {{ sr.weight }}; color: {{ sr.fg }}; cursor: pointer;">{{ sr.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="height: 52px; flex-shrink: 0; display: flex; border-bottom: 1px solid #e5e5e5; background: #fafafa;">
+        <div style="width: 472px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-right: 1px solid #e5e5e5; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #737373;">
+          <div style="flex-grow: 1; min-width: 0;">작업</div>
+          <div style="width: 104px; flex-shrink: 0;">상태</div>
+          <div style="width: 52px; flex-shrink: 0;">담당자</div>
+        </div>
+        <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="height: 25px; flex-shrink: 0; display: flex; align-items: center; border-bottom: 1px solid #e5e5e5;">
+            <sc-for list="{{ weeks }}" as="wk" hint-placeholder-count="4">
+              <div style="width: {{ wk.w }}px; flex-shrink: 0; padding-left: 9px; font-size: 11px; font-weight: 600; color: #737373; white-space: nowrap; overflow: hidden;">{{ wk.label }}</div>
+            </sc-for>
+          </div>
+          <div style="flex-grow: 1; display: flex; align-items: center;">
+            <sc-for list="{{ days }}" as="d" hint-placeholder-count="28">
+              <div style="width: {{ d.w }}px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 100%; background: {{ d.bg }};">
+                <div style="display: flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9999px; background: {{ d.pillBg }}; font-size: 10.5px; color: {{ d.fg }};">{{ d.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;">
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="12">
+          <div onClick="{{ r.select }}" style="display: flex; min-height: 40px; border-bottom: 1px solid #f5f5f5; background: {{ r.rowBg }}; cursor: pointer;">
+            <div style="width: 472px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-right: 1px solid #e5e5e5;">
+              <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding-left: {{ r.indent }}px;">
+                <sc-if value="{{ r.group }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ r.toggle }}" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex-shrink: 0; border-radius: 6px; cursor: pointer;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate({{ r.caret }}deg);">
+                      <path d="M9 6l6 6-6 6"></path>
+                    </svg>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ r.leaf }}" hint-placeholder-val="{{ true }}">
+                  <div style="width: 20px; height: 20px; flex-shrink: 0;"></div>
+                </sc-if>
+                <div style="font-size: 12px; color: #737373; flex-shrink: 0;">{{ r.key }}</div>
+                <div style="flex-grow: 1; min-width: 0; font-size: 13px; font-weight: {{ r.weight }}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.title }}</div>
+              </div>
+              <div style="width: 104px; flex-shrink: 0;">
+                <div style="display: inline-flex; align-items: center; gap: 5px; height: 23px; padding: 0 9px; border-radius: 8px; background: {{ r.badgeBg }}; font-size: 11px; color: {{ r.badgeFg }};">
+                  <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.badgeFg }};"></div>
+                  <span>{{ r.badge }}</span>
+                </div>
+              </div>
+              <div style="width: 52px; flex-shrink: 0; display: flex; align-items: center;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 9999px; background: {{ r.avBg }}; font-size: 11px; color: {{ r.avFg }};">{{ r.av }}</div>
+              </div>
+            </div>
+            <div style="flex-grow: 1; min-width: 0; position: relative; overflow: hidden; background-image: repeating-linear-gradient(to right, #f5f5f5 0px, #f5f5f5 1px, transparent 1px, transparent {{ dayW }}px);">
+              <sc-for list="{{ bands }}" as="bd" hint-placeholder-count="4">
+                <div style="position: absolute; top: 0; bottom: 0; left: {{ bd.left }}px; width: {{ bd.w }}px; background: #fafafa;"></div>
+              </sc-for>
+              <div style="position: absolute; top: 0; bottom: 0; left: {{ todayX }}px; width: 1px; background: {{ accent }};"></div>
+              <sc-if value="{{ r.hasBar }}" hint-placeholder-val="{{ true }}">
+                <div style="position: absolute; top: {{ r.barTop }}px; left: {{ r.barLeft }}px; width: {{ r.barW }}px; height: {{ r.barH }}px; border-radius: {{ r.barR }}px; background: {{ r.barBg }}; overflow: hidden;">
+                  <div style="width: {{ r.fillPct }}%; height: 100%; background: {{ r.fillBg }};"></div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ r.undated }}" hint-placeholder-val="{{ true }}">
+                <div style="position: absolute; top: 9px; left: 10px; display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; border: 1px dashed {{ accent }}; border-radius: 8px; background: #ffffff; font-size: 11px; color: {{ accent }};">
+                  <span>기간 미정 · 안건 결정을 기다리는 중</span>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noRows }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: center; justify-content: center; height: 120px; font-size: 13px; color: #737373;">검색어에 맞는 작업이 없습니다.</div>
+        </sc-if>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  data() {
+    return [
+      { id: 'a', key: 'HW-1', title: '설계', lv: 0, parent: null, st: 'doing', owner: null, s: 0, e: 15, p: 55 },
+      { id: 'a1', key: 'HW-2', title: '데이터 설계', lv: 1, parent: 'a', st: 'done', owner: '김서연', s: 0, e: 7, p: 100 },
+      { id: 'a2', key: 'HW-3', title: '프로그램 설계', lv: 1, parent: 'a', st: 'doing', owner: '박지훈', s: 8, e: 15, p: 25 },
+      { id: 'b', key: 'HW-4', title: '개발 환경 설정', lv: 0, parent: null, st: 'doing', owner: '이도현', s: 1, e: 8, p: 70 },
+      { id: 'c', key: 'HW-5', title: '개발', lv: 0, parent: null, st: 'todo', owner: null, s: 9, e: 27, p: 12 },
+      { id: 'c1', key: 'HW-6', title: 'AI Biz', lv: 1, parent: 'c', st: 'todo', owner: null, s: 9, e: 27, p: 15 },
+      { id: 'c11', key: 'HW-7', title: '가상비서', lv: 2, parent: 'c1', st: 'doing', owner: '정하늘', s: 9, e: 18, p: 45 },
+      { id: 'c111', key: 'HW-8', title: 'tool01', lv: 3, parent: 'c11', st: 'done', owner: '정하늘', s: 9, e: 11, p: 100 },
+      { id: 'c112', key: 'HW-9', title: 'tool02', lv: 3, parent: 'c11', st: 'doing', owner: '정하늘', s: 12, e: 14, p: 40 },
+      { id: 'c113', key: 'HW-10', title: 'tool03', lv: 3, parent: 'c11', st: 'todo', owner: null, s: 15, e: 16, p: 0 },
+      { id: 'c114', key: 'HW-11', title: 'tool04', lv: 3, parent: 'c11', st: 'todo', owner: null, s: 17, e: 18, p: 0 },
+      { id: 'c12', key: 'HW-12', title: 'AI 심사', lv: 2, parent: 'c1', st: 'todo', owner: null, s: 16, e: 23, p: 0 },
+      { id: 'c121', key: 'HW-13', title: '모델링', lv: 3, parent: 'c12', st: 'todo', owner: '김서연', s: 16, e: 23, p: 0 },
+      { id: 'c13', key: 'HW-14', title: '상품 추천', lv: 2, parent: 'c1', st: 'todo', owner: null, s: 19, e: 27, p: 0 },
+      { id: 'c131', key: 'HW-15', title: '기존 상품 분석', lv: 3, parent: 'c13', st: 'todo', owner: '박지훈', s: 19, e: 22, p: 0 },
+      { id: 'c132', key: 'HW-16', title: '모델링', lv: 3, parent: 'c13', st: 'todo', owner: null, s: 23, e: 27, p: 0 },
+      { id: 'c2', key: 'HW-17', title: '챗봇', lv: 1, parent: 'c', st: 'todo', owner: null, s: 21, e: 27, p: 0 },
+      { id: 'c3', key: 'HW-18', title: '보험료 산출 기간계 API 개발', lv: 1, parent: 'c', st: 'blocked', owner: '정하늘', s: -1, e: -1, p: 0 }
+    ];
+  }
+
+  badge(st, accent) {
+    if (st === 'done') { return { label: '완료', bg: '#171717', fg: '#fafafa' }; }
+    if (st === 'doing') { return { label: '진행 중', bg: '#e5e5e5', fg: '#171717' }; }
+    if (st === 'blocked') { return { label: '막힘', bg: accent, fg: '#fafafa' }; }
+    return { label: '해야 할 일', bg: '#f5f5f5', fg: '#737373' };
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#e7000b';
+    var scale = s.scale || 'week';
+    var q = s.q || '';
+    var ow = s.ow || null;
+    var closed = s.closed || {};
+    var picked = s.picked || null;
+
+    var chartW = 728;
+    var dayCount = scale === 'week' ? 28 : 56;
+    var dayW = scale === 'week' ? 26 : 13;
+    var todayIdx = 8;
+
+    var origin = new Date(2026, 8, 7);
+    var days = [];
+    for (var i = 0; i < dayCount; i += 1) {
+      var d = new Date(origin.getTime() + i * 86400000);
+      var dow = d.getDay();
+      var weekend = dow === 0 || dow === 6;
+      var today = i === todayIdx;
+      var label = '';
+      if (scale === 'week') { label = String(d.getDate()); }
+      else if (dow === 1) { label = String(d.getDate()); }
+      days.push({
+        w: dayW,
+        label: label,
+        bg: weekend ? '#f5f5f5' : 'transparent',
+        pillBg: today ? accent : 'transparent',
+        fg: today ? '#fafafa' : (weekend ? '#a3a3a3' : '#737373')
+      });
+    }
+
+    var bands = [];
+    for (var j = 0; j < dayCount; j += 1) {
+      var dd = new Date(origin.getTime() + j * 86400000);
+      if (dd.getDay() === 6) { bands.push({ left: j * dayW, w: Math.min(2 * dayW, chartW - j * dayW) }); }
+    }
+
+    var weeks = [];
+    for (var k = 0; k < dayCount; k += 7) {
+      var ws = new Date(origin.getTime() + k * 86400000);
+      var we = new Date(origin.getTime() + (k + 6) * 86400000);
+      weeks.push({
+        w: 7 * dayW,
+        label: (ws.getMonth() + 1) + '월 ' + ws.getDate() + '일 – ' + (we.getMonth() + 1) + '월 ' + we.getDate() + '일'
+      });
+    }
+
+    var all = this.data();
+    var byId = {};
+    var kids = {};
+    all.forEach(function (t) {
+      byId[t.id] = t;
+      if (t.parent) { kids[t.parent] = (kids[t.parent] || 0) + 1; }
+    });
+
+    var hidden = function (t) {
+      var p = t.parent;
+      while (p) { if (closed[p]) { return true; } p = byId[p] ? byId[p].parent : null; }
+      return false;
+    };
+
+    var visible = all.filter(function (t) {
+      if (q !== '' && t.title.indexOf(q) < 0) { return false; }
+      if (ow && t.owner !== ow) { return false; }
+      if (q === '' && !ow) { return !hidden(t); }
+      return true;
+    });
+
+    var rows = visible.map(function (t) {
+      var bd = self.badge(t.st, accent);
+      var isGroup = !!kids[t.id] && q === '' && !ow;
+      var hasBar = t.s >= 0;
+      var left = t.s * dayW;
+      var w = Math.max(dayW - 4, (t.e - t.s + 1) * dayW - 4);
+      if (left + w > chartW) { w = Math.max(0, chartW - left); }
+      var barBg = '#e5e5e5';
+      var fillBg = '#171717';
+      if (kids[t.id]) { barBg = '#e5e5e5'; fillBg = '#a3a3a3'; }
+      else if (t.st === 'done') { barBg = '#171717'; fillBg = '#171717'; }
+      else if (t.st === 'todo') { barBg = '#f5f5f5'; fillBg = '#f5f5f5'; }
+      return {
+        key: t.key,
+        title: t.title,
+        group: isGroup,
+        leaf: !isGroup,
+        caret: closed[t.id] ? 0 : 90,
+        indent: (q === '' && !ow) ? t.lv * 20 : 0,
+        weight: kids[t.id] ? '600' : '400',
+        badge: bd.label, badgeBg: bd.bg, badgeFg: bd.fg,
+        av: t.owner ? t.owner.charAt(0) : '–',
+        avBg: t.owner ? '#f5f5f5' : '#ffffff',
+        avFg: t.owner ? '#0a0a0a' : '#a3a3a3',
+        rowBg: picked === t.id ? '#fafafa' : '#ffffff',
+        hasBar: hasBar,
+        undated: !hasBar,
+        barLeft: left,
+        barW: w,
+        barTop: kids[t.id] ? 16 : 8,
+        barH: kids[t.id] ? 8 : 24,
+        barR: kids[t.id] ? 9999 : 6,
+        barBg: barBg,
+        fillBg: fillBg,
+        fillPct: t.p,
+        toggle: function (e) {
+          if (e && e.stopPropagation) { e.stopPropagation(); }
+          var next = {};
+          Object.keys(closed).forEach(function (kk) { next[kk] = closed[kk]; });
+          next[t.id] = !next[t.id];
+          self.setState({ closed: next });
+        },
+        select: function () { self.setState({ picked: t.id }); }
+      };
+    });
+
+    var owners = ['김서연', '박지훈', '이도현', '정하늘'];
+    var ownerChips = owners.map(function (n) {
+      var on = ow === n;
+      return {
+        ch: n.charAt(0),
+        bg: on ? '#171717' : '#ffffff',
+        bc: on ? '#171717' : '#e5e5e5',
+        fg: on ? '#fafafa' : '#0a0a0a',
+        pick: function () { self.setState({ ow: on ? null : n }); }
+      };
+    });
+
+    var scales = [
+      { key: 'week', label: '주' },
+      { key: 'month', label: '개월' }
+    ].map(function (sc) {
+      var on = scale === sc.key;
+      return {
+        label: sc.label,
+        bg: on ? '#ffffff' : 'transparent',
+        fg: on ? '#0a0a0a' : '#737373',
+        weight: on ? '600' : '400',
+        pick: function () { self.setState({ scale: sc.key }); }
+      };
+    });
+
+    var last = new Date(origin.getTime() + (dayCount - 1) * 86400000);
+    return {
+      accent: accent,
+      dayW: dayW,
+      days: days,
+      bands: bands,
+      weeks: weeks,
+      todayX: todayIdx * dayW + Math.round(dayW / 2),
+      rows: rows,
+      noRows: rows.length === 0,
+      q: q,
+      onQ: function (e) { self.setState({ q: e.target.value }); },
+      ownerChips: ownerChips,
+      scales: scales,
+      rangeLabel: '2026년 9월 7일 – ' + (last.getMonth() + 1) + '월 ' + last.getDate() + '일'
+    };
+  }
+}
+</script>
+</body>
+</html>
