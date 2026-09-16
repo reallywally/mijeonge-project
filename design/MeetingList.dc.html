@@ -1,0 +1,425 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #171717; } a:hover { color: #0a0a0a; }
+    input, select { font-family: inherit; font-size: 13px; color: #0a0a0a; }
+    input::placeholder { color: #737373; }
+    select { appearance: none; -webkit-appearance: none; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #ffffff; color: #0a0a0a; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 18px; border-bottom: 1px solid #e5e5e5;">
+    <div style="display: flex; align-items: center; gap: 9px;">
+      <div style="width: 17px; height: 17px; border: 1.5px solid #171717; border-radius: 5px;"></div>
+      <div style="font-size: 15.5px; font-weight: 600; letter-spacing: -0.025em;">회의록</div>
+    </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6l6 6-6 6"></path>
+    </svg>
+    <div style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #0a0a0a;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
+      </svg>
+      <span>한화손보 차세대</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; cursor: pointer;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="M7 10l5 5 5-5"></path>
+        <path d="M4 20h16"></path>
+      </svg>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <div style="width: 240px; flex-shrink: 0; border-right: 1px solid #e5e5e5; background: #fafafa; display: flex; flex-direction: column; gap: 16px; padding: 16px 12px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; cursor: pointer;">
+        <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+          <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">프로젝트</div>
+          <div style="font-size: 13px; font-weight: 600; line-height: 1.3;">한화손보 차세대</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M7 9l5-5 5 5"></path>
+          <path d="M7 15l5 5 5-5"></path>
+        </svg>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 10px; border-radius: 8px; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M4 6.5h16V20H4z"></path>
+            <path d="M4 10.5h16"></path>
+            <path d="M8.5 4v4"></path>
+            <path d="M15.5 4v4"></path>
+          </svg>
+          <div style="flex-grow: 1; font-size: 13px;">작업</div>
+          <div style="font-size: 11.5px; color: #737373;">18</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 10px; border-radius: 8px; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <path d="M4 6h11"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 18h8"></path>
+            <circle cx="19" cy="6" r="2"></circle>
+            <circle cx="16" cy="18" r="2"></circle>
+          </svg>
+          <div style="flex-grow: 1; font-size: 13px;">안건</div>
+          <div style="font-size: 11.5px; color: #737373;">9</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 8px 10px; border-radius: 8px; background: #ffffff; border: 1px solid #e5e5e5; cursor: pointer;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+            <circle cx="9" cy="8" r="2.6"></circle>
+            <path d="M4 19c0-3 2.2-5 5-5s5 2 5 5"></path>
+            <path d="M15.5 6.2a2.6 2.6 0 0 1 0 5"></path>
+            <path d="M17 14.4c1.8.7 3 2.4 3 4.6"></path>
+          </svg>
+          <div style="flex-grow: 1; font-size: 13px; font-weight: 600;">회의</div>
+          <div style="font-size: 11.5px; color: #737373;">{{ totalCount }}</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #e5e5e5;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 11px;">
+        <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">눈여겨볼 것</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5e5e5; border-left: 3px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+          <div style="font-size: 12px; line-height: 1.6; color: #737373; text-wrap: pretty;">안건 없이 메모만 남은 회의가 {{ memoOnlyCount }}건 있습니다. 안건 이력으로는 닿지 않으니 여기서 찾습니다.</div>
+          <div onClick="{{ pickMemoOnly }}" style="display: flex; align-items: center; min-height: 30px; font-size: 12px; color: #737373; cursor: pointer;">그 회의만 보기</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5e5e5; border-left: 3px solid {{ accent }}; border-radius: 8px; background: #ffffff;">
+          <div style="font-size: 12px; line-height: 1.6; color: #737373; text-wrap: pretty;">미룬 안건이 아직 그대로인 회의가 {{ deferCount }}건 있습니다. 다음 회의 후보에 올라가 있습니다.</div>
+          <div onClick="{{ pickDefer }}" style="display: flex; align-items: center; min-height: 30px; font-size: 12px; color: {{ accent }}; cursor: pointer;">그 회의만 보기</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 20px 20px 0;">
+        <div style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+
+          <div style="display: flex; align-items: flex-start; gap: 16px;">
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-size: 19px; font-weight: 600; line-height: 1.3; letter-spacing: -0.025em;">회의</div>
+              <div style="font-size: 12.5px; line-height: 1.65; color: #737373; text-wrap: pretty;">연 회의를 날짜순으로 놓는 게시판입니다. 안건에 줄을 남긴 회의는 안건 이력에서도 들어갈 수 있지만, 안건 없이 메모만 남긴 주간회의는 이 목록이 유일한 입구입니다. 새 회의도 여기서 시작합니다.</div>
+            </div>
+            <div onClick="{{ startMeeting }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fafafa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+              <span>새 회의</span>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fafafa;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 44px; flex-shrink: 0; font-size: 11.5px; color: #737373;">제목</div>
+              <input id="mt-q" placeholder="회의 이름에 들어가는 말" style="flex-grow: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none;">
+              <div style="flex-shrink: 0; font-size: 11.5px; color: #737373;">참석자</div>
+              <div style="position: relative; width: 132px; flex-shrink: 0;">
+                <select value="{{ personValue }}" onChange="{{ onPerson }}" style="width: 100%; height: 30px; padding: 0 26px 0 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none; cursor: pointer;">
+                  <sc-for list="{{ personOptions }}" as="po" hint-placeholder-count="5">
+                    <option value="{{ po.value }}">{{ po.label }}</option>
+                  </sc-for>
+                </select>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 9px; pointer-events: none;">
+                  <path d="M6 9l6 6 6-6"></path>
+                </svg>
+              </div>
+              <div onClick="{{ doSearch }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12px; font-weight: 500; cursor: pointer;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fafafa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="6.5"></circle>
+                  <path d="M16 16l4 4"></path>
+                </svg>
+                <span>조회</span>
+              </div>
+              <div onClick="{{ doReset }}" style="flex-shrink: 0; display: flex; align-items: center; justify-content: center; height: 30px; padding: 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12px; color: #0a0a0a; cursor: pointer;">초기화</div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+              <div style="width: 44px; flex-shrink: 0; font-size: 11.5px; color: #737373; padding-top: 6px;">종류</div>
+              <div style="flex-grow: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px;">
+                <sc-for list="{{ kindChips }}" as="kc" hint-placeholder-count="4">
+                  <div onClick="{{ kc.pick }}" style="display: flex; align-items: center; gap: 6px; height: 27px; padding: 0 10px; border: 1px solid {{ kc.bc }}; border-radius: 8px; background: {{ kc.bg }}; font-size: 11.5px; font-weight: {{ kc.weight }}; color: {{ kc.fg }}; cursor: pointer;">
+                    <span>{{ kc.label }}</span>
+                    <span style="color: {{ kc.numFg }};">{{ kc.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; overflow: hidden;">
+            <div style="display: flex; align-items: center; height: 32px; padding: 0 12px; border-bottom: 1px solid #e5e5e5; background: #fafafa; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: #737373;">
+              <div style="width: 84px; flex-shrink: 0;">날짜</div>
+              <div style="flex-grow: 1; min-width: 0; padding-right: 10px;">회의</div>
+              <div style="width: 156px; flex-shrink: 0; padding-left: 10px; border-left: 1px solid #e5e5e5;">참석자</div>
+              <div style="width: 74px; flex-shrink: 0; padding-left: 10px; border-left: 1px solid #e5e5e5;">남긴 줄</div>
+              <div style="width: 66px; flex-shrink: 0; padding-left: 10px; border-left: 1px solid #e5e5e5;">메모</div>
+              <div style="width: 78px; flex-shrink: 0; padding-left: 10px; border-left: 1px solid #e5e5e5;">연관 작업</div>
+              <div style="width: 22px; flex-shrink: 0;"></div>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+              <div onClick="{{ r.open }}" style="display: flex; align-items: center; min-height: 46px; padding: 0 12px; border-bottom: 1px solid #f5f5f5; background: {{ r.rowBg }}; cursor: pointer;">
+                <div style="width: 84px; flex-shrink: 0; display: flex; flex-direction: column; gap: 1px;">
+                  <div style="font-size: 12.5px; font-weight: 500;">{{ r.date }}</div>
+                  <div style="font-size: 11px; color: #a3a3a3;">{{ r.dow }}</div>
+                </div>
+                <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 0;">
+                  <div style="width: 3px; height: 22px; flex-shrink: 0; border-radius: 9999px; background: {{ r.stripe }};"></div>
+                  <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+                    <div style="display: flex; align-items: center; gap: 7px;">
+                      <div style="font-size: 13px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.title }}</div>
+                      <div style="display: flex; align-items: center; height: 19px; padding: 0 7px; flex-shrink: 0; border-radius: 6px; background: {{ r.tagBg }}; font-size: 10.5px; color: {{ r.tagFg }};">{{ r.tag }}</div>
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4; color: #a3a3a3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.summary }}</div>
+                  </div>
+                </div>
+                <div style="width: 156px; flex-shrink: 0; padding-left: 10px; font-size: 12px; color: #737373; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.people }}</div>
+                <div style="width: 74px; flex-shrink: 0; padding-left: 10px;">
+                  <div style="display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid {{ r.agBc }}; border-radius: 6px; font-size: 11px; color: {{ r.agFg }};">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="{{ r.agFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 6h11"></path>
+                      <path d="M4 12h16"></path>
+                      <path d="M4 18h8"></path>
+                    </svg>
+                    <span>{{ r.ag }}</span>
+                  </div>
+                </div>
+                <div style="width: 66px; flex-shrink: 0; padding-left: 10px; font-size: 12px; color: {{ r.memoFg }};">{{ r.memo }}</div>
+                <div style="width: 78px; flex-shrink: 0; padding-left: 10px; font-size: 12px; color: {{ r.taskFg }};">{{ r.tasks }}</div>
+                <div style="width: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d4d4d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 6l6 6-6 6"></path>
+                  </svg>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ noRows }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; align-items: center; justify-content: center; height: 96px; font-size: 12.5px; color: #737373;">조회 조건에 맞는 회의가 없습니다.</div>
+            </sc-if>
+            <sc-if value="{{ hasPicked }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; background: #fafafa;">
+                <div style="font-size: 12px; font-weight: 500;">{{ pickedTitle }}</div>
+                <div style="font-size: 11.5px; color: #737373;">행을 누르면 회의 상세로 들어갑니다 — 오른쪽 화면이 그 모습입니다</div>
+                <div style="flex-grow: 1;"></div>
+                <div onClick="{{ clearPick }}" style="display: flex; align-items: center; height: 26px; padding: 0 10px; font-size: 11.5px; color: #737373; cursor: pointer;">선택 해제</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 20px;">
+            <div style="font-size: 12px; color: #737373;">{{ rangeLabel }}</div>
+            <div style="flex-grow: 1;"></div>
+            <div onClick="{{ prevPage }}" style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid {{ prevBc }}; border-radius: 8px; background: #ffffff; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ prevFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 6l-6 6 6 6"></path>
+              </svg>
+            </div>
+            <sc-for list="{{ pages }}" as="pg" hint-placeholder-count="2">
+              <div onClick="{{ pg.pick }}" style="display: flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; padding: 0 8px; border: 1px solid {{ pg.bc }}; border-radius: 8px; background: {{ pg.bg }}; font-size: 12.5px; font-weight: {{ pg.weight }}; color: {{ pg.fg }}; cursor: pointer;">{{ pg.n }}</div>
+            </sc-for>
+            <div onClick="{{ nextPage }}" style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid {{ nextBc }}; border-radius: 8px; background: #ffffff; cursor: pointer;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{ nextFg }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 6l6 6-6 6"></path>
+              </svg>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"perPage":{"editor":"int","default":5,"min":3,"max":12,"section":"목록"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  data() {
+    return [
+      {
+        id: 'v6', date: '9/15', dow: '화', title: '일정 조율 회의', kind: 'decide',
+        summary: '일정 조율 — 전체 일정은 그대로 두고 테스트 기간만 2주 줄인다',
+        people: ['김서연', '박지훈', '이도현', '정하늘'], ag: 1, memo: 1, tasks: 3, openDefer: false
+      },
+      {
+        id: 'v5', date: '9/14', dow: '월', title: '기간계 API in·out 재회의', kind: 'defer',
+        summary: 'API 호출 in·out 정의 — 업무 정의가 아직이라 또 미뤘다 (2번째)',
+        people: ['김서연', '정하늘'], ag: 1, memo: 1, tasks: 1, openDefer: true
+      },
+      {
+        id: 'v4', date: '9/11', dow: '금', title: '9월 2주차 주간회의', kind: 'memo',
+        summary: '안건 없음 · 진행상황과 이슈를 메모로만 남겼다',
+        people: ['김서연', '박지훈', '이도현', '정하늘'], ag: 0, memo: 4, tasks: 0, openDefer: false
+      },
+      {
+        id: 'v3', date: '9/10', dow: '목', title: '개발 환경 확정 회의', kind: 'decide',
+        summary: 'DB 결정 — mysql을 쓴다 · 사내망 호출 범위는 미룸',
+        people: ['김서연', '박지훈', '이도현', '정하늘'], ag: 2, memo: 2, tasks: 1, openDefer: true
+      },
+      {
+        id: 'v2', date: '9/7', dow: '월', title: '기간계 API in·out 회의', kind: 'defer',
+        summary: 'API 호출 in·out 정의 — 기간계 업무 정의가 없어 미뤘다',
+        people: ['김서연', '정하늘', '박지훈'], ag: 1, memo: 1, tasks: 1, openDefer: false
+      },
+      {
+        id: 'v1', date: '9/4', dow: '금', title: '9월 1주차 주간회의', kind: 'memo',
+        summary: '안건 없음 · 킥오프 이후 진행상황만 공유했다',
+        people: ['김서연', '박지훈', '이도현'], ag: 0, memo: 3, tasks: 0, openDefer: false
+      }
+    ];
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#e7000b';
+    var per = this.props.perPage || 5;
+    var all = this.data();
+    var q = s.q || '';
+    var kind = s.kind || 'all';
+    var person = s.person || 'all';
+    var page = s.page || 1;
+    var picked = s.picked || null;
+
+    var TAG = {
+      decide: { label: '결정', bg: '#171717', fg: '#fafafa', stripe: '#171717' },
+      defer: { label: '미룸', bg: accent, fg: '#fafafa', stripe: accent },
+      memo: { label: '메모만', bg: '#f5f5f5', fg: '#737373', stripe: '#e5e5e5' }
+    };
+
+    var matches = function (m) {
+      if (q !== '' && m.title.indexOf(q) < 0) { return false; }
+      if (kind === 'memo' && m.ag !== 0) { return false; }
+      if (kind === 'agenda' && m.ag === 0) { return false; }
+      if (kind === 'defer' && !m.openDefer) { return false; }
+      if (person !== 'all' && m.people.indexOf(person) < 0) { return false; }
+      return true;
+    };
+
+    var shown = all.filter(matches);
+    var total = shown.length;
+    var pageCount = Math.max(1, Math.ceil(total / per));
+    var cur = Math.min(page, pageCount);
+    var start = (cur - 1) * per;
+    var slice = shown.slice(start, start + per);
+
+    var counts = {
+      all: all.length,
+      agenda: all.filter(function (m) { return m.ag > 0; }).length,
+      memo: all.filter(function (m) { return m.ag === 0; }).length,
+      defer: all.filter(function (m) { return m.openDefer; }).length
+    };
+
+    var chip = function (value, label) {
+      var on = kind === value;
+      return {
+        label: label, n: counts[value],
+        bg: on ? '#171717' : '#ffffff',
+        bc: on ? '#171717' : '#e5e5e5',
+        fg: on ? '#fafafa' : '#0a0a0a',
+        numFg: on ? '#a3a3a3' : '#737373',
+        weight: on ? '500' : '400',
+        pick: function () { self.setState({ kind: value, page: 1 }); }
+      };
+    };
+
+    var people = ['김서연', '박지훈', '이도현', '정하늘'];
+    var personOptions = [{ value: 'all', label: '전체' }];
+    people.forEach(function (n) { personOptions.push({ value: n, label: n }); });
+
+    var rows = slice.map(function (m) {
+      var tag = TAG[m.kind];
+      var names = m.people.length > 2
+        ? m.people[0] + ' · ' + m.people[1] + ' 외 ' + (m.people.length - 2) + '명'
+        : m.people.join(' · ');
+      return {
+        date: m.date, dow: m.dow, title: m.title, summary: m.summary,
+        tag: tag.label, tagBg: tag.bg, tagFg: tag.fg, stripe: tag.stripe,
+        people: names,
+        ag: m.ag === 0 ? '—' : m.ag + '건',
+        agFg: m.ag === 0 ? '#737373' : '#0a0a0a',
+        agBc: m.ag === 0 ? '#f5f5f5' : '#e5e5e5',
+        memo: m.memo === 0 ? '—' : m.memo + '줄',
+        memoFg: m.memo === 0 ? '#a3a3a3' : '#737373',
+        tasks: m.tasks === 0 ? '—' : m.tasks + '건',
+        taskFg: m.tasks === 0 ? '#a3a3a3' : '#737373',
+        rowBg: picked === m.id ? '#fafafa' : '#ffffff',
+        open: function () { self.setState({ picked: m.id }); }
+      };
+    });
+
+    var pages = [];
+    for (var i = 1; i <= pageCount; i += 1) {
+      (function (n) {
+        var on = n === cur;
+        pages.push({
+          n: n,
+          bg: on ? '#171717' : '#ffffff',
+          bc: on ? '#171717' : '#e5e5e5',
+          fg: on ? '#fafafa' : '#0a0a0a',
+          weight: on ? '500' : '400',
+          pick: function () { self.setState({ page: n }); }
+        });
+      }(i));
+    }
+
+    var pickedRow = all.filter(function (m) { return m.id === picked; })[0];
+
+    return {
+      accent: accent,
+      totalCount: all.length,
+      memoOnlyCount: counts.memo,
+      deferCount: counts.defer,
+      pickMemoOnly: function () { self.setState({ kind: 'memo', page: 1 }); },
+      pickDefer: function () { self.setState({ kind: 'defer', page: 1 }); },
+      startMeeting: function () { self.setState({ picked: null }); },
+      kindChips: [
+        chip('all', '전체'),
+        chip('agenda', '안건 있음'),
+        chip('memo', '메모만'),
+        chip('defer', '미룸 남음')
+      ],
+      personOptions: personOptions,
+      personValue: person,
+      onPerson: function (e) { self.setState({ person: e.target.value, page: 1 }); },
+      doSearch: function () {
+        var el = document.getElementById('mt-q');
+        self.setState({ q: el ? el.value : '', page: 1 });
+      },
+      doReset: function () {
+        var el = document.getElementById('mt-q');
+        if (el) { el.value = ''; }
+        self.setState({ q: '', kind: 'all', person: 'all', page: 1 });
+      },
+      rows: rows,
+      noRows: rows.length === 0,
+      hasPicked: !!pickedRow,
+      pickedTitle: pickedRow ? pickedRow.date + ' ' + pickedRow.title : '',
+      clearPick: function () { self.setState({ picked: null }); },
+      rangeLabel: total === 0 ? '0건' : (start + 1) + '–' + (start + slice.length) + ' / ' + total + '건',
+      pages: pages,
+      prevPage: function () { if (cur > 1) { self.setState({ page: cur - 1 }); } },
+      nextPage: function () { if (cur < pageCount) { self.setState({ page: cur + 1 }); } },
+      prevBc: cur > 1 ? '#e5e5e5' : '#f5f5f5',
+      prevFg: cur > 1 ? '#0a0a0a' : '#d4d4d4',
+      nextBc: cur < pageCount ? '#e5e5e5' : '#f5f5f5',
+      nextFg: cur < pageCount ? '#0a0a0a' : '#d4d4d4'
+    };
+  }
+}
+</script>
+</body>
+</html>

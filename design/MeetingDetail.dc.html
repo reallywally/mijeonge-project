@@ -1,0 +1,502 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans KR", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #171717; } a:hover { color: #0a0a0a; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #ffffff; color: #0a0a0a; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 18px; border-bottom: 1px solid #e5e5e5;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; cursor: pointer;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5"></path>
+        <path d="M11 5l-7 7 7 7"></path>
+      </svg>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #737373;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5a1.5 1.5 0 0 1 1.5-1.5h4l1.8 2.2h8.2a1.5 1.5 0 0 1 1.5 1.5v8.8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18.5z"></path>
+      </svg>
+      <span>한화손보 차세대</span>
+    </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6l6 6-6 6"></path>
+    </svg>
+    <div style="font-size: 12.5px; color: #737373;">회의</div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6l6 6-6 6"></path>
+    </svg>
+    <div style="font-size: 12.5px; color: #0a0a0a;">개발 환경 확정 회의</div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: #0a0a0a; cursor: pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 20h4l10-10-4-4L4 16z"></path>
+        <path d="M14 6l4 4"></path>
+      </svg>
+      <span>이어서 쓰기</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex;">
+
+    <div style="width: 240px; flex-shrink: 0; border-right: 1px solid #e5e5e5; background: #fafafa; display: flex; flex-direction: column; gap: 16px; padding: 16px 12px; overflow-y: auto;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">회의</div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="font-size: 14px; font-weight: 600;">9월 10일 (목)</div>
+          <div style="font-size: 12px; color: #737373;">오후 2시 · 41분</div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+          <div style="display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 9999px; background: #f5f5f5; font-size: 12px;">김서연</div>
+          <div style="display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 9999px; background: #f5f5f5; font-size: 12px;">박지훈</div>
+          <div style="display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 9999px; background: #f5f5f5; font-size: 12px;">이도현</div>
+          <div style="display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 9999px; background: #f5f5f5; font-size: 12px;">정하늘</div>
+        </div>
+        <div style="font-size: 11.5px; line-height: 1.65; color: #737373; text-wrap: pretty;">회의가 짊어지는 것은 이 셋입니다 — 날짜, 그 자리에 있던 사람, 녹음.</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: #0a0a0a; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 11v2"></path>
+            <path d="M8 7v10"></path>
+            <path d="M12 4v16"></path>
+            <path d="M16 8v8"></path>
+            <path d="M20 10v4"></path>
+          </svg>
+          <span>녹음 원문 보기</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 7px; height: 36px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: #0a0a0a; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20a8 8 0 1 0-6.9-3.9L4 20l4-1.1"></path>
+          </svg>
+          <span>이 회의에 질문하기</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #e5e5e5;"></div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5e5e5; border-left: 3px solid {{ accent }}; border-radius: 8px; background: #ffffff;">
+        <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">다음 회의로 넘어간 것</div>
+        <div style="font-size: 12px; line-height: 1.6; color: #737373; text-wrap: pretty;">미룬 안건 1건이 다음 회의 후보에 올라가 있습니다 — 사내망에서 외부 모델 호출 허용 범위.</div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+        <div style="font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">이 회의로 들어온 길</div>
+        <div style="font-size: 12px; line-height: 1.6; color: #737373; text-wrap: pretty;">회의 목록 · 안건 이력의 그 회의 보기 · 작업 상세의 연관 회의 — 셋 다 여기로 옵니다.</div>
+      </div>
+
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 9px; padding: 0 24px; border-bottom: 1px solid #e5e5e5;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">이 회의에서 남긴 줄</div>
+        <div style="font-size: 11.5px; color: #737373;">안건에 남긴 줄이 그대로 이 회의의 기록입니다 — 따로 쓴 회의록 본문은 없습니다</div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 24px 24px 0;">
+        <div style="width: 100%; display: flex; flex-direction: column; gap: 18px;">
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 24px; font-weight: 600; line-height: 1.3; letter-spacing: -0.025em;">개발 환경 확정 회의</div>
+            <div style="font-size: 12.5px; color: #737373;">2026년 9월 10일 · 안건 {{ entryCount }}건에 줄을 남겼습니다 · 회의 메모 {{ memoCount }}줄</div>
+          </div>
+
+          <div style="height: 1px; background: #e5e5e5;"></div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <sc-for list="{{ entries }}" as="e" hint-placeholder-count="2">
+              <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border: 1px solid #e5e5e5; border-left: 3px solid {{ e.stripe }}; border-radius: 8px; background: #ffffff;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <div style="display: flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 6px; background: {{ e.tagBg }}; font-size: 11px; font-weight: 600; color: {{ e.tagFg }};">{{ e.tag }}</div>
+                  <div style="font-size: 12.5px; color: #737373;">{{ e.thread }}</div>
+                  <div style="display: flex; align-items: center; gap: 4px; height: 22px; font-size: 11.5px; color: #737373; cursor: pointer;">
+                    <span>안건 이력</span>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M9 6l6 6-6 6"></path>
+                    </svg>
+                  </div>
+                </div>
+                <div style="font-size: 16px; line-height: 1.65; color: #0a0a0a; text-wrap: pretty;">{{ e.text }}</div>
+                <sc-if value="{{ e.hasDetail }}" hint-placeholder-val="{{ true }}">
+                  <div style="display: flex; flex-direction: column; gap: 5px; padding-left: 12px; border-left: 2px solid #e5e5e5;">
+                    <sc-for list="{{ e.detail }}" as="d" hint-placeholder-count="2">
+                      <div style="font-size: 13px; line-height: 1.7; color: #0a0a0a; text-wrap: pretty;">{{ d.line }}</div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ e.hasNote }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size: 12.5px; line-height: 1.7; color: #737373; text-wrap: pretty;">{{ e.note }}</div>
+                </sc-if>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <sc-if value="{{ e.hasOwner }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; align-items: center; gap: 6px; height: 25px; padding: 0 9px 0 4px; border-radius: 8px; background: #f5f5f5; font-size: 11.5px;">
+                      <div style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #ffffff; color: #737373; font-size: 10px;">{{ e.ownerCh }}</div>
+                      <span>{{ e.owner }}</span>
+                    </div>
+                  </sc-if>
+                  <div style="font-size: 11.5px; color: #a3a3a3;">{{ e.quoteHint }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="font-size: 12.5px; font-weight: 600;">회의 메모</div>
+              <div style="font-size: 11.5px; color: #737373;">안건에 안 붙는 것만 한 줄씩 — 그날의 상황입니다</div>
+            </div>
+            <sc-for list="{{ memos }}" as="m" hint-placeholder-count="3">
+              <div style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fafafa;">
+                <div style="width: 5px; height: 5px; flex-shrink: 0; margin-top: 8px; border-radius: 50%; background: #a3a3a3;"></div>
+                <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px;">
+                  <div style="font-size: 13px; line-height: 1.7; color: #0a0a0a; text-wrap: pretty;">{{ m.text }}</div>
+                  <sc-if value="{{ m.canPromote }}" hint-placeholder-val="{{ true }}">
+                    <div onClick="{{ m.promote }}" style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px dashed #d4d4d4; border-radius: 8px; background: #ffffff; font-size: 11.5px; color: #737373; cursor: pointer; align-self: flex-start;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14"></path>
+                        <path d="M13 6l6 6-6 6"></path>
+                      </svg>
+                      <span>안건으로 올리기</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.promoted }}" hint-placeholder-val="{{ true }}">
+                    <div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; background: #f5f5f5; font-size: 11.5px; color: #737373; align-self: flex-start;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 6L9 17l-5-5"></path>
+                      </svg>
+                      <span>안건으로 등록됨 · 대기</span>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 360px; flex-shrink: 0; border-left: 1px solid #e5e5e5; background: #fafafa; display: flex; flex-direction: column; overflow: hidden;">
+      <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #e5e5e5;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.09em; color: #737373;">맵핑</div>
+        <div style="font-size: 11.5px; color: #737373;">안건 · 작업을 이 회의에 겁니다</div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 16px; padding: 16px;">
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 12.5px; font-weight: 600;">연관 안건</div>
+            <div style="font-size: 11.5px; color: #737373;">{{ agendaCount }}건</div>
+          </div>
+          <div style="font-size: 11.5px; line-height: 1.6; color: #737373; text-wrap: pretty;">줄을 남긴 안건은 자동으로 걸립니다. 이야기만 하고 줄은 안 남긴 안건은 아래에서 겁니다.</div>
+
+          <sc-for list="{{ agendas }}" as="ag" hint-placeholder-count="3">
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; border: 1px solid #e5e5e5; border-left: 3px solid {{ ag.stripe }}; border-radius: 8px; background: #ffffff;">
+              <div style="display: flex; align-items: flex-start; gap: 8px;">
+                <div style="flex-grow: 1; min-width: 0; font-size: 12.5px; font-weight: 500; line-height: 1.45; text-wrap: pretty;">{{ ag.title }}</div>
+                <div style="display: flex; align-items: center; height: 20px; padding: 0 8px; flex-shrink: 0; border-radius: 6px; background: {{ ag.badgeBg }}; font-size: 10.5px; color: {{ ag.badgeFg }};">{{ ag.badge }}</div>
+              </div>
+              <div style="font-size: 11.5px; line-height: 1.6; color: #737373; text-wrap: pretty;">{{ ag.line }}</div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="display: flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 11.5px; cursor: pointer;">안건 이력</div>
+                <sc-if value="{{ ag.canUnlink }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ ag.unlink }}" style="display: flex; align-items: center; height: 26px; padding: 0 10px; font-size: 11.5px; color: #737373; cursor: pointer;">빼기</div>
+                </sc-if>
+                <sc-if value="{{ ag.locked }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size: 11px; color: #a3a3a3;">줄이 붙어 있어 뺄 수 없습니다</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+
+          <div style="display: flex; flex-direction: column; gap: 9px; padding: 11px 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+            <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: #737373;">등록된 안건에서 걸기</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <sc-for list="{{ agendaPool }}" as="ap" hint-placeholder-count="3">
+                <div onClick="{{ ap.link }}" style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12px; cursor: pointer;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                    <path d="M12 5v14"></path>
+                    <path d="M5 12h14"></path>
+                  </svg>
+                  <div style="flex-grow: 1; min-width: 0; line-height: 1.45; text-wrap: pretty;">{{ ap.title }}</div>
+                  <div style="font-size: 10.5px; color: #a3a3a3; flex-shrink: 0;">{{ ap.badge }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noAgendaPool }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; align-items: center; min-height: 32px; font-size: 11.5px; color: #a3a3a3;">고를 수 있는 안건을 모두 걸었습니다.</div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+
+        <div style="height: 1px; background: #e5e5e5;"></div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="font-size: 12.5px; font-weight: 600;">연관 작업</div>
+            <div style="font-size: 11.5px; color: #737373;">{{ taskCount }}건</div>
+          </div>
+          <div style="font-size: 11.5px; line-height: 1.6; color: #737373; text-wrap: pretty;">여기서 정해진 것이 어느 작업을 움직이는지 겁니다. 건 작업의 상세에도 이 회의가 연관 회의로 보입니다.</div>
+
+          <sc-for list="{{ tasks }}" as="tk" hint-placeholder-count="2">
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+              <div style="display: flex; align-items: flex-start; gap: 8px;">
+                <div style="font-size: 11px; color: #737373; flex-shrink: 0; padding-top: 1px;">{{ tk.key }}</div>
+                <div style="flex-grow: 1; min-width: 0; font-size: 12.5px; font-weight: 500; line-height: 1.45; text-wrap: pretty;">{{ tk.title }}</div>
+                <div style="display: flex; align-items: center; height: 20px; padding: 0 8px; flex-shrink: 0; border-radius: 6px; background: {{ tk.badgeBg }}; font-size: 10.5px; color: {{ tk.badgeFg }};">{{ tk.badge }}</div>
+              </div>
+              <div style="font-size: 11.5px; line-height: 1.6; color: #737373; text-wrap: pretty;">{{ tk.path }}</div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="display: flex; align-items: center; height: 26px; padding: 0 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 11.5px; cursor: pointer;">작업 열기</div>
+                <div onClick="{{ tk.unlink }}" style="display: flex; align-items: center; height: 26px; padding: 0 10px; font-size: 11.5px; color: #737373; cursor: pointer;">연결 해제</div>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noTasks }}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; align-items: center; min-height: 40px; padding: 0 12px; border: 1px dashed #e5e5e5; border-radius: 8px; font-size: 11.5px; color: #a3a3a3;">아직 건 작업이 없습니다.</div>
+          </sc-if>
+
+          <div style="display: flex; flex-direction: column; gap: 9px; padding: 11px 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+            <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: #737373;">작업에서 걸기</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <sc-for list="{{ taskPool }}" as="tp" hint-placeholder-count="3">
+                <div onClick="{{ tp.link }}" style="display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12px; cursor: pointer;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                    <path d="M12 5v14"></path>
+                    <path d="M5 12h14"></path>
+                  </svg>
+                  <div style="font-size: 11px; color: #737373; flex-shrink: 0;">{{ tp.key }}</div>
+                  <div style="flex-grow: 1; min-width: 0; line-height: 1.45; text-wrap: pretty;">{{ tp.title }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noTaskPool }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; align-items: center; min-height: 32px; font-size: 11.5px; color: #a3a3a3;">고를 수 있는 작업을 모두 걸었습니다.</div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  entryData() {
+    return [
+      {
+        id: 'x1', kind: 'decide', thread: 'DB 결정',
+        text: 'mysql을 쓴다',
+        detail: ['postgresql은 기존 솔루션과 호환성 이슈가 있어 뺀다', 'supabase는 비용 때문에 뺀다'],
+        owner: '이도현', quoteHint: '근거 발언 2건'
+      },
+      {
+        id: 'x2', kind: 'defer', thread: '사내망에서 외부 모델 호출 허용 범위',
+        text: '이번 회의에서는 정하지 못했다',
+        note: '정보보안팀 확인이 먼저다. 다음 회의 후보로 올려 둔다.',
+        quoteHint: '근거 발언 1건'
+      }
+    ];
+  }
+
+  memoData() {
+    return [
+      { id: 'n1', text: '서버는 9월 9일에 발급됐다. OS는 PM이 우분투 최신 버전으로 정했다고 전달받아 안건에는 회의 밖 줄로 적어 두었다.' },
+      { id: 'n2', text: '방화벽은 정보보안팀에 따로 신청해야 한다. 양식은 사내 포털 > 보안.' },
+      { id: 'n3', text: '개발 서버 백업 주기는 기간계와 맞추자는 이야기가 나왔다. 아직 정할 사람이 없다.' }
+    ];
+  }
+
+  agendaPoolData() {
+    return [
+      { id: 'p1', title: '서버 OS 결정', badge: '결정됨' },
+      { id: 'p2', title: '개발 서버 백업 주기', badge: '대기' },
+      { id: 'p3', title: '기간계 API 호출 in·out 정의', badge: '미룸' }
+    ];
+  }
+
+  taskPoolData() {
+    return [
+      { id: 't2', key: 'HW-18', title: '보험료 산출 기간계 API 개발', badge: '막힘', path: '개발 › 최상위 작업 아래' },
+      { id: 't3', key: 'HW-20', title: 'DB 설치와 초기 스키마 반영', badge: '진행 중', path: '개발 환경 설정 › 하위 작업' },
+      { id: 't4', key: 'HW-13', title: '모델링', badge: '해야 할 일', path: '개발 › AI Biz › AI 심사' }
+    ];
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#e7000b';
+    var promoted = s.promoted || {};
+    var linkedAg = s.linkedAg || {};
+    var unlinkedTask = s.unlinkedTask || {};
+    var linkedTask = s.linkedTask || {};
+
+    var TAG = {
+      decide: { label: '결정', bg: '#171717', fg: '#fafafa', stripe: '#171717' },
+      defer: { label: '미룸', bg: accent, fg: '#fafafa', stripe: accent },
+      refine: { label: '세부 추가', bg: '#f5f5f5', fg: '#171717', stripe: '#e5e5e5' }
+    };
+
+    var entries = this.entryData().map(function (e) {
+      var tag = TAG[e.kind];
+      var det = e.detail || [];
+      return {
+        tag: tag.label, tagBg: tag.bg, tagFg: tag.fg, stripe: tag.stripe,
+        thread: e.thread, text: e.text,
+        hasDetail: det.length > 0,
+        detail: det.map(function (x) { return { line: x }; }),
+        hasNote: !!e.note, note: e.note || '',
+        hasOwner: !!e.owner, owner: e.owner || '', ownerCh: (e.owner || '?').charAt(0),
+        quoteHint: e.quoteHint || ''
+      };
+    });
+
+    var agendas = [
+      {
+        title: 'DB 결정', badge: '결정됨', badgeBg: '#171717', badgeFg: '#fafafa', stripe: '#171717',
+        line: '이 회의에서 결정 줄이 붙었습니다 — mysql을 쓴다.',
+        canUnlink: false, locked: true, unlink: function () { return null; }
+      },
+      {
+        title: '사내망에서 외부 모델 호출 허용 범위', badge: '미룸', badgeBg: accent, badgeFg: '#fafafa', stripe: accent,
+        line: '이 회의에서 미룸 줄이 붙었습니다 — 다음 회의 후보.',
+        canUnlink: false, locked: true, unlink: function () { return null; }
+      }
+    ];
+
+    this.agendaPoolData().forEach(function (g) {
+      if (linkedAg[g.id]) {
+        agendas.push({
+          title: g.title, badge: g.badge, badgeBg: '#f5f5f5', badgeFg: '#171717', stripe: '#e5e5e5',
+          line: '줄은 안 남기고 이야기만 했습니다. 회의에 걸어 두었습니다.',
+          canUnlink: true, locked: false,
+          unlink: function () {
+            var next = {};
+            Object.keys(linkedAg).forEach(function (k) { next[k] = linkedAg[k]; });
+            next[g.id] = false;
+            self.setState({ linkedAg: next });
+          }
+        });
+      }
+    });
+
+    var agendaPool = this.agendaPoolData().filter(function (g) { return !linkedAg[g.id]; }).map(function (g) {
+      return {
+        title: g.title, badge: g.badge,
+        link: function () {
+          var next = {};
+          Object.keys(linkedAg).forEach(function (k) { next[k] = linkedAg[k]; });
+          next[g.id] = true;
+          self.setState({ linkedAg: next });
+        }
+      };
+    });
+
+    var badgeBgOf = function (label) {
+      if (label === '막힘') { return accent; }
+      if (label === '진행 중') { return '#e5e5e5'; }
+      if (label === '완료') { return '#171717'; }
+      return '#f5f5f5';
+    };
+    var badgeFgOf = function (label) {
+      if (label === '막힘') { return '#fafafa'; }
+      if (label === '완료') { return '#fafafa'; }
+      if (label === '진행 중') { return '#171717'; }
+      return '#737373';
+    };
+
+    var tasks = [];
+    if (!unlinkedTask.t1) {
+      tasks.push({
+        key: 'HW-4', title: '개발 환경 설정', badge: '진행 중',
+        badgeBg: badgeBgOf('진행 중'), badgeFg: badgeFgOf('진행 중'),
+        path: '최상위 작업 · 하위 3건 · 이도현',
+        unlink: function () {
+          var next = {};
+          Object.keys(unlinkedTask).forEach(function (k) { next[k] = unlinkedTask[k]; });
+          next.t1 = true;
+          self.setState({ unlinkedTask: next });
+        }
+      });
+    }
+
+    this.taskPoolData().forEach(function (t) {
+      if (linkedTask[t.id]) {
+        tasks.push({
+          key: t.key, title: t.title, badge: t.badge,
+          badgeBg: badgeBgOf(t.badge), badgeFg: badgeFgOf(t.badge),
+          path: t.path,
+          unlink: function () {
+            var next = {};
+            Object.keys(linkedTask).forEach(function (k) { next[k] = linkedTask[k]; });
+            next[t.id] = false;
+            self.setState({ linkedTask: next });
+          }
+        });
+      }
+    });
+
+    var taskPool = this.taskPoolData().filter(function (t) { return !linkedTask[t.id]; }).map(function (t) {
+      return {
+        key: t.key, title: t.title,
+        link: function () {
+          var next = {};
+          Object.keys(linkedTask).forEach(function (k) { next[k] = linkedTask[k]; });
+          next[t.id] = true;
+          self.setState({ linkedTask: next });
+        }
+      };
+    });
+
+    var memos = this.memoData().map(function (m) {
+      var done = !!promoted[m.id];
+      return {
+        text: m.text,
+        promoted: done,
+        canPromote: !done,
+        promote: function () {
+          var next = {};
+          Object.keys(promoted).forEach(function (k) { next[k] = promoted[k]; });
+          next[m.id] = true;
+          self.setState({ promoted: next });
+        }
+      };
+    });
+
+    return {
+      accent: accent,
+      entries: entries,
+      entryCount: entries.length,
+      memos: memos,
+      memoCount: memos.length,
+      agendas: agendas,
+      agendaCount: agendas.length,
+      agendaPool: agendaPool,
+      noAgendaPool: agendaPool.length === 0,
+      tasks: tasks,
+      taskCount: tasks.length,
+      noTasks: tasks.length === 0,
+      taskPool: taskPool,
+      noTaskPool: taskPool.length === 0
+    };
+  }
+}
+</script>
+</body>
+</html>
