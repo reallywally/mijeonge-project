@@ -30,5 +30,5 @@
 - 백: fastapi
 - db: postgresql 또는 supabase
 
-- 간트차트: dhtmlx-gantt v10 Community
+- 간트차트: dhtmlx-gantt v10 Community, [https://svar.dev/vue/gantt/](https://svar.dev/vue/gantt/)
 
