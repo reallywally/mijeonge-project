@@ -1,0 +1,359 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width: 760px; display: flex; flex-direction: column; border-radius: 10px; background: #ffffff; color: #0a0a0a; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden;">
+
+  <div style="display: flex; align-items: center; gap: 8px; height: 46px; flex-shrink: 0; padding: 0 16px; border-bottom: 1px solid #e5e5e5;">
+    <div style="font-size: 14px; font-weight: 600; letter-spacing: -0.02em;">작업 추가</div>
+    <div style="font-size: 12px; color: #737373;">한화손보 차세대</div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; cursor: pointer;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 6l12 12"></path>
+        <path d="M18 6L6 18"></path>
+      </svg>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 18px 20px 20px;">
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 11.5px; color: #737373;">상위 작업</div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="position: relative; flex-grow: 1;">
+          <select value="{{ parentValue }}" onChange="{{ onParent }}" style="width: 100%; height: 32px; padding: 0 28px 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none; cursor: pointer;">
+            <sc-for list="{{ parentOptions }}" as="po" hint-placeholder-count="6">
+              <option value="{{ po.value }}">{{ po.label }}</option>
+            </sc-for>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 10px; pointer-events: none;">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div style="font-size: 11.5px; color: #a3a3a3; flex-shrink: 0;">{{ parentHint }}</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 11.5px; color: #737373;">제목</div>
+      <input id="tc-title" value="{{ title }}" onChange="{{ onTitle }}" placeholder="예: 보험료 산출 기간계 API 개발" style="height: 40px; padding: 0 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 14px; outline: none;">
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="font-size: 11.5px; color: #737373;">내용</div>
+        <div style="font-size: 11px; color: #a3a3a3;">[] 로 시작하면 체크박스, - 로 시작하면 불릿이 됩니다</div>
+      </div>
+      <textarea id="tc-body" rows="5" placeholder="[] 서버 신청서 제출&#10;[] 개발자 접속 계정 만들기&#10;- 방화벽은 정보보안팀에 따로 신청" style="padding: 10px 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 13px; line-height: 1.6; outline: none;"></textarea>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 11.5px; color: #737373;">시작 날짜</div>
+        <input id="tc-start" placeholder="2026-09-16" style="height: 32px; padding: 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none;">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 11.5px; color: #737373;">기한</div>
+        <input id="tc-due" placeholder="2026-09-25" style="height: 32px; padding: 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none;">
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; margin-top: -8px;">
+      <div onClick="{{ toggleUndated }}" style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0; border: 1.5px solid {{ undatedBc }}; border-radius: 4px; background: {{ undatedBg }}; cursor: pointer;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="{{ undatedTick }}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12.5l4.5 4.5L19 7"></path>
+        </svg>
+      </div>
+      <div onClick="{{ toggleUndated }}" style="font-size: 12px; color: #737373; cursor: pointer;">기간은 아직 못 정했습니다 — 간트차트에 막대 없이 목록에만 섭니다</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 11.5px; color: #737373;">상태</div>
+        <div style="position: relative;">
+          <select value="{{ stValue }}" onChange="{{ onState }}" style="width: 100%; height: 32px; padding: 0 28px 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; outline: none; cursor: pointer;">
+            <sc-for list="{{ stateOptions }}" as="op" hint-placeholder-count="4">
+              <option value="{{ op.value }}">{{ op.label }}</option>
+            </sc-for>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 10px; pointer-events: none;">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 11.5px; color: #737373;">우선순위</div>
+        <div style="display: flex; gap: 6px;">
+          <sc-for list="{{ priorities }}" as="pr" hint-placeholder-count="3">
+            <div onClick="{{ pr.pick }}" style="display: flex; align-items: center; justify-content: center; flex-grow: 1; height: 32px; border: 1px solid {{ pr.bc }}; border-radius: 8px; background: {{ pr.bg }}; font-size: 12px; font-weight: {{ pr.weight }}; color: {{ pr.fg }}; cursor: pointer;">{{ pr.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <div style="font-size: 11.5px; color: #737373;">담당자</div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9999px; background: {{ ownerAvBg }}; font-size: 12px; color: {{ ownerAvFg }};">{{ ownerAvCh }}</div>
+        <div style="position: relative; width: 240px;">
+          <select value="{{ ownerValue }}" onChange="{{ onOwner }}" style="width: 100%; height: 32px; padding: 0 28px 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: {{ ownerFg }}; outline: none; cursor: pointer;">
+            <sc-for list="{{ memberOptions }}" as="mo" hint-placeholder-count="5">
+              <option value="{{ mo.value }}">{{ mo.label }}</option>
+            </sc-for>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 10px; pointer-events: none;">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div style="font-size: 11px; color: #a3a3a3;">{{ ownerHint }}</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fafafa;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: #737373;">연관 안건</div>
+        <div style="font-size: 11px; color: #a3a3a3;">이 작업을 하려면 먼저 정해야 하는 것이 있으면 여기서 겁니다</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="position: relative; flex-grow: 1;">
+          <select value="{{ agendaPickValue }}" onChange="{{ onAgendaPick }}" style="width: 100%; height: 32px; padding: 0 28px 0 11px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; color: {{ agendaPickFg }}; outline: none; cursor: pointer;">
+            <sc-for list="{{ agendaOptions }}" as="ao" hint-placeholder-count="4">
+              <option value="{{ ao.value }}">{{ ao.label }}</option>
+            </sc-for>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; right: 10px; top: 10px; pointer-events: none;">
+            <path d="M6 9l6 6 6-6"></path>
+          </svg>
+        </div>
+        <div style="font-size: 11px; color: #a3a3a3; flex-shrink: 0;">{{ agendaHint }}</div>
+      </div>
+      <sc-if value="{{ hasPicked }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <sc-for list="{{ pickedAgendas }}" as="pa" hint-placeholder-count="2">
+            <div style="display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 0 10px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                <path d="M4 6h11"></path>
+                <path d="M4 12h16"></path>
+                <path d="M4 18h8"></path>
+              </svg>
+              <div style="flex-grow: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ pa.title }}</div>
+              <div style="font-size: 11px; color: #a3a3a3; flex-shrink: 0;">{{ pa.id }}</div>
+              <div onClick="{{ pa.remove }}" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 6px; cursor: pointer;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 6l12 12"></path>
+                  <path d="M18 6L6 18"></path>
+                </svg>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ blockedWarn }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: {{ accent }};">
+          <div style="width: 5px; height: 5px; border-radius: 50%; background: {{ accent }};"></div>
+          <span>{{ pickedCount }}건을 걸었습니다. 그 안건이 정해지기 전까지는 상태를 막힘으로 두면 칸반의 막힘 칸에 섭니다.</span>
+        </div>
+      </sc-if>
+    </div>
+
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 10px; height: 56px; flex-shrink: 0; padding: 0 20px; border-top: 1px solid #e5e5e5; background: #fafafa;">
+    <div onClick="{{ toggleKeep }}" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+      <div style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1.5px solid {{ keepBc }}; border-radius: 4px; background: {{ keepBg }};">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="{{ keepTick }}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12.5l4.5 4.5L19 7"></path>
+        </svg>
+      </div>
+      <div style="font-size: 12px; color: #737373;">만들고 계속 추가</div>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="font-size: 11.5px; color: #a3a3a3;">{{ hint }}</div>
+    <div style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 13px; border: 1px solid #e5e5e5; border-radius: 8px; background: #ffffff; font-size: 12.5px; cursor: pointer;">취소</div>
+    <div onClick="{{ submit }}" style="display: flex; align-items: center; justify-content: center; height: 32px; padding: 0 15px; border-radius: 8px; background: {{ submitBg }}; color: {{ submitFg }}; font-size: 12.5px; font-weight: 500; cursor: pointer;">만들기</div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"$preview":{"width":760,"height":780}}'>
+class Component extends DCLogic {
+  /**
+   * 고르는 항목은 모두 서버에서 받아오는 자리다 — 담당자, 상위 작업, 안건.
+   * 지금은 예시 데이터를 그대로 돌려주지만, 나중에 이 메서드만
+   * fetch('/api/projects/:id/lookups') 로 바꾸면 화면은 손대지 않아도 된다.
+   * 그래서 고른 값은 이름이 아니라 id로 들고 다닌다 (owner: 'u3' → 저장할 때 그대로 FK).
+   */
+  loadLookups() {
+    return {
+      members: [
+        { id: 'u1', name: '김서연' },
+        { id: 'u2', name: '박지훈' },
+        { id: 'u3', name: '이도현' },
+        { id: 'u4', name: '정하늘' }
+      ],
+      parents: [
+        { id: 'a', path: '설계' },
+        { id: 'c', path: '개발' },
+        { id: 'c1', path: '개발 › AI Biz' },
+        { id: 'c11', path: '개발 › AI Biz › 가상비서' },
+        { id: 'c12', path: '개발 › AI Biz › AI 심사' }
+      ],
+      agendas: [
+        { id: 'g1', title: 'API 호출 in · out 정의' },
+        { id: 'g2', title: '기간계 업무 정의' },
+        { id: 'g3', title: '사내망에서 외부 모델 호출 허용 범위' }
+      ]
+    };
+  }
+
+  componentDidMount() {
+    this.setState({ lookups: this.loadLookups() });
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state || {};
+    var accent = this.props.accent || '#e7000b';
+
+    /* 아직 안 받아왔으면 비어 있는 상태로 그린다 (실제로는 이때가 조회 중이다). */
+    var lk = s.lookups || { members: [], parents: [], agendas: [] };
+    var loading = !s.lookups;
+
+    var title = s.title === undefined ? '' : s.title;
+    var parentId = s.parentId === undefined ? 'c' : s.parentId;
+    var ownerId = s.ownerId === undefined ? '' : s.ownerId;
+    var st = s.st || 'todo';
+    var pr = s.pr || 'mid';
+    var picked = s.picked || {};
+    var undated = !!s.undated;
+    var keep = !!s.keep;
+
+    var parentOptions = [{ value: 'none', label: '없음 (최상위 작업으로 만듭니다)' }];
+    lk.parents.forEach(function (p) { parentOptions.push({ value: p.id, label: p.path }); });
+    var parentLabel = '';
+    lk.parents.forEach(function (p) { if (p.id === parentId) { parentLabel = p.path; } });
+
+    var memberOptions = [{ value: '', label: loading ? '불러오는 중…' : '미정 (담당자 없음)' }];
+    lk.members.forEach(function (m) { memberOptions.push({ value: m.id, label: m.name }); });
+    var ownerName = '';
+    lk.members.forEach(function (m) { if (m.id === ownerId) { ownerName = m.name; } });
+
+    var pickedIds = lk.agendas.filter(function (g) { return picked[g.id]; }).map(function (g) { return g.id; });
+
+    return {
+      accent: accent,
+      title: title,
+      onTitle: function (e) { self.setState({ title: e.target.value }); },
+
+      parentOptions: parentOptions,
+      parentValue: parentId,
+      parentHint: parentId === 'none' ? '목록 맨 위 단계에 섭니다' : (parentLabel === '' ? '' : parentLabel + ' 아래로 들어갑니다'),
+      onParent: function (e) { self.setState({ parentId: e.target.value }); },
+
+      memberOptions: memberOptions,
+      ownerValue: ownerId,
+      onOwner: function (e) { self.setState({ ownerId: e.target.value }); },
+      ownerFg: ownerId === '' ? '#737373' : '#0a0a0a',
+      ownerAvCh: ownerName === '' ? '–' : ownerName.charAt(0),
+      ownerAvBg: ownerName === '' ? '#ffffff' : '#f5f5f5',
+      ownerAvFg: ownerName === '' ? '#a3a3a3' : '#0a0a0a',
+      ownerHint: ownerId === '' ? '나중에 정해도 됩니다' : '',
+
+      stateOptions: [
+        { value: 'todo', label: '해야 할 일' },
+        { value: 'doing', label: '진행 중' },
+        { value: 'blocked', label: '막힘' },
+        { value: 'done', label: '완료' }
+      ],
+      stValue: st,
+      onState: function (e) { self.setState({ st: e.target.value }); },
+
+      priorities: [
+        { key: 'low', label: '낮음' },
+        { key: 'mid', label: '보통' },
+        { key: 'high', label: '높음' }
+      ].map(function (p) {
+        var on = pr === p.key;
+        return {
+          label: p.label,
+          bg: on ? '#171717' : '#ffffff',
+          bc: on ? '#171717' : '#e5e5e5',
+          fg: on ? '#fafafa' : '#0a0a0a',
+          weight: on ? '500' : '400',
+          pick: function () { self.setState({ pr: p.key }); }
+        };
+      }),
+
+      /* 담당자와 같은 셀렉트지만 여러 개를 고른다 — 고른 것은 아래 목록으로 내려가고
+         셀렉트에는 아직 안 고른 안건만 남는다. 넘어가는 값은 id 배열(agendaIds)이다. */
+      agendaOptions: [{ value: '', label: loading ? '불러오는 중…' : '안건 고르기…' }].concat(
+        lk.agendas.filter(function (g) { return !picked[g.id]; }).map(function (g) {
+          return { value: g.id, label: g.title };
+        })
+      ),
+      agendaPickValue: '',
+      agendaPickFg: '#737373',
+      agendaHint: pickedIds.length === 0 ? '없어도 됩니다' : pickedIds.length + '건 골랐습니다',
+      onAgendaPick: function (e) {
+        var id = e.target.value;
+        if (!id) { return; }
+        var next = {};
+        Object.keys(picked).forEach(function (k) { next[k] = picked[k]; });
+        next[id] = true;
+        self.setState({ picked: next });
+      },
+      hasPicked: pickedIds.length > 0,
+      pickedAgendas: lk.agendas.filter(function (g) { return picked[g.id]; }).map(function (g) {
+        return {
+          id: g.id,
+          title: g.title,
+          remove: function () {
+            var next = {};
+            Object.keys(picked).forEach(function (k) { next[k] = picked[k]; });
+            next[g.id] = false;
+            self.setState({ picked: next });
+          }
+        };
+      }),
+      blockedWarn: pickedIds.length > 0,
+      pickedCount: pickedIds.length,
+
+      undated: undated,
+      undatedBg: undated ? '#171717' : '#ffffff',
+      undatedBc: undated ? '#171717' : '#d4d4d4',
+      undatedTick: undated ? '#fafafa' : 'transparent',
+      toggleUndated: function () { self.setState({ undated: !undated }); },
+
+      keepBg: keep ? '#171717' : '#ffffff',
+      keepBc: keep ? '#171717' : '#d4d4d4',
+      keepTick: keep ? '#fafafa' : 'transparent',
+      toggleKeep: function () { self.setState({ keep: !keep }); },
+
+      hint: title === '' ? '제목을 적어야 만들 수 있습니다' : '',
+      submitBg: title === '' ? '#e5e5e5' : '#171717',
+      submitFg: title === '' ? '#a3a3a3' : '#fafafa',
+      /* 저장할 때 서버로 넘어가는 모양: 고른 것은 전부 id다. */
+      submit: function () {
+        if (title === '') { return; }
+        var payload = {
+          parentId: parentId === 'none' ? null : parentId,
+          title: title,
+          ownerId: ownerId === '' ? null : ownerId,
+          state: st,
+          priority: pr,
+          startDate: undated ? null : null,
+          dueDate: undated ? null : null,
+          agendaIds: pickedIds
+        };
+        self.setState({ lastPayload: payload, title: keep ? '' : title });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -128,7 +128,7 @@
         </div>
         <div style="flex-grow: 1;"></div>
         <div style="display: flex; align-items: center; padding: 4px 0;">
-        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">
+        <div onClick="{{ openCreate }}" style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; background: #171717; color: #fafafa; font-size: 12.5px; font-weight: 500; cursor: pointer;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fafafa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 5v14"></path>
             <path d="M5 12h14"></path>
@@ -224,6 +224,18 @@
 
   </div>
 
+  <sc-if value="{{ createOpen }}" hint-placeholder-val="{{ true }}">
+    <div onClick="{{ closeOverlay }}" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: flex-start; justify-content: center; padding: 26px 0; overflow-y: auto;">
+      <dc-import name="TaskCreateForm" hint-size="760px,780px"></dc-import>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ true }}">
+    <div onClick="{{ closeOverlay }}" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: flex-start; justify-content: center; padding: 20px 0; overflow-y: auto;">
+      <dc-import name="TaskDetailPanel" hint-size="1140px,1240px"></dc-import>
+    </div>
+  </sc-if>
+
 </div>
 </x-dc>
 <script data-dc-script data-props='{"accent":{"editor":"color","default":"#e7000b","options":["#e7000b","#171717","#404040","#737373"],"section":"테마"},"$preview":{"width":1440,"height":900}}'>
@@ -253,6 +265,7 @@ class Component extends DCLogic {
     var ow = s.ow || null;
     var moved = s.moved || {};
     var picked = s.picked || null;
+    var overlay = s.overlay || null;
 
     var options = [
       { value: 'todo', label: '해야 할 일' },
@@ -292,8 +305,9 @@ class Component extends DCLogic {
         period: t.period === '' ? '기간 미정' : t.period,
         periodFg: t.period === '' ? accent : '#737373',
         bc: picked === t.id ? '#171717' : '#e5e5e5',
-        select: function () { self.setState({ picked: t.id }); },
+        select: function () { self.setState({ picked: t.id, overlay: 'detail' }); },
         move: function (e) {
+          if (e && e.stopPropagation) { e.stopPropagation(); }
           var next = {};
           Object.keys(moved).forEach(function (k) { next[k] = moved[k]; });
           next[t.id] = e.target.value;
@@ -332,6 +346,10 @@ class Component extends DCLogic {
 
     return {
       accent: accent,
+      createOpen: overlay === 'create',
+      detailOpen: overlay === 'detail',
+      openCreate: function () { self.setState({ overlay: 'create' }); },
+      closeOverlay: function () { self.setState({ overlay: null }); },
       columns: columns,
       q: q,
       onQ: function (e) { self.setState({ q: e.target.value }); },
