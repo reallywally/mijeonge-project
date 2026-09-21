@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { monthDay } from '@/lib/date'
-import { useMijeongeStore } from '@/stores/mijeonge'
+import { useDataStore } from '@/stores/data'
+import { useThreadStore } from '@/stores/thread'
 import type { EntryKind } from '@/types/domain'
 
 const props = defineProps<{ threadId: string | null }>()
@@ -16,8 +17,9 @@ const open = defineModel<boolean>('open', { required: true })
 /* 하위 안건을 누르면 그 안건으로 갈아탄다 — 목록을 거치지 않는다 */
 const emit = defineEmits<{ (e: 'open-thread', id: string): void }>()
 
-const store = useMijeongeStore()
-const detail = computed(() => (props.threadId ? store.threadDetail(props.threadId) : null))
+const data = useDataStore()
+const threadStore = useThreadStore()
+const detail = computed(() => (props.threadId ? threadStore.threadDetail(props.threadId) : null))
 
 /* 회의 없이 처리 — 회의를 다시 잡지 않고 담당자 확인만으로 끝낸 줄을 여기서 남긴다 */
 type OutKind = Extract<EntryKind, 'decide' | 'refine' | 'defer'>
@@ -33,9 +35,7 @@ const outText = ref('')
 const outNote = ref('')
 const outOwner = ref<string | null>(null)
 
-const outPlaceholder = computed(
-  () => OUT_KINDS.find((k) => k.key === outKind.value)!.placeholder,
-)
+const outPlaceholder = computed(() => OUT_KINDS.find((k) => k.key === outKind.value)!.placeholder)
 
 watch(
   () => props.threadId,
@@ -50,7 +50,13 @@ watch(
 function submitOutside() {
   const text = outText.value.trim()
   if (!text || !props.threadId) return
-  store.addOutsideEntry(props.threadId, outKind.value, text, outNote.value.trim(), outOwner.value)
+  threadStore.addOutsideEntry(
+    props.threadId,
+    outKind.value,
+    text,
+    outNote.value.trim(),
+    outOwner.value,
+  )
   outText.value = ''
   outNote.value = ''
   outOwner.value = null
@@ -62,7 +68,7 @@ function submitOutside() {
     <DialogScrollContent v-if="detail" class="max-w-[1000px] gap-0 p-0">
       <div class="flex items-center gap-2.5 border-b border-border px-[26px] py-4 pr-[60px]">
         <FolderClosed class="size-3.5 text-muted-foreground" />
-        <span class="text-xs text-muted-foreground">{{ store.currentProject.name }}</span>
+        <span class="text-xs text-muted-foreground">{{ data.currentProject.name }}</span>
         <ChevronRight class="size-3 text-muted-foreground" />
         <span class="text-xs">안건</span>
       </div>
@@ -81,26 +87,45 @@ function submitOutside() {
             </DialogTitle>
           </header>
 
-          <section class="flex flex-col gap-3 rounded-lg border border-border bg-card px-5 py-[18px] shadow-sm">
-            <div class="text-xs font-medium tracking-wider text-muted-foreground">지금 합의된 내용</div>
+          <section
+            class="flex flex-col gap-3 rounded-lg border border-border bg-card px-5 py-[18px] shadow-sm"
+          >
+            <div class="text-xs font-medium tracking-wider text-muted-foreground">
+              지금 합의된 내용
+            </div>
 
             <div v-if="detail.settled" class="flex flex-col gap-3.5">
               <div class="flex items-start gap-3">
-                <span class="mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full bg-primary">
+                <span
+                  class="mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full bg-primary"
+                >
                   <Check class="size-3 text-primary-foreground" />
                 </span>
-                <p class="min-w-0 grow text-[15px] leading-relaxed text-pretty">{{ detail.current }}</p>
+                <p class="min-w-0 grow text-[15px] leading-relaxed text-pretty">
+                  {{ detail.current }}
+                </p>
               </div>
 
-              <div v-if="detail.detail.length" class="ml-[31px] flex flex-col gap-1.5 border-l-2 border-border pl-3.5">
-                <p v-for="(line, i) in detail.detail" :key="i" class="text-sm leading-relaxed text-pretty">
+              <div
+                v-if="detail.detail.length"
+                class="ml-[31px] flex flex-col gap-1.5 border-l-2 border-border pl-3.5"
+              >
+                <p
+                  v-for="(line, i) in detail.detail"
+                  :key="i"
+                  class="text-sm leading-relaxed text-pretty"
+                >
                   {{ line }}
                 </p>
-                <p class="text-xs text-muted-foreground">조건별 상세 — 이 결정 안에 함께 적힌 줄입니다</p>
+                <p class="text-xs text-muted-foreground">
+                  조건별 상세 — 이 결정 안에 함께 적힌 줄입니다
+                </p>
               </div>
 
               <div v-if="detail.subThreads.length" class="ml-[31px] flex flex-col gap-2">
-                <div class="text-xs font-medium tracking-wider text-muted-foreground">따로 떼어낸 하위 안건</div>
+                <div class="text-xs font-medium tracking-wider text-muted-foreground">
+                  따로 떼어낸 하위 안건
+                </div>
                 <button
                   v-for="sub in detail.subThreads"
                   :key="sub.thread.id"
@@ -112,7 +137,9 @@ function submitOutside() {
                     class="size-1.5 shrink-0 rounded-full"
                     :class="sub.thread.state === 'decided' ? 'bg-primary' : 'bg-muted-foreground'"
                   />
-                  <span class="min-w-0 grow text-sm leading-snug text-pretty">{{ sub.thread.title }}</span>
+                  <span class="min-w-0 grow text-sm leading-snug text-pretty">{{
+                    sub.thread.title
+                  }}</span>
                   <span class="shrink-0 text-xs text-muted-foreground">{{ sub.splitAtLabel }}</span>
                   <ChevronRight class="size-3 shrink-0 text-muted-foreground" />
                 </button>
@@ -126,31 +153,42 @@ function submitOutside() {
 
             <div v-else class="flex flex-col gap-2.5">
               <div class="flex items-start gap-3">
-                <span class="mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-muted-foreground">
+                <span
+                  class="mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-muted-foreground"
+                >
                   <span class="size-1.5 rounded-full bg-muted-foreground" />
                 </span>
-                <p class="min-w-0 grow text-[15px] leading-relaxed text-muted-foreground">아직 정해지지 않았습니다.</p>
+                <p class="min-w-0 grow text-[15px] leading-relaxed text-muted-foreground">
+                  아직 정해지지 않았습니다.
+                </p>
               </div>
               <p class="text-xs text-muted-foreground">
-                {{ detail.deferCount }}번 미뤄졌고, 처음 나온 뒤 이력이 {{ detail.events.length }}건 쌓였습니다.
+                {{ detail.deferCount }}번 미뤄졌고, 처음 나온 뒤 이력이 {{ detail.events.length }}건
+                쌓였습니다.
               </p>
             </div>
           </section>
 
           <section class="flex flex-col gap-3.5">
             <div class="flex flex-wrap items-center gap-2.5">
-              <span class="text-xs font-medium tracking-wider text-muted-foreground">회의별 이력</span>
+              <span class="text-xs font-medium tracking-wider text-muted-foreground"
+                >회의별 이력</span
+              >
               <span class="text-xs font-medium">{{ detail.events.length }}</span>
               <span class="text-xs text-muted-foreground">
                 각 줄이 그 회의의 기록이기도 합니다 — 회의록을 따로 쓰지 않습니다
               </span>
             </div>
 
-            <div class="flex flex-col gap-3 rounded-lg border border-border bg-card px-[18px] py-4 shadow-sm">
-              <div class="text-xs font-medium tracking-wider text-muted-foreground">회의 없이 처리</div>
+            <div
+              class="flex flex-col gap-3 rounded-lg border border-border bg-card px-[18px] py-4 shadow-sm"
+            >
+              <div class="text-xs font-medium tracking-wider text-muted-foreground">
+                회의 없이 처리
+              </div>
               <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
-                회의를 다시 잡지 않고 담당자 확인만으로 처리한 경우입니다. 남기면 이 안건의 이력에 회의 밖 줄로
-                올라가고, 어느 회의에도 붙지 않습니다.
+                회의를 다시 잡지 않고 담당자 확인만으로 처리한 경우입니다. 남기면 이 안건의 이력에
+                회의 밖 줄로 올라가고, 어느 회의에도 붙지 않습니다.
               </p>
 
               <div class="flex flex-wrap gap-1.5">
@@ -177,7 +215,7 @@ function submitOutside() {
                 <span class="text-xs text-muted-foreground">처리한 사람</span>
                 <div class="flex flex-wrap gap-1.5">
                   <button
-                    v-for="m in store.allMembers"
+                    v-for="m in data.allMembers"
                     :key="m.id"
                     type="button"
                     class="inline-flex h-[34px] items-center gap-1.5 rounded-md border py-0.5 pr-3 pl-1.5 text-xs transition-colors"
@@ -188,7 +226,9 @@ function submitOutside() {
                     "
                     @click="outOwner = outOwner === m.id ? null : m.id"
                   >
-                    <span class="flex size-[22px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground">
+                    <span
+                      class="flex size-[22px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground"
+                    >
                       {{ m.name.charAt(0) }}
                     </span>
                     {{ m.name }}
@@ -196,7 +236,9 @@ function submitOutside() {
                 </div>
               </div>
 
-              <Button class="self-start" :disabled="!outText.trim()" @click="submitOutside">이력에 남기기</Button>
+              <Button class="self-start" :disabled="!outText.trim()" @click="submitOutside"
+                >이력에 남기기</Button
+              >
             </div>
 
             <div class="flex flex-col">
@@ -214,7 +256,9 @@ function submitOutside() {
                     >
                       회의 밖
                     </span>
-                    <span class="text-xs text-muted-foreground">{{ e.meeting?.title ?? '회의 없이 처리' }}</span>
+                    <span class="text-xs text-muted-foreground">{{
+                      e.meeting?.title ?? '회의 없이 처리'
+                    }}</span>
                   </div>
 
                   <p
@@ -224,13 +268,23 @@ function submitOutside() {
                     {{ e.entry.text }}
                   </p>
 
-                  <div v-if="e.entry.detail.length" class="flex flex-col gap-1 border-l-2 border-border pl-3">
-                    <p v-for="(line, i) in e.entry.detail" :key="i" class="text-[13px] leading-relaxed text-muted-foreground text-pretty">
+                  <div
+                    v-if="e.entry.detail.length"
+                    class="flex flex-col gap-1 border-l-2 border-border pl-3"
+                  >
+                    <p
+                      v-for="(line, i) in e.entry.detail"
+                      :key="i"
+                      class="text-[13px] leading-relaxed text-muted-foreground text-pretty"
+                    >
                       {{ line }}
                     </p>
                   </div>
 
-                  <p v-if="e.entry.note" class="text-xs leading-relaxed text-muted-foreground text-pretty">
+                  <p
+                    v-if="e.entry.note"
+                    class="text-xs leading-relaxed text-muted-foreground text-pretty"
+                  >
                     {{ e.entry.note }}
                   </p>
 

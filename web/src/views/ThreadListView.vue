@@ -1,19 +1,44 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useMijeongeStore } from '@/stores/mijeonge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useDataStore } from '@/stores/data'
+import { useThreadStore } from '@/stores/thread'
 import type { ThreadRow } from '@/types/domain'
 
-const store = useMijeongeStore()
+const data = useDataStore()
+const threadStore = useThreadStore()
+const route = useRoute()
+const router = useRouter()
 
 /* 조회 조건 — 제목 · 상태 · 담당자 */
 const titleDraft = ref('')
@@ -24,11 +49,11 @@ const page = ref(1)
 const perPage = 5
 
 const counts = computed(() => ({
-  all: store.rows.length,
-  queued: store.rows.filter((r) => r.thread.state === 'queued').length,
-  open: store.rows.filter((r) => r.thread.state === 'open').length,
-  decided: store.rows.filter((r) => r.thread.state === 'decided').length,
-  stuck: store.rows.filter((r) => r.deferCount >= 3).length,
+  all: threadStore.rows.length,
+  queued: threadStore.rows.filter((r) => r.thread.state === 'queued').length,
+  open: threadStore.rows.filter((r) => r.thread.state === 'open').length,
+  decided: threadStore.rows.filter((r) => r.thread.state === 'decided').length,
+  stuck: threadStore.rows.filter((r) => r.deferCount >= 3).length,
 }))
 
 const stateChips = computed(() => [
@@ -52,7 +77,7 @@ function matchesOwner(row: ThreadRow) {
 }
 
 const filtered = computed(() =>
-  store.rows.filter(
+  threadStore.rows.filter(
     (r) => r.thread.title.includes(query.value) && matchesState(r) && matchesOwner(r),
   ),
 )
@@ -86,13 +111,18 @@ function pickState(key: typeof stateFilter.value) {
   resetPage()
 }
 
-/* 안건 상세 — 목록을 그대로 두고 그 위에 띄운다 */
-const detailId = ref<string | null>(null)
-const detailOpen = ref(false)
+/* 안건 상세 — 목록을 그대로 두고 그 위에 띄우되, 주소를 갖는다.
+   /threads/:id 로 들어오면 그 안건이 열린 채로 시작한다 (새로고침 · 뒤로가기가 산다) */
+const detailId = computed(() => (route.params.id as string | undefined) ?? null)
+const detailOpen = computed({
+  get: () => detailId.value !== null,
+  set: (open: boolean) => {
+    if (!open) router.push('/threads')
+  },
+})
 
 function openThread(id: string) {
-  detailId.value = id
-  detailOpen.value = true
+  router.push(`/threads/${id}`)
 }
 
 /* 안건 추가 팝업 */
@@ -103,7 +133,7 @@ const newOwner = ref<string>('none')
 function submitThread() {
   const title = newTitle.value.trim()
   if (!title) return
-  store.addThread(title, newOwner.value === 'none' ? null : newOwner.value)
+  threadStore.addThread(title, newOwner.value === 'none' ? null : newOwner.value)
   newTitle.value = ''
   newOwner.value = 'none'
   addOpen.value = false
@@ -123,19 +153,31 @@ function submitThread() {
       <div class="h-px bg-border" />
       <div class="flex flex-col gap-3">
         <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
-        <div class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm">
+        <div
+          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm"
+        >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             아직 회의에서 다루지 않은 안건이 {{ counts.queued }}건 있습니다.
           </p>
-          <button type="button" class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline" @click="pickState('queued')">
+          <button
+            type="button"
+            class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline"
+            @click="pickState('queued')"
+          >
             그 안건만 보기
           </button>
         </div>
-        <div class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm">
+        <div
+          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+        >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             3번 이상 미뤄진 안건이 {{ counts.stuck }}건 있습니다.
           </p>
-          <button type="button" class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline" @click="pickState('stuck')">
+          <button
+            type="button"
+            class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline"
+            @click="pickState('stuck')"
+          >
             그 안건만 보기
           </button>
         </div>
@@ -153,8 +195,9 @@ function submitThread() {
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-              안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을 고릅니다.
-              회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
+              안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을
+              고릅니다. 회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의
+              기록이 됩니다.
             </p>
           </div>
           <Button class="shrink-0" @click="addOpen = true">
@@ -163,7 +206,9 @@ function submitThread() {
           </Button>
         </header>
 
-        <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">
+        <section
+          class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+        >
           <div class="flex items-center gap-2.5">
             <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
             <Input
@@ -179,7 +224,9 @@ function submitThread() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
-                <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
+                  m.name
+                }}</SelectItem>
                 <SelectItem value="none">미정</SelectItem>
               </SelectContent>
             </Select>
@@ -206,7 +253,12 @@ function submitThread() {
                 @click="pickState(c.key)"
               >
                 {{ c.label }}
-                <span :class="stateFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'">{{ c.n }}</span>
+                <span
+                  :class="
+                    stateFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                  "
+                  >{{ c.n }}</span
+                >
               </button>
             </div>
           </div>
@@ -217,10 +269,18 @@ function submitThread() {
             <TableHeader>
               <TableRow class="bg-muted/50 hover:bg-muted/50">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
-                <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground">상태</TableHead>
-                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">담당자</TableHead>
-                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">마지막 회의</TableHead>
-                <TableHead class="h-10 w-10 text-right text-xs font-medium text-muted-foreground">이력</TableHead>
+                <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground"
+                  >상태</TableHead
+                >
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                  >담당자</TableHead
+                >
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                  >마지막 회의</TableHead
+                >
+                <TableHead class="h-10 w-10 text-right text-xs font-medium text-muted-foreground"
+                  >이력</TableHead
+                >
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -240,7 +300,10 @@ function submitThread() {
                         'bg-muted-foreground/40': row.thread.state === 'decided',
                       }"
                     />
-                    <button type="button" class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline">
+                    <button
+                      type="button"
+                      class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
+                    >
                       {{ row.thread.title }}
                     </button>
                   </div>
@@ -251,8 +314,12 @@ function submitThread() {
                 <TableCell class="text-sm" :class="row.ownerName ? '' : 'text-muted-foreground'">
                   {{ row.ownerName ?? '미정' }}
                 </TableCell>
-                <TableCell class="text-sm text-muted-foreground">{{ row.lastMeetingLabel }}</TableCell>
-                <TableCell class="text-right text-sm text-muted-foreground">{{ row.entryCount }}</TableCell>
+                <TableCell class="text-sm text-muted-foreground">{{
+                  row.lastMeetingLabel
+                }}</TableCell>
+                <TableCell class="text-right text-sm text-muted-foreground">{{
+                  row.entryCount
+                }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
                 <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
@@ -266,7 +333,12 @@ function submitThread() {
         <div class="flex items-center gap-2.5 pb-[26px]">
           <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
           <div class="grow" />
-          <Button variant="outline" size="icon" :disabled="current <= 1" @click="page = current - 1">
+          <Button
+            variant="outline"
+            size="icon"
+            :disabled="current <= 1"
+            @click="page = current - 1"
+          >
             <ChevronLeft class="size-4" />
           </Button>
           <Button
@@ -279,7 +351,12 @@ function submitThread() {
           >
             {{ n }}
           </Button>
-          <Button variant="outline" size="icon" :disabled="current >= pageCount" @click="page = current + 1">
+          <Button
+            variant="outline"
+            size="icon"
+            :disabled="current >= pageCount"
+            @click="page = current + 1"
+          >
             <ChevronRight class="size-4" />
           </Button>
         </div>
@@ -293,7 +370,8 @@ function submitThread() {
         <DialogHeader>
           <DialogTitle>안건 추가</DialogTitle>
           <DialogDescription class="text-pretty">
-            회의와 무관하게 먼저 등록해 둡니다. 등록만 된 안건은 대기 상태로, 다음 회의에서 고를 후보가 됩니다.
+            회의와 무관하게 먼저 등록해 둡니다. 등록만 된 안건은 대기 상태로, 다음 회의에서 고를
+            후보가 됩니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -314,7 +392,9 @@ function submitThread() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">미정</SelectItem>
-                <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
+                  m.name
+                }}</SelectItem>
               </SelectContent>
             </Select>
           </div>

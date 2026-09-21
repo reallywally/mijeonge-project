@@ -1,24 +1,57 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Info, Plus, Search, X } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Plus,
+  Search,
+  X,
+} from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { monthDay } from '@/lib/date'
-import { useMijeongeStore } from '@/stores/mijeonge'
+import { useDataStore } from '@/stores/data'
+import { useMeetingStore } from '@/stores/meeting'
+import { useThreadStore } from '@/stores/thread'
 import type { EntryKind, MeetingEntryInput, NewThreadInput, ThreadState } from '@/types/domain'
 
-const store = useMijeongeStore()
+const data = useDataStore()
+const threadStore = useThreadStore()
+const meetingStore = useMeetingStore()
 const router = useRouter()
 
 /* 회의가 짊어지는 것은 제목 · 날짜 · 참석자뿐이다. 회의록 본문은 쓰지 않는다. */
@@ -65,14 +98,14 @@ const pool = computed<PickRow[]>(() => {
     state: 'queued' as ThreadState,
     deferCount: 0,
     ownerId: nt.ownerId,
-    ownerName: store.memberName(nt.ownerId),
+    ownerName: data.memberName(nt.ownerId),
     lastMeetingLabel: '이번 회의',
     meta: nt.parentThreadId
       ? `${titleOf(nt.parentThreadId)} 에서 떼어냄 · 이번 회의`
       : '이번 회의에서 등록 · 아직 다룬 적 없음',
   }))
 
-  const registered = store.rows
+  const registered = threadStore.rows
     .map((r) => ({
       id: r.thread.id,
       title: r.thread.title,
@@ -94,7 +127,7 @@ const pool = computed<PickRow[]>(() => {
 function titleOf(id: string) {
   return (
     newThreads.value.find((nt) => nt.tempId === id)?.title ??
-    store.allThreads.find((t) => t.id === id)?.title ??
+    data.allThreads.find((t) => t.id === id)?.title ??
     ''
   )
 }
@@ -171,10 +204,14 @@ const pickFiltered = computed(() =>
   ),
 )
 
-const pickPageCount = computed(() => Math.max(1, Math.ceil(pickFiltered.value.length / PICK_PER_PAGE)))
+const pickPageCount = computed(() =>
+  Math.max(1, Math.ceil(pickFiltered.value.length / PICK_PER_PAGE)),
+)
 const pickCurrent = computed(() => Math.min(pickPage.value, pickPageCount.value))
 const pickStart = computed(() => (pickCurrent.value - 1) * PICK_PER_PAGE)
-const pickRows = computed(() => pickFiltered.value.slice(pickStart.value, pickStart.value + PICK_PER_PAGE))
+const pickRows = computed(() =>
+  pickFiltered.value.slice(pickStart.value, pickStart.value + PICK_PER_PAGE),
+)
 const pickRangeLabel = computed(() =>
   pickFiltered.value.length === 0
     ? '0건'
@@ -324,7 +361,14 @@ function addNewThread() {
   const text = newTitle.value.trim()
   if (!text) return
   const tempId = registerThread(text, null, null)
-  lines.value.push({ threadId: tempId, kind: newKind.value, text, detail: [], note: '', ownerId: null })
+  lines.value.push({
+    threadId: tempId,
+    kind: newKind.value,
+    text,
+    detail: [],
+    note: '',
+    ownerId: null,
+  })
   picked.value = [...picked.value, tempId]
   newTitle.value = ''
   newOpen.value = false
@@ -358,7 +402,7 @@ const canSave = computed(
 
 function save() {
   if (!canSave.value) return
-  store.saveMeeting({
+  meetingStore.saveMeeting({
     title: title.value.trim(),
     date: date.value,
     attendeeIds: attendees.value,
@@ -397,7 +441,7 @@ const STRIPE: Record<ThreadState, string> = {
           <Label class="text-xs text-muted-foreground">참석자</Label>
           <div class="flex flex-wrap gap-1.5">
             <button
-              v-for="m in store.allMembers"
+              v-for="m in data.allMembers"
               :key="m.id"
               type="button"
               class="inline-flex h-8 items-center gap-1.5 rounded-full border py-0.5 pr-3 pl-1.5 text-xs transition-colors"
@@ -408,7 +452,9 @@ const STRIPE: Record<ThreadState, string> = {
               "
               @click="toggleAttendee(m.id)"
             >
-              <span class="flex size-[19px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground">
+              <span
+                class="flex size-[19px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground"
+              >
                 {{ m.name.charAt(0) }}
               </span>
               {{ m.name }}
@@ -416,8 +462,8 @@ const STRIPE: Record<ThreadState, string> = {
           </div>
         </div>
         <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
-          회의가 짊어지는 것은 날짜 · 참석자뿐입니다. 회의록 본문은 쓰지 않고, 안건에 남긴 줄이 그대로
-          이 회의의 기록이 됩니다.
+          회의가 짊어지는 것은 날짜 · 참석자뿐입니다. 회의록 본문은 쓰지 않고, 안건에 남긴 줄이
+          그대로 이 회의의 기록이 됩니다.
         </p>
       </div>
     </template>
@@ -445,9 +491,14 @@ const STRIPE: Record<ThreadState, string> = {
               <p class="text-xs text-muted-foreground">{{ monthDay(date) }} · {{ doneLabel }}</p>
             </header>
 
-            <div v-if="picked.length === 0" class="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border px-6 py-[26px]">
+            <div
+              v-if="picked.length === 0"
+              class="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border px-6 py-[26px]"
+            >
               <p class="text-sm text-muted-foreground">아직 담은 안건이 없습니다.</p>
-              <p class="text-sm text-muted-foreground">오른쪽 위 안건 담기로 등록된 안건에서 고르세요.</p>
+              <p class="text-sm text-muted-foreground">
+                오른쪽 위 안건 담기로 등록된 안건에서 고르세요.
+              </p>
             </div>
 
             <div
@@ -464,7 +515,12 @@ const STRIPE: Record<ThreadState, string> = {
                     <span class="text-xs text-muted-foreground">{{ row.meta }}</span>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" class="shrink-0 text-muted-foreground" @click="drop(row.id)">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="shrink-0 text-muted-foreground"
+                  @click="drop(row.id)"
+                >
                   <X class="size-3.5" />
                   빼기
                 </Button>
@@ -493,7 +549,9 @@ const STRIPE: Record<ThreadState, string> = {
               >
                 <div class="flex flex-wrap items-center gap-2">
                   <EntryKindBadge :kind="formKind[row.id]!" />
-                  <span class="text-xs text-muted-foreground">{{ FORM[formKind[row.id]!].hint }}</span>
+                  <span class="text-xs text-muted-foreground">{{
+                    FORM[formKind[row.id]!].hint
+                  }}</span>
                 </div>
 
                 <Input
@@ -511,12 +569,17 @@ const STRIPE: Record<ThreadState, string> = {
                     class="bg-background"
                   />
                   <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
-                    조건마다 갈리면 한 줄에 하나씩. 따로 쫓아다녀야 하는 줄만 하위 안건으로 올리세요.
+                    조건마다 갈리면 한 줄에 하나씩. 따로 쫓아다녀야 하는 줄만 하위 안건으로
+                    올리세요.
                   </p>
                 </div>
 
-                <p v-if="formKind[row.id] === 'split'" class="text-xs leading-relaxed text-muted-foreground text-pretty">
-                  떼어낸 줄은 이 프로젝트의 안건으로 따로 쌓이고, 이번 회의가 그 안건의 첫 줄이 됩니다.
+                <p
+                  v-if="formKind[row.id] === 'split'"
+                  class="text-xs leading-relaxed text-muted-foreground text-pretty"
+                >
+                  떼어낸 줄은 이 프로젝트의 안건으로 따로 쌓이고, 이번 회의가 그 안건의 첫 줄이
+                  됩니다.
                 </p>
 
                 <Input
@@ -529,7 +592,7 @@ const STRIPE: Record<ThreadState, string> = {
                   <span class="text-xs text-muted-foreground">담당자</span>
                   <div class="flex flex-wrap gap-1.5">
                     <button
-                      v-for="m in store.allMembers"
+                      v-for="m in data.allMembers"
                       :key="m.id"
                       type="button"
                       class="inline-flex h-8 items-center gap-1.5 rounded-full border py-0.5 pr-3 pl-1.5 text-xs transition-colors"
@@ -540,7 +603,9 @@ const STRIPE: Record<ThreadState, string> = {
                       "
                       @click="fOwner[row.id] = fOwner[row.id] === m.id ? null : m.id"
                     >
-                      <span class="flex size-[19px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground">
+                      <span
+                        class="flex size-[19px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground"
+                      >
                         {{ m.name.charAt(0) }}
                       </span>
                       {{ m.name }}
@@ -561,7 +626,11 @@ const STRIPE: Record<ThreadState, string> = {
                 </div>
 
                 <div class="flex gap-2">
-                  <Button size="sm" :disabled="!(fText[row.id] ?? '').trim()" @click="submitForm(row)">
+                  <Button
+                    size="sm"
+                    :disabled="!(fText[row.id] ?? '').trim()"
+                    @click="submitForm(row)"
+                  >
                     {{ FORM[formKind[row.id]!].confirm }}
                   </Button>
                   <Button variant="outline" size="sm" @click="closeForm(row.id)">닫기</Button>
@@ -575,7 +644,9 @@ const STRIPE: Record<ThreadState, string> = {
               >
                 <div class="flex flex-wrap items-center gap-2">
                   <EntryKindBadge :kind="line.kind" />
-                  <span class="text-xs text-muted-foreground">이 회의의 기록이자 이 안건의 이력</span>
+                  <span class="text-xs text-muted-foreground"
+                    >이 회의의 기록이자 이 안건의 이력</span
+                  >
                   <div class="grow" />
                   <button
                     type="button"
@@ -586,35 +657,57 @@ const STRIPE: Record<ThreadState, string> = {
                   </button>
                 </div>
                 <p class="text-sm leading-relaxed text-pretty">{{ line.text }}</p>
-                <div v-if="line.detail.length" class="flex flex-col gap-1 border-l-2 border-border pl-3">
-                  <p v-for="(d, j) in line.detail" :key="j" class="text-[13px] leading-relaxed text-muted-foreground text-pretty">
+                <div
+                  v-if="line.detail.length"
+                  class="flex flex-col gap-1 border-l-2 border-border pl-3"
+                >
+                  <p
+                    v-for="(d, j) in line.detail"
+                    :key="j"
+                    class="text-[13px] leading-relaxed text-muted-foreground text-pretty"
+                  >
                     {{ d }}
                   </p>
                 </div>
-                <p v-if="line.note" class="text-xs leading-relaxed text-muted-foreground text-pretty">
+                <p
+                  v-if="line.note"
+                  class="text-xs leading-relaxed text-muted-foreground text-pretty"
+                >
                   {{ line.note }}
                 </p>
                 <PersonChip
-                  v-if="store.memberName(line.ownerId)"
-                  :name="store.memberName(line.ownerId)!"
+                  v-if="data.memberName(line.ownerId)"
+                  :name="data.memberName(line.ownerId)!"
                   class="self-start"
                 />
               </div>
             </div>
 
             <div class="flex flex-col gap-2 pb-[26px]">
-              <Button v-if="!newOpen" variant="outline" class="h-11 border-dashed" @click="newOpen = true">
+              <Button
+                v-if="!newOpen"
+                variant="outline"
+                class="h-11 border-dashed"
+                @click="newOpen = true"
+              >
                 <Plus class="size-4" />
                 회의 중에 처음 나온 안건 등록
               </Button>
 
-              <div v-else class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-[18px] py-4 shadow-sm">
+              <div
+                v-else
+                class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-[18px] py-4 shadow-sm"
+              >
                 <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
-                  여기서 등록하면 프로젝트의 안건으로 바로 올라가고, 이번 회의가 그 안건의 첫 줄이 됩니다.
+                  여기서 등록하면 프로젝트의 안건으로 바로 올라가고, 이번 회의가 그 안건의 첫 줄이
+                  됩니다.
                 </p>
                 <div class="flex gap-1.5">
                   <button
-                    v-for="k in [{ key: 'decide' as const, label: '정해짐' }, { key: 'raise' as const, label: '못 정함' }]"
+                    v-for="k in [
+                      { key: 'decide' as const, label: '정해짐' },
+                      { key: 'raise' as const, label: '못 정함' },
+                    ]"
                     :key="k.key"
                     type="button"
                     class="inline-flex h-9 grow items-center justify-center rounded-md border text-xs font-medium transition-colors"
@@ -643,7 +736,9 @@ const STRIPE: Record<ThreadState, string> = {
         </div>
       </div>
 
-      <aside class="flex w-[360px] shrink-0 flex-col overflow-hidden border-l border-border bg-muted/50">
+      <aside
+        class="flex w-[360px] shrink-0 flex-col overflow-hidden border-l border-border bg-muted/50"
+      >
         <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-4">
           <span class="text-xs font-medium text-muted-foreground">회의 메모</span>
           <span class="text-xs text-muted-foreground">선택 — 안 적어도 됩니다</span>
@@ -673,15 +768,29 @@ const STRIPE: Record<ThreadState, string> = {
               <ArrowRight class="size-3.5" />
               안건으로 올리기
             </Button>
-            <span v-else class="inline-flex items-center gap-1.5 self-start text-xs text-muted-foreground">
+            <span
+              v-else
+              class="inline-flex items-center gap-1.5 self-start text-xs text-muted-foreground"
+            >
               <Check class="size-3.5" />
               안건으로 등록됨 · 대기
             </span>
           </div>
 
           <div class="flex flex-col gap-2">
-            <Input v-model="memoDraft" placeholder="한 줄씩 적습니다" class="bg-background" @keyup.enter="addMemo" />
-            <Button variant="outline" size="sm" class="self-start" :disabled="!memoDraft.trim()" @click="addMemo">
+            <Input
+              v-model="memoDraft"
+              placeholder="한 줄씩 적습니다"
+              class="bg-background"
+              @keyup.enter="addMemo"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              class="self-start"
+              :disabled="!memoDraft.trim()"
+              @click="addMemo"
+            >
               메모 추가
             </Button>
           </div>
@@ -691,16 +800,20 @@ const STRIPE: Record<ThreadState, string> = {
 
     <Dialog v-model:open="pickerOpen">
       <DialogContent class="flex max-h-[86vh] flex-col gap-0 p-0 sm:max-w-[880px]">
-        <DialogHeader class="shrink-0 gap-2 border-b border-border px-[22px] py-[18px] pr-[52px] text-left">
+        <DialogHeader
+          class="shrink-0 gap-2 border-b border-border px-[22px] py-[18px] pr-[52px] text-left"
+        >
           <DialogTitle>등록된 안건</DialogTitle>
           <DialogDescription class="text-pretty">
-            {{ store.currentProject.name }} · {{ pool.length }}건. 이번 회의에서 다룰 것만 고르고 추가를 누르세요.
-            페이지를 넘겨도 고른 것은 그대로 남습니다.
+            {{ data.currentProject.name }} · {{ pool.length }}건. 이번 회의에서 다룰 것만 고르고
+            추가를 누르세요. 페이지를 넘겨도 고른 것은 그대로 남습니다.
           </DialogDescription>
         </DialogHeader>
 
         <div class="flex min-h-0 grow flex-col gap-3 overflow-y-auto px-[22px] py-4">
-          <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">
+          <section
+            class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+          >
             <div class="flex items-center gap-2.5">
               <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
               <Input
@@ -716,7 +829,9 @@ const STRIPE: Record<ThreadState, string> = {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">전체</SelectItem>
-                  <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+                  <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
+                    m.name
+                  }}</SelectItem>
                   <SelectItem value="none">미정</SelectItem>
                 </SelectContent>
               </Select>
@@ -743,7 +858,12 @@ const STRIPE: Record<ThreadState, string> = {
                   @click="pickStateFilter(c.key)"
                 >
                   {{ c.label }}
-                  <span :class="pickState === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'">{{ c.n }}</span>
+                  <span
+                    :class="
+                      pickState === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                    "
+                    >{{ c.n }}</span
+                  >
                 </button>
               </div>
             </div>
@@ -755,9 +875,15 @@ const STRIPE: Record<ThreadState, string> = {
                 <TableRow class="bg-muted/50 hover:bg-muted/50">
                   <TableHead class="h-10 w-10" />
                   <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
-                  <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground">상태</TableHead>
-                  <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">담당자</TableHead>
-                  <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">마지막 회의</TableHead>
+                  <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground"
+                    >상태</TableHead
+                  >
+                  <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                    >담당자</TableHead
+                  >
+                  <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                    >마지막 회의</TableHead
+                  >
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -787,10 +913,15 @@ const STRIPE: Record<ThreadState, string> = {
                   <TableCell class="text-sm" :class="p.ownerName ? '' : 'text-muted-foreground'">
                     {{ p.ownerName ?? '미정' }}
                   </TableCell>
-                  <TableCell class="text-sm text-muted-foreground">{{ p.lastMeetingLabel }}</TableCell>
+                  <TableCell class="text-sm text-muted-foreground">{{
+                    p.lastMeetingLabel
+                  }}</TableCell>
                 </TableRow>
                 <TableRow v-if="pickRows.length === 0" class="hover:bg-transparent">
-                  <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colspan="5"
+                    class="h-[110px] text-center text-sm text-muted-foreground"
+                  >
                     조회 조건에 맞는 안건이 없습니다.
                   </TableCell>
                 </TableRow>
@@ -801,7 +932,12 @@ const STRIPE: Record<ThreadState, string> = {
           <div class="flex items-center gap-2.5">
             <span class="text-xs text-muted-foreground">{{ pickRangeLabel }}</span>
             <div class="grow" />
-            <Button variant="outline" size="icon" :disabled="pickCurrent <= 1" @click="pickPage = pickCurrent - 1">
+            <Button
+              variant="outline"
+              size="icon"
+              :disabled="pickCurrent <= 1"
+              @click="pickPage = pickCurrent - 1"
+            >
               <ChevronLeft class="size-4" />
             </Button>
             <Button
@@ -814,13 +950,20 @@ const STRIPE: Record<ThreadState, string> = {
             >
               {{ n }}
             </Button>
-            <Button variant="outline" size="icon" :disabled="pickCurrent >= pickPageCount" @click="pickPage = pickCurrent + 1">
+            <Button
+              variant="outline"
+              size="icon"
+              :disabled="pickCurrent >= pickPageCount"
+              @click="pickPage = pickCurrent + 1"
+            >
               <ChevronRight class="size-4" />
             </Button>
           </div>
         </div>
 
-        <DialogFooter class="shrink-0 items-center border-t border-border px-[22px] py-4 sm:justify-start">
+        <DialogFooter
+          class="shrink-0 items-center border-t border-border px-[22px] py-4 sm:justify-start"
+        >
           <span class="text-sm text-muted-foreground">{{ staged.length }}건 선택</span>
           <div class="grow" />
           <Button variant="outline" @click="pickerOpen = false">취소</Button>

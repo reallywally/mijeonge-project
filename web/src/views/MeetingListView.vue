@@ -1,17 +1,35 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import MeetingDetailDialog from '@/components/app/MeetingDetailDialog.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useMijeongeStore } from '@/stores/mijeonge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useDataStore } from '@/stores/data'
+import { useMeetingStore } from '@/stores/meeting'
 import type { MeetingRow } from '@/types/domain'
 
-const store = useMijeongeStore()
+const data = useDataStore()
+const meetingStore = useMeetingStore()
+const route = useRoute()
+const router = useRouter()
 
 /* 조회 조건 — 제목 · 결과 · 참석자. 안건 목록과 같은 자리, 같은 순서다. */
 const titleDraft = ref('')
@@ -22,10 +40,10 @@ const page = ref(1)
 const perPage = 5
 
 const counts = computed(() => ({
-  all: store.meetingRows.length,
-  decided: store.meetingRows.filter((r) => r.decidedCount > 0).length,
-  undecided: store.meetingRows.filter((r) => r.decidedCount === 0).length,
-  deferred: store.meetingRows.filter((r) => r.deferredCount > 0).length,
+  all: meetingStore.rows.length,
+  decided: meetingStore.rows.filter((r) => r.decidedCount > 0).length,
+  undecided: meetingStore.rows.filter((r) => r.decidedCount === 0).length,
+  deferred: meetingStore.rows.filter((r) => r.deferredCount > 0).length,
 }))
 
 const resultChips = computed(() => [
@@ -48,7 +66,7 @@ function matchesAttendee(row: MeetingRow) {
 }
 
 const filtered = computed(() =>
-  store.meetingRows.filter(
+  meetingStore.rows.filter(
     (r) => r.meeting.title.includes(query.value) && matchesResult(r) && matchesAttendee(r),
   ),
 )
@@ -82,12 +100,17 @@ function pickResult(key: typeof resultFilter.value) {
   resetPage()
 }
 
-/* 회의 하나 보기 — 목록을 그대로 두고 그 위에 띄운다 */
-const detailId = ref<string | null>(null)
-const detailOpen = ref(false)
+/* 회의 하나 보기 — 목록을 그대로 두고 그 위에 띄우되, 주소를 갖는다 */
+const detailId = computed(() => (route.params.id as string | undefined) ?? null)
+const detailOpen = computed({
+  get: () => detailId.value !== null,
+  set: (open: boolean) => {
+    if (!open) router.push('/meetings')
+  },
+})
 
 function openMeeting(id: string) {
-  detailId.value = id
+  router.push(`/meetings/${id}`)
   detailOpen.value = true
 }
 
@@ -114,19 +137,31 @@ function openThread(id: string) {
       <div class="h-px bg-border" />
       <div class="flex flex-col gap-3">
         <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
-        <div class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm">
+        <div
+          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm"
+        >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             아무것도 정하지 못하고 끝난 회의가 {{ counts.undecided }}건 있습니다.
           </p>
-          <button type="button" class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline" @click="pickResult('undecided')">
+          <button
+            type="button"
+            class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline"
+            @click="pickResult('undecided')"
+          >
             그 회의만 보기
           </button>
         </div>
-        <div class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm">
+        <div
+          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+        >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             안건을 미룬 채 끝난 회의가 {{ counts.deferred }}건 있습니다.
           </p>
-          <button type="button" class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline" @click="pickResult('deferred')">
+          <button
+            type="button"
+            class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline"
+            @click="pickResult('deferred')"
+          >
             그 회의만 보기
           </button>
         </div>
@@ -144,8 +179,8 @@ function openThread(id: string) {
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-2xl font-semibold tracking-tight">회의</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-              지난 회의가 언제 열렸고 무엇이 정해졌는지 여기서 봅니다. 회의를 열면 등록된 안건 중에서
-              이번에 다룰 것을 고르고, 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
+              지난 회의가 언제 열렸고 무엇이 정해졌는지 여기서 봅니다. 회의를 열면 등록된 안건
+              중에서 이번에 다룰 것을 고르고, 안건에 남긴 줄이 그대로 그 회의의 기록이 됩니다.
             </p>
           </div>
           <Button class="shrink-0" as-child>
@@ -156,7 +191,9 @@ function openThread(id: string) {
           </Button>
         </header>
 
-        <section class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]">
+        <section
+          class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+        >
           <div class="flex items-center gap-2.5">
             <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
             <Input
@@ -172,7 +209,9 @@ function openThread(id: string) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
-                <SelectItem v-for="m in store.allMembers" :key="m.id" :value="m.id">{{ m.name }}</SelectItem>
+                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
+                  m.name
+                }}</SelectItem>
               </SelectContent>
             </Select>
             <Button class="shrink-0" @click="search">
@@ -198,7 +237,12 @@ function openThread(id: string) {
                 @click="pickResult(c.key)"
               >
                 {{ c.label }}
-                <span :class="resultFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'">{{ c.n }}</span>
+                <span
+                  :class="
+                    resultFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'
+                  "
+                  >{{ c.n }}</span
+                >
               </button>
             </div>
           </div>
@@ -209,10 +253,19 @@ function openThread(id: string) {
             <TableHeader>
               <TableRow class="bg-muted/50 hover:bg-muted/50">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">회의</TableHead>
-                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">날짜</TableHead>
-                <TableHead class="h-10 w-[160px] text-xs font-medium text-muted-foreground">참석자</TableHead>
-                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground">다룬 안건</TableHead>
-                <TableHead class="h-10 w-[60px] text-right text-xs font-medium text-muted-foreground">결정</TableHead>
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                  >날짜</TableHead
+                >
+                <TableHead class="h-10 w-[160px] text-xs font-medium text-muted-foreground"
+                  >참석자</TableHead
+                >
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                  >다룬 안건</TableHead
+                >
+                <TableHead
+                  class="h-10 w-[60px] text-right text-xs font-medium text-muted-foreground"
+                  >결정</TableHead
+                >
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -228,17 +281,26 @@ function openThread(id: string) {
                       class="h-[22px] w-1 shrink-0 rounded-full"
                       :class="row.decidedCount > 0 ? 'bg-primary' : 'bg-border'"
                     />
-                    <button type="button" class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline">
+                    <button
+                      type="button"
+                      class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
+                    >
                       {{ row.meeting.title }}
                     </button>
                   </div>
                 </TableCell>
                 <TableCell class="text-sm text-muted-foreground">{{ row.dateLabel }}</TableCell>
-                <TableCell class="truncate text-sm" :class="row.attendeeNames.length ? '' : 'text-muted-foreground'">
+                <TableCell
+                  class="truncate text-sm"
+                  :class="row.attendeeNames.length ? '' : 'text-muted-foreground'"
+                >
                   {{ row.attendeeNames.length ? row.attendeeNames.join(', ') : '—' }}
                 </TableCell>
                 <TableCell class="text-sm text-muted-foreground">{{ row.threadCount }}건</TableCell>
-                <TableCell class="text-right text-sm" :class="row.decidedCount ? '' : 'text-muted-foreground'">
+                <TableCell
+                  class="text-right text-sm"
+                  :class="row.decidedCount ? '' : 'text-muted-foreground'"
+                >
                   {{ row.decidedCount }}
                 </TableCell>
               </TableRow>
@@ -254,7 +316,12 @@ function openThread(id: string) {
         <div class="flex items-center gap-2.5 pb-[26px]">
           <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
           <div class="grow" />
-          <Button variant="outline" size="icon" :disabled="current <= 1" @click="page = current - 1">
+          <Button
+            variant="outline"
+            size="icon"
+            :disabled="current <= 1"
+            @click="page = current - 1"
+          >
             <ChevronLeft class="size-4" />
           </Button>
           <Button
@@ -267,14 +334,23 @@ function openThread(id: string) {
           >
             {{ n }}
           </Button>
-          <Button variant="outline" size="icon" :disabled="current >= pageCount" @click="page = current + 1">
+          <Button
+            variant="outline"
+            size="icon"
+            :disabled="current >= pageCount"
+            @click="page = current + 1"
+          >
             <ChevronRight class="size-4" />
           </Button>
         </div>
       </div>
     </div>
 
-    <MeetingDetailDialog v-model:open="detailOpen" :meeting-id="detailId" @open-thread="openThread" />
+    <MeetingDetailDialog
+      v-model:open="detailOpen"
+      :meeting-id="detailId"
+      @open-thread="openThread"
+    />
     <ThreadDetailDialog v-model:open="threadOpen" :thread-id="threadId" @open-thread="openThread" />
   </AppShell>
 </template>
