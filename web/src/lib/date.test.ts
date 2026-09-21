@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { dayTime, monthDay, today } from './date'
+import { dayTime, monthDay, slashDay, today } from './date'
 
 describe('monthDay', () => {
   it('앞자리 0을 떼고 한국식으로 적는다', () => {
     expect(monthDay('2026-03-12')).toBe('3월 12일')
     expect(monthDay('2026-09-04')).toBe('9월 4일')
+  })
+})
+
+describe('slashDay', () => {
+  it('좁은 칸에 쓰라고 슬래시로 준다', () => {
+    expect(slashDay('2026-09-08')).toBe('9/8')
+    expect(slashDay('2026-10-04')).toBe('10/4')
   })
 })
 

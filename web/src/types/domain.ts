@@ -129,6 +129,10 @@ export interface MeetingRow {
   decidedCount: number
   /** 미룸 줄 수 */
   deferredCount: number
+  /** 안건에 안 붙는 메모 줄 수 */
+  memoCount: number
+  /** 이 회의에 걸린 작업 수 */
+  taskCount: number
   dateLabel: string
 }
 
@@ -269,4 +273,114 @@ export interface RequestDetail {
   /** 이 요청을 낳은 안건과 그 줄 */
   sourceThread: Thread | null
   sourceLabel: string
+}
+
+/**
+ * 작업(task) — memo 의 네 번째 엔티티.
+ *
+ * 계층으로 쌓이지만 목록은 펼치지 않고 한 줄에 하나씩 놓는다(경로는 제목 아래 회색 글씨).
+ * 계층째로 보는 건 간트차트가 맡는다. start · due 가 둘 다 null 이면 기간 미정이라
+ * 간트에 막대가 없다(unscheduled).
+ */
+
+export type TaskStatus =
+  | 'todo' // 해야 할 일
+  | 'doing' // 진행 중
+  | 'blocked' // 막힘 — 걸어 둔 안건이 안 정해져서 멈춘 상태
+  | 'done'
+
+export type TaskPriority = 'low' | 'normal' | 'high'
+
+/** 작업 본문 한 줄. memo: "checkbox 와 bullet list 로 필요한 내용을 작성한다" */
+export interface TaskLine {
+  id: string
+  kind: 'check' | 'bullet'
+  text: string
+  done: boolean
+  /** 들여쓰기 깊이 */
+  level: number
+}
+
+export interface Task {
+  id: string
+  projectId: string
+  /** 화면에 보이는 번호 — HW-4 */
+  key: string
+  title: string
+  parentId: string | null
+  body: TaskLine[]
+  status: TaskStatus
+  ownerId: string | null
+  /** YYYY-MM-DD. start 와 due 가 둘 다 null 이면 기간 미정 */
+  start: string | null
+  due: string | null
+  priority: TaskPriority
+  createdAt: string
+}
+
+/**
+ * 맵핑은 링크로 둔다.
+ *
+ * memo 의 "안건 상세에서는 맵핑 불가"는 화면의 규칙이지 모델의 제약이 아니다 —
+ * 링크는 양쪽에서 읽고, 안건 화면에서만 읽기 전용으로 보여준다.
+ */
+export interface TaskThreadLink {
+  taskId: string
+  threadId: string
+}
+
+export interface MeetingTaskLink {
+  meetingId: string
+  taskId: string
+}
+
+/** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
+export interface TaskRow {
+  task: Task
+  ownerName: string | null
+  /** 개발 › AI Biz › 가상비서 · 하위 2건 / 또는 '최상위 작업' */
+  pathLabel: string
+  /** 9/8 ~ 9/15 또는 '' (기간 미정) */
+  periodLabel: string
+  /** 기간이 안 잡혔는가 — 간트에 막대가 없는 작업 */
+  undated: boolean
+  threadCount: number
+  childCount: number
+}
+
+/** 작업 하나 보기 */
+export interface TaskDetail {
+  task: Task
+  ownerName: string | null
+  pathLabel: string
+  periodLabel: string
+  parent: Task | null
+  children: TaskRow[]
+  /** 이 작업을 하다가 정해야 했던 것들 */
+  threads: TaskThreadRow[]
+  /** 이 작업이 걸린 회의 */
+  meetings: Meeting[]
+  doneChildCount: number
+}
+
+/** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
+export interface TaskThreadRow {
+  thread: Thread
+  /** 결정됐으면 그 한 줄, 아니면 왜 아직인지 */
+  line: string
+  /** 어디서 정해졌는지 — '개발 환경 확정 회의 · 9월 10일' 또는 '회의 밖 · …' */
+  where: string
+}
+
+/** 작업을 새로 만들 때 화면이 넘기는 것 */
+export interface TaskInput {
+  title: string
+  parentId: string | null
+  body: TaskLine[]
+  status: TaskStatus
+  ownerId: string | null
+  start: string | null
+  due: string | null
+  priority: TaskPriority
+  threadIds: string[]
 }

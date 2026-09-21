@@ -4,6 +4,12 @@ export function monthDay(iso: string) {
   return `${Number(m)}월 ${Number(d)}일`
 }
 
+/** 2026-09-08 → 9/8. 표의 기간 칸처럼 좁은 자리에 쓴다. */
+export function slashDay(iso: string) {
+  const [, m, d] = iso.split('-')
+  return `${Number(m)}/${Number(d)}`
+}
+
 /** 2026-03-21T10:14 → 3월 21일 10:14. 요청 댓글처럼 같은 날 여러 번 오가는 곳에 쓴다. */
 export function dayTime(iso: string) {
   const [date, time = ''] = iso.split('T')
