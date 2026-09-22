@@ -134,6 +134,11 @@ export const useTaskStore = defineStore('task', () => {
     if (task) task.status = status
   }
 
+  function setOwner(taskId: string, ownerId: string | null) {
+    const task = data.allTasks.find((t) => t.id === taskId)
+    if (task) task.ownerId = ownerId
+  }
+
   function toggleBodyLine(taskId: string, lineId: string) {
     const line = data.allTasks.find((t) => t.id === taskId)?.body.find((l) => l.id === lineId)
     if (line && line.kind === 'check') line.done = !line.done
@@ -205,6 +210,7 @@ export const useTaskStore = defineStore('task', () => {
     meetingsOfTask,
     tasksOfThread,
     setStatus,
+    setOwner,
     toggleBodyLine,
     addTask,
     linkThread,
