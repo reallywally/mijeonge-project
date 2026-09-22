@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
+import { Select } from '@/components/ui/select'
 import { useTaskStore } from '@/stores/task'
 import TasksView from './TasksView.vue'
 
@@ -187,5 +188,100 @@ describe('작업 추가 팝업', () => {
     await mountView('/tasks/new')
     expect(popupText()).toContain('제목을 적어야 만들 수 있습니다')
     expect(popupButton('만들기')!.hasAttribute('disabled')).toBe(true)
+  })
+})
+
+describe('칸반보드 탭', () => {
+  /* 카드의 상태 셀렉트 — reka-ui 셀렉트는 jsdom 에서 열리지 않으므로 고른 값만 흘려 넣는다 */
+  const cardSelect = (w: Awaited<ReturnType<typeof mountView>>, taskId: string) =>
+    w
+      .findAllComponents(Select)
+      .find((s) => (s.element as HTMLElement)?.closest?.(`[data-task-id="${taskId}"]`))
+
+  it('칸 넷이 상태 순서대로 서고, 묶음 작업은 카드가 되지 않는다', async () => {
+    const w = await mountView('/tasks?view=board')
+    expect(w.findAll('[data-column]').map((c) => c.attributes('data-column'))).toEqual([
+      'todo',
+      'doing',
+      'blocked',
+      'done',
+    ])
+    expect(w.text()).toContain('해야 할 일')
+    expect(w.text()).toContain('막힘')
+
+    /* 잎 작업 14건만 올라온다 — 자식이 있는 7건(설계 · 개발 환경 설정 · 개발 …)은 빠진다 */
+    const ids = w.findAll('[data-task-id]').map((c) => c.attributes('data-task-id'))
+    expect(ids).toHaveLength(14)
+    /* 설계(k1) · 개발 환경 설정(k4) · 개발(k5) · AI Biz(k6) … 는 카드가 없다.
+       제목 아래 경로로만 남는다 */
+    for (const parentId of ['k1', 'k4', 'k5', 'k6', 'k7', 'k12', 'k14']) {
+      expect(ids).not.toContain(parentId)
+    }
+    expect(w.get('[data-column="todo"]').findAll('[data-task-id]')).toHaveLength(7)
+    expect(w.get('[data-column="doing"]').findAll('[data-task-id]')).toHaveLength(3)
+    expect(w.get('[data-column="done"]').findAll('[data-task-id]')).toHaveLength(3)
+  })
+
+  it('카드의 상태를 바꾸면 다른 칸으로 옮겨간다', async () => {
+    const w = await mountView('/tasks?view=board')
+    expect(w.find('[data-column="todo"] [data-task-id="k21"]').exists()).toBe(true)
+
+    cardSelect(w, 'k21')!.vm.$emit('update:modelValue', 'doing')
+    await flushPromises()
+
+    expect(w.find('[data-column="todo"] [data-task-id="k21"]').exists()).toBe(false)
+    expect(w.find('[data-column="doing"] [data-task-id="k21"]').exists()).toBe(true)
+    expect(useTaskStore().rows.find((r) => r.task.id === 'k21')!.task.status).toBe('doing')
+  })
+
+  it('막힌 카드는 막힘 칸에서 빨간 안건 배지를 들고 있다', async () => {
+    const w = await mountView('/tasks?view=board')
+    const card = w.get('[data-column="blocked"] [data-task-id="k18"]')
+    expect(card.text()).toContain('HW-18')
+    expect(card.text()).toContain('보험료 산출 기간계 API 개발')
+    expect(card.text()).toContain('기간 미정')
+
+    const badge = card.get('button[aria-label$="연관 안건"]')
+    expect(badge.text()).toContain('안건 1')
+    expect(badge.get('div').classes()).toContain('bg-destructive')
+  })
+
+  it('안건 배지를 누르면 상세가 아니라 그 안건으로 간다', async () => {
+    const w = await mountView('/tasks?view=board')
+    await w.get('[data-task-id="k18"] button[aria-label$="연관 안건"]').trigger('click')
+    await flushPromises()
+
+    expect(window.location.pathname).toBe('/threads/t5')
+    expect(popupText()).not.toContain('보험료 산출 기간계 API 개발')
+  })
+
+  it('카드를 누르면 작업 상세가 뜨고 주소에 칸반이 남는다', async () => {
+    const w = await mountView('/tasks?view=board')
+    await w.get('[data-task-id="k18"]').trigger('click')
+    await flushPromises()
+
+    expect(popupText()).toContain('보험료 산출 기간계 API 개발')
+    expect(window.location.pathname).toBe('/tasks/k18')
+    expect(window.location.search).toContain('view=board')
+  })
+
+  it("칸 아래 '작업 추가'는 그 칸의 상태로 만든다", async () => {
+    const w = await mountView('/tasks?view=board')
+    const taskStore = useTaskStore()
+    const add = w
+      .get('[data-column="blocked"]')
+      .findAll('button')
+      .find((b) => b.text() === '작업 추가')
+    await add!.trigger('click')
+    await flushPromises()
+
+    expect(window.location.search).toContain('status=blocked')
+    expect(popupText()).toContain('작업 추가')
+
+    await fill('input[placeholder="예: 보험료 산출 기간계 API 개발"]', '정산 배치 재설계')
+    await click(popupButton('만들기'))
+
+    const made = taskStore.rows.find((r) => r.task.title === '정산 배치 재설계')!
+    expect(made.task.status).toBe('blocked')
   })
 })

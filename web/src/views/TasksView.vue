@@ -12,6 +12,7 @@ import {
   SquareKanban,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import TaskBoard from '@/components/app/TaskBoard.vue'
 import TaskCreateDialog from '@/components/app/TaskCreateDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { TASK_STATUS_OPTIONS } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import type { TaskRow, TaskStatus } from '@/types/domain'
@@ -43,7 +45,13 @@ const taskStore = useTaskStore()
 const route = useRoute()
 const router = useRouter()
 
-/* 조회 조건 — 제목 · 담당자. 안건 목록과 같은 자리, 같은 순서다 */
+/* 세 탭은 같은 작업을 보는 방식만 다르다. 주소로 가른다 —
+   /tasks(목록) · /tasks?view=board(칸반). 팝업(/tasks/:id · /tasks/new)에도 이 쿼리를
+   달고 다녀서, 팝업을 닫으면 열었던 탭으로 돌아간다. */
+const view = computed<'list' | 'board'>(() => (route.query.view === 'board' ? 'board' : 'list'))
+const viewQuery = computed(() => (view.value === 'board' ? { view: 'board' } : {}))
+
+/* 조회 조건 — 제목 · 담당자. 안건 목록과 같은 자리, 같은 순서다. 목록 탭의 것이다 */
 const titleDraft = ref('')
 const query = ref('')
 const statusFilter = ref<'all' | TaskStatus | 'undated'>('all')
@@ -118,25 +126,39 @@ const detailId = computed(() => (route.params.id as string | undefined) ?? null)
 const detailOpen = computed({
   get: () => detailId.value !== null,
   set: (open: boolean) => {
-    if (!open) router.push('/tasks')
+    if (!open) router.push({ path: '/tasks', query: viewQuery.value })
   },
 })
 
 /* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열리고, 닫으면 그 상위 작업으로 돌아간다 */
 const createParentId = computed(() => (route.query.parent as string | undefined) ?? null)
+/* 칸반의 칸마다 있는 '작업 추가' — 그 칸의 상태로 폼이 열린다 */
+const createStatus = computed<TaskStatus | null>(() => {
+  const value = route.query.status
+  return TASK_STATUS_OPTIONS.some((o) => o.value === value) ? (value as TaskStatus) : null
+})
 const createOpen = computed({
   get: () => route.path === '/tasks/new',
   set: (open: boolean) => {
-    if (!open) router.push(createParentId.value ? `/tasks/${createParentId.value}` : '/tasks')
+    if (open) return
+    const back = createParentId.value ? `/tasks/${createParentId.value}` : '/tasks'
+    router.push({ path: back, query: viewQuery.value })
   },
 })
 
 function openTask(id: string) {
-  router.push(`/tasks/${id}`)
+  router.push({ path: `/tasks/${id}`, query: viewQuery.value })
 }
 
-function openCreate(parentId: string | null = null) {
-  router.push(parentId ? `/tasks/new?parent=${parentId}` : '/tasks/new')
+function openCreate(parentId: string | null = null, status: TaskStatus | null = null) {
+  router.push({
+    path: '/tasks/new',
+    query: {
+      ...viewQuery.value,
+      ...(parentId ? { parent: parentId } : {}),
+      ...(status ? { status } : {}),
+    },
+  })
 }
 
 /* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다 */
@@ -186,6 +208,16 @@ function bulkOwner(value: string) {
       <div class="flex flex-col gap-3">
         <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
         <div
+          v-if="view === 'board'"
+          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+        >
+          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+            막힘 칸에 있는 작업은 연관 안건이 정해지면 다시 움직입니다. 카드의 안건 배지를 눌러
+            안건으로 갑니다.
+          </p>
+        </div>
+        <div
+          v-if="view === 'list'"
           class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm"
         >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
@@ -201,6 +233,7 @@ function bulkOwner(value: string) {
           </button>
         </div>
         <div
+          v-if="view === 'list'"
           class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
         >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
@@ -218,12 +251,18 @@ function bulkOwner(value: string) {
     </template>
 
     <div class="flex h-[46px] shrink-0 items-center gap-1 border-b border-border px-[26px]">
-      <span
-        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 border-foreground px-3 text-sm font-medium"
+      <RouterLink
+        :to="{ path: '/tasks' }"
+        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        :class="
+          view === 'list'
+            ? 'border-foreground font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
       >
         <List class="size-4" />
         목록
-      </span>
+      </RouterLink>
       <button
         type="button"
         disabled
@@ -233,20 +272,37 @@ function bulkOwner(value: string) {
         <GanttChartSquare class="size-4" />
         간트차트
       </button>
-      <button
-        type="button"
-        disabled
-        class="inline-flex h-[46px] cursor-not-allowed items-center gap-1.5 border-b-2 border-transparent px-3 text-sm text-muted-foreground/60"
-        title="다음 단계에서 붙습니다"
+      <RouterLink
+        :to="{ path: '/tasks', query: { view: 'board' } }"
+        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        :class="
+          view === 'board'
+            ? 'border-foreground font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
       >
         <SquareKanban class="size-4" />
         칸반보드
-      </button>
+      </RouterLink>
       <div class="grow" />
-      <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
+      <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
+      <Button v-else size="sm" @click="openCreate()">
+        <Plus class="size-4" />
+        작업 추가
+      </Button>
     </div>
 
-    <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
+    <TaskBoard
+      v-if="view === 'board'"
+      @open-task="openTask"
+      @add-task="(status) => openCreate(null, status)"
+      @open-thread="(id) => router.push(`/threads/${id}`)"
+    />
+
+    <div
+      v-if="view === 'list'"
+      class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]"
+    >
       <div class="flex w-full max-w-[1040px] flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
@@ -507,6 +563,7 @@ function bulkOwner(value: string) {
     <TaskCreateDialog
       v-model:open="createOpen"
       :parent-id="createParentId"
+      :initial-status="createStatus"
       @created="(id) => openTask(id)"
     />
   </AppShell>

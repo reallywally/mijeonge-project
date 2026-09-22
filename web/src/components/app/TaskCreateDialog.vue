@@ -20,8 +20,9 @@ import { useThreadStore } from '@/stores/thread'
 import type { TaskPriority, TaskStatus } from '@/types/domain'
 
 /* 작업 추가 — 목록 위 팝업. 세 탭(목록 · 간트 · 칸반) 어디서든 같은 폼이 뜬다.
-   고른 값은 이름이 아니라 id 로 들고 다닌다 (parentId · ownerId · threadIds). */
-const props = defineProps<{ parentId: string | null }>()
+   고른 값은 이름이 아니라 id 로 들고 다닌다 (parentId · ownerId · threadIds).
+   initialStatus 는 칸반의 칸마다 있는 '작업 추가' 가 그 칸의 상태로 열려고 넘긴다. */
+const props = defineProps<{ parentId: string | null; initialStatus?: TaskStatus | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ (e: 'created', id: string): void }>()
 
@@ -50,7 +51,7 @@ function resetForm() {
   start.value = ''
   due.value = ''
   undated.value = false
-  status.value = 'todo'
+  status.value = props.initialStatus ?? 'todo'
   priority.value = 'normal'
   owner.value = NONE
   picked.value = []
@@ -58,7 +59,7 @@ function resetForm() {
 
 /* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열린다 */
 watch(
-  () => [open.value, props.parentId] as const,
+  () => [open.value, props.parentId, props.initialStatus] as const,
   ([isOpen]) => {
     if (isOpen) resetForm()
   },
