@@ -279,6 +279,8 @@ export interface TaskDetail {
 /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
 export interface TaskThreadRow {
   thread: Thread
+  /** 몇 번 미뤄졌는지 — 안건 목록과 같은 배지를 쓴다 */
+  deferCount: number
   /** 결정됐으면 그 한 줄, 아니면 왜 아직인지 */
   line: string
   /** 어디서 정해졌는지 — '개발 환경 확정 회의 · 9월 10일' 또는 '회의 밖 · …' */

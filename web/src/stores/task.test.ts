@@ -26,6 +26,17 @@ describe('작업 목록', () => {
     expect(row('HW-2').pathLabel).toBe('설계')
   })
 
+  it('상위 작업을 고르는 자리는 자기까지 포함한 경로를 적는다', () => {
+    const task = useTaskStore()
+    const label = (key: string) =>
+      task.parentOptions.find((o) => o.id === task.rows.find((r) => r.task.key === key)!.task.id)!
+        .label
+
+    expect(label('HW-8')).toBe('개발 › AI Biz › 가상비서 › tool01')
+    expect(label('HW-1')).toBe('설계')
+    expect(task.parentOptions).toHaveLength(21)
+  })
+
   it('기간이 둘 다 없는 작업만 기간 미정이다', () => {
     const task = useTaskStore()
     const undated = task.rows.filter((r) => r.undated)
@@ -58,6 +69,12 @@ describe('작업 상세', () => {
     /* 회의 없이 담당자 확인으로 정한 줄이라 회의 이름이 없다 */
     expect(detail.threads[0].where).toContain('담당자 확인')
     expect(detail.threads[1].line).toBe('mysql 을 쓴다')
+  })
+
+  it('걸린 안건이 몇 번 미뤄졌는지도 함께 온다 — 안건 목록과 같은 배지를 쓴다', () => {
+    const task = useTaskStore()
+    const detail = task.taskDetail('k18')!
+    expect(detail.threads.map((t) => t.deferCount)).toEqual([2])
   })
 
   it('하위 작업과 끝난 수를 센다', () => {

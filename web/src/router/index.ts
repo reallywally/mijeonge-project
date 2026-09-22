@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 /* 목록 위에 뜨는 상세 팝업도 주소를 갖는다 — 새로고침과 뒤로가기가 살아 있어야 한다.
-   /meetings/new 는 /meetings/:id 보다 먼저 둔다. */
+   /tasks/new · /meetings/new 는 각각 /:id 보다 먼저 둔다. */
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -9,6 +9,16 @@ const router = createRouter({
     {
       path: '/tasks',
       name: 'tasks',
+      component: () => import('@/views/TasksView.vue'),
+    },
+    {
+      path: '/tasks/new',
+      name: 'task-new',
+      component: () => import('@/views/TasksView.vue'),
+    },
+    {
+      path: '/tasks/:id',
+      name: 'task',
       component: () => import('@/views/TasksView.vue'),
     },
     {

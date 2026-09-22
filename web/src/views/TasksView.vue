@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +12,8 @@ import {
   SquareKanban,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import TaskCreateDialog from '@/components/app/TaskCreateDialog.vue'
+import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -37,6 +40,8 @@ import type { TaskRow, TaskStatus } from '@/types/domain'
    어디에 속했는지는 제목 아래 경로로 적는다. 계층째로 보는 건 간트차트가 맡는다. */
 const data = useDataStore()
 const taskStore = useTaskStore()
+const route = useRoute()
+const router = useRouter()
 
 /* 조회 조건 — 제목 · 담당자. 안건 목록과 같은 자리, 같은 순서다 */
 const titleDraft = ref('')
@@ -105,6 +110,33 @@ function resetAll() {
 function pickStatus(key: (typeof statusChips.value)[number]['key']) {
   statusFilter.value = key
   resetPage()
+}
+
+/* 작업 상세 · 작업 추가 — 목록을 그대로 두고 그 위에 띄우되, 주소를 갖는다.
+   /tasks/:id 로 들어오면 그 작업이 열린 채로 시작한다 (새로고침 · 뒤로가기가 산다) */
+const detailId = computed(() => (route.params.id as string | undefined) ?? null)
+const detailOpen = computed({
+  get: () => detailId.value !== null,
+  set: (open: boolean) => {
+    if (!open) router.push('/tasks')
+  },
+})
+
+/* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열리고, 닫으면 그 상위 작업으로 돌아간다 */
+const createParentId = computed(() => (route.query.parent as string | undefined) ?? null)
+const createOpen = computed({
+  get: () => route.path === '/tasks/new',
+  set: (open: boolean) => {
+    if (!open) router.push(createParentId.value ? `/tasks/${createParentId.value}` : '/tasks')
+  },
+})
+
+function openTask(id: string) {
+  router.push(`/tasks/${id}`)
+}
+
+function openCreate(parentId: string | null = null) {
+  router.push(parentId ? `/tasks/new?parent=${parentId}` : '/tasks/new')
 }
 
 /* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다 */
@@ -225,7 +257,7 @@ function bulkOwner(value: string) {
               경로로 보이고, 계층째로 보려면 간트차트로 갑니다.
             </p>
           </div>
-          <Button class="shrink-0" disabled title="다음 단계에서 붙습니다">
+          <Button class="shrink-0" @click="openCreate()">
             <Plus class="size-4" />
             작업 추가
           </Button>
@@ -320,8 +352,13 @@ function bulkOwner(value: string) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="row in pageRows" :key="row.task.id" class="h-14">
-                <TableCell>
+              <TableRow
+                v-for="row in pageRows"
+                :key="row.task.id"
+                class="group h-14 cursor-pointer"
+                @click="openTask(row.task.id)"
+              >
+                <TableCell @click.stop>
                   <Checkbox
                     :model-value="checked.has(row.task.id)"
                     :aria-label="`${row.task.title} 선택`"
@@ -342,7 +379,7 @@ function bulkOwner(value: string) {
                     />
                     <span class="flex min-w-0 flex-col gap-0.5">
                       <span
-                        class="truncate text-sm"
+                        class="truncate text-sm underline-offset-4 group-hover:underline"
                         :class="row.task.status === 'done' ? 'text-muted-foreground' : ''"
                         >{{ row.task.title }}</span
                       >
@@ -352,7 +389,7 @@ function bulkOwner(value: string) {
                     </span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell @click.stop>
                   <Select
                     :model-value="row.task.status"
                     @update:model-value="(v) => taskStore.setStatus(row.task.id, v as TaskStatus)"
@@ -457,5 +494,20 @@ function bulkOwner(value: string) {
         </div>
       </div>
     </div>
+
+    <TaskDetailDialog
+      v-model:open="detailOpen"
+      :task-id="detailId"
+      @open-task="openTask"
+      @add-subtask="openCreate"
+      @open-thread="(id) => router.push(`/threads/${id}`)"
+      @open-meeting="(id) => router.push(`/meetings/${id}`)"
+    />
+
+    <TaskCreateDialog
+      v-model:open="createOpen"
+      :parent-id="createParentId"
+      @created="(id) => openTask(id)"
+    />
   </AppShell>
 </template>

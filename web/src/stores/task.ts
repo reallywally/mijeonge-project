@@ -41,18 +41,32 @@ export const useTaskStore = defineStore('task', () => {
     return counts
   })
 
-  /** 개발 › AI Biz › 가상비서 · 하위 2건 — 최상위면 '최상위 작업' */
-  function pathLabel(task: Task) {
+  /** 위로 올라가며 모은 조상들의 제목 */
+  function ancestorTitles(task: Task) {
     const names: string[] = []
     let parent = task.parentId ? byId.value[task.parentId] : undefined
     while (parent) {
       names.unshift(parent.title)
       parent = parent.parentId ? byId.value[parent.parentId] : undefined
     }
+    return names
+  }
+
+  /** 개발 › AI Biz › 가상비서 · 하위 2건 — 최상위면 '최상위 작업' */
+  function pathLabel(task: Task) {
+    const names = ancestorTitles(task)
     const base = names.length === 0 ? '최상위 작업' : names.join(' › ')
     const kids = childCountOf.value[task.id] ?? 0
     return kids > 0 ? `${base} · 하위 ${kids}건` : base
   }
+
+  /** 자기까지 포함한 경로 — 상위 작업을 고르는 자리가 쓴다 */
+  const fullPath = (task: Task) => [...ancestorTitles(task), task.title].join(' › ')
+
+  /** 상위 작업 고르기 목록. 고르는 값은 이름이 아니라 id 다 */
+  const parentOptions = computed<{ id: string; label: string }[]>(() =>
+    tasks.value.map((t) => ({ id: t.id, label: fullPath(t) })),
+  )
 
   const periodLabel = (task: Task) =>
     task.start && task.due ? `${slashDay(task.start)} ~ ${slashDay(task.due)}` : ''
@@ -99,12 +113,14 @@ export const useTaskStore = defineStore('task', () => {
   /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
   function threadRow(thread: Thread): TaskThreadRow {
     const detail = threadStore.threadDetail(thread.id)
+    const deferCount = detail?.deferCount ?? 0
     if (detail?.settled) {
-      return { thread, line: detail.current, where: detail.settledLabel }
+      return { thread, deferCount, line: detail.current, where: detail.settledLabel }
     }
     const last = detail?.events[0]
     return {
       thread,
+      deferCount,
       line: last ? last.entry.text : '아직 회의에서 다루지 않았습니다.',
       where: last?.meeting
         ? `${last.meeting.title} · ${last.at}`
@@ -204,6 +220,8 @@ export const useTaskStore = defineStore('task', () => {
     blockedCount,
     statusCounts,
     pathLabel,
+    fullPath,
+    parentOptions,
     periodLabel,
     taskDetail,
     threadsOfTask,
