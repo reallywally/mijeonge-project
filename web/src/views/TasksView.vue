@@ -15,6 +15,7 @@ import AppShell from '@/components/app/AppShell.vue'
 import TaskBoard from '@/components/app/TaskBoard.vue'
 import TaskCreateDialog from '@/components/app/TaskCreateDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
+import TaskGantt from '@/components/app/TaskGantt.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -46,10 +47,14 @@ const route = useRoute()
 const router = useRouter()
 
 /* 세 탭은 같은 작업을 보는 방식만 다르다. 주소로 가른다 —
-   /tasks(목록) · /tasks?view=board(칸반). 팝업(/tasks/:id · /tasks/new)에도 이 쿼리를
-   달고 다녀서, 팝업을 닫으면 열었던 탭으로 돌아간다. */
-const view = computed<'list' | 'board'>(() => (route.query.view === 'board' ? 'board' : 'list'))
-const viewQuery = computed(() => (view.value === 'board' ? { view: 'board' } : {}))
+   /tasks(목록) · /tasks?view=gantt(간트) · /tasks?view=board(칸반). 팝업(/tasks/:id ·
+   /tasks/new)에도 이 쿼리를 달고 다녀서, 팝업을 닫으면 열었던 탭으로 돌아간다. */
+type TaskView = 'list' | 'gantt' | 'board'
+const view = computed<TaskView>(() => {
+  const q = route.query.view
+  return q === 'board' || q === 'gantt' ? q : 'list'
+})
+const viewQuery = computed(() => (view.value === 'list' ? {} : { view: view.value }))
 
 /* 조회 조건 — 제목 · 담당자. 안건 목록과 같은 자리, 같은 순서다. 목록 탭의 것이다 */
 const titleDraft = ref('')
@@ -63,6 +68,9 @@ const counts = computed(() => ({
   ...taskStore.statusCounts,
   undated: taskStore.undatedCount,
 }))
+
+/* 간트 탭 오른쪽에 적는 숫자 — 시안의 '4 / 21 완료' */
+const doneLabel = computed(() => `${counts.value.done} / ${counts.value.all} 완료`)
 
 const statusChips = computed(() => [
   { key: 'all' as const, label: '전체', n: counts.value.all },
@@ -161,6 +169,17 @@ function openCreate(parentId: string | null = null, status: TaskStatus | null = 
   })
 }
 
+/* 간트 막대 읽는 법 — 왼쪽에 둔다. 색은 TaskGantt 의 막대와 같은 토큰을 쓴다 */
+const barLegend = [
+  { label: '묶음 작업 · 자식들의 기간', bar: 'h-2 rounded-full bg-border' },
+  { label: '진행 중', bar: 'h-4 rounded-sm border border-primary bg-secondary' },
+  { label: '완료', bar: 'h-4 rounded-sm bg-primary' },
+  {
+    label: '기간 미정 · 막대가 없습니다',
+    bar: 'h-4 rounded-sm border border-dashed border-destructive',
+  },
+]
+
 /* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다 */
 const checked = ref<Set<string>>(new Set())
 const checkedCount = computed(() => checked.value.size)
@@ -206,7 +225,9 @@ function bulkOwner(value: string) {
     <template #aside>
       <div class="h-px bg-border" />
       <div class="flex flex-col gap-3">
-        <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
+        <div class="text-xs font-medium text-muted-foreground">
+          {{ view === 'gantt' ? '막대 읽는 법' : '눈여겨볼 것' }}
+        </div>
         <div
           v-if="view === 'board'"
           class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
@@ -215,6 +236,15 @@ function bulkOwner(value: string) {
             막힘 칸에 있는 작업은 연관 안건이 정해지면 다시 움직입니다. 카드의 안건 배지를 눌러
             안건으로 갑니다.
           </p>
+        </div>
+        <div
+          v-if="view === 'gantt'"
+          class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-[13px] py-3 shadow-sm"
+        >
+          <div v-for="b in barLegend" :key="b.label" class="flex items-center gap-2.5">
+            <span class="w-[34px] shrink-0" :class="b.bar" />
+            <span class="text-xs text-muted-foreground">{{ b.label }}</span>
+          </div>
         </div>
         <div
           v-if="view === 'list'"
@@ -263,15 +293,18 @@ function bulkOwner(value: string) {
         <List class="size-4" />
         목록
       </RouterLink>
-      <button
-        type="button"
-        disabled
-        class="inline-flex h-[46px] cursor-not-allowed items-center gap-1.5 border-b-2 border-transparent px-3 text-sm text-muted-foreground/60"
-        title="다음 단계에서 붙습니다"
+      <RouterLink
+        :to="{ path: '/tasks', query: { view: 'gantt' } }"
+        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        :class="
+          view === 'gantt'
+            ? 'border-foreground font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+        "
       >
         <GanttChartSquare class="size-4" />
         간트차트
-      </button>
+      </RouterLink>
       <RouterLink
         :to="{ path: '/tasks', query: { view: 'board' } }"
         class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
@@ -286,11 +319,20 @@ function bulkOwner(value: string) {
       </RouterLink>
       <div class="grow" />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
-      <Button v-else size="sm" @click="openCreate()">
-        <Plus class="size-4" />
-        작업 추가
-      </Button>
+      <template v-else>
+        <span v-if="view === 'gantt'" class="text-xs text-muted-foreground">{{ doneLabel }}</span>
+        <Button size="sm" @click="openCreate()">
+          <Plus class="size-4" />
+          작업 추가
+        </Button>
+      </template>
     </div>
+
+    <TaskGantt
+      v-if="view === 'gantt'"
+      @open-task="openTask"
+      @add-task="(parentId) => openCreate(parentId)"
+    />
 
     <TaskBoard
       v-if="view === 'board'"

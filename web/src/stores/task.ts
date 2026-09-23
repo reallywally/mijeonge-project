@@ -155,6 +155,16 @@ export const useTaskStore = defineStore('task', () => {
     if (task) task.ownerId = ownerId
   }
 
+  /** 간트에서 막대를 끌거나 늘렸을 때 되돌아오는 자리. 둘 다 null 이면 기간 미정이다. */
+  function setPeriod(taskId: string, start: string | null, due: string | null) {
+    const task = data.allTasks.find((t) => t.id === taskId)
+    if (!task) return
+    /* 한쪽만 아는 기간은 기간 미정과 구분이 안 된다 — 둘 다 있을 때만 기간으로 친다 */
+    const both = start !== null && due !== null
+    task.start = both ? start : null
+    task.due = both ? due : null
+  }
+
   function toggleBodyLine(taskId: string, lineId: string) {
     const line = data.allTasks.find((t) => t.id === taskId)?.body.find((l) => l.id === lineId)
     if (line && line.kind === 'check') line.done = !line.done
@@ -229,6 +239,7 @@ export const useTaskStore = defineStore('task', () => {
     tasksOfThread,
     setStatus,
     setOwner,
+    setPeriod,
     toggleBodyLine,
     addTask,
     linkThread,

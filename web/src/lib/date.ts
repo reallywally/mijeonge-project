@@ -20,3 +20,22 @@ export function dayTime(iso: string) {
 export function today() {
   return new Date().toISOString().slice(0, 10)
 }
+
+/** Date → 2026-09-08. toISOString 은 UTC 라 한국 시간대에서 하루가 밀린다. */
+export function isoDay(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** 2026-09-08 → Date. 간트가 Date 를 받는다. */
+export function dayToDate(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+/** 날짜를 하루 단위로 민다 */
+export function shiftDays(d: Date, days: number) {
+  const next = new Date(d)
+  next.setDate(next.getDate() + days)
+  return next
+}

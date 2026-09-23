@@ -138,3 +138,34 @@ describe('상태 바꾸기', () => {
     expect(task.taskDetail('k4')!.task.body.find((l) => l.id === 'l5')!.done).toBe(false)
   })
 })
+
+describe('기간 바꾸기', () => {
+  it('간트에서 막대를 끌면 기간이 바뀐다', () => {
+    const task = useTaskStore()
+    task.setPeriod('k4', '2026-09-10', '2026-09-18')
+
+    const row = task.rows.find((r) => r.task.key === 'HW-4')!
+    expect(row.task.start).toBe('2026-09-10')
+    expect(row.task.due).toBe('2026-09-18')
+    expect(row.periodLabel).toBe('9/10 ~ 9/18')
+    expect(row.undated).toBe(false)
+  })
+
+  it('기간을 지우면 다시 기간 미정이 된다 — 한쪽만 아는 기간은 기간으로 치지 않는다', () => {
+    const task = useTaskStore()
+    task.setPeriod('k4', null, null)
+    expect(task.rows.find((r) => r.task.key === 'HW-4')!.undated).toBe(true)
+
+    task.setPeriod('k4', '2026-09-10', null)
+    const row = task.rows.find((r) => r.task.key === 'HW-4')!
+    expect(row.task.start).toBeNull()
+    expect(row.undated).toBe(true)
+  })
+
+  it('기간 미정이던 작업에 기간을 잡아 주면 그 수가 준다', () => {
+    const task = useTaskStore()
+    expect(task.undatedCount).toBe(1)
+    task.setPeriod('k18', '2026-09-28', '2026-10-02')
+    expect(task.undatedCount).toBe(0)
+  })
+})

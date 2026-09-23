@@ -10,6 +10,16 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
   },
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      /* dhtmlx-gantt 는 package.json 이 type: module 인데 main 이 UMD 라, node 쪽에서 읽으면
+         export 가 비어 온다. 브라우저는 module 필드(ES 빌드)를 보므로 여기서만 맞춰 준다 */
+      {
+        find: /^dhtmlx-gantt$/,
+        replacement: fileURLToPath(
+          new URL('./node_modules/dhtmlx-gantt/codebase/dhtmlxgantt.es.js', import.meta.url),
+        ),
+      },
+    ],
   },
 })

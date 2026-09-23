@@ -1,11 +1,47 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 import { Select } from '@/components/ui/select'
 import { useTaskStore } from '@/stores/task'
 import TasksView from './TasksView.vue'
+
+/* dhtmlx-gantt 는 jsdom 에서 컨테이너 높이가 0 이라 줄을 한 줄도 그리지 않는다.
+   라이브러리 대신 스텁을 세우고, 우리가 무엇을 건네고 어떤 손놀림을 받아 쓰는지만 본다.
+   스토어를 간트 모양으로 옮기는 일은 lib/gantt.test.ts 가 따로 본다. */
+const chart = vi.hoisted(() => ({
+  config: {} as Record<string, unknown>,
+  templates: {} as Record<string, unknown>,
+  events: {} as Record<string, (...args: unknown[]) => unknown>,
+  parsed: [] as { id: string; key: string; parent: string; unscheduled?: boolean }[],
+  dragged: {} as Record<string, { start_date: Date; end_date: Date }>,
+  destroyed: 0,
+  attachEvent(name: string, fn: (...args: unknown[]) => unknown) {
+    chart.events[name] = fn
+    return name
+  },
+  init() {},
+  parse(payload: { data: typeof chart.parsed }) {
+    chart.parsed = payload.data
+  },
+  clearAll() {
+    chart.parsed = []
+  },
+  destructor() {
+    chart.destroyed += 1
+  },
+  render() {},
+  showDate() {},
+  getTask(id: string) {
+    return chart.dragged[id]
+  },
+}))
+
+vi.mock('dhtmlx-gantt', () => ({
+  Gantt: { getGanttInstance: () => chart },
+  escapeHTML: (value: string) => value,
+}))
 
 /* 화면이 실제로 떠야 잡히는 것들 — 템플릿 오류, shadcn 컴포넌트 쓰는 법, 거르기가
    화면까지 닿는지. 타입 검사만으로는 안 걸린다.
@@ -53,6 +89,10 @@ enableAutoUnmount(afterEach)
 beforeEach(() => {
   setActivePinia(createPinia())
   document.body.innerHTML = ''
+  chart.events = {}
+  chart.parsed = []
+  chart.dragged = {}
+  chart.destroyed = 0
 })
 
 describe('작업 목록 화면', () => {
@@ -283,5 +323,89 @@ describe('칸반보드 탭', () => {
 
     const made = taskStore.rows.find((r) => r.task.title === '정산 배치 재설계')!
     expect(made.task.status).toBe('blocked')
+  })
+})
+
+describe('간트차트 탭', () => {
+  const parsed = (key: string) => chart.parsed.find((t) => t.key === key)!
+
+  it('탭 셋이 서고 간트가 골라진다', async () => {
+    const w = await mountView('/tasks?view=gantt')
+    const tabs = w.findAll('a.border-b-2').map((a) => a.text())
+    expect(tabs).toEqual(['목록', '간트차트', '칸반보드'])
+
+    const gantt = w.findAll('a.border-b-2').find((a) => a.text() === '간트차트')!
+    expect(gantt.classes()).toContain('border-foreground')
+    /* 조회 조건 · 페이징은 목록 탭의 것이라 간트에는 없다 */
+    expect(w.text()).not.toContain('조회 조건에 맞는 작업이 없습니다')
+    expect(w.text()).toContain('/ 21 완료')
+    expect(w.text()).toContain('막대 읽는 법')
+  })
+
+  it('목록과 달리 계층을 그대로 넘긴다. 기간 미정은 막대가 없다', async () => {
+    await mountView('/tasks?view=gantt')
+    expect(chart.parsed).toHaveLength(21)
+    expect(parsed('HW-8').parent).toBe('k7')
+    expect(parsed('HW-1').parent).toBe('0')
+    expect(parsed('HW-18').unscheduled).toBe(true)
+    expect(parsed('HW-4').unscheduled).toBeUndefined()
+  })
+
+  it('기본 편집창은 뜨지 않는다', async () => {
+    await mountView('/tasks?view=gantt')
+    expect(chart.events.onBeforeLightbox()).toBe(false)
+  })
+
+  it('줄을 누르면 작업 상세가 뜨고 주소에 간트가 남는다', async () => {
+    await mountView('/tasks?view=gantt')
+    chart.events.onTaskClick('k18', { target: document.createElement('div') })
+    await flushPromises()
+
+    expect(popupText()).toContain('보험료 산출 기간계 API 개발')
+    expect(window.location.pathname).toBe('/tasks/k18')
+    expect(window.location.search).toContain('view=gantt')
+  })
+
+  it('접기 화살표는 팝업을 열지 않는다', async () => {
+    await mountView('/tasks?view=gantt')
+    const caret = document.createElement('div')
+    caret.className = 'gantt_tree_icon'
+    document.body.appendChild(caret)
+
+    expect(chart.events.onTaskClick('k5', { target: caret })).toBe(true)
+    await flushPromises()
+    expect(window.location.pathname).toBe('/tasks')
+  })
+
+  it("'+' 는 상위 작업이 채워진 채로 추가 팝업을 연다", async () => {
+    await mountView('/tasks?view=gantt')
+    /* 라이브러리가 제 손으로 줄을 만들지 않게 막는다 */
+    expect(chart.events.onTaskCreated({ parent: 'k4' })).toBe(false)
+    await flushPromises()
+
+    expect(window.location.pathname).toBe('/tasks/new')
+    expect(window.location.search).toContain('parent=k4')
+    expect(window.location.search).toContain('view=gantt')
+    expect(popupText()).toContain('개발 환경 설정 아래로 들어갑니다')
+  })
+
+  it('막대를 끌면 스토어의 기간이 바뀐다', async () => {
+    await mountView('/tasks?view=gantt')
+    const taskStore = useTaskStore()
+    /* 간트의 끝은 열린 구간이라 9/19 로 놓으면 9/18 까지다 */
+    chart.dragged.k4 = { start_date: new Date(2026, 8, 10), end_date: new Date(2026, 8, 19) }
+    chart.events.onAfterTaskDrag('k4')
+    await flushPromises()
+
+    const row = taskStore.rows.find((r) => r.task.key === 'HW-4')!
+    expect(row.task.start).toBe('2026-09-10')
+    expect(row.task.due).toBe('2026-09-18')
+  })
+
+  it('탭을 떠나면 간트를 치운다', async () => {
+    const w = await mountView('/tasks?view=gantt')
+    expect(chart.destroyed).toBe(0)
+    w.unmount()
+    expect(chart.destroyed).toBe(1)
   })
 })
