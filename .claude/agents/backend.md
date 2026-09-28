@@ -35,7 +35,10 @@ Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0(async) + asyncpg + Alembic 
 - **JSON 키는 프론트 타입 그대로 camelCase.** 파이썬 안에서는 snake_case 를 쓰고,
   경계에서 Pydantic 의 `alias_generator=to_camel` + `populate_by_name=True` 로 바꾼다
 - **id 는 문자열.** DB 는 UUID 라도 내보낼 때 `str` 이다 (프론트가 `id: string` 으로 들고 있다)
-- 날짜는 `date` 필드면 `YYYY-MM-DD` 문자열, `createdAt` 은 ISO 8601 UTC
+- **날짜는 전부 `YYYY-MM-DD` 문자열로 내보낸다. `createdAt` 도 그렇다** — 저장은 `timestamptz`
+  지만 경계에서 KST 기준 날짜로 자른다(`app/schemas/base.py` 의 `DayStamp`).
+  프론트 `lib/date.ts` 의 `monthDay` 가 `split('-')` 로 읽어서, 시각을 실어 보내면
+  화면에 `9월 NaN일` 이 찍힌다. 시각이 필요해지면 그 필드를 따로 추가하지 이 규칙을 깨지 않는다
 - 경로는 프로젝트 안에서만 돈다 — `/api/projects/{projectId}/tasks` 처럼 스코프를 경로에 둔다.
   프로젝트 목록만 예외(`/api/projects`)
 - `ThreadRow` · `ThreadDetail` · `TaskRow` 같은 **계산된 타입은 지금 프론트 스토어가 만든다.**
@@ -59,7 +62,7 @@ Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0(async) + asyncpg + Alembic 
 | --- | --- |
 | 앱 · 설정 | `server/app/main.py` · `app/config.py` |
 | 라우트 | `server/app/api/<domain>.py` — project · task · thread · meeting |
-| 요청 · 응답 스키마 | `server/app/schemas/<domain>.py` |
+| 요청 · 응답 스키마 | `server/app/schemas/<domain>.py` — 전부 `schemas/base.py` 의 `Schema` 를 상속한다 |
 | ORM 모델 | `server/app/models/<domain>.py` |
 | 도메인 규칙 · 집계 | `server/app/services/<domain>.py` — 라우트에 로직을 쌓지 않는다 |
 | DB 세션 | `server/app/db.py` |
