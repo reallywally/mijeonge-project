@@ -7,10 +7,10 @@
 
 from datetime import datetime
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.errors import not_found
 from app.models import Entry, EntryDetail, Thread, new_id
 from app.schemas.thread import EntryAdded, EntryCreate, EntryOut, ThreadCreate, ThreadOut
 from app.services import project as project_service
@@ -39,7 +39,7 @@ async def load_thread(session: AsyncSession, thread_id: str) -> Thread:
     found = await session.execute(select(Thread).where(Thread.id == thread_id))
     thread = found.scalar_one_or_none()
     if thread is None:
-        raise HTTPException(status_code=404, detail="그런 안건이 없다")
+        raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
     return thread
 
 

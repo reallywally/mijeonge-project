@@ -18,9 +18,11 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Entry, Meeting, MeetingTaskLink, Task, TaskThreadLink, Thread
+from app.schemas.project import ProjectOut
 from app.schemas.snapshot import SnapshotOut
 from app.schemas.task import MeetingTaskLinkOut, TaskThreadLinkOut
 from app.schemas.thread import ThreadOut
+from app.services import project as project_service
 from app.services.meeting import to_meeting
 from app.services.task import to_task
 from app.services.thread import to_entry
@@ -31,6 +33,8 @@ async def _all[T](session: AsyncSession, query: Select[tuple[T]]) -> Sequence[T]
 
 
 async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
+    # 없는 프로젝트면 여기서 404 다 — 빈 배열 여섯은 '레코드가 없는 프로젝트' 와 구분이 안 된다
+    project = await project_service.load_project(session, project_id)
     threads = await _all(
         session,
         select(Thread).where(Thread.project_id == project_id).order_by(Thread.seq),
@@ -49,22 +53,22 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
     tasks = await _all(
         session, select(Task).where(Task.project_id == project_id).order_by(Task.seq)
     )
+    # 링크는 양쪽이 같은 프로젝트라 project_id 하나로 갈린다 (API.md Q13)
     task_threads = await _all(
         session,
         select(TaskThreadLink)
-        .join(Task, Task.id == TaskThreadLink.task_id)
-        .where(Task.project_id == project_id)
+        .where(TaskThreadLink.project_id == project_id)
         .order_by(TaskThreadLink.task_id, TaskThreadLink.thread_id),
     )
     meeting_tasks = await _all(
         session,
         select(MeetingTaskLink)
-        .join(Meeting, Meeting.id == MeetingTaskLink.meeting_id)
-        .where(Meeting.project_id == project_id)
+        .where(MeetingTaskLink.project_id == project_id)
         .order_by(MeetingTaskLink.meeting_id, MeetingTaskLink.task_id),
     )
 
     return SnapshotOut(
+        project=ProjectOut.model_validate(project),
         threads=[ThreadOut.model_validate(row) for row in threads],
         entries=[to_entry(row) for row in entries],
         meetings=[to_meeting(row) for row in meetings],

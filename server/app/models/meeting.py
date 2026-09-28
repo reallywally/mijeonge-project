@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,7 +21,11 @@ class Meeting(Base):
     """회의가 짊어지는 것은 날짜 · 참석자뿐이다. 회의록 본문은 없다 — Entry 가 그 기록이다."""
 
     __tablename__ = "meeting"
-    __table_args__ = (Index("ix_meeting_project_id_date", "project_id", "date"),)
+    __table_args__ = (
+        Index("ix_meeting_project_id_date", "project_id", "date"),
+        # meeting_task_link 의 복합 FK 가 본다 (API.md Q13)
+        UniqueConstraint("id", "project_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"))

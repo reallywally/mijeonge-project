@@ -43,9 +43,9 @@ def d(day: str | None) -> date | None:
 def projects() -> list[Project]:
     # last_task_no 는 픽스처가 이미 써 버린 마지막 번호다 — 다음 작업이 HW-22 · PAS-3 로 나온다
     return [
-        Project(id="p1", name="한화손보 차세대", key_prefix="HW", last_task_no=21),
-        Project(id="p2", name="삼성생명 PAS", key_prefix="PAS", last_task_no=2),
-        Project(id="p3", name="경영지원 파트", key_prefix="MG", last_task_no=0),
+        Project(id="p1", name="한화손보 차세대", task_key_prefix="HW", last_task_no=21),
+        Project(id="p2", name="삼성생명 PAS", task_key_prefix="PAS", last_task_no=2),
+        Project(id="p3", name="경영지원 파트", task_key_prefix="MG", last_task_no=0),
     ]
 
 
@@ -418,6 +418,7 @@ def tasks() -> list[Task]:
 
 
 # 작업 ↔ 안건. 작업을 하다가 정해야 했던 것들이다
+# 픽스처의 링크는 전부 한화손보 차세대(p1) 안에서 선다
 TASK_THREAD_LINKS = [
     ("k4", "t1"),  # 개발 환경 설정 ↔ 서버 OS 결정
     ("k4", "t2"),  # 개발 환경 설정 ↔ DB 결정
@@ -504,8 +505,8 @@ async def seed(session: AsyncSession) -> None:
     await session.flush()
     await advance_identity(session)
     session.add_all(
-        [TaskThreadLink(task_id=t, thread_id=h) for t, h in TASK_THREAD_LINKS]
-        + [MeetingTaskLink(meeting_id=m, task_id=t) for m, t in MEETING_TASK_LINKS]
+        [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
+        + [MeetingTaskLink(meeting_id=m, task_id=t, project_id="p1") for m, t in MEETING_TASK_LINKS]
     )
     await session.commit()
 

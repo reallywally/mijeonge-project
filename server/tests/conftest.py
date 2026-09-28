@@ -26,8 +26,14 @@ SEQ_MODELS = (Thread, Entry, Meeting, Task)
 
 @event.listens_for(Engine, "connect")
 def _sqlite_fk_on(dbapi_connection: object, _record: object) -> None:
-    """sqlite 는 FK 를 기본으로 안 본다. 켜 둬야 시드의 참조 오류가 잡힌다."""
-    if dbapi_connection.__class__.__module__.startswith("sqlite3"):
+    """sqlite 는 FK 를 기본으로 안 본다. 켜 둬야 참조 오류와 프로젝트 경계가 잡힌다.
+
+    aiosqlite 로 붙으면 이 자리에 오는 것은 sqlite3 의 connection 이 아니라 SQLAlchemy 의
+    어댑터라(`sqlalchemy.dialects.sqlite.aiosqlite`), 모듈 이름을 sqlite3 로만 보면 pragma 가
+    한 번도 안 걸린다 — 부모 · 링크의 복합 FK(API.md Q13 · Q16)가 테스트에서 통째로 놀게 된다.
+    """
+    module = dbapi_connection.__class__.__module__
+    if module.startswith("sqlite3") or "sqlite" in module:
         cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
         cursor.execute("pragma foreign_keys=on")
         cursor.close()

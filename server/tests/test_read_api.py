@@ -40,9 +40,9 @@ async def test_projects(client: httpx.AsyncClient) -> None:
     res = await client.get("/api/projects")
     assert res.status_code == 200
     assert res.json() == [
-        {"id": "p1", "name": "한화손보 차세대"},
-        {"id": "p2", "name": "삼성생명 PAS"},
-        {"id": "p3", "name": "경영지원 파트"},
+        {"id": "p1", "name": "한화손보 차세대", "taskKeyPrefix": "HW"},
+        {"id": "p2", "name": "삼성생명 PAS", "taskKeyPrefix": "PAS"},
+        {"id": "p3", "name": "경영지원 파트", "taskKeyPrefix": "MG"},
     ]
 
 
@@ -55,6 +55,8 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
     assert set(snap) == {
+        # 고른 프로젝트 자신 — 딥링크로 바로 들어와도 헤더가 선다 (API.md Q7)
+        "project",
         "threads",
         "entries",
         "meetings",
@@ -62,6 +64,7 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
         "taskThreadLinks",
         "meetingTaskLinks",
     }
+    assert set(snap["project"]) == {"id", "name", "taskKeyPrefix"}
     assert set(snap["threads"][0]) == THREAD_KEYS
     assert set(snap["entries"][0]) == ENTRY_KEYS
     assert set(snap["meetings"][0]) == MEETING_KEYS

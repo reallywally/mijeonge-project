@@ -7,10 +7,10 @@
 
 from datetime import datetime
 
-from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.errors import bad_request, not_found
 from app.models import (
     Meeting,
     MeetingTaskLink,
@@ -54,7 +54,7 @@ async def load_task(session: AsyncSession, task_id: str) -> Task:
     found = await session.execute(select(Task).where(Task.id == task_id))
     task = found.scalar_one_or_none()
     if task is None:
-        raise HTTPException(status_code=404, detail="그런 작업이 없다")
+        raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
     return task
 
 
@@ -62,7 +62,7 @@ async def _load_thread(session: AsyncSession, thread_id: str) -> Thread:
     found = await session.execute(select(Thread).where(Thread.id == thread_id))
     thread = found.scalar_one_or_none()
     if thread is None:
-        raise HTTPException(status_code=404, detail="그런 안건이 없다")
+        raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
     return thread
 
 
@@ -70,7 +70,7 @@ async def _load_meeting(session: AsyncSession, meeting_id: str) -> Meeting:
     found = await session.execute(select(Meeting).where(Meeting.id == meeting_id))
     meeting = found.scalar_one_or_none()
     if meeting is None:
-        raise HTTPException(status_code=404, detail="그런 회의가 없다")
+        raise not_found("MEETING_NOT_FOUND", "회의를 찾을 수 없습니다.")
     return meeting
 
 
@@ -86,7 +86,7 @@ async def _next_key(session: AsyncSession, project: Project) -> str:
         .values(last_task_no=Project.last_task_no + 1)
         .returning(Project.last_task_no)
     )
-    return f"{project.key_prefix}-{bumped.scalar_one()}"
+    return f"{project.task_key_prefix}-{bumped.scalar_one()}"
 
 
 async def _guard_parent(
@@ -99,20 +99,20 @@ async def _guard_parent(
     if parent_id is None:
         return
     if parent_id == task_id:
-        raise HTTPException(status_code=400, detail="작업을 자기 자신의 상위로 둘 수 없다")
+        raise bad_request("TASK_PARENT_SELF", "작업을 자기 자신의 상위로 둘 수 없습니다.")
 
     parent = await session.execute(select(Task).where(Task.id == parent_id))
     found = parent.scalar_one_or_none()
     if found is None:
-        raise HTTPException(status_code=400, detail="그런 상위 작업이 없다")
+        raise bad_request("TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.")
     if found.project_id != project_id:
-        raise HTTPException(status_code=400, detail="상위 작업이 다른 프로젝트에 있다")
+        raise bad_request("TASK_PARENT_OTHER_PROJECT", "상위 작업이 다른 프로젝트에 있습니다.")
 
     seen: set[str] = set()
     walker: str | None = found.parent_id
     while walker is not None:
         if walker == task_id:
-            raise HTTPException(status_code=400, detail="하위 작업을 상위로 둘 수 없다")
+            raise bad_request("TASK_PARENT_DESCENDANT", "하위 작업을 상위로 둘 수 없습니다.")
         if walker in seen:  # 이미 망가진 데이터를 만나도 여기서 멈춘다
             return
         seen.add(walker)
@@ -173,9 +173,9 @@ async def set_line_done(session: AsyncSession, task_id: str, line_id: str, done:
     task = await load_task(session, task_id)
     line = next((each for each in task.lines if each.id == line_id), None)
     if line is None:
-        raise HTTPException(status_code=404, detail="그런 본문 줄이 없다")
+        raise not_found("TASK_LINE_NOT_FOUND", "그 본문 줄을 찾을 수 없습니다.")
     if line.kind != "check":
-        raise HTTPException(status_code=400, detail="체크박스가 아닌 줄은 토글할 수 없다")
+        raise bad_request("TASK_LINE_NOT_CHECKABLE", "체크박스가 아닌 줄은 켜고 끌 수 없습니다.")
     line.done = done
     await session.commit()
     return to_task(task)
@@ -185,14 +185,18 @@ async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> N
     """같은 프로젝트인지 보고 링크를 건다. 이미 있으면 아무것도 하지 않는다(멱등)."""
     thread = await _load_thread(session, thread_id)
     if thread.project_id != task.project_id:
-        raise HTTPException(status_code=400, detail="작업과 안건이 서로 다른 프로젝트에 있다")
+        raise bad_request(
+            "TASK_THREAD_LINK_OTHER_PROJECT", "작업과 안건이 서로 다른 프로젝트에 있습니다."
+        )
     found = await session.execute(
         select(TaskThreadLink).where(
             TaskThreadLink.task_id == task.id, TaskThreadLink.thread_id == thread_id
         )
     )
     if found.scalar_one_or_none() is None:
-        session.add(TaskThreadLink(task_id=task.id, thread_id=thread_id))
+        session.add(
+            TaskThreadLink(task_id=task.id, thread_id=thread_id, project_id=task.project_id)
+        )
 
 
 async def link_thread(session: AsyncSession, task_id: str, thread_id: str) -> TaskThreadLinkOut:
@@ -216,14 +220,18 @@ async def link_meeting(session: AsyncSession, task_id: str, meeting_id: str) -> 
     task = await load_task(session, task_id)
     meeting = await _load_meeting(session, meeting_id)
     if meeting.project_id != task.project_id:
-        raise HTTPException(status_code=400, detail="작업과 회의가 서로 다른 프로젝트에 있다")
+        raise bad_request(
+            "MEETING_TASK_LINK_OTHER_PROJECT", "작업과 회의가 서로 다른 프로젝트에 있습니다."
+        )
     found = await session.execute(
         select(MeetingTaskLink).where(
             MeetingTaskLink.task_id == task_id, MeetingTaskLink.meeting_id == meeting_id
         )
     )
     if found.scalar_one_or_none() is None:
-        session.add(MeetingTaskLink(meeting_id=meeting_id, task_id=task_id))
+        session.add(
+            MeetingTaskLink(meeting_id=meeting_id, task_id=task_id, project_id=task.project_id)
+        )
     await session.commit()
     return MeetingTaskLinkOut(meeting_id=meeting_id, task_id=task_id)
 

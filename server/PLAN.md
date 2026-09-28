@@ -114,10 +114,12 @@
 - [x] `GET /api/projects` — 프로젝트 목록
 - [x] `GET /api/members` — 멤버 목록
 - [x] `GET /api/projects/{projectId}/snapshot` — **그 프로젝트의 레코드 전부**
-      (`threads` · `entries` · `meetings` · `tasks` · `taskThreadLinks` · `meetingTaskLinks`).
+      (`project` · `threads` · `entries` · `meetings` · `tasks` · `taskThreadLinks` · `meetingTaskLinks`).
       `stores/data.ts` 가 지금 들고 있는 것과 같은 모양이다. 없는 프로젝트는 404
 - [x] 응답 스키마를 `domain.ts` 와 한 필드씩 맞췄다 — `tests/test_read_api.py` 가 레코드마다
       키 집합을 통째로 비교한다. 이름이 하나 어긋나면 화면이 조용히 빈칸을 그려서 눈으로는 못 잡는다
+- [x] 그 목록은 손으로 옮겨 적은 것이라, `tests/test_contract_types.py` 가 **`domain.ts` 를 파일로
+      읽어** 아홉 타입의 키와 null 허용 자리를 대조한다. 프론트가 타입을 고치면 여기서 깨진다
 - [x] **경계** — `app/schemas/base.py` 의 `Schema`(camelCase alias + `from_attributes`)와
       `DayStamp`(KST 날짜로 자르기). 도메인 스키마는 전부 이걸 상속한다
 - [x] **배열 순서도 계약이다** — 이걸 놓칠 뻔했다. `stores/thread.ts` 의 `rows` 와 작업 목록에는
@@ -242,6 +244,8 @@ README 의 핵심 컨셉이지만 화면도 스펙도 아직 없다. **모델이
 | 1 스키마와 마이그레이션 | **끝남** (2026-09-28) — 테이블 12개 · 첫 리비전 · 시드. Postgres 에 올려 확인까지 |
 | 2 읽기 API | **끝남** (2026-09-28) — 프로젝트 · 멤버 · 스냅샷. 목업 화면과 대조 확인 |
 | 3 쓰기 API | **끝남** (2026-09-28) — 작업 · 안건 · 회의 · 링크 · 프로젝트 등록. 시나리오 넷을 API 로 재현 |
+| 3-b 계약 메우기 | **끝남** (2026-09-28) — 오류 형식 · 링크와 부모의 프로젝트 경계 · `Project` 모양 ·
+  `domain.ts` 대조 검사. 리비전 `0003_contract_gaps` |
 | 4 프론트 붙이기 | 시작 전 |
 | 5 집계를 서버로 | 시작 전 |
 | 6 품질과 운영 | 시작 전 |

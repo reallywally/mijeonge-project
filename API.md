@@ -47,6 +47,17 @@
 | 409 | `PROJECT_PREFIX_TAKEN` | 이미 쓰는 `taskKeyPrefix` 로 프로젝트를 만들 때. 접두사는 프로젝트 사이에 유일하다 (Q20) |
 | 500 | `INTERNAL_ERROR` | 그 밖. `message` 는 고정된 한국어 한 줄이고 속사정을 싣지 않는다 |
 
+쓰기 API 의 `code` 는 아래와 같다. 화면이 갈라 볼 수 있게 '없다' 와 '규칙에 어긋난다' 를 나눠 둔다.
+
+| 상태 | `code` | 언제 |
+| --- | --- | --- |
+| 404 | `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `MEETING_NOT_FOUND` · `TASK_LINE_NOT_FOUND` | 경로가 가리키는 것이 없을 때 |
+| 400 | `TASK_PARENT_SELF` · `TASK_PARENT_NOT_FOUND` · `TASK_PARENT_OTHER_PROJECT` · `TASK_PARENT_DESCENDANT` | 상위 작업이 고리를 만들거나 다른 프로젝트에 있을 때 (Q16) |
+| 400 | `THREAD_PARENT_NOT_FOUND` · `THREAD_PARENT_OTHER_PROJECT` | 상위 안건이 없거나 다른 프로젝트에 있을 때 (Q16) |
+| 400 | `TASK_THREAD_LINK_OTHER_PROJECT` · `MEETING_TASK_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
+| 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
+| 400 | `MEETING_TEMP_ID_DUPLICATED` · `MEMBER_NOT_FOUND` | 새 회의 저장이 들고 온 값이 서로 안 맞을 때 |
+
 ## 엔드포인트
 
 상태: `초안`(서버가 올림) · `검토`(프론트가 보는 중) · `합의`(양쪽 확인) · `구현`(서버 완료) · `연결`(프론트 연결 완료)
@@ -59,7 +70,21 @@
 | GET | `/api/members` | 멤버 목록. 담당자 · 참석자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 구현 |
 | GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 구현 |
 
-넷 다 섰다 — 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
+쓰기(3단계)는 스토어 함수 하나가 엔드포인트 하나다. 응답은 **바뀐 레코드**를 돌려준다.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 구현 |
+| PATCH | `/api/tasks/{taskId}` | 상태 · 담당자 · 기간 · 상위 작업 부분 수정 | `Task` | 구현 |
+| PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 구현 |
+| PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 구현 |
+| PUT · DELETE | `/api/tasks/{taskId}/meetings/{meetingId}` | 작업 ↔ 회의 링크 (멱등) | 링크 · 204 | 구현 |
+| POST | `/api/projects/{projectId}/threads` | 안건 등록 | `Thread` · 201 | 구현 |
+| POST | `/api/threads/{threadId}/entries` | 회의 밖 줄. `meetingId` 는 서버가 null 로 고정 | `{ entry, thread }` · 201 | 구현 |
+| POST | `/api/projects/{projectId}/meetings` | 새 회의 저장 — 안건 · 줄 · 상태 변경이 한 트랜잭션. 응답에 `threadIdByTempId` | `{ meeting, threads, entries, threadIdByTempId }` · 201 | 구현 |
+| PUT · DELETE | `/api/meetings/{meetingId}/tasks/{taskId}` | 회의 ↔ 작업 링크 (작업 쪽과 같은 링크) | 링크 · 204 | 구현 |
+
+읽기 넷은 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
 `uv run fastapi dev` 로 띄우고 `/api/projects` → `/api/projects/p1/snapshot` 순으로 받으면 목업과 같은 데이터가 온다
 (시드가 `web/src/fixtures/*.ts` 와 같은 값이다).
 
@@ -283,13 +308,22 @@ DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀
 | Q18 | 사용자 | 프로젝트가 하나도 없을 때 무슨 화면인가. `stores/data.ts` 가 `allProjects.value[0].id` 로 시작해서 `GET /api/projects` 가 빈 배열이면 앱이 뜨다가 터진다. 프로젝트 목록 · 등록 화면(`memo.md` 화면 1)은 아직 코드에 없다 — 첫 진입을 프로젝트 등록으로 보낼지, 시드가 항상 하나를 보장하는 것으로 하고 빈 상태는 나중에 볼지 | **프로젝트 등록 화면으로 보낸다.** 빈 배열은 에러가 아니라 정상 상태다 — 서버가 시드로 프로젝트 하나를 억지로 보장하지 않는다. `GET /api/projects` 가 `[]` 면 프론트가 첫 진입을 프로젝트 등록으로 돌린다. **따라올 것** — ① 프로젝트 목록 · 등록 화면(`memo.md` 화면 1)이 아직 코드에 없다. 계약이 닫힌 뒤 frontend 가 세운다 ② `stores/data.ts` 의 `currentProjectId` 초기값(`allProjects.value[0].id`)이 빈 배열에서 터지므로 같이 고친다 ③ `POST /api/projects` 가 `server/PLAN.md` 3단계에 잡혀 있는데, 빈 상태에서 앱을 여는 **유일한 길**이라 2단계로 당길지는 서버가 판단한다. **서버 답 ③:** 당긴다 — `POST /api/projects` 만 2단계로 올리고 나머지 쓰기는 3단계 그대로다. 이게 없으면 2단계의 '끝난 것으로 보는 기준'(빈 DB 에 붙여 화면이 목업처럼 도는지)을 시드 없이는 확인할 수 없고, 시드로 가리면 빈 상태가 처음 도는 곳이 사내 배포가 된다. **서버 답(접두사):** 등록 요청의 `taskKeyPrefix` 는 **필수**다 — 선택으로 두면 접두사 없는 프로젝트에서 작업을 만드는 순간 키를 못 만들고, 나중에 메우면 이미 나간 키를 전부 다시 써야 한다. **등록 화면에 입력칸이 하나 는다.** 계약은 `## 요청 스키마 — ProjectInput` 절에 있다 | 닫힘 |
 | Q19 | 사용자 | `task.key` 의 **번호**를 어떻게 매기나 (Q9 에서 뗐다). ① 번호를 프로젝트별로 세나 — 프로젝트 A 의 `HW-1` 과 B 의 `SL-1` 이 따로 도는가 ② 지운 작업의 번호를 다시 쓰나. 지금 목업은 '프로젝트 작업 수 + 1' 이라 3번을 지우면 다음 작업이 3번을 다시 받는다. 보통은 안 되돌린다(시퀀스로 발번하고 구멍을 둔다). **서버 의견:** ① **프로젝트별로 센다** — 접두사가 프로젝트마다 다른데 번호를 전역으로 세면 `HW-1` 다음이 `HW-7` 이 되어 사람이 읽는 값이라는 뜻이 사라진다 ② **지운 번호를 다시 쓰지 않는다** — 회의록 · 대화에 적힌 `HW-3` 이 나중에 다른 작업을 가리키게 되면 기록이 거짓말을 한다. 지금 목업의 '작업 수 + 1' 은 3번을 지우면 다음 작업이 3번을 다시 받는다. 구현은 `project` 에 '다음 번호' 열을 두고 작업을 만들 때 그 행을 잠가 올린다(Postgres 시퀀스는 프로젝트마다 객체를 하나씩 만들어야 해서 안 쓴다). 번호에 구멍이 생기는 건 받아들인다 | **① 번호는 프로젝트별로 센다. ② 지운 번호는 다시 쓰지 않는다.** `HW-1` 과 `SL-1` 이 따로 돌고, 3번 작업을 지워도 다음 작업은 4번을 받는다 — 번호에 구멍이 생기는 건 받아들인다. 서버 의견과 같은 결론이다. **구현** — `project` 에 '다음 번호' 열을 두고 작업을 만들 때 그 행을 잠가 올린다. `MAX(번호)+1` 은 동시 등록에서 겹치므로 쓰지 않는다. **서버 구현(확정):** `project.next_task_no` 를 `UPDATE project SET next_task_no = next_task_no + 1 WHERE id = :id RETURNING next_task_no - 1` 한 문장으로 올린다 — 그 `UPDATE` 가 행 잠금을 잡아 같은 프로젝트의 동시 등록을 줄 세우고, 트랜잭션이 되돌아가면 번호도 같이 돌아온다(프로젝트마다 진짜 시퀀스를 만드는 쪽은 등록마다 DDL 이 돌고 롤백에도 번호가 안 돌아와 구멍이 더 난다). 안전망으로 `task(project_id, key)` 에 UNIQUE. `key` 는 `{taskKeyPrefix}-{번호}` 다. **따라간 것** — `server/PLAN.md` 1-1 의 `project` 에 `next_task_no`, `task` 에 그 UNIQUE 를 더하고 1-2 에 발번 규칙을 적었다 | 닫힘 |
 | Q20 | 사용자 | `taskKeyPrefix`(작업 키 접두사)의 **값을 누가 정하나**. ① 프로젝트를 만들 때 사람이 넣나 — 프로젝트 등록 화면은 아직 코드에 없다(`web/PLAN.md` 5단계) ② 이름에서 자동으로 뽑나 — 이름이 한글이라('한화손보 차세대' → `HW`) 자동은 규칙을 세우기 어렵다 ③ 두 프로젝트가 같은 접두사를 써도 되나(`key` 가 전사에서 유일해야 하는지). **서버 의견:** 등록할 때 사람이 넣고(기본값 없이 필수), 프로젝트 사이에 겹치지 않게 유니크를 건다 — 그래야 `HW-4` 한 마디로 회의에서 가리킬 수 있다. **Q18 이 닫히면서 범위가 줄었다** — 서버는 `POST /api/projects` 에서 `taskKeyPrefix` 를 **필수**로 잡았다(①은 '사람이 넣는다'). 남은 것은 ③(프로젝트끼리 겹쳐도 되나 — 안 되면 409 `PROJECT_PREFIX_TAKEN` 이 선다), 글자 모양을 `^[A-Z][A-Z0-9]{0,7}$` 로 제한할지, 등록 화면이 이름에서 기본값을 제안할지다 | **프로젝트를 만들 때 프로젝트 단위로 하나 생긴다 — 사용자가 넣으면 그 값을 쓰고, 안 넣으면 서버가 임의로 만든다.** 등록 화면의 입력칸은 **선택**이다(필수가 아니다). 이름이 한글이라 자동 추출 규칙은 세우지 않는다 — 안 넣었을 때 서버가 만드는 값은 이름에서 뽑는 것이 아니라 겹치지 않는 임의 문자열이면 된다. **접두사는 프로젝트 사이에 유니크하다** — 그래야 `HW-4` 한 마디로 회의에서 가리킬 수 있고, '임의 생성' 도 겹치지 않아야 뜻이 선다. **서버가 정할 것** — ① 임의 생성 규칙(길이 · 글자 종류) ② 사용자가 넣은 값이 이미 쓰이고 있으면 400 으로 돌려준다고 보는데, 그 `code` 와 문구 ③ 형식 제약(대문자 · 길이 상한 · 한글 허용 여부). 이 셋은 계약을 막지 않으니 구현하며 정하고 결정 로그에 남겨라 | 닫힘 |
-| Q21 | 서버 | **`ProjectInput.taskKeyPrefix` 가 필수인가 선택인가 — 계약 안에서 두 절이 어긋난다.** `## 요청 스키마 — ProjectInput` 은 "**`taskKeyPrefix` 는 필수다**(Q18 ②) … 빈 문자열을 받지 않는다 — 422" 로 적혀 있는데, 뒤에 닫힌 **Q20(사용자)** 은 "등록 화면의 입력칸은 **선택**이다(필수가 아니다). 안 넣으면 서버가 겹치지 않는 임의 문자열을 만든다" 로 닫았다. 사용자 답이 나중이고 제품 결정이라 **프론트는 선택으로 세웠다** — `web/src/components/app/ProjectCreateDialog.vue` 의 입력칸이 '선택' 이고, 비우면 목업이 `PJ1` 같은 겹치지 않는 값을 붙인다(`web/src/lib/project.ts` 의 `makeTaskKeyPrefix`). 서버가 `ProjectInput` 절을 Q20 에 맞춰 고쳐 달라 — `taskKeyPrefix` 를 선택으로 두고, 빈 값이면 서버가 만들고, 422 는 '적었는데 형식이 틀렸을 때' 만. 겸해서 ① 서버가 만드는 값의 규칙(길이 · 글자 종류) ② 프론트가 그 값을 **미리 보여 줄 수 있나** — 지금 등록 폼은 비워 두면 붙을 값을 미리 찍어 준다. 서버가 다른 값을 만든다면 응답의 `Project.taskKeyPrefix` 로만 알 수 있으니 미리보기를 '저장하면 자동으로 붙습니다' 로 바꾸겠다 | | 열림 |
-| Q22 | 서버 | **main 의 서버 구현과 `Project` 계약이 어긋난다.** 두 갈래로 따로 만들어져 계약을 안 거친 쪽이 생겼다. ① **필드가 안 나간다** — `server/app/schemas/project.py` 의 `ProjectOut` 이 `id` · `name` 둘뿐이고 "key_prefix 는 내보내지 않는다 — 화면의 Project 는 id · name 둘뿐이다" 라고 적혀 있다. 그런데 `domain.ts` 의 `Project` 는 `taskKeyPrefix` 를 들고 있고 프로젝트 목록 화면이 그 값을 찍는다 ② **이름이 다르다** — 서버는 `key_prefix`(→ `keyPrefix`), 계약은 `taskKeyPrefix`(Q9 에서 정했다) ③ **필수/선택이 다르다** — `ProjectCreate` 가 `key_prefix` 를 필수로 받는데, **Q20 은 선택으로 닫혔다**(안 넣으면 서버가 임의 생성). 서버 주석이 "화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다" 라고 적고 있는데, 이제 있다(`web/src/views/ProjectsView.vue` · `ProjectCreateDialog.vue`). **계약(Q9 · Q20)이 정본이다 — 서버를 그쪽에 맞춰라** | | 열림 |
+| Q21 | 서버 | **`ProjectInput.taskKeyPrefix` 가 필수인가 선택인가 — 계약 안에서 두 절이 어긋난다.** `## 요청 스키마 — ProjectInput` 은 "**`taskKeyPrefix` 는 필수다**(Q18 ②) … 빈 문자열을 받지 않는다 — 422" 로 적혀 있는데, 뒤에 닫힌 **Q20(사용자)** 은 "등록 화면의 입력칸은 **선택**이다(필수가 아니다). 안 넣으면 서버가 겹치지 않는 임의 문자열을 만든다" 로 닫았다. 사용자 답이 나중이고 제품 결정이라 **프론트는 선택으로 세웠다** — `web/src/components/app/ProjectCreateDialog.vue` 의 입력칸이 '선택' 이고, 비우면 목업이 `PJ1` 같은 겹치지 않는 값을 붙인다(`web/src/lib/project.ts` 의 `makeTaskKeyPrefix`). 서버가 `ProjectInput` 절을 Q20 에 맞춰 고쳐 달라 — `taskKeyPrefix` 를 선택으로 두고, 빈 값이면 서버가 만들고, 422 는 '적었는데 형식이 틀렸을 때' 만. 겸해서 ① 서버가 만드는 값의 규칙(길이 · 글자 종류) ② 프론트가 그 값을 **미리 보여 줄 수 있나** — 지금 등록 폼은 비워 두면 붙을 값을 미리 찍어 준다. 서버가 다른 값을 만든다면 응답의 `Project.taskKeyPrefix` 로만 알 수 있으니 미리보기를 '저장하면 자동으로 붙습니다' 로 바꾸겠다 | **계약 절은 이미 Q20 에 맞춰져 있다 — `## 요청 스키마 — ProjectInput` 을 보면 `taskKeyPrefix?: string` 이고 '선택이다' 로 적혀 있다.** 프론트가 본 것은 그 앞 판이다(라운드 3 에서 고쳤다). 서버 구현도 그쪽으로 세웠다 — `ProjectCreate.task_key_prefix` 는 `str \| None = None` 이고, 적었는데 형식이 틀렸을 때만 422 다. ① **서버가 만드는 값** — 헷갈리는 글자(`I` · `O` · `0` · `1`)를 뺀 대문자 · 숫자에서 **네 글자**를 뽑고, 이미 쓰는 값이면 다시 뽑는다. 이름에서 뽑지 않는다(한글이라 규칙이 안 선다) ② **미리보기는 '저장하면 자동으로 붙습니다' 로 바꾸는 것이 맞다** — 서버가 만드는 값은 임의라 화면이 미리 맞힐 수 없다. 저장한 뒤 응답의 `Project.taskKeyPrefix` 를 그대로 보여 주면 된다(등록 직후 목록으로 돌아가면 거기에도 실려 있다). 프론트의 `makeTaskKeyPrefix` 는 목업용으로만 남기고 서버가 붙은 뒤에는 안 쓴다 | 닫힘 |
+| Q22 | 서버 | **main 의 서버 구현과 `Project` 계약이 어긋난다.** 두 갈래로 따로 만들어져 계약을 안 거친 쪽이 생겼다. ① **필드가 안 나간다** — `server/app/schemas/project.py` 의 `ProjectOut` 이 `id` · `name` 둘뿐이고 "key_prefix 는 내보내지 않는다 — 화면의 Project 는 id · name 둘뿐이다" 라고 적혀 있다. 그런데 `domain.ts` 의 `Project` 는 `taskKeyPrefix` 를 들고 있고 프로젝트 목록 화면이 그 값을 찍는다 ② **이름이 다르다** — 서버는 `key_prefix`(→ `keyPrefix`), 계약은 `taskKeyPrefix`(Q9 에서 정했다) ③ **필수/선택이 다르다** — `ProjectCreate` 가 `key_prefix` 를 필수로 받는데, **Q20 은 선택으로 닫혔다**(안 넣으면 서버가 임의 생성). 서버 주석이 "화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다" 라고 적고 있는데, 이제 있다(`web/src/views/ProjectsView.vue` · `ProjectCreateDialog.vue`). **계약(Q9 · Q20)이 정본이다 — 서버를 그쪽에 맞춰라** | **셋 다 계약에 맞췄다.** ① `ProjectOut` 에 `task_key_prefix` 를 더해 `taskKeyPrefix` 로 나간다 — `GET /api/projects` · `POST /api/projects` · **스냅샷의 `project`** 가 전부 같은 모양(`id` · `name` · `taskKeyPrefix`)이다 ② 이름을 바꿨다 — DB 열까지 `key_prefix` → `task_key_prefix`(리비전 `0003_contract_gaps`). 안에서 한 이름, 밖으로 한 이름만 쓴다 ③ `ProjectCreate.task_key_prefix` 를 **선택**으로 바꾸고, 없으면 서버가 만든다. 겹치면 **409 `PROJECT_PREFIX_TAKEN`**, 형식이 틀리면 422 다. 접두사에는 DB 유니크를 걸었다. **겸해서 스냅샷에 빠져 있던 `project` 키도 채웠다**(Q7 이 닫아 둔 일곱 번째 키인데 구현에 없었다). 깨진 main 테스트 넷은 계약대로 고쳤다 — `keyPrefix` → `taskKeyPrefix`, `{id, name}` → 셋, 스냅샷 키 일곱, 시나리오의 접두사는 시드(`HW`)와 겹치지 않게 `HWN` 으로 | 닫힘 |
+
+### 남은 어긋남 (2026-09-28)
+
+| # | 누가 답하나 | 질문 | 답 | 상태 |
+| --- | --- | --- | --- | --- |
+| Q23 | 프론트 | **`createdAt` 이 계약과 다르게 나간다.** 공통 규칙과 Q3 은 'ISO 8601 UTC · 항상 `Z` 접미' 인데, 서버는 `app/schemas/base.py` 의 `DayStamp` 가 **KST 기준 날짜로 잘라서**(`2026-09-10`) 내보낸다. 그렇게 만든 이유는 프론트의 옛 `monthDay` 가 `split('-')` 로 읽어 시각을 실으면 '9월 NaN일' 이 찍혔기 때문인데, **Q3 이 닫히면서 프론트가 `lib/date.ts` 를 고쳤다**(`localDay` 가 `Z` 를 KST 로 옮기고 날짜뿐 문자열도 그대로 통과시킨다). 그래서 지금은 화면이 깨지지는 않지만 **같은 날 여러 줄의 시각이 사라진다** — 정렬은 `seq` 가 잡아 주므로 당장 틀어지는 화면은 없다. 서버를 계약대로(`Z`) 되돌려도 되나? **서버 의견:** 되돌리는 것이 맞다. 다만 `tests/test_contract.py` 의 다섯 검사('날짜로 자른다' · 'KST 로 자른다')가 그 동작을 못 박고 있어 같이 고쳐야 하고, 저장값(`at_day_start` 로 KST 0시에 앉히는 것)도 같이 볼 자리다. 프론트가 `Z` 를 받을 준비가 됐는지(이미 됐다고 본다) 확인해 주면 다음 턴에 옮긴다 | | 열림 |
 
 ## 결정 로그
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-09-28 | 오류 본문을 계약대로 `{ code, message, detail? }` 로 통일했다 — 핸들러 넷(`ApiError` · 검증 · `HTTPException` · 못 잡은 예외), 쓰기 API 의 `code` 도 표로 못 박았다 (Q14) | 프론트가 `code` 로 갈라 본다. FastAPI 기본 `{"detail": ...}` 로는 '프로젝트가 없다' 와 '작업이 없다' 를 화면이 구분하지 못한다 |
+| 2026-09-28 | 링크 둘에 `project_id` 를 두고 복합 FK 로 묶었다. 부모(`task.parent_id` · `thread.parent_thread_id`)도 복합 FK 다 (Q13 · Q16) | 서비스만 막으면 시드 · 마이그레이션 · 훗날의 버그가 넘어간다. 넘어가면 화면에 에러가 안 뜨고 계층과 맵핑이 조용히 틀어진다 |
+| 2026-09-28 | `Project` 를 계약 모양으로 되돌렸다 — `taskKeyPrefix` 를 내보내고, 등록에서는 선택으로 받고, 스냅샷에 `project` 키를 채웠다 (Q9 · Q20 · Q22 · Q7) | 계약을 안 거치고 만들어진 쪽이 '화면의 Project 는 id · name 둘뿐' 이라고 추측했다. 프로젝트 목록 화면은 접두사를 찍고 있었다 |
 | 2026-09-28 | 서버 구현이 두 갈래로 갈려 `Project` 계약이 어긋난 것을 발견했다 (Q22) | 한쪽이 계약 문서를 안 거치고 만들어졌다. 서버 코드 주석이 "화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다" 라고 적고 있는 것이 증거다 — 계약이 없으면 추측으로 메우게 된다 |
 | 2026-09-28 | 멤버는 **전사 공통**. 스냅샷에 싣지 않고 `GET /api/members` 로 따로 받는다 (Q6 · Q5 확정) | 프로젝트를 바꿔도 안 바뀌는 값이라 스냅샷에 실으면 매번 다시 받는다. 프로젝트별로 갈라야 하면 그때 `project_member` 를 더한다 |
 | 2026-09-28 | 회의에 **녹음을 두지 않는다** (Q11) | 타입에도 테이블에도 없고 주석에만 살아 있던 유령이다. 파일 업로드 · 스토리지가 같이 따라오는 일이라 필요해질 때 제대로 연다. `stores/meeting.ts` 주석에서 걷어낸다 |

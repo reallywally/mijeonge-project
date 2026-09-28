@@ -3,6 +3,7 @@
 3단계의 끝난 기준이 이것이다. 시드에 기대지 않고 빈 프로젝트를 하나 만들어 시작한다 —
 `memo.md` 의 시나리오와 한 줄씩 맞춰 볼 수 있게 각 단계에 그 문장을 주석으로 달았다.
 (멤버 u1~u4 는 시드가 넣은 것을 쓴다. 멤버 등록 화면도 API 도 아직 없다.)
+접두사는 시드의 것(HW · PAS · MG)과 겹치면 안 된다 — 프로젝트 사이에 유일하다(API.md Q20).
 """
 
 import httpx
@@ -10,7 +11,7 @@ import httpx
 
 async def start(client: httpx.AsyncClient, name: str, prefix: str) -> str:
     """1. 최상위 프로젝트 등록."""
-    res = await client.post("/api/projects", json={"name": name, "keyPrefix": prefix})
+    res = await client.post("/api/projects", json={"name": name, "taskKeyPrefix": prefix})
     assert res.status_code == 201
     return str(res.json()["id"])
 
@@ -26,7 +27,7 @@ async def test_scenario_1_dev_environment(client: httpx.AsyncClient) -> None:
 
     작업에서 안건 둘이 갈라지고, 하나는 회의 밖에서 하나는 회의에서 정해진다.
     """
-    project = await start(client, "한화손보 차세대", "HW")
+    project = await start(client, "한화손보 차세대", "HWN")
 
     # 간트차트에 개발 환경 설정 task 를 등록한다
     task = (
@@ -41,7 +42,7 @@ async def test_scenario_1_dev_environment(client: httpx.AsyncClient) -> None:
             },
         )
     ).json()
-    assert task["key"] == "HW-1"
+    assert task["key"] == "HWN-1"
 
     # 서버 OS · DB 를 무엇으로 할지 결정이 안 돼 안건 둘을 만든다
     os_thread = (
@@ -121,7 +122,7 @@ async def test_scenario_1_dev_environment(client: httpx.AsyncClient) -> None:
 
 async def test_scenario_2_deferred_twice(client: httpx.AsyncClient) -> None:
     """2. 미결정 상황 — 회의 둘에서 두 번 미뤄도 상태는 open 이다. 미룸은 상태가 아니라 줄이다."""
-    project = await start(client, "한화손보 차세대", "HW")
+    project = await start(client, "한화손보 차세대", "HWN")
 
     # 보험료 산출 기간계 API 개발 task 를 등록한다
     task = (
@@ -211,7 +212,7 @@ async def test_scenario_2_deferred_twice(client: httpx.AsyncClient) -> None:
 
 async def test_scenario_3_schedule_settled_in_one_meeting(client: httpx.AsyncClient) -> None:
     """3. 안건 · 회의만 사용 — 일정 조율. 작업 없이 안건 하나가 회의 한 번으로 정해진다."""
-    project = await start(client, "한화손보 차세대", "HW")
+    project = await start(client, "한화손보 차세대", "HWN")
 
     # 일정 조율 안건을 등록하고 회의를 한다
     thread = (
@@ -267,7 +268,7 @@ async def test_scenario_3_schedule_settled_in_one_meeting(client: httpx.AsyncCli
 
 async def test_scenario_4_weekly_meeting_without_any_thread(client: httpx.AsyncClient) -> None:
     """4. 안건 · 회의만 사용 — 주간회의. 공유할 안건이 없을 수도 있다: 메모만 남는다."""
-    project = await start(client, "한화손보 차세대", "HW")
+    project = await start(client, "한화손보 차세대", "HWN")
 
     saved = (
         await client.post(

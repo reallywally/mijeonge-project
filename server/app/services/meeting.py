@@ -8,10 +8,10 @@
 `services/task.py` 의 함수를 그대로 부른다 — 두 벌로 갈리면 한쪽만 고치는 날이 온다.
 """
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.errors import bad_request
 from app.models import Meeting, MeetingAttendee, MeetingMemo, Member, Thread, new_id
 from app.schemas.meeting import (
     MeetingCreate,
@@ -50,22 +50,44 @@ def _temp_ids(new_threads: list[NewThreadIn]) -> dict[str, str]:
     mapped: dict[str, str] = {}
     for new_thread in new_threads:
         if new_thread.temp_id in mapped:
-            raise HTTPException(status_code=400, detail=f"tempId 가 겹친다: {new_thread.temp_id}")
+            raise bad_request(
+                "MEETING_TEMP_ID_DUPLICATED",
+                f"회의 안에서 tempId 가 겹칩니다: {new_thread.temp_id}",
+            )
         mapped[new_thread.temp_id] = new_id()
     return mapped
 
 
-def _resolve(value: str, temp_ids: dict[str, str], known: dict[str, Thread], what: str) -> str:
+def _resolve(value: str, temp_ids: dict[str, str], known: dict[str, Thread]) -> str:
     """tempId 표에 있으면 실제 id 로, 없으면 그 값을 이미 있는 안건의 id 로 본다.
 
     `stores/meeting.ts` 의 resolve 와 같은 규칙이다 — 픽스처 mm7 처럼 이미 있는 안건(`t4`)을
-    바로 가리키는 메모가 있다.
+    바로 가리키는 메모가 있다. `known` 은 이 프로젝트의 안건뿐이라 남의 프로젝트 안건은 못 가리킨다.
     """
     if value in temp_ids:
         return temp_ids[value]
     if value not in known:
-        raise HTTPException(status_code=400, detail=f"{what}: {value}")
+        raise bad_request("THREAD_NOT_FOUND", f"안건을 찾을 수 없습니다: {value}")
     return value
+
+
+async def _resolve_parent(
+    session: AsyncSession, value: str, temp_ids: dict[str, str], known: dict[str, Thread]
+) -> str:
+    """하위 안건의 부모. **부모는 같은 프로젝트여야 한다** (API.md Q16).
+
+    없는 것인지 남의 프로젝트 것인지를 갈라 준다 — 둘은 화면에서 할 일이 다르다.
+    """
+    if value in temp_ids:
+        return temp_ids[value]
+    if value in known:
+        return value
+    elsewhere = await session.scalar(select(Thread.id).where(Thread.id == value))
+    if elsewhere is not None:
+        raise bad_request(
+            "THREAD_PARENT_OTHER_PROJECT", f"상위 안건이 다른 프로젝트에 있습니다: {value}"
+        )
+    raise bad_request("THREAD_PARENT_NOT_FOUND", f"상위 안건을 찾을 수 없습니다: {value}")
 
 
 async def _check_members(session: AsyncSession, ids: set[str]) -> None:
@@ -75,7 +97,7 @@ async def _check_members(session: AsyncSession, ids: set[str]) -> None:
     found = (await session.execute(select(Member.id).where(Member.id.in_(ids)))).scalars().all()
     missing = sorted(ids - set(found))
     if missing:
-        raise HTTPException(status_code=400, detail=f"그런 멤버가 없다: {', '.join(missing)}")
+        raise bad_request("MEMBER_NOT_FOUND", f"멤버를 찾을 수 없습니다: {', '.join(missing)}")
 
 
 async def save_meeting(
@@ -102,18 +124,14 @@ async def save_meeting(
     known = {row.id: row for row in rows}
 
     parent_ids = [
-        _resolve(new_thread.parent_thread_id, temp_ids, known, "그런 상위 안건이 없다")
+        await _resolve_parent(session, new_thread.parent_thread_id, temp_ids, known)
         if new_thread.parent_thread_id
         else None
         for new_thread in payload.new_threads
     ]
-    entry_thread_ids = [
-        _resolve(line.thread_id, temp_ids, known, "그런 안건이 없다") for line in payload.entries
-    ]
+    entry_thread_ids = [_resolve(line.thread_id, temp_ids, known) for line in payload.entries]
     promoted_ids = [
-        _resolve(memo.promoted_temp_id, temp_ids, known, "그런 안건이 없다")
-        if memo.promoted_temp_id
-        else None
+        _resolve(memo.promoted_temp_id, temp_ids, known) if memo.promoted_temp_id else None
         for memo in payload.memos
     ]
     await _check_members(
@@ -140,6 +158,10 @@ async def save_meeting(
         session.add(thread)
         created.append(thread)
         known[thread.id] = thread
+    # 줄(entry)이 이 안건들을 가리킨다. Entry 에는 relationship 이 없어 SQLAlchemy 가 순서를
+    # 알지 못하고 클래스 이름 순으로 넣는다(Entry < Thread) — 먼저 밀어 넣어 FK 가 서게 한다.
+    # flush 는 커밋이 아니다. 뒤에서 하나라도 틀어지면 회의는 통째로 없던 일이 된다
+    await session.flush()
 
     meeting = Meeting(
         id=new_id(),
@@ -162,6 +184,8 @@ async def save_meeting(
         ],
     )
     session.add(meeting)
+    # 줄이 이 회의를 가리킨다 — 같은 이유로 회의를 먼저 밀어 넣는다
+    await session.flush()
 
     entries = []
     for line, thread_id in zip(payload.entries, entry_thread_ids, strict=True):

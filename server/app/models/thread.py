@@ -5,11 +5,13 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +27,11 @@ class Thread(Base):
     __table_args__ = (
         CheckConstraint(f"state in {THREAD_STATES}", name="state"),
         Index("ix_thread_project_id", "project_id"),
+        # 부모는 같은 프로젝트여야 한다 (API.md Q16). 링크 테이블의 복합 FK 도 이 유니크를 본다
+        UniqueConstraint("id", "project_id"),
+        ForeignKeyConstraint(
+            ["parent_thread_id", "project_id"], ["thread.id", "thread.project_id"]
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -32,8 +39,8 @@ class Thread(Base):
     title: Mapped[str] = mapped_column(Text)
     state: Mapped[str] = mapped_column(String(16), default="queued")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
-    # 다른 안건에서 떼어낸 것이면 그 안건
-    parent_thread_id: Mapped[str | None] = mapped_column(ForeignKey("thread.id"))
+    # 다른 안건에서 떼어낸 것이면 그 안건. FK 는 위의 복합 FK 하나뿐이다
+    parent_thread_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다

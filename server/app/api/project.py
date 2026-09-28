@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -27,14 +27,11 @@ async def list_members(session: Session) -> list[MemberOut]:
 
 @router.post("/projects", status_code=201)
 async def create_project(payload: ProjectCreate, session: Session) -> ProjectOut:
-    """화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다.
-    keyPrefix 는 작업 발번(`HW-22`)에 꼭 필요해서 필수로 받는다."""
+    """프로젝트 등록. `taskKeyPrefix` 는 선택이고, 안 넣으면 서버가 만들어 돌려준다."""
     return await project_service.create_project(session, payload)
 
 
 @router.get("/projects/{project_id}/snapshot")
 async def get_snapshot(project_id: str, session: Session) -> SnapshotOut:
     """그 프로젝트의 레코드 전부. 화면의 `stores/data.ts` 가 들고 있는 것과 같은 모양이다."""
-    if not await project_service.project_exists(session, project_id):
-        raise HTTPException(status_code=404, detail="그런 프로젝트가 없다")
     return await snapshot_service.load_snapshot(session, project_id)

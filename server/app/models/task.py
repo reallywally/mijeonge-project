@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     Integer,
@@ -33,6 +34,10 @@ class Task(Base):
         # 자기 자신을 부모로 두는 것만 DB 가 막는다. 더 긴 고리는 서비스가 막는다
         CheckConstraint("parent_id is null or parent_id <> id", name="parent_not_self"),
         UniqueConstraint("project_id", "key"),
+        # 부모는 같은 프로젝트여야 한다 (API.md Q16) — 복합 FK 가 참조할 유니크가 필요하다.
+        # 넘어가면 화면에 에러가 안 뜨고 계층만 조용히 틀어진다
+        UniqueConstraint("id", "project_id"),
+        ForeignKeyConstraint(["parent_id", "project_id"], ["task.id", "task.project_id"]),
         Index("ix_task_project_id_status", "project_id", "status"),
         Index("ix_task_parent_id", "parent_id"),
     )
@@ -42,7 +47,8 @@ class Task(Base):
     # 화면에 보이는 번호 — HW-4
     key: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(Text)
-    parent_id: Mapped[str | None] = mapped_column(ForeignKey("task.id"))
+    # FK 는 위의 복합 FK 하나뿐이다 — 부모 id 만으로는 프로젝트를 못 지킨다
+    parent_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="todo")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     start: Mapped[date | None] = mapped_column(Date)
@@ -80,24 +86,42 @@ class TaskLine(Base):
 
 
 class TaskThreadLink(Base):
-    """작업 ↔ 안건. 양쪽에서 읽는다 — '안건 상세에서 맵핑 불가'는 화면 규칙이다."""
+    """작업 ↔ 안건. 양쪽에서 읽는다 — '안건 상세에서 맵핑 불가'는 화면 규칙이다.
+
+    **양쪽이 같은 프로젝트일 때만 선다** (API.md Q13). project_id 는 그것을 복합 FK 로
+    못 박으려고 두는 열이고 JSON 에는 나가지 않는다.
+    """
 
     __tablename__ = "task_thread_link"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
+        ),
+        ForeignKeyConstraint(
+            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+        ),
+    )
 
-    task_id: Mapped[str] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"), primary_key=True
-    )
-    thread_id: Mapped[str] = mapped_column(
-        ForeignKey("thread.id", ondelete="CASCADE"), primary_key=True
-    )
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36))
 
 
 class MeetingTaskLink(Base):
-    __tablename__ = "meeting_task_link"
+    """회의 ↔ 작업. 이쪽도 양쪽이 같은 프로젝트일 때만 선다 (API.md Q13)."""
 
-    meeting_id: Mapped[str] = mapped_column(
-        ForeignKey("meeting.id", ondelete="CASCADE"), primary_key=True
+    __tablename__ = "meeting_task_link"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["meeting_id", "project_id"],
+            ["meeting.id", "meeting.project_id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
+        ),
     )
-    task_id: Mapped[str] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"), primary_key=True
-    )
+
+    meeting_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36))
