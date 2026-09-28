@@ -41,10 +41,11 @@ def d(day: str | None) -> date | None:
 
 
 def projects() -> list[Project]:
+    # last_task_no 는 픽스처가 이미 써 버린 마지막 번호다 — 다음 작업이 HW-22 · PAS-3 로 나온다
     return [
-        Project(id="p1", name="한화손보 차세대", key_prefix="HW"),
-        Project(id="p2", name="삼성생명 PAS", key_prefix="PAS"),
-        Project(id="p3", name="경영지원 파트", key_prefix="MG"),
+        Project(id="p1", name="한화손보 차세대", key_prefix="HW", last_task_no=21),
+        Project(id="p2", name="삼성생명 PAS", key_prefix="PAS", last_task_no=2),
+        Project(id="p3", name="경영지원 파트", key_prefix="MG", last_task_no=0),
     ]
 
 
@@ -472,14 +473,19 @@ def in_order[T: Ordered](rows: list[T]) -> list[T]:
 
 
 async def advance_identity(session: AsyncSession) -> None:
-    """직접 넣은 seq 뒤로 자동 번호를 민다. 안 밀면 다음 INSERT 가 1 번부터 부딪힌다."""
+    """직접 넣은 seq 뒤로 자동 번호를 민다. 안 밀면 다음 INSERT 가 1 번부터 부딪힌다.
+
+    세 번째 인자(is_called)를 같이 준다 — 행이 없을 때 1 로만 밀면 다음이 2 번이 되어 1 번을
+    건너뛴다. 빈 테이블에서는 is_called=false 라야 다음이 1 번이다.
+    """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
     for table in ("thread", "entry", "meeting", "task"):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
-                f" coalesce((select max(seq) from {table}), 1))"
+                f" coalesce((select max(seq) from {table}), 1),"
+                f" (select count(*) from {table}) > 0)"
             )
         )
 

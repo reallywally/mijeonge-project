@@ -1,4 +1,4 @@
-from sqlalchemy import String
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, new_id
@@ -9,8 +9,13 @@ class Project(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(200))
-    # 작업 번호의 접두사 — 픽스처의 HW-4 에서 'HW'. 발번은 3단계에서 서버가 한다
+    # 작업 번호의 접두사 — 픽스처의 HW-4 에서 'HW'
     key_prefix: Mapped[str] = mapped_column(String(16))
+    # 마지막으로 써 버린 작업 번호. 최댓값+1 로 세지 않는다 —
+    # 지운 뒤 번호가 재사용되고, 동시에 등록하면 같은 번호가 둘 나온다
+    last_task_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
 
 
 class Member(Base):
