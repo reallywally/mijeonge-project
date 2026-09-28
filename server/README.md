@@ -31,15 +31,34 @@ uv run fastapi dev app/main.py        # http://localhost:8000
 | 무엇 | 어디 |
 | --- | --- |
 | 살아 있나 | `GET /api/health` |
-| 프로젝트 목록 | `GET /api/projects` |
+| 프로젝트 목록 · 등록 | `GET` · `POST /api/projects` |
 | 멤버 목록 | `GET /api/members` |
 | 프로젝트 스냅샷 | `GET /api/projects/{projectId}/snapshot` |
+| 작업 등록 | `POST /api/projects/{projectId}/tasks` |
+| 작업 수정 | `PATCH /api/tasks/{taskId}` (상태 · 담당자 · 기간 · 상위 작업을 하나로 받는다) |
+| 작업 본문 줄 토글 | `PATCH /api/tasks/{taskId}/lines/{lineId}` |
+| 작업 ↔ 안건 | `PUT` · `DELETE /api/tasks/{taskId}/threads/{threadId}` |
+| 작업 ↔ 회의 | `PUT` · `DELETE /api/tasks/{taskId}/meetings/{meetingId}` |
+| 안건 등록 | `POST /api/projects/{projectId}/threads` |
+| 회의 밖 줄 | `POST /api/threads/{threadId}/entries` |
+| **새 회의 저장** | `POST /api/projects/{projectId}/meetings` |
+| 회의 ↔ 작업 | `PUT` · `DELETE /api/meetings/{meetingId}/tasks/{taskId}` |
 
 스냅샷은 그 프로젝트의 레코드 전부(`threads` · `entries` · `meetings` · `tasks` · 링크 둘)를
 한 번에 준다 — 화면의 `stores/data.ts` 가 들고 있는 것과 같은 모양이다. 집계는 여전히 화면이 한다.
 
 **배열 순서까지가 계약이다.** 안건 · 작업 목록에는 정렬이 없어서 배열 순서가 곧 화면 순서다.
 등록 순서(`seq`)로 내보낸다.
+
+쓰기는 **바뀐 레코드를 그대로 돌려준다** — 스냅샷을 다시 받지 않아도 되게. 줄 하나가 안건
+상태까지 바꾸므로 `POST /threads/{id}/entries` 는 `{entry, thread}` 를 같이 준다. 링크는
+`PUT`/`DELETE` 라 두 번 눌러도 결과가 같고, 없는 링크를 지워도 204 다.
+
+**새 회의 저장이 제일 큰 자리다.** 안건 등록 · 회의 · 줄 여럿 · 안건 상태 변경이 **한 트랜잭션**에서
+돈다(하나 틀어지면 통째로 없던 일이다). 회의 중에 처음 만든 안건은 화면이 `tempId` 로 가리키는데,
+서버가 실제 id 를 미리 만들어 **줄 · 메모 · 하위 안건의 부모** 세 곳을 치환하고
+`threadIdByTempId` 로 돌려준다. 응답의 `threads` 는 이 저장으로 바뀐 안건 전부다.
+memo 의 시나리오 넷을 API 호출만으로 따라가는 검사가 `tests/test_scenarios.py` 에 있다.
 
 ## 마이그레이션
 
