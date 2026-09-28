@@ -7,6 +7,9 @@
 정렬이 아예 없어서 배열 순서가 곧 화면 순서고, 안건 이력은 같은 날짜의 줄을 배열 인덱스로
 가른다(`stores/thread.ts` 의 seqNo). 그래서 **등록 순서(`seq`)** 로 내보낸다 —
 `created_at` 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다.
+
+레코드 → 응답 변환(`to_task` · `to_entry` · `to_meeting`)은 도메인 서비스에 있다.
+쓰기 API 도 바뀐 레코드를 같은 모양으로 돌려주므로 변환이 두 벌이 되면 안 된다.
 """
 
 from collections.abc import Sequence
@@ -15,56 +18,12 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Entry, Meeting, MeetingTaskLink, Task, TaskThreadLink, Thread
-from app.schemas.meeting import MeetingMemoOut, MeetingOut
 from app.schemas.snapshot import SnapshotOut
-from app.schemas.task import MeetingTaskLinkOut, TaskLineOut, TaskOut, TaskThreadLinkOut
-from app.schemas.thread import EntryOut, ThreadOut
-
-
-def _to_entry(row: Entry) -> EntryOut:
-    return EntryOut(
-        id=row.id,
-        thread_id=row.thread_id,
-        meeting_id=row.meeting_id,
-        kind=row.kind,
-        text=row.text,
-        # entry_detail 행을 문자열 배열로 편다
-        detail=[d.text for d in row.details],
-        note=row.note,
-        owner_id=row.owner_id,
-        created_at=row.created_at,
-    )
-
-
-def _to_meeting(row: Meeting) -> MeetingOut:
-    return MeetingOut(
-        id=row.id,
-        project_id=row.project_id,
-        title=row.title,
-        date=row.date,
-        attendee_ids=sorted(a.member_id for a in row.attendees),
-        memos=[
-            MeetingMemoOut(id=m.id, text=m.text, promoted_thread_id=m.promoted_thread_id)
-            for m in row.memos
-        ],
-    )
-
-
-def _to_task(row: Task) -> TaskOut:
-    return TaskOut(
-        id=row.id,
-        project_id=row.project_id,
-        key=row.key,
-        title=row.title,
-        parent_id=row.parent_id,
-        body=[TaskLineOut.model_validate(line) for line in row.lines],
-        status=row.status,
-        owner_id=row.owner_id,
-        start=row.start,
-        due=row.due,
-        priority=row.priority,
-        created_at=row.created_at,
-    )
+from app.schemas.task import MeetingTaskLinkOut, TaskThreadLinkOut
+from app.schemas.thread import ThreadOut
+from app.services.meeting import to_meeting
+from app.services.task import to_task
+from app.services.thread import to_entry
 
 
 async def _all[T](session: AsyncSession, query: Select[tuple[T]]) -> Sequence[T]:
@@ -107,9 +66,9 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
 
     return SnapshotOut(
         threads=[ThreadOut.model_validate(row) for row in threads],
-        entries=[_to_entry(row) for row in entries],
-        meetings=[_to_meeting(row) for row in meetings],
-        tasks=[_to_task(row) for row in tasks],
+        entries=[to_entry(row) for row in entries],
+        meetings=[to_meeting(row) for row in meetings],
+        tasks=[to_task(row) for row in tasks],
         task_thread_links=[TaskThreadLinkOut.model_validate(row) for row in task_threads],
         meeting_task_links=[MeetingTaskLinkOut.model_validate(row) for row in meeting_tasks],
     )

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.schemas.project import MemberOut, ProjectOut
+from app.schemas.project import MemberOut, ProjectCreate, ProjectOut
 from app.schemas.snapshot import SnapshotOut
 from app.services import project as project_service
 from app.services import snapshot as snapshot_service
@@ -23,6 +23,13 @@ async def list_projects(session: Session) -> list[ProjectOut]:
 @router.get("/members")
 async def list_members(session: Session) -> list[MemberOut]:
     return await project_service.list_members(session)
+
+
+@router.post("/projects", status_code=201)
+async def create_project(payload: ProjectCreate, session: Session) -> ProjectOut:
+    """화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다.
+    keyPrefix 는 작업 발번(`HW-22`)에 꼭 필요해서 필수로 받는다."""
+    return await project_service.create_project(session, payload)
 
 
 @router.get("/projects/{project_id}/snapshot")
