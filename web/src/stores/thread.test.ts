@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { useMeetingStore } from './meeting'
 import { useThreadStore } from './thread'
 
 beforeEach(() => {
@@ -44,6 +45,46 @@ describe('안건 이력', () => {
     ])
   })
 
+  it('한 회의에서 한 안건에 남긴 줄은 배열 순서로 갈린다 — 날짜도 시각도 같다', () => {
+    const thread = useThreadStore()
+    const meeting = useMeetingStore()
+    const line = (kind: 'decide' | 'refine', text: string) => ({
+      threadId: 't3',
+      kind,
+      text,
+      detail: [],
+      note: '',
+      ownerId: 'u1',
+    })
+    meeting.saveMeeting({
+      title: '보안 확인 회의',
+      date: '2026-09-18',
+      attendeeIds: ['u1'],
+      newThreads: [],
+      entries: [line('decide', '사내망에서만 부른다'), line('refine', '예외는 보안팀 승인 건만')],
+      memos: [],
+    })
+
+    const detail = thread.threadDetail('t3')!
+    /* 나중에 적은 줄이 위로 온다 — 배열 순서가 계약이다 (API.md Q4) */
+    expect(detail.events.slice(0, 2).map((e) => e.entry.text)).toEqual([
+      '예외는 보안팀 승인 건만',
+      '사내망에서만 부른다',
+    ])
+    expect(detail.current).toBe('사내망에서만 부른다')
+    expect(detail.detail).toEqual(['예외는 보안팀 승인 건만'])
+  })
+
+  it('이력의 날짜는 시각을 달지 않는다 — 회의 밖 줄도 날짜에만 놓인다', () => {
+    const thread = useThreadStore()
+    thread.addOutsideEntry('t4', 'defer', '보안팀 답을 기다린다', '', 'u1')
+
+    const event = thread.threadDetail('t4')!.events[0]
+    expect(event.at).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    /* 레코드에 남는 값은 계약대로 UTC 타임스탬프다 */
+    expect(event.entry.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
+  })
+
   it('나중 결정이 앞의 결정을 대체한다', () => {
     const thread = useThreadStore()
     thread.addOutsideEntry('t2', 'decide', 'mariadb 로 바꾼다', '라이선스 때문에', 'u3')
@@ -62,6 +103,15 @@ describe('안건 목록', () => {
     expect(thread.rows).toHaveLength(9)
     expect(thread.queuedCount).toBe(4)
     expect(thread.openCount).toBe(2)
+  })
+
+  it("'마지막 회의' 는 줄을 적은 날이 아니라 그 회의가 열린 날이다", () => {
+    const thread = useThreadStore()
+    const label = (id: string) => thread.rows.find((r) => r.thread.id === id)!.lastMeetingLabel
+
+    expect(label('t5')).toBe('9월 14일')
+    /* 회의 밖에서만 정해진 안건은 다룬 회의가 없다 */
+    expect(label('t1')).toBe('—')
   })
 
   it('새 안건은 대기로 들어가 다음 회의 후보가 된다', () => {

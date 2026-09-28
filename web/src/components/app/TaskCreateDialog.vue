@@ -122,7 +122,7 @@ function submit() {
       <div class="flex items-center gap-2.5 border-b border-border px-5 py-3.5 pr-[60px]">
         <DialogTitle class="text-sm font-semibold tracking-tight">작업 추가</DialogTitle>
         <DialogDescription class="text-xs text-muted-foreground">
-          {{ data.currentProject.name }}
+          {{ data.currentProject?.name }}
         </DialogDescription>
       </div>
 

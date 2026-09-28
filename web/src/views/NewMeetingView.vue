@@ -805,7 +805,7 @@ const STRIPE: Record<ThreadState, string> = {
         >
           <DialogTitle>등록된 안건</DialogTitle>
           <DialogDescription class="text-pretty">
-            {{ data.currentProject.name }} · {{ pool.length }}건. 이번 회의에서 다룰 것만 고르고
+            {{ data.currentProject?.name }} · {{ pool.length }}건. 이번 회의에서 다룰 것만 고르고
             추가를 누르세요. 페이지를 넘겨도 고른 것은 그대로 남습니다.
           </DialogDescription>
         </DialogHeader>

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useDataStore } from '@/stores/data'
 
 /* 목록 위에 뜨는 상세 팝업도 주소를 갖는다 — 새로고침과 뒤로가기가 살아 있어야 한다.
    /tasks/new · /meetings/new 는 각각 /:id 보다 먼저 둔다. */
@@ -6,6 +7,16 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/tasks' },
+    {
+      path: '/projects',
+      name: 'projects',
+      component: () => import('@/views/ProjectsView.vue'),
+    },
+    {
+      path: '/projects/new',
+      name: 'project-new',
+      component: () => import('@/views/ProjectsView.vue'),
+    },
     {
       path: '/tasks',
       name: 'tasks',
@@ -47,6 +58,12 @@ const router = createRouter({
       component: () => import('@/views/MeetingListView.vue'),
     },
   ],
+})
+
+/* 프로젝트가 하나도 없으면 다른 화면은 보여 줄 것이 없다 — 등록으로 보낸다 (API.md Q18) */
+router.beforeEach((to) => {
+  if (to.path.startsWith('/projects')) return true
+  return useDataStore().allProjects.length > 0 ? true : '/projects/new'
 })
 
 export default router

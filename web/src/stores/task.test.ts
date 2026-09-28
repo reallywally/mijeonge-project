@@ -115,6 +115,41 @@ describe('맵핑', () => {
   })
 })
 
+describe('작업 추가', () => {
+  const input = (title: string) => ({
+    title,
+    parentId: null,
+    body: [],
+    status: 'todo' as const,
+    ownerId: null,
+    start: null,
+    due: null,
+    priority: 'normal' as const,
+    threadIds: [],
+  })
+
+  it('키는 그 프로젝트의 접두사로 선다 — 다른 프로젝트에 HW 가 붙지 않는다', () => {
+    const task = useTaskStore()
+    const data = useDataStore()
+    data.setProject('p2')
+
+    const id = task.addTask(input('이관 도구 고르기'))
+    expect(task.rows.find((r) => r.task.id === id)!.task.key).toBe('PAS-3')
+  })
+
+  it('번호를 들고 세므로 목록에서 빠진 번호를 다시 쓰지 않는다', () => {
+    const task = useTaskStore()
+    const data = useDataStore()
+
+    const first = task.addTask(input('CI 러너 늘리기'))
+    expect(data.allTasks.find((t) => t.id === first)!.key).toBe('HW-22')
+
+    data.allTasks = data.allTasks.filter((t) => t.id !== first)
+    const second = task.addTask(input('배포 스크립트 정리'))
+    expect(data.allTasks.find((t) => t.id === second)!.key).toBe('HW-23')
+  })
+})
+
 describe('상태 바꾸기', () => {
   it('막힘에서 진행 중으로 옮기면 목록의 수도 따라 바뀐다', () => {
     const task = useTaskStore()

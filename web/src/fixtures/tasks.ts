@@ -30,7 +30,7 @@ function mk(
     start,
     due,
     priority: 'normal',
-    createdAt: '2026-09-04',
+    createdAt: '2026-09-04T00:20:00Z',
   }
 }
 

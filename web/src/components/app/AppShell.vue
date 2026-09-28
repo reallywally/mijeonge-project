@@ -30,7 +30,9 @@ const meetingStore = useMeetingStore()
       <ChevronRight class="size-3.5 text-muted-foreground" />
       <div class="flex items-center gap-2 text-sm">
         <FolderClosed class="size-3.5 text-muted-foreground" />
-        <span>{{ data.currentProject.name }}</span>
+        <span :class="data.currentProject ? '' : 'text-muted-foreground'">
+          {{ data.currentProject?.name ?? '고른 프로젝트 없음' }}
+        </span>
       </div>
       <div class="grow" />
       <slot name="actions" />
@@ -41,8 +43,18 @@ const meetingStore = useMeetingStore()
         class="flex w-60 shrink-0 flex-col gap-5 overflow-hidden border-r border-border bg-muted/50 px-4 py-[22px]"
       >
         <label class="flex flex-col gap-1.5">
-          <span class="px-1 text-xs font-medium text-muted-foreground">프로젝트</span>
+          <span class="flex items-center gap-2 px-1">
+            <span class="grow text-xs font-medium text-muted-foreground">프로젝트</span>
+            <!-- 프로젝트를 만들고 고르는 자리. 대메뉴는 memo 대로 셋으로 두고 여기서 간다 -->
+            <RouterLink
+              to="/projects"
+              class="text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              목록
+            </RouterLink>
+          </span>
           <Select
+            v-if="data.allProjects.length > 0"
             :model-value="data.currentProjectId"
             @update:model-value="(id) => data.setProject(String(id))"
           >
@@ -55,6 +67,12 @@ const meetingStore = useMeetingStore()
               </SelectItem>
             </SelectContent>
           </Select>
+          <p
+            v-else
+            class="rounded-md border border-dashed border-border px-3 py-2.5 text-xs leading-relaxed text-muted-foreground"
+          >
+            등록된 프로젝트가 없습니다.
+          </p>
         </label>
 
         <nav class="flex flex-col gap-[3px]">

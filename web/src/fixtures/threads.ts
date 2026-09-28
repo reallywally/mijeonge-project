@@ -16,7 +16,7 @@ export const threads: Thread[] = [
     state: 'decided',
     ownerId: 'u3',
     parentThreadId: null,
-    createdAt: '2026-09-08',
+    createdAt: '2026-09-08T00:30:00Z',
   },
   {
     id: 't2',
@@ -25,7 +25,7 @@ export const threads: Thread[] = [
     state: 'decided',
     ownerId: 'u3',
     parentThreadId: null,
-    createdAt: '2026-09-08',
+    createdAt: '2026-09-08T00:35:00Z',
   },
   {
     id: 't3',
@@ -34,7 +34,7 @@ export const threads: Thread[] = [
     state: 'open',
     ownerId: 'u1',
     parentThreadId: null,
-    createdAt: '2026-09-09',
+    createdAt: '2026-09-09T02:10:00Z',
   },
   {
     id: 't4',
@@ -43,7 +43,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: null,
     parentThreadId: null,
-    createdAt: '2026-09-10',
+    createdAt: '2026-09-10T06:20:00Z',
   },
   // 시나리오 2 — 두 번 미뤄진 안건
   {
@@ -53,7 +53,7 @@ export const threads: Thread[] = [
     state: 'open',
     ownerId: 'u4',
     parentThreadId: null,
-    createdAt: '2026-09-07',
+    createdAt: '2026-09-07T00:10:00Z',
   },
   // 시나리오 3 — 회의만으로 끝난 안건
   {
@@ -63,7 +63,7 @@ export const threads: Thread[] = [
     state: 'decided',
     ownerId: 'u1',
     parentThreadId: null,
-    createdAt: '2026-09-14',
+    createdAt: '2026-09-14T01:00:00Z',
   },
   {
     id: 't7',
@@ -72,7 +72,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u4',
     parentThreadId: null,
-    createdAt: '2026-09-12',
+    createdAt: '2026-09-12T05:40:00Z',
   },
   {
     id: 't8',
@@ -81,7 +81,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u1',
     parentThreadId: null,
-    createdAt: '2026-09-12',
+    createdAt: '2026-09-12T05:45:00Z',
   },
   {
     id: 't9',
@@ -90,7 +90,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u2',
     parentThreadId: null,
-    createdAt: '2026-09-15',
+    createdAt: '2026-09-15T00:20:00Z',
   },
   // 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
   {
@@ -100,23 +100,17 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u2',
     parentThreadId: null,
-    createdAt: '2026-09-16',
+    createdAt: '2026-09-16T01:05:00Z',
   },
 ]
 
+/**
+ * 안건에 남긴 줄. **배열 순서가 등록 순서다** (오래된 것 → 새 것, API.md Q4).
+ *
+ * 같은 회의에서 같은 안건에 남긴 줄들은 날짜도 시각도 같아서 이 순서 말고는 가를 것이 없다.
+ * id 는 순서가 아니다 — 서버가 UUID 를 주면 사전순이 등록순과 무관해진다.
+ */
 export const entries: Entry[] = [
-  // 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
-  {
-    id: 'e1',
-    threadId: 't1',
-    meetingId: null,
-    kind: 'decide',
-    text: '우분투 최신 버전으로 한다',
-    detail: [],
-    note: 'PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.',
-    ownerId: 'u3',
-    createdAt: '2026-09-09',
-  },
   // 시나리오 2 — 첫 번째 미룸
   {
     id: 'e2',
@@ -127,7 +121,19 @@ export const entries: Entry[] = [
     detail: [],
     note: '기간계 업무 정의가 안 돼 in · out 을 정할 수 없다. 다음 주 월요일에 다시 본다.',
     ownerId: 'u4',
-    createdAt: '2026-09-07',
+    createdAt: '2026-09-07T07:30:00Z',
+  },
+  // 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
+  {
+    id: 'e1',
+    threadId: 't1',
+    meetingId: null,
+    kind: 'decide',
+    text: '우분투 최신 버전으로 한다',
+    detail: [],
+    note: 'PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.',
+    ownerId: 'u3',
+    createdAt: '2026-09-09T02:00:00Z',
   },
   // 시나리오 1 — 회의에서 정한 것
   {
@@ -139,7 +145,7 @@ export const entries: Entry[] = [
     detail: ['postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다', 'supabase 는 비용 때문에 뺀다'],
     note: '',
     ownerId: 'u3',
-    createdAt: '2026-09-10',
+    createdAt: '2026-09-10T06:05:00Z',
   },
   {
     id: 'e4',
@@ -150,7 +156,7 @@ export const entries: Entry[] = [
     detail: [],
     note: '정보보안팀 확인이 먼저다. 다음 회의 후보로 올려 둔다.',
     ownerId: 'u1',
-    createdAt: '2026-09-10',
+    createdAt: '2026-09-10T06:08:00Z',
   },
   // 시나리오 2 — 두 번째 미룸
   {
@@ -162,7 +168,7 @@ export const entries: Entry[] = [
     detail: [],
     note: '두 번째 미룸이다. 다음에는 기간계 담당자를 회의에 부르기로 했다.',
     ownerId: 'u4',
-    createdAt: '2026-09-14',
+    createdAt: '2026-09-14T07:10:00Z',
   },
   // 시나리오 3
   {
@@ -174,6 +180,6 @@ export const entries: Entry[] = [
     detail: ['늘어난 개발 기간은 그대로 둔다', '통합 테스트를 3주에서 1주로 줄인다'],
     note: '일정을 미루면 오픈 일정이 밀린다는 데에 이견이 없었다.',
     ownerId: 'u1',
-    createdAt: '2026-09-15',
+    createdAt: '2026-09-15T07:00:00Z',
   },
 ]

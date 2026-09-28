@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { slashDay, today } from '@/lib/date'
+import { nowIso, slashDay } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import { useThreadStore } from '@/stores/thread'
 import type {
@@ -172,11 +172,11 @@ export const useTaskStore = defineStore('task', () => {
 
   function addTask(input: TaskInput) {
     const id = data.nextId('nk')
-    const n = data.allTasks.filter((t) => t.projectId === data.currentProjectId).length + 1
     data.allTasks.push({
       id,
       projectId: data.currentProjectId,
-      key: `HW-${n}`,
+      /* 키는 프로젝트의 접두사와 그 프로젝트의 다음 번호로 선다 — 쓰기 API 가 서면 서버가 낸다 */
+      key: data.takeTaskKey(data.currentProjectId),
       title: input.title,
       parentId: input.parentId,
       body: input.body,
@@ -185,7 +185,7 @@ export const useTaskStore = defineStore('task', () => {
       start: input.start,
       due: input.due,
       priority: input.priority,
-      createdAt: today(),
+      createdAt: nowIso(),
     })
     for (const threadId of input.threadIds) linkThread(id, threadId)
     return id

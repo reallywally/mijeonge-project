@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { monthDay, today } from '@/lib/date'
+import { localDay, monthDay, nowIso } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import type {
   Entry,
   EntryKind,
+  Meeting,
   SubThreadRow,
   Thread,
   ThreadDetail,
@@ -38,13 +39,18 @@ export const useThreadStore = defineStore('thread', () => {
   const rows = computed<ThreadRow[]>(() =>
     threads.value.map((thread) => {
       const own = entriesOfThread(thread.id)
-      const lastWithMeeting = own.find((e) => e.meetingId !== null)
+      /* '마지막 회의' 는 줄을 적은 시각이 아니라 그 회의가 열린 날이다 —
+         지난 회의를 나중에 입력하면 둘이 갈린다 */
+      const lastMeeting = own
+        .map((e) => meetingById(e.meetingId))
+        .filter((m): m is Meeting => m !== null)
+        .sort((a, b) => b.date.localeCompare(a.date))[0]
       return {
         thread,
         ownerName: data.memberName(thread.ownerId),
         deferCount: own.filter((e) => e.kind === 'defer').length,
         entryCount: own.length,
-        lastMeetingLabel: lastWithMeeting ? monthDay(lastWithMeeting.createdAt) : '—',
+        lastMeetingLabel: lastMeeting ? monthDay(lastMeeting.date) : '—',
       }
     }),
   )
@@ -66,6 +72,9 @@ export const useThreadStore = defineStore('thread', () => {
    *
    * 이력은 새 줄이 위로 온다. 정렬 기준은 createdAt 이 아니라 "그 줄이 놓이는 날짜"다 —
    * 회의에 붙은 줄은 그 회의의 날짜에 놓인다. 같은 날짜의 줄끼리는 등록한 순서를 뒤집는다.
+   *
+   * 그 '등록한 순서' 는 allEntries 의 배열 순서다 — 한 회의에서 한 안건에 남긴 줄들은
+   * 날짜도 시각도 같아서 다른 기준이 없다. **배열 순서가 계약이다** (API.md Q4).
    */
   function threadDetail(threadId: string): ThreadDetail | null {
     const thread = data.allThreads.find((t) => t.id === threadId)
@@ -76,7 +85,8 @@ export const useThreadStore = defineStore('thread', () => {
       .filter((x) => x.entry.threadId === threadId)
       .map((x) => {
         const meeting = meetingById(x.entry.meetingId)
-        return { ...x, meeting, at: meeting?.date ?? x.entry.createdAt }
+        /* at 은 회의 날짜와 나란히 놓고 비교하므로 날짜뿐이어야 한다 */
+        return { ...x, meeting, at: meeting?.date ?? localDay(x.entry.createdAt) }
       })
       .sort((a, b) => b.at.localeCompare(a.at) || b.seqNo - a.seqNo)
 
@@ -134,7 +144,7 @@ export const useThreadStore = defineStore('thread', () => {
       state: 'queued',
       ownerId,
       parentThreadId: null,
-      createdAt: today(),
+      createdAt: nowIso(),
     })
     return id
   }
@@ -159,7 +169,7 @@ export const useThreadStore = defineStore('thread', () => {
       detail: [],
       note,
       ownerId,
-      createdAt: today(),
+      createdAt: nowIso(),
     })
 
     const thread = data.allThreads.find((t) => t.id === threadId)

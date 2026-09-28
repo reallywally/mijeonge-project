@@ -27,6 +27,8 @@ export interface Member {
 export interface Project {
   id: string
   name: string
+  /** 작업 키의 접두사 — 'HW' 면 그 프로젝트의 작업이 HW-1 · HW-2 … 가 된다. 프로젝트끼리 겹치지 않는다 */
+  taskKeyPrefix: string
 }
 
 export interface Thread {

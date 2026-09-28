@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { monthDay } from '@/lib/date'
+import { monthDay, nowIso } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import type {
   Entry,
@@ -13,7 +13,7 @@ import type {
 } from '@/types/domain'
 
 /**
- * 회의. 회의가 짊어지는 것은 날짜 · 참석자 · 녹음뿐이고 회의록 본문은 없다 —
+ * 회의. 회의가 짊어지는 것은 날짜 · 참석자뿐이고 회의록 본문은 없다 —
  * 그날 안건에 남긴 줄이 그대로 그 회의의 기록이다.
  *
  * 안건이 하나도 안 붙은 회의(메모만 남긴 주간회의)도 있다. 그 회의는 안건 이력으로는
@@ -121,7 +121,7 @@ export const useMeetingStore = defineStore('meeting', () => {
         state: 'queued',
         ownerId: nt.ownerId,
         parentThreadId: nt.parentThreadId ? resolve(nt.parentThreadId) : null,
-        createdAt: input.date,
+        createdAt: nowIso(),
       })
     }
 
@@ -149,7 +149,7 @@ export const useMeetingStore = defineStore('meeting', () => {
         detail: e.detail,
         note: e.note,
         ownerId: e.ownerId,
-        createdAt: input.date,
+        createdAt: nowIso(),
       })
 
       const thread = data.allThreads.find((t) => t.id === threadId)

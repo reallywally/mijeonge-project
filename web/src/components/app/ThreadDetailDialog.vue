@@ -68,7 +68,7 @@ function submitOutside() {
     <DialogScrollContent v-if="detail" class="max-w-[1000px] gap-0 p-0">
       <div class="flex items-center gap-2.5 border-b border-border px-[26px] py-4 pr-[60px]">
         <FolderClosed class="size-3.5 text-muted-foreground" />
-        <span class="text-xs text-muted-foreground">{{ data.currentProject.name }}</span>
+        <span class="text-xs text-muted-foreground">{{ data.currentProject?.name }}</span>
         <ChevronRight class="size-3 text-muted-foreground" />
         <span class="text-xs">안건</span>
       </div>

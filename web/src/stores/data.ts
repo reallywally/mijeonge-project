@@ -11,6 +11,7 @@ import {
   taskThreadLinks,
   threads,
 } from '@/fixtures'
+import { makeTaskKeyPrefix } from '@/lib/project'
 import type {
   Entry,
   Meeting,
@@ -41,13 +42,49 @@ export const useDataStore = defineStore('data', () => {
   const taskThreads = ref<TaskThreadLink[]>(structuredClone(taskThreadLinks))
   const meetingTasks = ref<MeetingTaskLink[]>(structuredClone(meetingTaskLinks))
 
-  /** 고른 프로젝트. 이후 모든 화면은 이 프로젝트 안에서만 돈다. */
-  const currentProjectId = ref(allProjects.value[0].id)
-  const currentProject = computed(
-    () => allProjects.value.find((p) => p.id === currentProjectId.value) ?? allProjects.value[0],
+  /**
+   * 고른 프로젝트. 이후 모든 화면은 이 프로젝트 안에서만 돈다.
+   * 하나도 없을 수 있다 — 그때는 프로젝트 등록이 첫 화면이다 (API.md Q18).
+   */
+  const currentProjectId = ref(allProjects.value[0]?.id ?? '')
+  const currentProject = computed<Project | null>(
+    () => allProjects.value.find((p) => p.id === currentProjectId.value) ?? null,
   )
   function setProject(id: string) {
     if (allProjects.value.some((p) => p.id === id)) currentProjectId.value = id
+  }
+
+  /* 작업 키 번호. 서버는 project.next_task_no 를 잠가 올린다 (API.md Q19) —
+     남은 작업을 세면 지운 번호를 다시 쓰게 되므로 세지 않고 들고 센다. */
+  const nextTaskNo = ref<Record<string, number>>(
+    Object.fromEntries(
+      allProjects.value.map((p) => [
+        p.id,
+        allTasks.value
+          .filter((t) => t.projectId === p.id)
+          .reduce((max, t) => Math.max(max, Number(t.key.split('-').pop()) || 0), 0) + 1,
+      ]),
+    ),
+  )
+
+  /** 다음 작업 키를 떼 온다 — 같은 번호가 두 번 나가지 않는다 */
+  function takeTaskKey(projectId: string) {
+    const project = allProjects.value.find((p) => p.id === projectId)
+    if (!project) return ''
+    const no = nextTaskNo.value[projectId] ?? 1
+    nextTaskNo.value[projectId] = no + 1
+    return `${project.taskKeyPrefix}-${no}`
+  }
+
+  /** 프로젝트를 만들고 그 자리에서 고른다. 접두사를 비우면 겹치지 않는 값을 붙여 준다. */
+  function addProject(name: string, taskKeyPrefix: string) {
+    const id = nextId('np')
+    const wanted = taskKeyPrefix.trim().toUpperCase()
+    const prefix = wanted || makeTaskKeyPrefix(allProjects.value.map((p) => p.taskKeyPrefix))
+    allProjects.value.push({ id, name, taskKeyPrefix: prefix })
+    nextTaskNo.value[id] = 1
+    currentProjectId.value = id
+    return id
   }
 
   /** 지금 로그인한 사람. 로그인이 붙기 전까지 고정이다. */
@@ -73,6 +110,8 @@ export const useDataStore = defineStore('data', () => {
     currentProjectId,
     currentProject,
     setProject,
+    addProject,
+    takeTaskKey,
     currentMemberId,
     memberName,
     nextId,
