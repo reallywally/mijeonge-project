@@ -14,7 +14,7 @@ from app.errors import not_found
 from app.models import Entry, EntryDetail, Thread, new_id
 from app.schemas.thread import EntryAdded, EntryCreate, EntryOut, ThreadCreate, ThreadOut
 from app.services import project as project_service
-from app.time import KST
+from app.time import now
 
 # 이 둘은 '정해졌다'로 친다. 그 밖의 kind 는 다뤘다는 뜻일 뿐이다
 DECIDING_KINDS = ("decide", "change")
@@ -67,7 +67,7 @@ async def create_thread(session: AsyncSession, project_id: str, payload: ThreadC
         state="queued",
         owner_id=payload.owner_id,
         parent_thread_id=None,
-        created_at=datetime.now(KST),
+        created_at=now(),
     )
     session.add(thread)
     await session.commit()
@@ -100,7 +100,7 @@ async def add_outside_entry(
 ) -> EntryAdded:
     """회의 없이 담당자 확인만으로 처리한 줄. meeting_id 는 null 로 고정한다."""
     thread = await load_thread(session, thread_id)
-    entry = build_entry(payload, thread_id, None, datetime.now(KST))
+    entry = build_entry(payload, thread_id, None, now())
     session.add(entry)
     apply_entry_to_thread(thread, payload.kind, payload.owner_id)
     await session.commit()

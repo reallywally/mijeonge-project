@@ -66,3 +66,29 @@ async def test_first_task_of_a_new_project_is_number_one(client: httpx.AsyncClie
         await client.post(f"/api/projects/{project['id']}/tasks", json={"title": "요구사항 정리"})
     ).json()
     assert task["key"] == "POR-1"
+
+
+async def test_blank_prefix_counts_as_not_given(client: httpx.AsyncClient) -> None:
+    """등록 폼은 입력칸을 비워 두는 것이 정상 경로다.
+
+    빈 문자열도 '안 넣은 것' 과 같이 본다 (API.md Q24).
+    """
+    for blank in ("", "   "):
+        res = await client.post(
+            "/api/projects", json={"name": "비워 둔 칸", "taskKeyPrefix": blank}
+        )
+
+        assert res.status_code == 201, blank
+        prefix = res.json()["taskKeyPrefix"]
+        assert prefix and prefix not in {"HW", "PAS", "MG"}
+
+
+async def test_prefix_keeps_its_shape_when_given(client: httpx.AsyncClient) -> None:
+    """빈 값만 접는다. 적은 값은 앞뒤 공백만 떼고 그대로 쓴다 — 형식이 틀리면 422 다."""
+    res = await client.post("/api/projects", json={"name": "공백만 떼기", "taskKeyPrefix": " POR "})
+    assert res.status_code == 201
+    assert res.json()["taskKeyPrefix"] == "POR"
+
+    bad = await client.post("/api/projects", json={"name": "빈칸 낀 값", "taskKeyPrefix": "PO R"})
+    assert bad.status_code == 422
+    assert bad.json()["detail"] == {"taskKeyPrefix": "형식이 올바르지 않습니다."}

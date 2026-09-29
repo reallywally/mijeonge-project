@@ -20,7 +20,7 @@ async def test_add_thread_answers_with_a_thread(client: httpx.AsyncClient) -> No
     assert thread["state"] == "queued"  # 등록만 된 상태
     assert thread["ownerId"] == "u2"
     assert thread["parentThreadId"] is None
-    assert "T" not in thread["createdAt"]
+    assert thread["createdAt"].endswith("Z")  # ISO 8601 UTC (API.md Q3)
 
 
 async def test_add_thread_on_unknown_project_is_404(client: httpx.AsyncClient) -> None:
@@ -55,7 +55,7 @@ async def test_outside_entry_carries_no_meeting(client: httpx.AsyncClient) -> No
     assert set(body["entry"]) == ENTRY_KEYS
     assert body["entry"]["meetingId"] is None  # 회의 밖 처리
     assert body["entry"]["detail"] == ["일 1회 전체 백업", "보관은 30일"]
-    assert "T" not in body["entry"]["createdAt"]
+    assert body["entry"]["createdAt"].endswith("Z")
 
 
 async def test_decide_settles_the_thread_and_moves_the_owner(client: httpx.AsyncClient) -> None:

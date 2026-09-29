@@ -207,7 +207,9 @@ async def test_scenario_2_deferred_twice(client: httpx.AsyncClient) -> None:
         first["meeting"]["id"],
         second["meeting"]["id"],
     ]
-    assert [e["createdAt"] for e in history] == ["2026-09-07", "2026-09-14"]
+    # 그날을 가리키는 것은 회의 날짜다. createdAt 은 적은 시각이라 둘 다 지금이다 (API.md Q23)
+    assert [m["date"] for m in snap["meetings"]] == ["2026-09-07", "2026-09-14"]
+    assert all(e["createdAt"].endswith("Z") for e in history)
 
 
 async def test_scenario_3_schedule_settled_in_one_meeting(client: httpx.AsyncClient) -> None:

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from app.schemas.base import DayStamp, Schema
+from app.schemas.base import Schema, Utc
 
 EntryKindIn = Literal["raise", "defer", "decide", "refine", "change", "split"]
 
@@ -12,7 +12,7 @@ class ThreadOut(Schema):
     state: str
     owner_id: str | None
     parent_thread_id: str | None
-    created_at: DayStamp
+    created_at: Utc
 
 
 class EntryOut(Schema):
@@ -27,7 +27,7 @@ class EntryOut(Schema):
     detail: list[str]
     note: str
     owner_id: str | None
-    created_at: DayStamp
+    created_at: Utc
 
 
 class ThreadCreate(Schema):

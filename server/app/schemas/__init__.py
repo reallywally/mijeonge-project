@@ -1,3 +1,3 @@
-from app.schemas.base import DayStamp, Schema
+from app.schemas.base import Schema, Utc
 
-__all__ = ["DayStamp", "Schema"]
+__all__ = ["Schema", "Utc"]

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from app.schemas.base import DayStamp, Schema
+from app.schemas.base import Schema, Utc
 
 # 입력에서만 좁힌다 — 화면이 보낸 값이 셋 넷 중 하나인지 경계에서 걸러야 400 이 아니라 422 로 나간다
 TaskStatusIn = Literal["todo", "doing", "blocked", "done"]
@@ -30,7 +30,7 @@ class TaskOut(Schema):
     start: date | None
     due: date | None
     priority: str
-    created_at: DayStamp
+    created_at: Utc
 
 
 class TaskLineIn(Schema):

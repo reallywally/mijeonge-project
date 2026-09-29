@@ -6,13 +6,14 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, PlainSerializer
 from pydantic.alias_generators import to_camel
 
-from app.time import day_of
+from app.time import iso_z
 
-DayStamp = Annotated[
+Utc = Annotated[
     datetime,
-    # 저장은 timestamptz 인데 내보낼 때는 날짜로 자른다. 프론트 `lib/date.ts` 의 monthDay 가
-    # split('-') 로 읽어서, 시각을 실어 보내면 화면에 '9월 NaN일' 이 찍힌다
-    PlainSerializer(lambda moment: day_of(moment).isoformat(), return_type=str),
+    # 계약은 ISO 8601 UTC 하나다 — 늘 `Z` 로 끝나고 오프셋(+09:00)을 섞지 않는다 (API.md Q3).
+    # naive 가 와도 UTC 로 보고 Z 를 붙인다. 시각 없이 날짜만 내보내면 같은 날 여러 줄의
+    # 순서를 잃는다 — 화면은 `lib/date.ts` 의 localDay 로 한국 날짜를 뽑아 쓴다
+    PlainSerializer(iso_z, return_type=str),
 ]
 
 

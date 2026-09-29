@@ -25,7 +25,7 @@ from app.schemas.thread import ThreadOut
 from app.services import project as project_service
 from app.services import task as task_service
 from app.services import thread as thread_service
-from app.time import at_day_start
+from app.time import now
 
 
 def to_meeting(row: Meeting) -> MeetingOut:
@@ -109,7 +109,9 @@ async def save_meeting(
     회의에서 생긴 것은 안건도 줄도 그 회의 날짜로 앉힌다(`stores/meeting.ts` 와 같다).
     """
     await project_service.load_project(session, project_id)
-    created_at = at_day_start(payload.date.isoformat())
+    # created_at 은 '그 줄을 적은 시각' 이다. 회의 날짜 0시에 앉히면 지난 회의를 나중에 입력할 때
+    # 과거로 적히고 한 회의의 모든 줄이 같은 값이 된다 — 그날을 가리키는 건 meeting.date 다
+    created_at = now()
 
     temp_ids = _temp_ids(payload.new_threads)
     rows = (

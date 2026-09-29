@@ -31,9 +31,10 @@ from app.models import (
     TaskThreadLink,
     Thread,
 )
-from app.time import at_day_start as at
+from app.time import at
 
-# 픽스처의 createdAt 은 날짜뿐이다. 저장은 timestamptz 라 `at` 이 그날 0시(KST)로 앉힌다
+# createdAt 은 픽스처의 값을 그대로 쓴다 — 계약대로 ISO 8601 UTC(`…Z`) 다.
+# 회의는 `date` 가 그날을 가리키므로 created_at 만 그날 0시(KST)로 앉힌다(화면에 안 나간다)
 
 
 def d(day: str | None) -> date | None:
@@ -75,25 +76,31 @@ def thread(
 def threads() -> list[Thread]:
     return [
         # 시나리오 1 — 개발 환경 설정 작업에서 갈라져 나온 둘
-        thread("t1", "서버 OS 결정", "decided", "u3", "2026-09-08"),
-        thread("t2", "DB 결정", "decided", "u3", "2026-09-08"),
-        thread("t3", "사내망에서 외부 모델 호출 허용 범위", "open", "u1", "2026-09-09"),
-        thread("t4", "개발 서버 백업 주기", "queued", None, "2026-09-10"),
+        thread("t1", "서버 OS 결정", "decided", "u3", "2026-09-08T00:30:00Z"),
+        thread("t2", "DB 결정", "decided", "u3", "2026-09-08T00:35:00Z"),
+        thread("t3", "사내망에서 외부 모델 호출 허용 범위", "open", "u1", "2026-09-09T02:10:00Z"),
+        thread("t4", "개발 서버 백업 주기", "queued", None, "2026-09-10T06:20:00Z"),
         # 시나리오 2 — 두 번 미뤄진 안건
-        thread("t5", "보험료 산출 기간계 API 호출 in · out 정의", "open", "u4", "2026-09-07"),
+        thread(
+            "t5",
+            "보험료 산출 기간계 API 호출 in · out 정의",
+            "open",
+            "u4",
+            "2026-09-07T00:10:00Z",
+        ),
         # 시나리오 3 — 회의만으로 끝난 안건
         thread(
             "t6",
             "일정 조율 — 전체 일정을 미룰지, 테스트 기간을 줄일지",
             "decided",
             "u1",
-            "2026-09-14",
+            "2026-09-14T01:00:00Z",
         ),
-        thread("t7", "가상비서 tool 만드는 순서", "queued", "u4", "2026-09-12"),
-        thread("t8", "AI 심사 학습 데이터 범위", "queued", "u1", "2026-09-12"),
-        thread("t9", "공통 코드 체계 확정", "queued", "u2", "2026-09-15"),
+        thread("t7", "가상비서 tool 만드는 순서", "queued", "u4", "2026-09-12T05:40:00Z"),
+        thread("t8", "AI 심사 학습 데이터 범위", "queued", "u1", "2026-09-12T05:45:00Z"),
+        thread("t9", "공통 코드 체계 확정", "queued", "u2", "2026-09-15T00:20:00Z"),
         # 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
-        thread("t10", "이관 범위 확정", "queued", "u2", "2026-09-16", project="p2"),
+        thread("t10", "이관 범위 확정", "queued", "u2", "2026-09-16T01:05:00Z", project="p2"),
     ]
 
 
@@ -226,7 +233,7 @@ def entries() -> list[Entry]:
             [],
             "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.",
             "u3",
-            "2026-09-09",
+            "2026-09-09T02:00:00Z",
         ),
         # 시나리오 2 — 첫 번째 미룸
         entry(
@@ -238,7 +245,7 @@ def entries() -> list[Entry]:
             [],
             "기간계 업무 정의가 안 돼 in · out 을 정할 수 없다. 다음 주 월요일에 다시 본다.",
             "u4",
-            "2026-09-07",
+            "2026-09-07T07:30:00Z",
         ),
         # 시나리오 1 — 회의에서 정한 것
         entry(
@@ -253,7 +260,7 @@ def entries() -> list[Entry]:
             ],
             "",
             "u3",
-            "2026-09-10",
+            "2026-09-10T06:05:00Z",
         ),
         entry(
             "e4",
@@ -264,7 +271,7 @@ def entries() -> list[Entry]:
             [],
             "정보보안팀 확인이 먼저다. 다음 회의 후보로 올려 둔다.",
             "u1",
-            "2026-09-10",
+            "2026-09-10T06:08:00Z",
         ),
         # 시나리오 2 — 두 번째 미룸
         entry(
@@ -276,7 +283,7 @@ def entries() -> list[Entry]:
             [],
             "두 번째 미룸이다. 다음에는 기간계 담당자를 회의에 부르기로 했다.",
             "u4",
-            "2026-09-14",
+            "2026-09-14T07:10:00Z",
         ),
         # 시나리오 3
         entry(
@@ -288,7 +295,7 @@ def entries() -> list[Entry]:
             ["늘어난 개발 기간은 그대로 둔다", "통합 테스트를 3주에서 1주로 줄인다"],
             "일정을 미루면 오픈 일정이 밀린다는 데에 이견이 없었다.",
             "u1",
-            "2026-09-15",
+            "2026-09-15T07:00:00Z",
         ),
     ]
 
@@ -328,7 +335,7 @@ def task(
         start=d(start),
         due=d(due),
         priority="normal",
-        created_at=at("2026-09-04"),
+        created_at=at("2026-09-04T00:20:00Z"),
         lines=[
             TaskLine(
                 id=lid, task_id=id_, kind=kind, text=text, done=done, level=level, sort_order=i

@@ -44,7 +44,7 @@ async def test_add_task_answers_with_a_task(client: httpx.AsyncClient) -> None:
     assert set(task) == TASK_KEYS  # domain.ts 의 Task 와 한 필드씩 같다
     assert task["projectId"] == "p1"
     assert task["title"] == "배포 파이프라인 만들기"
-    assert task["createdAt"].count("-") == 2 and "T" not in task["createdAt"]  # YYYY-MM-DD
+    assert task["createdAt"].endswith("Z")  # ISO 8601 UTC (API.md Q3)
 
 
 async def test_body_lines_get_server_ids_in_order(client: httpx.AsyncClient) -> None:

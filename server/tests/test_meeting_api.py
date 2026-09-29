@@ -51,8 +51,13 @@ async def test_save_meeting_answers_with_everything_that_changed(
     assert body["threads"][0]["ownerId"] == "u2"
 
 
-async def test_meeting_date_is_the_date_of_everything_it_made(client: httpx.AsyncClient) -> None:
-    """회의에서 생긴 것은 안건도 줄도 그 회의 날짜로 앉는다(`stores/meeting.ts` 와 같다)."""
+async def test_meeting_date_is_the_date_it_happened(client: httpx.AsyncClient) -> None:
+    """그날을 가리키는 것은 `meeting.date` 하나다.
+
+    안건과 줄의 `createdAt` 은 **적은 시각**이지 회의 날짜가 아니다 (API.md Q23) — 지난 회의를
+    나중에 입력하면 갈린다. 이력이 회의 날짜에 놓이는 것은 화면이 `meeting.date` 로 하는 일이고,
+    같은 날 줄들의 순서는 배열 순서(= 서버의 seq)가 잡는다.
+    """
     body = (
         await client.post(
             "/api/projects/p1/meetings",
@@ -62,8 +67,10 @@ async def test_meeting_date_is_the_date_of_everything_it_made(client: httpx.Asyn
     ).json()
 
     assert body["meeting"]["date"] == "2026-09-18"
-    assert body["entries"][0]["createdAt"] == "2026-09-18"
-    assert body["threads"][0]["createdAt"] == "2026-09-18"  # 새로 만든 안건
+    # 적은 시각 — ISO 8601 UTC 하나, 늘 Z 로 끝난다
+    assert body["entries"][0]["createdAt"].endswith("Z")
+    assert body["threads"][0]["createdAt"].endswith("Z")  # 새로 만든 안건
+    assert "+" not in body["entries"][0]["createdAt"]
 
 
 async def test_temp_ids_are_replaced_in_all_three_places(client: httpx.AsyncClient) -> None:

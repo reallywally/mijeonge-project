@@ -92,8 +92,8 @@ async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> N
 
     `stores/thread.ts` 의 `rows` 와 작업 목록에는 정렬이 아예 없다. 게다가 안건 이력은
     같은 날짜의 줄을 배열 인덱스(seqNo)로 가른다. 그래서 등록 순서(`seq`)로 내보낸다 —
-    `created_at` 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다(e1 이 09-09, e2 가 09-07 이라
-    날짜로 세우면 픽스처와 순서가 뒤집힌다).
+    `created_at` 으로 세우면 안 된다. 한 회의에서 남긴 줄들은 값이 같을 수 있고, 픽스처의
+    e1(09-09)과 e2(09-07)처럼 적은 순서와 시각 순서가 다른 줄도 있다.
     """
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
@@ -103,11 +103,16 @@ async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> N
     assert [t["key"] for t in snap["tasks"]] == [f"HW-{n}" for n in range(1, 22)]
 
 
-async def test_dates_are_days_not_timestamps(client: httpx.AsyncClient) -> None:
-    """프론트 monthDay 가 split('-') 로 읽는다 — 시각이 실리면 '9월 NaN일' 이 찍힌다."""
+async def test_created_at_is_utc_and_dates_are_days(client: httpx.AsyncClient) -> None:
+    """`createdAt` 은 ISO 8601 UTC(`…Z`), 사람이 고른 날짜는 `YYYY-MM-DD` 다 (API.md Q3 · Q23).
+
+    시드가 픽스처의 값을 그대로 넣으므로 목업과 한 글자씩 같다.
+    """
     snap = (await client.get("/api/projects/p1/snapshot")).json()
     thread = next(t for t in snap["threads"] if t["id"] == "t1")
-    assert thread["createdAt"] == "2026-09-08"
+    assert thread["createdAt"] == "2026-09-08T00:30:00Z"  # fixtures/threads.ts 의 t1
+    entry = next(e for e in snap["entries"] if e["id"] == "e3")
+    assert entry["createdAt"] == "2026-09-10T06:05:00Z"
     assert next(m for m in snap["meetings"] if m["id"] == "m3")["date"] == "2026-09-10"
 
 

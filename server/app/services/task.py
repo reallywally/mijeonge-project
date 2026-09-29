@@ -5,8 +5,6 @@
 성공이다. 읽기 쪽(`services/snapshot.py`)이 쓰는 `to_task` 도 여기 둔다 — 변환을 두 벌 갖지 않는다.
 """
 
-from datetime import datetime
-
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +28,7 @@ from app.schemas.task import (
     TaskThreadLinkOut,
 )
 from app.services import project as project_service
-from app.time import KST
+from app.time import now
 
 
 def to_task(row: Task) -> TaskOut:
@@ -134,7 +132,7 @@ async def create_task(session: AsyncSession, project_id: str, payload: TaskCreat
         start=payload.start,
         due=payload.due,
         priority=payload.priority,
-        created_at=datetime.now(KST),
+        created_at=now(),
         # 화면이 보낸 줄 id 는 화면 안에서만 쓰던 값이다 — 서버가 새로 붙인다
         lines=[
             TaskLine(
