@@ -67,8 +67,6 @@ async function mountView(path = '/tasks') {
 const popupText = () => document.body.textContent ?? ''
 const popupButton = (text: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
-const popupButtonWith = (text: string) =>
-  [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes(text))
 
 async function click(el: Element | undefined) {
   expect(el, '누를 것을 못 찾았다').toBeTruthy()
@@ -83,6 +81,39 @@ async function fill(selector: string, value: string) {
   el!.dispatchEvent(new Event('input'))
   await flushPromises()
 }
+
+/* 고쳐 쓰는 칸 — 값을 넣고 그 칸이 듣는 이벤트를 쏜다 */
+async function type(selector: string, value: string, event: 'input' | 'change' = 'input') {
+  const el = document.body.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)
+  expect(el, `${selector} 를 못 찾았다`).toBeTruthy()
+  el!.value = value
+  el!.dispatchEvent(new Event('input'))
+  /* Input 은 값을 다음 틱에 올린다 — 브라우저에서처럼 input 과 change 사이를 띄운다 */
+  await flushPromises()
+  if (event === 'change') el!.dispatchEvent(new Event('change'))
+  await flushPromises()
+}
+
+async function blur(selector: string) {
+  document.body.querySelector<HTMLElement>(selector)!.dispatchEvent(new FocusEvent('blur'))
+  await flushPromises()
+}
+
+const fieldValues = () =>
+  [...document.body.querySelectorAll('textarea')].map((t) => t.value).join('\n')
+const bodyField = (text: string) =>
+  [...document.body.querySelectorAll('textarea')].find((t) => t.value === text)
+
+async function keydown(selector: string, key: string) {
+  document.body
+    .querySelector(selector)!
+    .dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  await flushPromises()
+}
+
+/* 검색 칸 아래로 펼쳐진 후보들 */
+const options = () =>
+  [...document.body.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim() ?? '')
 
 enableAutoUnmount(afterEach)
 
@@ -151,7 +182,8 @@ describe('작업 상세 팝업', () => {
     expect(popupText()).toContain('개발 환경 설정')
     expect(popupText()).toContain('HW-4')
     expect(popupText()).toContain('최상위 작업 · 하위 3건')
-    expect(popupText()).toContain('체크박스는 눌러서 켜고 끕니다')
+    /* 본문은 줄마다 고칠 수 있는 칸으로 뜬다 */
+    expect(fieldValues()).toContain('mysql 설치와 계정 발급')
     /* 걸린 안건이 지금까지 정해진 내용까지 달고 온다 */
     expect(popupText()).toContain('서버 OS 결정')
     expect(popupText()).toContain('mysql 을 쓴다')
@@ -161,32 +193,40 @@ describe('작업 상세 팝업', () => {
     await mountView('/tasks/k18')
     expect(popupText()).toContain('보험료 산출 기간계 API 개발')
     expect(popupText()).toContain('기간 미정')
-    expect(popupText()).toContain('등록된 회의에서 고르기')
+    expect(popupText()).toContain('기간계 API in · out 회의')
   })
 
-  it('안건을 걸면 걸린 목록에 들어가고, 해제하면 빠진다', async () => {
+  it('안건은 찾아서 걸면 표에 들어가고, 해제하면 빠진다', async () => {
     await mountView('/tasks/k4')
     const taskStore = useTaskStore()
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
 
-    await click(popupButton('개발 서버 백업 주기'))
+    const search = 'input[placeholder="안건 제목으로 찾기"]'
+    await type(search, '백업')
+    /* 적은 말이 들어간 것만 펼친다 */
+    expect(options()).toEqual(['개발 서버 백업 주기다음 회의 대기'])
+    await keydown(search, 'Enter')
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', 't4'])
-    /* 고르는 자리에서는 빠지고 걸린 목록으로 내려간다 */
-    expect(popupButton('개발 서버 백업 주기')).toBeUndefined()
+    /* 고르고 나면 칸이 비고, 건 것은 다시 고를 수 없다 */
+    expect(document.body.querySelector<HTMLInputElement>(search)!.value).toBe('')
+    await type(search, '백업')
+    expect(options()).toEqual([])
 
-    const unlink = [...document.body.querySelectorAll('button')].filter(
-      (b) => b.textContent?.trim() === '연결 해제',
-    )
-    await click(unlink[2])
+    await click(document.body.querySelector('button[aria-label="개발 서버 백업 주기 연결 해제"]')!)
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
   })
 
-  it('회의도 같은 모양으로 걸고 뗀다', async () => {
+  it('회의는 제목뿐 아니라 날짜로도 찾아 건다', async () => {
     await mountView('/tasks/k4')
     const taskStore = useTaskStore()
     expect(taskStore.meetingsOfTask('k4').map((m) => m.id)).toEqual(['m3'])
 
-    await click(popupButtonWith('일정 조율 회의'))
+    const search = 'input[placeholder="제목 · 날짜 · 참석자로 찾기"]'
+    await type(search, '9월 15일')
+    expect(options()).toEqual(['일정 조율 회의9월 15일'])
+    const option = document.body.querySelector('[role="option"]')!
+    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flushPromises()
     expect(taskStore.meetingsOfTask('k4').map((m) => m.id)).toEqual(['m3', 'm6'])
   })
 
@@ -196,37 +236,161 @@ describe('작업 상세 팝업', () => {
     const line = () => taskStore.taskDetail('k4')!.task.body.find((l) => l.id === 'l3')!
     expect(line().done).toBe(false)
 
-    await click(popupButton('mysql 설치와 계정 발급'))
+    const row = bodyField('mysql 설치와 계정 발급')!.parentElement!
+    await click(row.querySelector('button[aria-label="완료"]')!)
     expect(line().done).toBe(true)
   })
 
-  it("'하위 작업 추가'는 상위 작업이 채워진 채로 추가 폼을 연다", async () => {
+  it('제목은 고치고 벗어나면 바로 들어가고, 비우면 원래대로 돌아간다', async () => {
     await mountView('/tasks/k4')
+    const taskStore = useTaskStore()
+    const title = () => taskStore.taskDetail('k4')!.task.title
+
+    await type('textarea[aria-label="제목"]', '개발 환경 설정 (1차)')
+    await blur('textarea[aria-label="제목"]')
+    expect(title()).toBe('개발 환경 설정 (1차)')
+
+    await type('textarea[aria-label="제목"]', '   ')
+    await blur('textarea[aria-label="제목"]')
+    expect(title()).toBe('개발 환경 설정 (1차)')
+    expect(
+      document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="제목"]')!.value,
+    ).toBe('개발 환경 설정 (1차)')
+  })
+
+  it('본문 줄을 고치면 바로 들어가고, Enter 로 새 줄을 열고, [] 로 체크박스가 된다', async () => {
+    await mountView('/tasks/k4')
+    const taskStore = useTaskStore()
+    const body = () => taskStore.taskDetail('k4')!.task.body
+
+    const first = bodyField('서버 신청서 제출')!
+    first.value = '서버 신청서 제출 (완료 후 공유)'
+    first.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(body()[0].text).toBe('서버 신청서 제출 (완료 후 공유)')
+
+    first.setSelectionRange(first.value.length, first.value.length)
+    first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    const fresh = document.activeElement as HTMLTextAreaElement
+    expect(fresh.tagName).toBe('TEXTAREA')
+    fresh.value = '[] 접속 확인'
+    fresh.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(body()[1]).toMatchObject({ kind: 'check', text: '접속 확인', done: false })
+  })
+
+  it('기간은 한쪽만 고른 동안 들고 있다가 짝이 맞으면 들어간다', async () => {
+    await mountView('/tasks/k4')
+    const taskStore = useTaskStore()
+    const task = () => taskStore.taskDetail('k4')!.task
+
+    await type('input[aria-label="시작 날짜"]', '', 'change')
+    expect([task().start, task().due]).toEqual(['2026-09-08', '2026-09-15'])
+    expect(popupText()).toContain('시작 날짜도 정하면 기간이 잡힙니다')
+
+    await type('input[aria-label="기한"]', '', 'change')
+    expect([task().start, task().due]).toEqual([null, null])
+
+    await type('input[aria-label="시작 날짜"]', '2026-10-01', 'change')
+    expect(task().start).toBeNull()
+    await type('input[aria-label="기한"]', '2026-10-10', 'change')
+    expect([task().start, task().due]).toEqual(['2026-10-01', '2026-10-10'])
+  })
+
+  it("'하위 작업 추가'는 폼을 띄우지 않고 제목만 받아 바로 만든다", async () => {
+    await mountView('/tasks/k4')
+    const taskStore = useTaskStore()
+    const children = () => taskStore.tasks.filter((t) => t.parentId === 'k4')
+    expect(children()).toHaveLength(3)
+
     await click(popupButton('하위 작업 추가'))
-    expect(popupText()).toContain('작업 추가')
-    expect(popupText()).toContain('개발 환경 설정 아래로 들어갑니다')
+    expect(popupText()).not.toContain('만들고 계속 추가')
+
+    const input = 'input[placeholder="하위 작업 제목을 적고 Enter"]'
+    await fill(input, '스테이징 서버 신청')
+    document.body
+      .querySelector(input)!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+
+    expect(children()).toHaveLength(4)
+    const made = children().at(-1)!
+    expect(made.title).toBe('스테이징 서버 신청')
+    expect([made.status, made.priority, made.ownerId, made.start, made.due]).toEqual([
+      'todo',
+      'normal',
+      null,
+      null,
+      null,
+    ])
+    /* 칸은 비워진 채 남아 이어서 적는다 */
+    expect(document.body.querySelector<HTMLInputElement>(input)?.value).toBe('')
   })
 })
 
 describe('작업 추가 팝업', () => {
-  it('제목과 내용을 적고 만들면 목록 건수가 늘어난다', async () => {
+  it('상세와 같은 칸에 제목 · 내용을 적고 만들면 목록 건수가 늘어난다', async () => {
     const w = await mountView('/tasks/new')
     const taskStore = useTaskStore()
     expect(taskStore.rows).toHaveLength(21)
 
-    await fill('input[placeholder="예: 보험료 산출 기간계 API 개발"]', 'CI 러너 붙이기')
-    await fill('textarea', '[] 러너 등록\n- 사내 인증서가 필요하다')
+    await type('textarea[aria-label="제목"]', 'CI 러너 붙이기')
+    const body = document.body.querySelector<HTMLTextAreaElement>('[data-task-body] textarea')!
+    body.value = '[] 러너 등록'
+    body.dispatchEvent(new Event('input'))
+    await flushPromises()
+    body.setSelectionRange(body.value.length, body.value.length)
+    body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    const next = document.activeElement as HTMLTextAreaElement
+    next.value = '- 사내 인증서가 필요하다'
+    next.dispatchEvent(new Event('input'))
+    await flushPromises()
+
     await click(popupButton('만들기'))
 
     expect(taskStore.rows).toHaveLength(22)
     const made = taskStore.rows.find((r) => r.task.title === 'CI 러너 붙이기')!
-    expect(made.task.body.map((l) => l.kind)).toEqual(['check', 'bullet'])
+    expect(made.task.body.map((l) => [l.kind, l.text])).toEqual([
+      ['check', '러너 등록'],
+      ['bullet', '사내 인증서가 필요하다'],
+    ])
     expect(w.text()).toContain('총 22건 중 1–8건')
   })
 
-  it('제목이 비면 만들 수 없다', async () => {
+  it('찾아서 골라 둔 안건 · 회의가 만들 때 같이 걸린다', async () => {
+    await mountView('/tasks/new')
+    const taskStore = useTaskStore()
+
+    await type('textarea[aria-label="제목"]', '백업 스크립트')
+    await type('input[placeholder="안건 제목으로 찾기"]', '백업')
+    await keydown('input[placeholder="안건 제목으로 찾기"]', 'Enter')
+    await type('input[placeholder="제목 · 날짜 · 참석자로 찾기"]', '일정 조율 회의')
+    await keydown('input[placeholder="제목 · 날짜 · 참석자로 찾기"]', 'Enter')
+    /* 아직 만들기 전이라 표에만 서 있다 */
+    expect(popupText()).toContain('개발 서버 백업 주기')
+    expect(taskStore.rows).toHaveLength(21)
+
+    await click(popupButton('만들기'))
+    const made = taskStore.rows.find((r) => r.task.title === '백업 스크립트')!
+    expect(taskStore.threadsOfTask(made.task.id).map((t) => t.id)).toEqual(['t4'])
+    expect(taskStore.meetingsOfTask(made.task.id).map((m) => m.id)).toEqual(['m6'])
+  })
+
+  it('하위 작업 추가로 들어오면 상위 작업이 채워져 있다', async () => {
+    await mountView('/tasks/new?parent=k4')
+    expect(popupText()).toContain('개발 환경 설정 아래로 들어갑니다')
+  })
+
+  it('제목이 비거나 기간이 반쪽이면 만들 수 없다', async () => {
     await mountView('/tasks/new')
     expect(popupText()).toContain('제목을 적어야 만들 수 있습니다')
+    expect(popupButton('만들기')!.hasAttribute('disabled')).toBe(true)
+
+    await type('textarea[aria-label="제목"]', '배포 스크립트 정리')
+    expect(popupButton('만들기')!.hasAttribute('disabled')).toBe(false)
+    await type('input[aria-label="시작 날짜"]', '2026-10-01', 'change')
     expect(popupButton('만들기')!.hasAttribute('disabled')).toBe(true)
   })
 })
@@ -318,7 +482,7 @@ describe('칸반보드 탭', () => {
     expect(window.location.search).toContain('status=blocked')
     expect(popupText()).toContain('작업 추가')
 
-    await fill('input[placeholder="예: 보험료 산출 기간계 API 개발"]', '정산 배치 재설계')
+    await type('textarea[aria-label="제목"]', '정산 배치 재설계')
     await click(popupButton('만들기'))
 
     const made = taskStore.rows.find((r) => r.task.title === '정산 배치 재설계')!

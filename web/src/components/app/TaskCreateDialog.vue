@@ -1,26 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ListTree, X } from 'lucide-vue-next'
+import { computed, nextTick, ref, watch } from 'vue'
+import { ChevronRight, FolderClosed } from 'lucide-vue-next'
+import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
+import TaskLinks from '@/components/app/TaskLinks.vue'
+import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { parseTaskBody, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from '@/lib/task'
+import { periodProblem } from '@/lib/task'
+import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
+import { useMeetingStore } from '@/stores/meeting'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
-import type { TaskPriority, TaskStatus } from '@/types/domain'
+import type { TaskLine, TaskPriority, TaskStatus, Thread } from '@/types/domain'
 
-/* 작업 추가 — 목록 위 팝업. 세 탭(목록 · 간트 · 칸반) 어디서든 같은 폼이 뜬다.
-   고른 값은 이름이 아니라 id 로 들고 다닌다 (parentId · ownerId · threadIds).
+/* 작업 추가 — 작업 상세와 같은 모양의 팝업이다. 세 탭(목록 · 간트 · 칸반) 어디서든 같은 것이 뜬다.
+   상세는 고치는 즉시 들어가지만 여기는 아직 작업이 없으니 골라 두었다가 '만들기'로 한꺼번에 넣는다.
+   하위 작업은 만든 뒤 상세에서 붙인다 — 만들면 바로 그 작업의 상세로 넘어간다.
    initialStatus 는 칸반의 칸마다 있는 '작업 추가' 가 그 칸의 상태로 열려고 넘긴다. */
 const props = defineProps<{ parentId: string | null; initialStatus?: TaskStatus | null }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -29,32 +26,43 @@ const emit = defineEmits<{ (e: 'created', id: string): void }>()
 const data = useDataStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
+const meetingStore = useMeetingStore()
 
-const NONE = 'none'
-
-const parent = ref(NONE)
 const title = ref('')
-const bodyText = ref('')
+const body = ref<TaskLine[]>([])
+const status = ref<TaskStatus>('todo')
+const ownerId = ref<string | null>(null)
 const start = ref('')
 const due = ref('')
-const undated = ref(false)
-const status = ref<TaskStatus>('todo')
 const priority = ref<TaskPriority>('normal')
-const owner = ref(NONE)
-const picked = ref<string[]>([])
+const parent = ref<string | null>(null)
+const threadIds = ref<string[]>([])
+const meetingIds = ref<string[]>([])
 const keepOpen = ref(false)
+/* 본문 편집기는 자기 줄을 들고 있으니, 폼을 비울 때는 새로 띄운다 */
+const bodyKey = ref(0)
+
+const titleField = ref<HTMLTextAreaElement | null>(null)
+const fitTitle = () => fitTextarea(titleField.value)
+
+async function focusTitle() {
+  await nextTick()
+  titleField.value?.focus()
+}
 
 function resetForm() {
-  parent.value = props.parentId ?? NONE
   title.value = ''
-  bodyText.value = ''
+  body.value = []
+  status.value = props.initialStatus ?? 'todo'
+  ownerId.value = null
   start.value = ''
   due.value = ''
-  undated.value = false
-  status.value = props.initialStatus ?? 'todo'
   priority.value = 'normal'
-  owner.value = NONE
-  picked.value = []
+  parent.value = props.parentId
+  threadIds.value = []
+  meetingIds.value = []
+  bodyKey.value += 1
+  void nextTick(fitTitle)
 }
 
 /* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열린다 */
@@ -66,234 +74,152 @@ watch(
   { immediate: true },
 )
 
-const parentHint = computed(() => {
-  if (parent.value === NONE) return '목록 맨 위 단계에 섭니다'
+/* 골라 둔 안건 · 회의 — 상세의 표와 같은 줄 모양으로 보여 준다 */
+const pickedThreads = computed(() =>
+  threadIds.value
+    .map((id) => threadStore.threads.find((t) => t.id === id))
+    .filter((t): t is Thread => t !== undefined)
+    .map(taskStore.threadRow),
+)
+const threadChoices = computed(() =>
+  threadStore.threads.filter((t) => !threadIds.value.includes(t.id)),
+)
+const pickedMeetings = computed(() =>
+  meetingIds.value
+    .map((id) => meetingStore.rows.find((r) => r.meeting.id === id))
+    .filter((r) => r !== undefined),
+)
+const meetingChoices = computed(() =>
+  meetingStore.rows.filter((r) => !meetingIds.value.includes(r.meeting.id)),
+)
+
+const toggle = (list: string[], id: string, on: boolean) =>
+  on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
+
+const parentPath = computed(() => {
   const label = taskStore.parentOptions.find((o) => o.id === parent.value)?.label
-  return label ? `${label} 아래로 들어갑니다` : ''
+  return label ? `${label} 아래로 들어갑니다` : '최상위 작업으로 만듭니다'
 })
 
-const ownerName = computed(() => data.memberName(owner.value === NONE ? null : owner.value))
-
-const pickedThreads = computed(() =>
-  picked.value
-    .map((id) => threadStore.threads.find((t) => t.id === id))
-    .filter((t) => t !== undefined),
-)
-
-const threadChoices = computed(() =>
-  threadStore.threads.filter((t) => !picked.value.includes(t.id)),
-)
-
-function pickThread(id: string) {
-  if (!picked.value.includes(id)) picked.value = [...picked.value, id]
-}
-
-function dropThread(id: string) {
-  picked.value = picked.value.filter((t) => t !== id)
-}
-
-const canSubmit = computed(() => title.value.trim() !== '')
+const blocker = computed(() => {
+  if (!title.value.trim()) return '제목을 적어야 만들 수 있습니다'
+  return periodProblem(start.value, due.value)
+})
 
 function submit() {
-  if (!canSubmit.value) return
+  if (blocker.value) {
+    if (!title.value.trim()) void focusTitle()
+    return
+  }
   const id = taskStore.addTask({
     title: title.value.trim(),
-    parentId: parent.value === NONE ? null : parent.value,
-    body: parseTaskBody(bodyText.value),
+    parentId: parent.value,
+    body: body.value,
     status: status.value,
-    ownerId: owner.value === NONE ? null : owner.value,
-    start: undated.value ? null : start.value || null,
-    due: undated.value ? null : due.value || null,
+    ownerId: ownerId.value,
+    start: start.value || null,
+    due: due.value || null,
     priority: priority.value,
-    threadIds: [...picked.value],
+    threadIds: [...threadIds.value],
+    meetingIds: [...meetingIds.value],
   })
   /* 만들고 계속 추가 — 폼만 비우고 팝업은 열어 둔다 */
   if (keepOpen.value) {
     resetForm()
+    void focusTitle()
     return
   }
   emit('created', id)
+}
+
+function onTitleKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
+  /* 제목은 한 줄이다 — Enter 는 줄을 바꾸지 않고 본문으로 넘어간다 */
+  if (e.key === 'Enter' && !(e.metaKey || e.ctrlKey)) {
+    e.preventDefault()
+    ;(document.querySelector('[data-task-body] textarea') as HTMLTextAreaElement | null)?.focus()
+  }
+}
+
+/* 어디서든 ⌘/Ctrl + Enter 로 만든다 */
+function onKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault()
+    submit()
+  }
 }
 </script>
 
 <template>
   <Dialog v-model:open="open">
-    <DialogScrollContent class="max-w-[760px] gap-0 p-0">
-      <div class="flex items-center gap-2.5 border-b border-border px-5 py-3.5 pr-[60px]">
-        <DialogTitle class="text-sm font-semibold tracking-tight">작업 추가</DialogTitle>
-        <DialogDescription class="text-xs text-muted-foreground">
-          {{ data.currentProject?.name }}
-        </DialogDescription>
+    <DialogScrollContent
+      class="max-w-[1140px] gap-0 p-0"
+      @open-auto-focus.prevent="focusTitle"
+      @keydown="onKeydown"
+    >
+      <div class="flex items-center gap-2 border-b border-border px-[22px] py-3.5 pr-[60px]">
+        <FolderClosed class="size-3.5 text-muted-foreground" />
+        <span class="text-xs text-muted-foreground">{{ data.currentProject?.name }}</span>
+        <ChevronRight class="size-3 text-muted-foreground" />
+        <span class="text-xs text-muted-foreground">작업</span>
+        <ChevronRight class="size-3 text-muted-foreground" />
+        <DialogTitle class="text-xs font-normal">작업 추가</DialogTitle>
       </div>
 
-      <div class="flex flex-col gap-4 px-5 py-[18px]">
-        <div class="flex flex-col gap-1.5">
-          <span class="text-xs text-muted-foreground">상위 작업</span>
-          <div class="flex items-center gap-2">
-            <Select v-model="parent">
-              <SelectTrigger class="h-8 grow text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="NONE">없음 (최상위 작업으로 만듭니다)</SelectItem>
-                <SelectItem v-for="o in taskStore.parentOptions" :key="o.id" :value="o.id">
-                  {{ o.label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <span class="shrink-0 text-xs text-muted-foreground">{{ parentHint }}</span>
-          </div>
-        </div>
+      <div class="flex items-stretch">
+        <div class="flex min-w-0 grow flex-col gap-6 px-[22px] pt-4 pb-6">
+          <header class="flex flex-col gap-1">
+            <textarea
+              ref="titleField"
+              v-model="title"
+              rows="1"
+              aria-label="제목"
+              placeholder="작업 제목"
+              class="-mx-2 resize-none overflow-hidden [field-sizing:content] rounded-md border border-transparent bg-transparent px-2 py-1 text-xl leading-snug font-semibold tracking-tight outline-none placeholder:text-muted-foreground/60 hover:border-border focus:border-input"
+              @input="fitTitle"
+              @keydown="onTitleKeydown"
+            />
+            <DialogDescription class="text-xs text-muted-foreground">
+              {{ parentPath }}
+            </DialogDescription>
+          </header>
 
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs text-muted-foreground">제목</span>
-          <Input v-model="title" placeholder="예: 보험료 산출 기간계 API 개발" />
-        </label>
+          <section class="flex flex-col gap-1.5" data-task-body>
+            <span class="text-xs font-medium">내용</span>
+            <TaskBodyEditor :key="bodyKey" :lines="body" @change="(lines) => (body = lines)" />
+          </section>
 
-        <label class="flex flex-col gap-1.5">
-          <span class="flex items-center gap-2">
-            <span class="text-xs text-muted-foreground">내용</span>
-            <span class="text-xs text-muted-foreground">
-              [] 로 시작하면 체크박스, - 로 시작하면 불릿이 됩니다
-            </span>
-          </span>
-          <Textarea
-            v-model="bodyText"
-            :rows="5"
-            class="leading-relaxed"
-            placeholder="[] 서버 신청서 제출&#10;[] 개발자 접속 계정 만들기&#10;- 방화벽은 정보보안팀에 따로 신청"
+          <TaskLinks
+            :threads="pickedThreads"
+            :meetings="pickedMeetings"
+            :thread-choices="threadChoices"
+            :meeting-choices="meetingChoices"
+            :navigable="false"
+            @link-thread="(id) => (threadIds = toggle(threadIds, id, true))"
+            @unlink-thread="(id) => (threadIds = toggle(threadIds, id, false))"
+            @link-meeting="(id) => (meetingIds = toggle(meetingIds, id, true))"
+            @unlink-meeting="(id) => (meetingIds = toggle(meetingIds, id, false))"
           />
-        </label>
-
-        <div class="grid grid-cols-2 gap-3.5">
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs text-muted-foreground">시작 날짜</span>
-            <Input v-model="start" type="date" class="h-8 text-xs" :disabled="undated" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs text-muted-foreground">기한</span>
-            <Input v-model="due" type="date" class="h-8 text-xs" :disabled="undated" />
-          </label>
         </div>
 
-        <label class="flex items-center gap-2">
-          <Checkbox :model-value="undated" @update:model-value="(v) => (undated = v === true)" />
-          <span class="text-xs text-muted-foreground">
-            기간은 아직 못 정했습니다 — 간트차트에 막대 없이 목록에만 섭니다
-          </span>
-        </label>
-
-        <div class="grid grid-cols-2 gap-3.5">
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs text-muted-foreground">상태</span>
-            <Select v-model="status">
-              <SelectTrigger class="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="o in TASK_STATUS_OPTIONS" :key="o.value" :value="o.value">
-                  {{ o.label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <span class="text-xs text-muted-foreground">우선순위</span>
-            <div class="flex gap-1.5">
-              <button
-                v-for="p in TASK_PRIORITY_OPTIONS"
-                :key="p.value"
-                type="button"
-                class="inline-flex h-8 grow items-center justify-center rounded-md border text-xs transition-colors"
-                :class="
-                  priority === p.value
-                    ? 'border-primary bg-primary font-medium text-primary-foreground shadow'
-                    : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
-                "
-                @click="priority = p.value"
-              >
-                {{ p.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <span class="text-xs text-muted-foreground">담당자</span>
-          <div class="flex items-center gap-2">
-            <span
-              class="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs"
-              :class="ownerName ? '' : 'text-muted-foreground'"
-            >
-              {{ ownerName ? ownerName.charAt(0) : '–' }}
-            </span>
-            <Select v-model="owner">
-              <SelectTrigger class="h-8 w-[240px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="NONE">미정 (담당자 없음)</SelectItem>
-                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">
-                  {{ m.name }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <span v-if="owner === NONE" class="text-xs text-muted-foreground"
-              >나중에 정해도 됩니다</span
-            >
-          </div>
-        </div>
-
-        <section
-          class="flex flex-col gap-2 rounded-md border border-border bg-muted/50 px-3.5 py-3"
+        <TaskPropertyPanel
+          v-model:status="status"
+          v-model:owner-id="ownerId"
+          v-model:start="start"
+          v-model:due="due"
+          v-model:priority="priority"
+          v-model:parent-id="parent"
+          :parent-choices="taskStore.parentOptions"
         >
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-medium tracking-wider text-muted-foreground">연관 안건</span>
-            <span class="text-xs text-muted-foreground">
-              이 작업을 하려면 먼저 정해야 하는 것이 있으면 여기서 겁니다
-            </span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <Select :model-value="''" @update:model-value="(v) => pickThread(String(v))">
-              <SelectTrigger class="h-8 grow bg-background text-xs">
-                <span class="text-muted-foreground">안건 고르기…</span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="t in threadChoices" :key="t.id" :value="t.id">
-                  {{ t.title }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <span class="shrink-0 text-xs text-muted-foreground">
-              {{ picked.length === 0 ? '없어도 됩니다' : `${picked.length}건 골랐습니다` }}
-            </span>
-          </div>
-
-          <div v-if="pickedThreads.length" class="flex flex-col gap-1.5">
-            <div
-              v-for="t in pickedThreads"
-              :key="t.id"
-              class="flex min-h-[34px] items-center gap-2.5 rounded-md border border-border bg-background px-2.5"
-            >
-              <ListTree class="size-3 shrink-0 text-muted-foreground" />
-              <span class="min-w-0 grow truncate text-xs">{{ t.title }}</span>
-              <button
-                type="button"
-                class="flex size-6 shrink-0 items-center justify-center rounded-md hover:bg-accent"
-                :aria-label="`${t.title} 빼기`"
-                @click="dropThread(t.id)"
-              >
-                <X class="size-3.5 text-muted-foreground" />
-              </button>
-            </div>
-          </div>
-
-          <p v-if="picked.length" class="text-xs text-destructive">
-            {{ picked.length }}건을 걸었습니다. 그 안건이 정해지기 전까지는 상태를 막힘으로 두면
-            칸반의 막힘 칸에 섭니다.
+          <p
+            v-if="threadIds.length && status !== 'blocked'"
+            class="rounded-md border border-border bg-background px-3 py-2.5 text-xs leading-relaxed text-muted-foreground text-pretty"
+          >
+            안건을 {{ threadIds.length }}건 걸었습니다. 그 안건이 정해지기 전까지 상태를 막힘으로
+            두면 칸반의 막힘 칸에 섭니다.
           </p>
-        </section>
+        </TaskPropertyPanel>
       </div>
 
       <div class="flex items-center gap-2.5 border-t border-border bg-muted/50 px-5 py-3">
@@ -302,11 +228,9 @@ function submit() {
           <span class="text-xs text-muted-foreground">만들고 계속 추가</span>
         </label>
         <div class="grow" />
-        <span v-if="!canSubmit" class="text-xs text-muted-foreground"
-          >제목을 적어야 만들 수 있습니다</span
-        >
+        <span class="text-xs text-muted-foreground">{{ blocker || '⌘ / Ctrl + Enter' }}</span>
         <Button variant="outline" size="sm" @click="open = false">취소</Button>
-        <Button size="sm" :disabled="!canSubmit" @click="submit">만들기</Button>
+        <Button size="sm" :disabled="!!blocker" @click="submit">만들기</Button>
       </div>
     </DialogScrollContent>
   </Dialog>

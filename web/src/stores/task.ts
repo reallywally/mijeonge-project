@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { nowIso, slashDay } from '@/lib/date'
+import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import { useThreadStore } from '@/stores/thread'
 import type {
@@ -8,6 +8,8 @@ import type {
   Task,
   TaskDetail,
   TaskInput,
+  TaskLine,
+  TaskPriority,
   TaskRow,
   TaskStatus,
   TaskThreadRow,
@@ -123,7 +125,7 @@ export const useTaskStore = defineStore('task', () => {
       deferCount,
       line: last ? last.entry.text : '아직 회의에서 다루지 않았습니다.',
       where: last?.meeting
-        ? `${last.meeting.title} · ${last.at}`
+        ? `${last.meeting.title} · ${monthDay(last.at)}`
         : '다음 회의에서 고를 수 있습니다',
     }
   }
@@ -165,6 +167,54 @@ export const useTaskStore = defineStore('task', () => {
     task.due = both ? due : null
   }
 
+  /** 자기와 자기 아래 작업들 — 상위 작업으로 고르면 계층이 고리가 된다 */
+  function selfAndDescendants(taskId: string): Set<string> {
+    const ids = new Set([taskId])
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const t of tasks.value) {
+        if (t.parentId && ids.has(t.parentId) && !ids.has(t.id)) {
+          ids.add(t.id)
+          grew = true
+        }
+      }
+    }
+    return ids
+  }
+
+  /** 수정할 때 고를 수 있는 상위 작업 — 자기와 자기 아래는 뺀다 */
+  const parentOptionsFor = (taskId: string) => {
+    const blocked = selfAndDescendants(taskId)
+    return parentOptions.value.filter((o) => !blocked.has(o.id))
+  }
+
+  /* 작업 상세는 보는 자리가 곧 고치는 자리다 — 칸 하나를 고치면 그 값만 바로 들어간다 */
+  const findTask = (taskId: string) => data.allTasks.find((t) => t.id === taskId)
+
+  function setTitle(taskId: string, title: string) {
+    const task = findTask(taskId)
+    if (task && title.trim()) task.title = title.trim()
+  }
+
+  /** 자기나 자기 아래 작업을 상위로 고르면 계층이 고리가 되니 받지 않는다 */
+  function setParent(taskId: string, parentId: string | null) {
+    const task = findTask(taskId)
+    if (!task) return
+    if (parentId && selfAndDescendants(taskId).has(parentId)) return
+    task.parentId = parentId
+  }
+
+  function setPriority(taskId: string, priority: TaskPriority) {
+    const task = findTask(taskId)
+    if (task) task.priority = priority
+  }
+
+  function setBody(taskId: string, body: TaskLine[]) {
+    const task = findTask(taskId)
+    if (task) task.body = body
+  }
+
   function toggleBodyLine(taskId: string, lineId: string) {
     const line = data.allTasks.find((t) => t.id === taskId)?.body.find((l) => l.id === lineId)
     if (line && line.kind === 'check') line.done = !line.done
@@ -188,6 +238,7 @@ export const useTaskStore = defineStore('task', () => {
       createdAt: nowIso(),
     })
     for (const threadId of input.threadIds) linkThread(id, threadId)
+    for (const meetingId of input.meetingIds ?? []) linkMeeting(id, meetingId)
     return id
   }
 
@@ -232,8 +283,10 @@ export const useTaskStore = defineStore('task', () => {
     pathLabel,
     fullPath,
     parentOptions,
+    parentOptionsFor,
     periodLabel,
     taskDetail,
+    threadRow,
     threadsOfTask,
     meetingsOfTask,
     tasksOfThread,
@@ -241,6 +294,10 @@ export const useTaskStore = defineStore('task', () => {
     setOwner,
     setPeriod,
     toggleBodyLine,
+    setTitle,
+    setParent,
+    setPriority,
+    setBody,
     addTask,
     linkThread,
     unlinkThread,

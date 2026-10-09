@@ -597,7 +597,6 @@ function bulkOwner(value: string) {
       v-model:open="detailOpen"
       :task-id="detailId"
       @open-task="openTask"
-      @add-subtask="openCreate"
       @open-thread="(id) => router.push(`/threads/${id}`)"
       @open-meeting="(id) => router.push(`/meetings/${id}`)"
     />

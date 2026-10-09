@@ -49,3 +49,14 @@ export function parseTaskBody(text: string): TaskLine[] {
   }
   return lines
 }
+
+/**
+ * 기간은 둘 다 있거나 둘 다 없어야 한다(간트의 규칙). 어긋나 있으면 왜인지, 맞으면 빈 문자열.
+ * 작업 상세는 맞을 때만 넣고, 작업 추가는 맞을 때만 만든다.
+ */
+export function periodProblem(start: string, due: string): string {
+  if (start && due && start > due) return '기한이 시작 날짜보다 앞섭니다'
+  if (start && !due) return '기한도 정하면 기간이 잡힙니다'
+  if (!start && due) return '시작 날짜도 정하면 기간이 잡힙니다'
+  return ''
+}

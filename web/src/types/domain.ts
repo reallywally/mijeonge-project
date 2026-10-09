@@ -300,4 +300,6 @@ export interface TaskInput {
   due: string | null
   priority: TaskPriority
   threadIds: string[]
+  /** 만들면서 같이 걸 회의 */
+  meetingIds?: string[]
 }
