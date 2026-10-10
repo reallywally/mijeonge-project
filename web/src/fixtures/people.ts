@@ -17,7 +17,7 @@ export const members: Member[] = [
 /**
  * memo: "개발은 한화손보 차세대, 삼성생명 PAS, 사무직은 경영지원 파트 정도 단위로 생성"
  *
- * taskKeyPrefix 는 프로젝트마다 하나고 서로 겹치지 않는다 — 회의에서 'HW-4' 한 마디로 가리킨다.
+ * taskKeyPrefix 는 프로젝트마다 하나고 서로 겹치지 않는다 — 말로 'HW-4' 한 마디로 가리킨다.
  */
 export const projects: Project[] = [
   { id: 'p1', name: '한화손보 차세대', taskKeyPrefix: 'HW' },

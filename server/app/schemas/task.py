@@ -77,8 +77,3 @@ class TaskLinePatch(Schema):
 class TaskThreadLinkOut(Schema):
     task_id: str
     thread_id: str
-
-
-class MeetingTaskLinkOut(Schema):
-    meeting_id: str
-    task_id: str

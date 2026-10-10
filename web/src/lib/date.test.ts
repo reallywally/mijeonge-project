@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayTime, localDay, monthDay, nowIso, slashDay, today } from './date'
+import { dayTime, kstToday, localDay, monthDay, nowIso, slashDay, today } from './date'
 
 describe('localDay', () => {
   it('UTC 를 한국 시간으로 옮겨 날짜만 남긴다', () => {
@@ -8,7 +8,7 @@ describe('localDay', () => {
     expect(localDay('2026-09-08T22:00:00Z')).toBe('2026-09-09')
   })
 
-  it('날짜뿐인 문자열은 그대로 통과한다 — 회의 날짜는 시간대가 없다', () => {
+  it('날짜뿐인 문자열은 그대로 통과한다 — 사람이 고른 날짜는 시간대가 없다', () => {
     expect(localDay('2026-09-08')).toBe('2026-09-08')
   })
 })
@@ -44,6 +44,13 @@ describe('dayTime', () => {
 describe('today', () => {
   it('YYYY-MM-DD 로 준다', () => {
     expect(today()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('kstToday', () => {
+  it('브라우저 시간대가 아니라 한국 시간의 오늘을 준다', () => {
+    expect(kstToday(new Date('2026-10-09T14:59:59Z'))).toBe('2026-10-09')
+    expect(kstToday(new Date('2026-10-09T15:00:00Z'))).toBe('2026-10-10')
   })
 })
 

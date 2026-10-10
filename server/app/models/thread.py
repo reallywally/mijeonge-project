@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -37,8 +38,12 @@ class Thread(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(Text)
+    # 배경(왜 지금 정해야 하나). 빈 값은 null 이 아니라 '' 다
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
     state: Mapped[str] = mapped_column(String(16), default="queued")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    # 결정 기한. 사람이 고른 날짜라 Task.start · due 와 같이 date 다
+    due_date: Mapped[date | None] = mapped_column(Date)
     # 다른 안건에서 떼어낸 것이면 그 안건. FK 는 위의 복합 FK 하나뿐이다
     parent_thread_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -46,23 +51,38 @@ class Thread(Base):
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
 
+    options: Mapped[list["ThreadOption"]] = relationship(
+        back_populates="thread",
+        cascade="all, delete-orphan",
+        order_by="ThreadOption.sort_order",
+        lazy="selectin",
+    )
+
+
+class ThreadOption(Base):
+    """후보 선택지 한 줄. 프론트는 string[] 이라 순서가 뜻을 갖는다."""
+
+    __tablename__ = "thread_option"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("thread.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer)
+
+    thread: Mapped[Thread] = relationship(back_populates="options")
+
 
 class Entry(Base):
-    """(회의 × 안건) 한 줄.
-
-    meeting_id 가 null 이면 회의 없이 처리한 줄이다 — nullable 을 지우면 모델이 틀린 것이다.
-    """
+    """안건 이력 한 줄. 결정 · 미룸이 남는 유일한 자리다."""
 
     __tablename__ = "entry"
     __table_args__ = (
         CheckConstraint(f"kind in {ENTRY_KINDS}", name="kind"),
         Index("ix_entry_thread_id_created_at", "thread_id", "created_at"),
-        Index("ix_entry_meeting_id", "meeting_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     thread_id: Mapped[str] = mapped_column(ForeignKey("thread.id", ondelete="CASCADE"))
-    meeting_id: Mapped[str | None] = mapped_column(ForeignKey("meeting.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(String(16))
     text: Mapped[str] = mapped_column(Text, default="")
     # 왜 그렇게 됐는지

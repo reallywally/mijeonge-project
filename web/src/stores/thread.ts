@@ -1,23 +1,29 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
-import { localDay, monthDay, nowIso } from '@/lib/date'
+import { kstToday, localDay, monthDay, nowIso } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import type {
   Entry,
   EntryKind,
-  Meeting,
   SubThreadRow,
   Thread,
   ThreadDetail,
   ThreadEvent,
+  ThreadInput,
+  ThreadPatch,
   ThreadRow,
 } from '@/types/domain'
+
+/** 결정 기한이 지났는데 아직 못 정한 안건. 기한 당일은 아직 지난 게 아니다. */
+export function isOverdue(thread: Thread, today: string) {
+  return thread.dueDate !== null && thread.dueDate < today && thread.state !== 'decided'
+}
 
 /**
  * 안건과 그 이력.
  *
- * Entry 하나가 (회의 × 안건) 한 줄이다. 안건 이력과 회의 기록이 같은 Entry 를 각자 걸러 보여줄 뿐
- * 옮겨 적은 사본이 아니다. meetingId 가 null 이면 회의 없이 담당자 확인으로 처리한 줄이다.
+ * 상태는 손으로 바꾸지 않는다 — Entry 를 남기면 그에 따라 바뀐다. 결정이 미뤄지는 것을 막고
+ * 무엇이 왜 정해졌는지 남기는 것이 목적이라, 상태만 바뀌고 기록이 없는 일이 없게 한다.
  */
 export const useThreadStore = defineStore('thread', () => {
   const data = useDataStore()
@@ -33,61 +39,48 @@ export const useThreadStore = defineStore('thread', () => {
       .slice()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
-  const meetingById = (id: string | null) =>
-    id ? (data.allMeetings.find((m) => m.id === id) ?? null) : null
-
-  const rows = computed<ThreadRow[]>(() =>
-    threads.value.map((thread) => {
+  const rows = computed<ThreadRow[]>(() => {
+    /* 오늘은 계산할 때 한 번만 읽는다 — 화면을 연 채 자정을 넘기는 경우까지는 쫓지 않는다 */
+    const today = kstToday()
+    return threads.value.map((thread) => {
       const own = entriesOfThread(thread.id)
-      /* '마지막 회의' 는 줄을 적은 시각이 아니라 그 회의가 열린 날이다 —
-         지난 회의를 나중에 입력하면 둘이 갈린다 */
-      const lastMeeting = own
-        .map((e) => meetingById(e.meetingId))
-        .filter((m): m is Meeting => m !== null)
-        .sort((a, b) => b.date.localeCompare(a.date))[0]
       return {
         thread,
         ownerName: data.memberName(thread.ownerId),
         deferCount: own.filter((e) => e.kind === 'defer').length,
         entryCount: own.length,
-        lastMeetingLabel: lastMeeting ? monthDay(lastMeeting.date) : '—',
+        lastEntryLabel: own[0] ? monthDay(own[0].createdAt) : '—',
+        dueLabel: thread.dueDate ? monthDay(thread.dueDate) : '—',
+        overdue: isOverdue(thread, today),
       }
-    }),
-  )
+    })
+  })
 
-  /** 아직 어느 회의에서도 다루지 않은 안건 — 다음 회의에서 고를 후보다 */
+  /** 아직 아무 기록이 없는 안건 */
   const queuedCount = computed(() => rows.value.filter((r) => r.thread.state === 'queued').length)
-  /** 다뤘지만 아직 못 정한 안건 */
+  /** 기록은 있지만 아직 못 정한 안건 */
   const openCount = computed(() => rows.value.filter((r) => r.thread.state === 'open').length)
+  /** 결정 기한을 넘긴 안건 */
+  const overdueCount = computed(() => rows.value.filter((r) => r.overdue).length)
 
   function settledLabel(decision: ThreadEvent, lastRefine: ThreadEvent | null) {
-    const where = decision.meeting
-      ? `${monthDay(decision.at)} 회의에서 정해`
-      : `${monthDay(decision.at)} · 회의를 다시 잡지 않고 담당자 확인으로 정해`
-    return lastRefine ? `${where}지고 ${monthDay(lastRefine.at)}에 세부가 붙음` : `${where}짐`
+    const when = `${monthDay(decision.at)}에 정해`
+    return lastRefine ? `${when}지고 ${monthDay(lastRefine.at)}에 세부가 붙음` : `${when}짐`
   }
 
   /**
    * 안건 하나를 한 화면에 필요한 모양으로 조립한다.
    *
-   * 이력은 새 줄이 위로 온다. 정렬 기준은 createdAt 이 아니라 "그 줄이 놓이는 날짜"다 —
-   * 회의에 붙은 줄은 그 회의의 날짜에 놓인다. 같은 날짜의 줄끼리는 등록한 순서를 뒤집는다.
-   *
-   * 그 '등록한 순서' 는 allEntries 의 배열 순서다 — 한 회의에서 한 안건에 남긴 줄들은
-   * 날짜도 시각도 같아서 다른 기준이 없다. **배열 순서가 계약이다** (API.md Q4).
+   * 이력은 새 줄이 위로 온다. 같은 날짜의 줄끼리는 등록한 순서를 뒤집는다 —
+   * 그 '등록한 순서' 는 allEntries 의 배열 순서다. **배열 순서가 계약이다** (API.md Q4).
    */
   function threadDetail(threadId: string): ThreadDetail | null {
     const thread = data.allThreads.find((t) => t.id === threadId)
     if (!thread) return null
 
     const ordered = data.allEntries
-      .map((entry, seqNo) => ({ entry, seqNo }))
+      .map((entry, seqNo) => ({ entry, seqNo, at: localDay(entry.createdAt) }))
       .filter((x) => x.entry.threadId === threadId)
-      .map((x) => {
-        const meeting = meetingById(x.entry.meetingId)
-        /* at 은 회의 날짜와 나란히 놓고 비교하므로 날짜뿐이어야 한다 */
-        return { ...x, meeting, at: meeting?.date ?? localDay(x.entry.createdAt) }
-      })
       .sort((a, b) => b.at.localeCompare(a.at) || b.seqNo - a.seqNo)
 
     /* 결정 · 변경은 뒤에 온 것이 앞의 것을 대체한다. 위에서부터 첫 줄만 살아 있다. */
@@ -98,7 +91,6 @@ export const useThreadStore = defineStore('thread', () => {
       if (decides) decisionSeen = true
       return {
         entry: x.entry,
-        meeting: x.meeting,
         at: x.at,
         ownerName: data.memberName(x.entry.ownerId),
         superseded,
@@ -123,26 +115,36 @@ export const useThreadStore = defineStore('thread', () => {
       ownerName: data.memberName(thread.ownerId),
       events,
       deferCount: events.filter((e) => e.entry.kind === 'defer').length,
+      overdue: isOverdue(thread, kstToday()),
       settled: decision !== null,
       current: decision?.entry.text ?? '',
       detail: decision
         ? [...decision.entry.detail, ...refines.map((e) => e.entry.text).reverse()]
         : [],
       settledLabel: decision ? settledLabel(decision, refines[0] ?? null) : '',
+      settledNote: decision?.entry.note ?? '',
       settledOwnerName: decision ? (decision.ownerName ?? data.memberName(thread.ownerId)) : null,
       subThreads,
     }
   }
 
-  /** 회의와 무관하게 먼저 등록해 두는 안건. 등록만 된 상태가 '대기'다. */
-  function addThread(title: string, ownerId: string | null) {
+  const cleanOptions = (options: string[]) => options.map((o) => o.trim()).filter(Boolean)
+
+  /**
+   * 안건을 먼저 등록해 둔다. 등록만 된 상태가 '대기'다 — POST /api/projects/{id}/threads.
+   * 제목 말고는 다 비워도 들어간다 — 칸이 귀찮으면 안건 대신 메신저로 정하게 된다.
+   */
+  function addThread(input: ThreadInput) {
     const id = data.nextId('nt')
     data.allThreads.unshift({
       id,
       projectId: data.currentProjectId,
-      title,
+      title: input.title.trim(),
+      description: input.description?.trim() ?? '',
+      options: cleanOptions(input.options ?? []),
+      dueDate: input.dueDate || null,
       state: 'queued',
-      ownerId,
+      ownerId: input.ownerId ?? null,
       parentThreadId: null,
       createdAt: nowIso(),
     })
@@ -150,10 +152,27 @@ export const useThreadStore = defineStore('thread', () => {
   }
 
   /**
-   * 회의 없이 담당자 확인만으로 처리한 줄. meetingId 가 없어 어느 회의에도 붙지 않는다.
-   * 결정으로 남기면 안건 상태와 담당자까지 그 자리에서 바뀐다.
+   * 안건을 고친다 — PATCH /api/threads/{id}. 보낸 필드만 바뀐다.
+   * 제목을 비우려 하면 아무것도 바꾸지 않는다(서버도 요청째 거절한다). 상태는 여기서 못 바꾼다.
    */
-  function addOutsideEntry(
+  function updateThread(threadId: string, patch: ThreadPatch) {
+    const thread = data.allThreads.find((t) => t.id === threadId)
+    if (!thread) return false
+    if (patch.title !== undefined && !patch.title.trim()) return false
+    if (patch.title !== undefined) thread.title = patch.title.trim()
+    if (patch.description !== undefined) thread.description = patch.description.trim()
+    if (patch.options !== undefined) thread.options = cleanOptions(patch.options)
+    if (patch.dueDate !== undefined) thread.dueDate = patch.dueDate || null
+    if (patch.ownerId !== undefined) thread.ownerId = patch.ownerId
+    return true
+  }
+
+  /**
+   * 이력 한 줄을 남긴다 — POST /api/threads/{id}/entries.
+   * 결정으로 남기면 안건이 결정됨이 되고 처리한 사람이 있으면 담당자도 그 사람이 된다.
+   * 그 밖의 줄은 대기 중이던 안건을 논의중으로 옮긴다.
+   */
+  function addEntry(
     threadId: string,
     kind: Extract<EntryKind, 'decide' | 'refine' | 'defer'>,
     text: string,
@@ -163,7 +182,6 @@ export const useThreadStore = defineStore('thread', () => {
     data.allEntries.push({
       id: data.nextId('ne'),
       threadId,
-      meetingId: null,
       kind,
       text,
       detail: [],
@@ -187,9 +205,11 @@ export const useThreadStore = defineStore('thread', () => {
     rows,
     queuedCount,
     openCount,
+    overdueCount,
     entriesOfThread,
     threadDetail,
     addThread,
-    addOutsideEntry,
+    updateThread,
+    addEntry,
   }
 })

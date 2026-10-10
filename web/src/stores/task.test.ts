@@ -66,8 +66,7 @@ describe('작업 상세', () => {
     expect(detail.task.title).toBe('개발 환경 설정')
     expect(detail.threads.map((t) => t.thread.title)).toEqual(['서버 OS 결정', 'DB 결정'])
     expect(detail.threads[0].line).toBe('우분투 최신 버전으로 한다')
-    /* 회의 없이 담당자 확인으로 정한 줄이라 회의 이름이 없다 */
-    expect(detail.threads[0].where).toContain('담당자 확인')
+    expect(detail.threads[0].where).toBe('9월 9일에 정해짐')
     expect(detail.threads[1].line).toBe('mysql 을 쓴다')
   })
 
@@ -84,9 +83,18 @@ describe('작업 상세', () => {
     expect(detail.doneChildCount).toBe(1)
   })
 
-  it('걸린 회의를 보여준다', () => {
+  it('아직 못 정한 안건은 마지막 기록과 그 날짜를 보여준다', () => {
     const task = useTaskStore()
-    expect(task.taskDetail('k4')!.meetings.map((m) => m.title)).toEqual(['개발 환경 확정 회의'])
+    const row = task.taskDetail('k18')!.threads[0]
+    expect(row.line).toBe('여전히 업무 정의가 없어 또 미룬다')
+    expect(row.where).toBe('마지막 기록 · 9월 14일')
+  })
+
+  it('기록이 하나도 없는 안건은 그렇다고 적는다', () => {
+    const task = useTaskStore()
+    const row = task.taskDetail('k13')!.threads[0]
+    expect(row.line).toBe('아직 아무 기록이 없습니다.')
+    expect(row.where).toBe('기록 없음')
   })
 })
 
@@ -99,14 +107,6 @@ describe('맵핑', () => {
 
     task.unlinkThread('k4', 't4')
     expect(task.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
-  })
-
-  it('회의를 거는 쪽과 작업을 거는 쪽이 같은 링크다', () => {
-    const task = useTaskStore()
-    task.linkMeeting('k4', 'm6')
-    expect(task.meetingsOfTask('k4').map((m) => m.id)).toEqual(['m3', 'm6'])
-    task.unlinkMeeting('k4', 'm6')
-    expect(task.meetingsOfTask('k4').map((m) => m.id)).toEqual(['m3'])
   })
 
   it('안건 쪽에서는 어느 작업에 걸렸는지 읽을 수 있다', () => {

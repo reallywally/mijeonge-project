@@ -1,14 +1,13 @@
 /**
- * 회의 × 안건 모델
+ * 안건 × 이력 모델
  *
- * 회의에서 남긴 한 줄은 Entry 하나다. Entry 는 threadId 와 meetingId 를 모두 갖고,
- * 안건 이력과 회의 기록이 같은 Entry 를 각자 걸러 보여준다. 옮겨 적은 사본이 아니다.
- * meetingId 가 null 이면 회의 없이 담당자 확인으로 처리한 줄("회의 밖")이다.
+ * 안건에 남긴 한 줄이 Entry 하나다. 결정이 미뤄지는 것을 막고 무엇이 왜 정해졌는지 남기는 것이
+ * 이 앱의 목적이라, 상태는 손으로 바꾸지 않고 Entry 를 남겨서만 바뀐다.
  */
 
 export type ThreadState =
-  | 'queued' // 등록만 됨 · 아직 어느 회의에서도 다루지 않음
-  | 'open' // 다뤘지만 아직 못 정함
+  | 'queued' // 등록만 됨 · 아직 아무 기록이 없음
+  | 'open' // 기록이 있지만 아직 못 정함
   | 'decided'
 
 export type EntryKind =
@@ -35,6 +34,12 @@ export interface Thread {
   id: string
   projectId: string
   title: string
+  /** 배경 — 왜 지금 정해야 하나. 없으면 '' */
+  description: string
+  /** 후보 선택지. 순서가 있다. 정답이 열려 있는 안건이면 [] */
+  options: string[]
+  /** 결정 기한 YYYY-MM-DD (Task.start · due 와 같은 형식) */
+  dueDate: string | null
   state: ThreadState
   ownerId: string | null
   /** 다른 안건에서 떼어낸 것이면 그 안건 */
@@ -42,29 +47,9 @@ export interface Thread {
   createdAt: string
 }
 
-export interface Meeting {
-  id: string
-  projectId: string
-  title: string
-  /** YYYY-MM-DD */
-  date: string
-  attendeeIds: string[]
-  /** 안건에 붙지 않는 줄. 회의록 본문은 따로 없다. */
-  memos: MeetingMemo[]
-}
-
-export interface MeetingMemo {
-  id: string
-  text: string
-  /** 이 메모를 안건으로 올렸다면 그 안건 */
-  promotedThreadId: string | null
-}
-
 export interface Entry {
   id: string
   threadId: string
-  /** null = 회의 밖 처리 */
-  meetingId: string | null
   kind: EntryKind
   /** 한 줄 요약 */
   text: string
@@ -82,15 +67,39 @@ export interface ThreadRow {
   ownerName: string | null
   deferCount: number
   entryCount: number
-  lastMeetingLabel: string
+  /** 마지막 Entry 를 남긴 날(KST) — 9월 14일 또는 '—' (기록 없음) */
+  lastEntryLabel: string
+  /** 9월 12일 또는 '—' (기한 없음) */
+  dueLabel: string
+  /** 결정 기한이 지났는데 아직 못 정함 */
+  overdue: boolean
+}
+
+/** 안건을 먼저 등록할 때 화면이 넘기는 것. 제목 말고는 다 비워도 된다 */
+export interface ThreadInput {
+  title: string
+  description?: string
+  options?: string[]
+  dueDate?: string | null
+  ownerId?: string | null
+}
+
+/**
+ * 안건을 고칠 때 화면이 넘기는 것 — PATCH /api/threads/{id}. 보낸 필드만 바뀐다.
+ * ownerId · dueDate 는 null 로 비우고, options 는 통째로 바뀐다. state 는 여기서 못 바꾼다(이력으로만).
+ */
+export interface ThreadPatch {
+  title?: string
+  ownerId?: string | null
+  description?: string
+  options?: string[]
+  dueDate?: string | null
 }
 
 /** 안건 이력 한 줄 — Entry 에 화면에서 필요한 것만 붙였다 */
 export interface ThreadEvent {
   entry: Entry
-  /** null = 회의 밖 처리 */
-  meeting: Meeting | null
-  /** 이 줄이 놓이는 날짜. 회의에 붙은 줄이면 그 회의의 날짜다 */
+  /** 이 줄이 놓이는 날짜 — createdAt 의 KST 날짜 */
   at: string
   ownerName: string | null
   /** 뒤에 온 결정에 밀려난 줄 — 취소선으로 남는다 */
@@ -103,91 +112,26 @@ export interface SubThreadRow {
   splitAtLabel: string
 }
 
-/** 안건 상세 한 화면 — 지금 합의된 내용 + 회의별 이력 */
+/** 안건 상세 한 화면 — 지금 결정된 내용 + 이력 */
 export interface ThreadDetail {
   thread: Thread
   ownerName: string | null
   events: ThreadEvent[]
   deferCount: number
+  /** 결정 기한이 지났는데 아직 못 정함 */
+  overdue: boolean
   /** 결정 · 변경 줄이 하나라도 있는가 */
   settled: boolean
   /** 마지막 결정 · 변경의 한 줄 요약 */
   current: string
   /** 그 결정의 조건별 상세 + 그 뒤에 붙은 세부 추가 */
   detail: string[]
-  /** 언제 · 어디서 정해졌는지 */
+  /** 언제 정해졌는지 */
   settledLabel: string
+  /** 그 결정에 적힌 근거 */
+  settledNote: string
   settledOwnerName: string | null
   subThreads: SubThreadRow[]
-}
-
-/** 회의 목록 한 행 — 그 회의에 붙은 Entry 를 세어 얻는다 */
-export interface MeetingRow {
-  meeting: Meeting
-  attendeeNames: string[]
-  /** 그 회의에서 다룬 안건 수 */
-  threadCount: number
-  /** 결정 · 변경 줄 수 */
-  decidedCount: number
-  /** 미룸 줄 수 */
-  deferredCount: number
-  /** 안건에 안 붙는 메모 줄 수 */
-  memoCount: number
-  /** 이 회의에 걸린 작업 수 */
-  taskCount: number
-  dateLabel: string
-}
-
-/** 회의 하나에서 안건 하나에 남긴 줄들 */
-export interface MeetingThreadLines {
-  thread: Thread
-  /** 안건 전체에서 미뤄진 횟수 — 상태 배지가 쓴다 */
-  deferCount: number
-  lines: { entry: Entry; ownerName: string | null }[]
-}
-
-/** 회의 하나 보기 — 회의록 본문은 없다. 그날 안건에 남긴 줄이 그대로 기록이다. */
-export interface MeetingDetail {
-  meeting: Meeting
-  attendeeNames: string[]
-  threads: MeetingThreadLines[]
-  entryCount: number
-  decidedCount: number
-  deferredCount: number
-  dateLabel: string
-}
-
-/**
- * 새 회의 화면이 저장할 때 넘기는 것.
- *
- * 회의 중에 처음 등록한 안건은 아직 id 가 없어 화면에서만 쓰는 tempId 로 가리킨다.
- * 저장할 때 실제 id 를 받고, entries 와 memos 의 tempId 도 그것으로 바뀐다.
- */
-export interface NewThreadInput {
-  tempId: string
-  title: string
-  ownerId: string | null
-  parentThreadId: string | null
-}
-
-export interface MeetingEntryInput {
-  /** 실제 안건 id 또는 NewThreadInput.tempId */
-  threadId: string
-  kind: EntryKind
-  text: string
-  detail: string[]
-  note: string
-  ownerId: string | null
-}
-
-export interface MeetingInput {
-  title: string
-  /** YYYY-MM-DD */
-  date: string
-  attendeeIds: string[]
-  newThreads: NewThreadInput[]
-  entries: MeetingEntryInput[]
-  memos: { text: string; promotedTempId: string | null }[]
 }
 
 /**
@@ -244,11 +188,6 @@ export interface TaskThreadLink {
   threadId: string
 }
 
-export interface MeetingTaskLink {
-  meetingId: string
-  taskId: string
-}
-
 /** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
 export interface TaskRow {
   task: Task
@@ -273,8 +212,6 @@ export interface TaskDetail {
   children: TaskRow[]
   /** 이 작업을 하다가 정해야 했던 것들 */
   threads: TaskThreadRow[]
-  /** 이 작업이 걸린 회의 */
-  meetings: Meeting[]
   doneChildCount: number
 }
 
@@ -285,7 +222,7 @@ export interface TaskThreadRow {
   deferCount: number
   /** 결정됐으면 그 한 줄, 아니면 왜 아직인지 */
   line: string
-  /** 어디서 정해졌는지 — '개발 환경 확정 회의 · 9월 10일' 또는 '회의 밖 · …' */
+  /** 언제 정해졌는지 — '9월 10일에 정해짐' 또는 '마지막 기록 · 9월 14일' */
   where: string
 }
 
@@ -300,6 +237,4 @@ export interface TaskInput {
   due: string | null
   priority: TaskPriority
   threadIds: string[]
-  /** 만들면서 같이 걸 회의 */
-  meetingIds?: string[]
 }

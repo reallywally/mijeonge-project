@@ -1,8 +1,8 @@
-"""작업 쓰기 — 등록 · 부분 수정 · 본문 줄 · 링크 둘.
+"""작업 쓰기 — 등록 · 부분 수정 · 본문 줄 · 안건 링크.
 
-링크 테이블 둘 다 작업에 걸린다(`task_thread_link` · `meeting_task_link`) — 회의 쪽 라우트도
-여기 함수를 부른다. 링크는 멱등이다: PUT 을 두 번 눌러도 결과가 같고, 없는 링크를 DELETE 해도
-성공이다. 읽기 쪽(`services/snapshot.py`)이 쓰는 `to_task` 도 여기 둔다 — 변환을 두 벌 갖지 않는다.
+작업 ↔ 안건 링크(`task_thread_link`)는 멱등이다: PUT 을 두 번 눌러도 결과가 같고,
+없는 링크를 DELETE 해도 성공이다. 읽기 쪽(`services/snapshot.py`)이 쓰는 `to_task` 도
+여기 둔다 — 변환을 두 벌 갖지 않는다.
 """
 
 from sqlalchemy import delete, select, update
@@ -10,8 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import bad_request, not_found
 from app.models import (
-    Meeting,
-    MeetingTaskLink,
     Project,
     Task,
     TaskLine,
@@ -20,7 +18,6 @@ from app.models import (
     new_id,
 )
 from app.schemas.task import (
-    MeetingTaskLinkOut,
     TaskCreate,
     TaskLineOut,
     TaskOut,
@@ -62,14 +59,6 @@ async def _load_thread(session: AsyncSession, thread_id: str) -> Thread:
     if thread is None:
         raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
     return thread
-
-
-async def _load_meeting(session: AsyncSession, meeting_id: str) -> Meeting:
-    found = await session.execute(select(Meeting).where(Meeting.id == meeting_id))
-    meeting = found.scalar_one_or_none()
-    if meeting is None:
-        raise not_found("MEETING_NOT_FOUND", "회의를 찾을 수 없습니다.")
-    return meeting
 
 
 async def _next_key(session: AsyncSession, project: Project) -> str:
@@ -209,36 +198,6 @@ async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str) -> 
     await session.execute(
         delete(TaskThreadLink).where(
             TaskThreadLink.task_id == task_id, TaskThreadLink.thread_id == thread_id
-        )
-    )
-    await session.commit()
-
-
-async def link_meeting(session: AsyncSession, task_id: str, meeting_id: str) -> MeetingTaskLinkOut:
-    task = await load_task(session, task_id)
-    meeting = await _load_meeting(session, meeting_id)
-    if meeting.project_id != task.project_id:
-        raise bad_request(
-            "MEETING_TASK_LINK_OTHER_PROJECT", "작업과 회의가 서로 다른 프로젝트에 있습니다."
-        )
-    found = await session.execute(
-        select(MeetingTaskLink).where(
-            MeetingTaskLink.task_id == task_id, MeetingTaskLink.meeting_id == meeting_id
-        )
-    )
-    if found.scalar_one_or_none() is None:
-        session.add(
-            MeetingTaskLink(meeting_id=meeting_id, task_id=task_id, project_id=task.project_id)
-        )
-    await session.commit()
-    return MeetingTaskLinkOut(meeting_id=meeting_id, task_id=task_id)
-
-
-async def unlink_meeting(session: AsyncSession, task_id: str, meeting_id: str) -> None:
-    await load_task(session, task_id)
-    await session.execute(
-        delete(MeetingTaskLink).where(
-            MeetingTaskLink.task_id == task_id, MeetingTaskLink.meeting_id == meeting_id
         )
     )
     await session.commit()

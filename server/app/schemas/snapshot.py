@@ -1,7 +1,6 @@
 from app.schemas.base import Schema
-from app.schemas.meeting import MeetingOut
 from app.schemas.project import ProjectOut
-from app.schemas.task import MeetingTaskLinkOut, TaskOut, TaskThreadLinkOut
+from app.schemas.task import TaskOut, TaskThreadLinkOut
 from app.schemas.thread import EntryOut, ThreadOut
 
 
@@ -17,7 +16,5 @@ class SnapshotOut(Schema):
     project: ProjectOut
     threads: list[ThreadOut]
     entries: list[EntryOut]
-    meetings: list[MeetingOut]
     tasks: list[TaskOut]
     task_thread_links: list[TaskThreadLinkOut]
-    meeting_task_links: list[MeetingTaskLinkOut]

@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Entry, Meeting, Task, TaskLine, Thread
+from app.models import Entry, Task, TaskLine, Thread
 from scripts.seed import seed
 
 
@@ -15,7 +15,6 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
 
     assert await count(Thread) == 10
     assert await count(Entry) == 6
-    assert await count(Meeting) == 6
     assert await count(Task) == 23
     assert await count(TaskLine) == 7
 
@@ -29,11 +28,10 @@ async def test_seed_is_repeatable(session: AsyncSession) -> None:
 
 
 async def test_scenario_records_stand(session: AsyncSession) -> None:
-    """시나리오 1 · 2 가 그대로 서 있는지 — 회의 밖 줄과 두 번 미룸."""
+    """시나리오 1 · 2 가 그대로 서 있는지 — 결정 한 줄과 두 번 미룸."""
     await seed(session)
 
     outside = (await session.execute(select(Entry).where(Entry.id == "e1"))).scalar_one()
-    assert outside.meeting_id is None  # 회의 없이 처리한 줄
     assert outside.kind == "decide"
 
     defers = (await session.execute(select(Entry).where(Entry.thread_id == "t5"))).scalars().all()

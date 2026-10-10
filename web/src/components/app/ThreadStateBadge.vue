@@ -12,8 +12,10 @@ const look = computed<{
   variant: 'default' | 'secondary' | 'destructive' | 'outline'
 }>(() => {
   if (props.state === 'decided') return { label: '결정됨', variant: 'default' }
-  if (props.state === 'queued') return { label: '다음 회의 대기', variant: 'outline' }
+  if (props.state === 'queued') return { label: '대기', variant: 'outline' }
+  /* 논의중인 안건은 몇 번 미뤄졌는지가 곧 상태다 — 한 번도 안 미뤘으면 그냥 논의중 */
   const n = props.deferCount ?? 0
+  if (n === 0) return { label: '논의중', variant: 'secondary' }
   return { label: `${n}번 미뤄짐`, variant: n >= 3 ? 'destructive' : 'secondary' }
 })
 </script>

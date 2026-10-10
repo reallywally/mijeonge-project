@@ -598,7 +598,6 @@ function bulkOwner(value: string) {
       :task-id="detailId"
       @open-task="openTask"
       @open-thread="(id) => router.push(`/threads/${id}`)"
-      @open-meeting="(id) => router.push(`/meetings/${id}`)"
     />
 
     <TaskCreateDialog

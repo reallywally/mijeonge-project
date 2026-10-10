@@ -105,23 +105,3 @@ class TaskThreadLink(Base):
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     thread_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(36))
-
-
-class MeetingTaskLink(Base):
-    """회의 ↔ 작업. 이쪽도 양쪽이 같은 프로젝트일 때만 선다 (API.md Q13)."""
-
-    __tablename__ = "meeting_task_link"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["meeting_id", "project_id"],
-            ["meeting.id", "meeting.project_id"],
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(
-            ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
-        ),
-    )
-
-    meeting_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(36))

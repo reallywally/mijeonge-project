@@ -4,7 +4,6 @@ import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import { useThreadStore } from '@/stores/thread'
 import type {
-  Meeting,
   Task,
   TaskDetail,
   TaskInput,
@@ -79,12 +78,6 @@ export const useTaskStore = defineStore('task', () => {
       .map((l) => data.allThreads.find((t) => t.id === l.threadId))
       .filter((t): t is Thread => t !== undefined)
 
-  const meetingsOfTask = (taskId: string): Meeting[] =>
-    data.meetingTasks
-      .filter((l) => l.taskId === taskId)
-      .map((l) => data.allMeetings.find((m) => m.id === l.meetingId))
-      .filter((m): m is Meeting => m !== undefined)
-
   function toRow(task: Task): TaskRow {
     return {
       task,
@@ -123,10 +116,8 @@ export const useTaskStore = defineStore('task', () => {
     return {
       thread,
       deferCount,
-      line: last ? last.entry.text : '아직 회의에서 다루지 않았습니다.',
-      where: last?.meeting
-        ? `${last.meeting.title} · ${monthDay(last.at)}`
-        : '다음 회의에서 고를 수 있습니다',
+      line: last ? last.entry.text : '아직 아무 기록이 없습니다.',
+      where: last ? `마지막 기록 · ${monthDay(last.at)}` : '기록 없음',
     }
   }
 
@@ -142,7 +133,6 @@ export const useTaskStore = defineStore('task', () => {
       parent: task.parentId ? (byId.value[task.parentId] ?? null) : null,
       children,
       threads: threadsOfTask(taskId).map(threadRow),
-      meetings: meetingsOfTask(taskId),
       doneChildCount: children.filter((c) => c.task.status === 'done').length,
     }
   }
@@ -238,7 +228,6 @@ export const useTaskStore = defineStore('task', () => {
       createdAt: nowIso(),
     })
     for (const threadId of input.threadIds) linkThread(id, threadId)
-    for (const meetingId of input.meetingIds ?? []) linkMeeting(id, meetingId)
     return id
   }
 
@@ -251,18 +240,6 @@ export const useTaskStore = defineStore('task', () => {
   function unlinkThread(taskId: string, threadId: string) {
     data.taskThreads = data.taskThreads.filter(
       (l) => !(l.taskId === taskId && l.threadId === threadId),
-    )
-  }
-
-  /** 작업 상세에서 회의를 건다. 회의 상세에서 거는 것과 같은 링크다. */
-  function linkMeeting(taskId: string, meetingId: string) {
-    const already = data.meetingTasks.some((l) => l.taskId === taskId && l.meetingId === meetingId)
-    if (!already) data.meetingTasks.push({ meetingId, taskId })
-  }
-
-  function unlinkMeeting(taskId: string, meetingId: string) {
-    data.meetingTasks = data.meetingTasks.filter(
-      (l) => !(l.taskId === taskId && l.meetingId === meetingId),
     )
   }
 
@@ -288,7 +265,6 @@ export const useTaskStore = defineStore('task', () => {
     taskDetail,
     threadRow,
     threadsOfTask,
-    meetingsOfTask,
     tasksOfThread,
     setStatus,
     setOwner,
@@ -301,7 +277,5 @@ export const useTaskStore = defineStore('task', () => {
     addTask,
     linkThread,
     unlinkThread,
-    linkMeeting,
-    unlinkMeeting,
   }
 })

@@ -3,19 +3,11 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -43,7 +35,7 @@ const router = useRouter()
 /* 조회 조건 — 제목 · 상태 · 담당자 */
 const titleDraft = ref('')
 const query = ref('')
-const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'stuck'>('all')
+const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'stuck' | 'overdue'>('all')
 const ownerFilter = ref<string>('all')
 const page = ref(1)
 const perPage = 5
@@ -54,19 +46,22 @@ const counts = computed(() => ({
   open: threadStore.rows.filter((r) => r.thread.state === 'open').length,
   decided: threadStore.rows.filter((r) => r.thread.state === 'decided').length,
   stuck: threadStore.rows.filter((r) => r.deferCount >= 3).length,
+  overdue: threadStore.overdueCount,
 }))
 
 const stateChips = computed(() => [
   { key: 'all' as const, label: '전체', n: counts.value.all },
   { key: 'queued' as const, label: '대기', n: counts.value.queued },
-  { key: 'open' as const, label: '미결정', n: counts.value.open },
+  { key: 'open' as const, label: '논의중', n: counts.value.open },
   { key: 'decided' as const, label: '결정됨', n: counts.value.decided },
   { key: 'stuck' as const, label: '3번 이상 미뤄짐', n: counts.value.stuck },
+  { key: 'overdue' as const, label: '기한 지남', n: counts.value.overdue },
 ])
 
 function matchesState(row: ThreadRow) {
   if (stateFilter.value === 'all') return true
   if (stateFilter.value === 'stuck') return row.deferCount >= 3
+  if (stateFilter.value === 'overdue') return row.overdue
   return row.thread.state === stateFilter.value
 }
 
@@ -125,19 +120,22 @@ function openThread(id: string) {
   router.push(`/threads/${id}`)
 }
 
-/* 안건 추가 팝업 */
-const addOpen = ref(false)
-const newTitle = ref('')
-const newOwner = ref<string>('none')
+/* 안건 추가 — 상세와 같은 모양의 팝업. /threads/new 로 주소를 갖는다 (작업 추가와 같은 방식) */
+const createOpen = computed({
+  get: () => route.path === '/threads/new',
+  set: (open: boolean) => {
+    if (!open) router.push('/threads')
+  },
+})
 
-function submitThread() {
-  const title = newTitle.value.trim()
-  if (!title) return
-  threadStore.addThread(title, newOwner.value === 'none' ? null : newOwner.value)
-  newTitle.value = ''
-  newOwner.value = 'none'
-  addOpen.value = false
+function openCreate() {
+  router.push('/threads/new')
+}
+
+/* 새 안건이 조회 조건에 걸려 안 보이는 일이 없게 조건을 풀고, 그 안건의 상세로 간다 */
+function onCreated(id: string) {
   resetAll()
+  openThread(id)
 }
 </script>
 
@@ -157,7 +155,7 @@ function submitThread() {
           class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm"
         >
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            아직 회의에서 다루지 않은 안건이 {{ counts.queued }}건 있습니다.
+            아직 아무 기록이 없는 안건이 {{ counts.queued }}건 있습니다.
           </p>
           <button
             type="button"
@@ -181,6 +179,20 @@ function submitThread() {
             그 안건만 보기
           </button>
         </div>
+        <div
+          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+        >
+          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+            기한이 지난 안건이 {{ counts.overdue }}건 있습니다.
+          </p>
+          <button
+            type="button"
+            class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline"
+            @click="pickState('overdue')"
+          >
+            그 안건만 보기
+          </button>
+        </div>
       </div>
     </template>
 
@@ -195,12 +207,11 @@ function submitThread() {
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-              안건 추가로 먼저 등록해 두고, 회의를 열 때 등록된 안건 중에서 이번에 다룰 것을
-              고릅니다. 회의록은 따로 쓰지 않습니다 — 회의에서 안건에 남긴 줄이 그대로 그 회의의
-              기록이 됩니다.
+              정해야 할 것을 안건으로 먼저 등록해 두고, 정해지면 무엇을 왜 그렇게 정했는지 남깁니다.
+              못 정하면 사유를 달아 미룹니다 — 몇 번 미뤄졌는지가 그대로 보입니다.
             </p>
           </div>
-          <Button class="shrink-0" @click="addOpen = true">
+          <Button class="shrink-0" @click="openCreate">
             <Plus class="size-4" />
             안건 추가
           </Button>
@@ -276,7 +287,10 @@ function submitThread() {
                   >담당자</TableHead
                 >
                 <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
-                  >마지막 회의</TableHead
+                  >마지막 기록</TableHead
+                >
+                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
+                  >결정 기한</TableHead
                 >
                 <TableHead class="h-10 w-10 text-right text-xs font-medium text-muted-foreground"
                   >이력</TableHead
@@ -315,14 +329,20 @@ function submitThread() {
                   {{ row.ownerName ?? '미정' }}
                 </TableCell>
                 <TableCell class="text-sm text-muted-foreground">{{
-                  row.lastMeetingLabel
+                  row.lastEntryLabel
                 }}</TableCell>
+                <TableCell
+                  class="text-sm"
+                  :class="row.overdue ? 'font-medium text-destructive' : 'text-muted-foreground'"
+                  :title="row.overdue ? '기한 지남' : undefined"
+                  >{{ row.dueLabel }}</TableCell
+                >
                 <TableCell class="text-right text-sm text-muted-foreground">{{
                   row.entryCount
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="6" class="h-[110px] text-center text-sm text-muted-foreground">
                   조회 조건에 맞는 안건이 없습니다.
                 </TableCell>
               </TableRow>
@@ -365,46 +385,6 @@ function submitThread() {
 
     <ThreadDetailDialog v-model:open="detailOpen" :thread-id="detailId" @open-thread="openThread" />
 
-    <Dialog v-model:open="addOpen">
-      <DialogContent class="sm:max-w-[560px]">
-        <DialogHeader>
-          <DialogTitle>안건 추가</DialogTitle>
-          <DialogDescription class="text-pretty">
-            회의와 무관하게 먼저 등록해 둡니다. 등록만 된 안건은 대기 상태로, 다음 회의에서 고를
-            후보가 됩니다.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="flex flex-col gap-3.5 py-1">
-          <div class="flex flex-col gap-2">
-            <Label>무엇을 정해야 하나요</Label>
-            <Input
-              v-model="newTitle"
-              placeholder="예: 결제 실패 안내 문구를 어떤 톤으로 쓸지"
-              @keyup.enter="submitThread"
-            />
-          </div>
-          <div class="flex flex-col gap-2">
-            <Label>담당자 (선택)</Label>
-            <Select v-model="newOwner">
-              <SelectTrigger class="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">미정</SelectItem>
-                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
-                  m.name
-                }}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" @click="addOpen = false">취소</Button>
-          <Button :disabled="!newTitle.trim()" @click="submitThread">저장</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ThreadCreateDialog v-model:open="createOpen" @created="onCreated" />
   </AppShell>
 </template>

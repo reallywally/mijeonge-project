@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarDays, ChevronRight, FolderClosed, ListTree, SquareKanban } from 'lucide-vue-next'
+import { ChevronRight, FolderClosed, ListTree, SquareKanban } from 'lucide-vue-next'
 import {
   Select,
   SelectContent,
@@ -8,16 +8,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useDataStore } from '@/stores/data'
-import { useMeetingStore } from '@/stores/meeting'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 
-/* 대메뉴는 memo 대로 작업 · 안건 · 회의 셋이다. 위에서 프로젝트를 고르면
-   세 화면 모두 그 프로젝트 안에서만 돈다. */
+/* 대메뉴는 작업 · 안건 둘이다. 위에서 프로젝트를 고르면 두 화면 모두 그 프로젝트 안에서만 돈다. */
 const data = useDataStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
-const meetingStore = useMeetingStore()
 </script>
 
 <template>
@@ -45,7 +42,7 @@ const meetingStore = useMeetingStore()
         <label class="flex flex-col gap-1.5">
           <span class="flex items-center gap-2 px-1">
             <span class="grow text-xs font-medium text-muted-foreground">프로젝트</span>
-            <!-- 프로젝트를 만들고 고르는 자리. 대메뉴는 memo 대로 셋으로 두고 여기서 간다 -->
+            <!-- 프로젝트를 만들고 고르는 자리. 대메뉴에 두지 않고 여기서 간다 -->
             <RouterLink
               to="/projects"
               class="text-xs text-muted-foreground underline-offset-4 hover:underline"
@@ -93,15 +90,6 @@ const meetingStore = useMeetingStore()
             <ListTree class="size-4 shrink-0" />
             <span class="grow">안건</span>
             <span class="text-xs text-muted-foreground">{{ threadStore.rows.length }}</span>
-          </RouterLink>
-          <RouterLink
-            to="/meetings"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
-          >
-            <CalendarDays class="size-4 shrink-0" />
-            <span class="grow">회의</span>
-            <span class="text-xs text-muted-foreground">{{ meetingStore.rows.length }}</span>
           </RouterLink>
         </nav>
 

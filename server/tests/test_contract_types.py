@@ -49,12 +49,9 @@ CASES: list[tuple[str, Pick]] = [
     ("Project", lambda body: [body["project"]]),
     ("Thread", lambda body: body["threads"]),
     ("Entry", lambda body: body["entries"]),
-    ("Meeting", lambda body: body["meetings"]),
-    ("MeetingMemo", lambda body: [m for meeting in body["meetings"] for m in meeting["memos"]]),
     ("Task", lambda body: body["tasks"]),
     ("TaskLine", lambda body: [line for task in body["tasks"] for line in task["body"]]),
     ("TaskThreadLink", lambda body: body["taskThreadLinks"]),
-    ("MeetingTaskLink", lambda body: body["meetingTaskLinks"]),
 ]
 
 
@@ -95,8 +92,6 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
         "project",
         "threads",
         "entries",
-        "meetings",
         "tasks",
         "taskThreadLinks",
-        "meetingTaskLinks",
     }

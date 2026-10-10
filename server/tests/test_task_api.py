@@ -197,12 +197,10 @@ async def test_link_needs_both_sides_in_one_project(client: httpx.AsyncClient) -
     assert (await client.put("/api/tasks/k1/threads/없는안건")).status_code == 404
 
 
-async def test_meeting_link_from_the_task_side(client: httpx.AsyncClient) -> None:
-    linked = await client.put("/api/tasks/k1/meetings/m1")
-    assert linked.status_code == 200
-    assert linked.json() == {"meetingId": "m1", "taskId": "k1"}
-    assert (await client.put("/api/tasks/k1/meetings/m1")).json() == linked.json()
-
-    assert (await client.delete("/api/tasks/k1/meetings/m1")).status_code == 204
-    snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert {"meetingId": "m1", "taskId": "k1"} not in snap["meetingTaskLinks"]
+async def test_meeting_routes_are_gone(client: httpx.AsyncClient) -> None:
+    """회의는 걷어냈다 — 링크 경로도 회의 저장 경로도 남아 있지 않다."""
+    assert (await client.put("/api/tasks/k1/meetings/m1")).status_code == 404
+    assert (await client.delete("/api/tasks/k1/meetings/m1")).status_code == 404
+    assert (await client.put("/api/meetings/m1/tasks/k1")).status_code == 404
+    res = await client.post("/api/projects/p1/meetings", json={"title": "x", "date": "2026-09-10"})
+    assert res.status_code == 404

@@ -56,7 +56,7 @@ function submit() {
       <DialogHeader>
         <DialogTitle>프로젝트 추가</DialogTitle>
         <DialogDescription class="text-pretty">
-          가장 큰 단위입니다. 작업 · 안건 · 회의는 모두 프로젝트 하나 안에서만 돕니다.
+          가장 큰 단위입니다. 작업 · 안건은 모두 프로젝트 하나 안에서만 돕니다.
         </DialogDescription>
       </DialogHeader>
 
@@ -78,7 +78,7 @@ function submit() {
             {{ prefixError }}
           </p>
           <p v-else class="text-xs leading-relaxed text-muted-foreground text-pretty">
-            회의에서 작업을 한 마디로 가리키는 값입니다. 첫 작업이
+            대화에서 작업을 한 마디로 가리키는 값입니다. 첫 작업이
             <span class="font-medium text-foreground">{{ keyPreview }}</span> 로 섭니다.
           </p>
         </div>

@@ -7,11 +7,21 @@
 import httpx
 
 # domain.ts 가 들고 있는 필드 그대로. 하나라도 어긋나면 화면이 조용히 빈칸을 그린다
-THREAD_KEYS = {"id", "projectId", "title", "state", "ownerId", "parentThreadId", "createdAt"}
+THREAD_KEYS = {
+    "id",
+    "projectId",
+    "title",
+    "description",
+    "options",
+    "dueDate",
+    "state",
+    "ownerId",
+    "parentThreadId",
+    "createdAt",
+}
 ENTRY_KEYS = {
     "id",
     "threadId",
-    "meetingId",
     "kind",
     "text",
     "detail",
@@ -19,7 +29,6 @@ ENTRY_KEYS = {
     "ownerId",
     "createdAt",
 }
-MEETING_KEYS = {"id", "projectId", "title", "date", "attendeeIds", "memos"}
 TASK_KEYS = {
     "id",
     "projectId",
@@ -59,20 +68,15 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
         "project",
         "threads",
         "entries",
-        "meetings",
         "tasks",
         "taskThreadLinks",
-        "meetingTaskLinks",
     }
     assert set(snap["project"]) == {"id", "name", "taskKeyPrefix"}
     assert set(snap["threads"][0]) == THREAD_KEYS
     assert set(snap["entries"][0]) == ENTRY_KEYS
-    assert set(snap["meetings"][0]) == MEETING_KEYS
     assert set(snap["tasks"][0]) == TASK_KEYS
-    assert set(snap["meetings"][0]["memos"][0]) == {"id", "text", "promotedThreadId"}
     assert set(snap["tasks"][3]["body"][0]) == {"id", "kind", "text", "done", "level"}
     assert set(snap["taskThreadLinks"][0]) == {"taskId", "threadId"}
-    assert set(snap["meetingTaskLinks"][0]) == {"meetingId", "taskId"}
 
 
 async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> None:
@@ -82,7 +86,6 @@ async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> Non
 
     assert [t["key"] for t in p2["tasks"]] == ["PAS-1", "PAS-2"]
     assert [t["id"] for t in p2["threads"]] == ["t10"]
-    assert p2["meetings"] == []
     assert all(t["projectId"] == "p1" for t in p1["tasks"])
     assert len(p1["tasks"]) == 21
 
@@ -92,14 +95,13 @@ async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> N
 
     `stores/thread.ts` 의 `rows` 와 작업 목록에는 정렬이 아예 없다. 게다가 안건 이력은
     같은 날짜의 줄을 배열 인덱스(seqNo)로 가른다. 그래서 등록 순서(`seq`)로 내보낸다 —
-    `created_at` 으로 세우면 안 된다. 한 회의에서 남긴 줄들은 값이 같을 수 있고, 픽스처의
-    e1(09-09)과 e2(09-07)처럼 적은 순서와 시각 순서가 다른 줄도 있다.
+    `created_at` 으로 세우면 안 된다. 픽스처의 e1(09-09)과 e2(09-07)처럼 적은 순서와
+    시각 순서가 다른 줄도 있다.
     """
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
     assert [t["id"] for t in snap["threads"]] == [f"t{n}" for n in range(1, 10)]
     assert [e["id"] for e in snap["entries"]] == [f"e{n}" for n in range(1, 7)]
-    assert [m["id"] for m in snap["meetings"]] == [f"m{n}" for n in range(1, 7)]
     assert [t["key"] for t in snap["tasks"]] == [f"HW-{n}" for n in range(1, 22)]
 
 
@@ -113,7 +115,6 @@ async def test_created_at_is_utc_and_dates_are_days(client: httpx.AsyncClient) -
     assert thread["createdAt"] == "2026-09-08T00:30:00Z"  # fixtures/threads.ts 의 t1
     entry = next(e for e in snap["entries"] if e["id"] == "e3")
     assert entry["createdAt"] == "2026-09-10T06:05:00Z"
-    assert next(m for m in snap["meetings"] if m["id"] == "m3")["date"] == "2026-09-10"
 
 
 async def test_entry_detail_is_flattened_to_strings(client: httpx.AsyncClient) -> None:
@@ -124,16 +125,7 @@ async def test_entry_detail_is_flattened_to_strings(client: httpx.AsyncClient) -
         "supabase 는 비용 때문에 뺀다",
     ]
     outside = next(e for e in snap["entries"] if e["id"] == "e1")
-    assert outside["meetingId"] is None  # 회의 밖 처리
     assert outside["detail"] == []
-
-
-async def test_meeting_carries_attendees_and_memos(client: httpx.AsyncClient) -> None:
-    snap = (await client.get("/api/projects/p1/snapshot")).json()
-    m3 = next(m for m in snap["meetings"] if m["id"] == "m3")
-    assert m3["attendeeIds"] == ["u1", "u2", "u3", "u4"]
-    assert [memo["id"] for memo in m3["memos"]] == ["mm5", "mm6", "mm7"]
-    assert m3["memos"][2]["promotedThreadId"] == "t4"
 
 
 async def test_task_body_keeps_its_order(client: httpx.AsyncClient) -> None:
@@ -151,11 +143,10 @@ async def test_task_body_keeps_its_order(client: httpx.AsyncClient) -> None:
     assert blocked["status"] == "blocked"
 
 
-async def test_links_come_both_ways(client: httpx.AsyncClient) -> None:
+async def test_task_thread_links(client: httpx.AsyncClient) -> None:
     snap = (await client.get("/api/projects/p1/snapshot")).json()
     assert {"taskId": "k4", "threadId": "t1"} in snap["taskThreadLinks"]
     assert len(snap["taskThreadLinks"]) == 5
-    assert len(snap["meetingTaskLinks"]) == 6
 
 
 async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:

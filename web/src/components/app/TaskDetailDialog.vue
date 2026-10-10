@@ -17,26 +17,23 @@ import { monthDay } from '@/lib/date'
 import { periodProblem, TASK_STATUS_OPTIONS } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
-import { useMeetingStore } from '@/stores/meeting'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 import type { TaskLine, TaskStatus } from '@/types/domain'
 
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
    따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 연결, 오른쪽이 속성이다.
-   맵핑(안건 · 회의)은 memo 의 연관 관계대로 여기와 회의 상세에서만 한다. */
+   안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. */
 const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{
   (e: 'open-task', id: string): void
   (e: 'open-thread', id: string): void
-  (e: 'open-meeting', id: string): void
 }>()
 
 const data = useDataStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
-const meetingStore = useMeetingStore()
 
 const detail = computed(() => (props.taskId ? taskStore.taskDetail(props.taskId) : null))
 
@@ -145,20 +142,10 @@ const subPct = computed(() => {
   return Math.round((d.doneChildCount / d.children.length) * 100)
 })
 
-/* 아직 안 건 안건 · 회의 — 검색 칸이 이 안에서 찾는다 */
+/* 아직 안 건 안건 — 검색 칸이 이 안에서 찾는다 */
 const threadChoices = computed(() => {
   const linked = new Set(detail.value?.threads.map((t) => t.thread.id))
   return threadStore.threads.filter((t) => !linked.has(t.id))
-})
-
-const linkedMeetings = computed(() => {
-  const linked = new Set(detail.value?.meetings.map((m) => m.id))
-  return meetingStore.rows.filter((r) => linked.has(r.meeting.id))
-})
-
-const meetingChoices = computed(() => {
-  const linked = new Set(detail.value?.meetings.map((m) => m.id))
-  return meetingStore.rows.filter((r) => !linked.has(r.meeting.id))
 })
 </script>
 
@@ -294,15 +281,10 @@ const meetingChoices = computed(() => {
 
           <TaskLinks
             :threads="detail.threads"
-            :meetings="linkedMeetings"
             :thread-choices="threadChoices"
-            :meeting-choices="meetingChoices"
             @link-thread="(id) => taskStore.linkThread(detail!.task.id, id)"
             @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
-            @link-meeting="(id) => taskStore.linkMeeting(detail!.task.id, id)"
-            @unlink-meeting="(id) => taskStore.unlinkMeeting(detail!.task.id, id)"
             @open-thread="(id) => emit('open-thread', id)"
-            @open-meeting="(id) => emit('open-meeting', id)"
           />
         </div>
 
@@ -327,10 +309,6 @@ const meetingChoices = computed(() => {
             <div class="flex gap-2">
               <dt class="w-[72px] shrink-0 text-muted-foreground">연관 안건</dt>
               <dd>{{ detail.threads.length }}건</dd>
-            </div>
-            <div class="flex gap-2">
-              <dt class="w-[72px] shrink-0 text-muted-foreground">연관 회의</dt>
-              <dd>{{ detail.meetings.length }}건</dd>
             </div>
             <div class="flex gap-2">
               <dt class="w-[72px] shrink-0 text-muted-foreground">만든 날짜</dt>

@@ -10,7 +10,6 @@ import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/c
 import { periodProblem } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
-import { useMeetingStore } from '@/stores/meeting'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 import type { TaskLine, TaskPriority, TaskStatus, Thread } from '@/types/domain'
@@ -26,7 +25,6 @@ const emit = defineEmits<{ (e: 'created', id: string): void }>()
 const data = useDataStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
-const meetingStore = useMeetingStore()
 
 const title = ref('')
 const body = ref<TaskLine[]>([])
@@ -37,7 +35,6 @@ const due = ref('')
 const priority = ref<TaskPriority>('normal')
 const parent = ref<string | null>(null)
 const threadIds = ref<string[]>([])
-const meetingIds = ref<string[]>([])
 const keepOpen = ref(false)
 /* 본문 편집기는 자기 줄을 들고 있으니, 폼을 비울 때는 새로 띄운다 */
 const bodyKey = ref(0)
@@ -60,7 +57,6 @@ function resetForm() {
   priority.value = 'normal'
   parent.value = props.parentId
   threadIds.value = []
-  meetingIds.value = []
   bodyKey.value += 1
   void nextTick(fitTitle)
 }
@@ -74,7 +70,7 @@ watch(
   { immediate: true },
 )
 
-/* 골라 둔 안건 · 회의 — 상세의 표와 같은 줄 모양으로 보여 준다 */
+/* 골라 둔 안건 — 상세의 표와 같은 줄 모양으로 보여 준다 */
 const pickedThreads = computed(() =>
   threadIds.value
     .map((id) => threadStore.threads.find((t) => t.id === id))
@@ -83,14 +79,6 @@ const pickedThreads = computed(() =>
 )
 const threadChoices = computed(() =>
   threadStore.threads.filter((t) => !threadIds.value.includes(t.id)),
-)
-const pickedMeetings = computed(() =>
-  meetingIds.value
-    .map((id) => meetingStore.rows.find((r) => r.meeting.id === id))
-    .filter((r) => r !== undefined),
-)
-const meetingChoices = computed(() =>
-  meetingStore.rows.filter((r) => !meetingIds.value.includes(r.meeting.id)),
 )
 
 const toggle = (list: string[], id: string, on: boolean) =>
@@ -121,7 +109,6 @@ function submit() {
     due: due.value || null,
     priority: priority.value,
     threadIds: [...threadIds.value],
-    meetingIds: [...meetingIds.value],
   })
   /* 만들고 계속 추가 — 폼만 비우고 팝업은 열어 둔다 */
   if (keepOpen.value) {
@@ -192,14 +179,10 @@ function onKeydown(e: KeyboardEvent) {
 
           <TaskLinks
             :threads="pickedThreads"
-            :meetings="pickedMeetings"
             :thread-choices="threadChoices"
-            :meeting-choices="meetingChoices"
             :navigable="false"
             @link-thread="(id) => (threadIds = toggle(threadIds, id, true))"
             @unlink-thread="(id) => (threadIds = toggle(threadIds, id, false))"
-            @link-meeting="(id) => (meetingIds = toggle(meetingIds, id, true))"
-            @unlink-meeting="(id) => (meetingIds = toggle(meetingIds, id, false))"
           />
         </div>
 

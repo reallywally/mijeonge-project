@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useDataStore } from '@/stores/data'
 
 /* 목록 위에 뜨는 상세 팝업도 주소를 갖는다 — 새로고침과 뒤로가기가 살아 있어야 한다.
-   /tasks/new · /meetings/new 는 각각 /:id 보다 먼저 둔다. */
+   /tasks/new · /threads/new 는 각각 /:id 보다 먼저 둔다. */
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -38,24 +38,14 @@ const router = createRouter({
       component: () => import('@/views/ThreadListView.vue'),
     },
     {
-      path: '/threads/:id',
-      name: 'thread',
+      path: '/threads/new',
+      name: 'thread-new',
       component: () => import('@/views/ThreadListView.vue'),
     },
     {
-      path: '/meetings/new',
-      name: 'meeting-new',
-      component: () => import('@/views/NewMeetingView.vue'),
-    },
-    {
-      path: '/meetings',
-      name: 'meetings',
-      component: () => import('@/views/MeetingListView.vue'),
-    },
-    {
-      path: '/meetings/:id',
-      name: 'meeting',
-      component: () => import('@/views/MeetingListView.vue'),
+      path: '/threads/:id',
+      name: 'thread',
+      component: () => import('@/views/ThreadListView.vue'),
     },
   ],
 })

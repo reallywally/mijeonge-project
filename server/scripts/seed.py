@@ -20,21 +20,17 @@ from app.db import engine, session_factory
 from app.models import (
     Entry,
     EntryDetail,
-    Meeting,
-    MeetingAttendee,
-    MeetingMemo,
-    MeetingTaskLink,
     Member,
     Project,
     Task,
     TaskLine,
     TaskThreadLink,
     Thread,
+    ThreadOption,
 )
 from app.time import at
 
 # createdAt 은 픽스처의 값을 그대로 쓴다 — 계약대로 ISO 8601 UTC(`…Z`) 다.
-# 회의는 `date` 가 그날을 가리키므로 created_at 만 그날 0시(KST)로 앉힌다(화면에 안 나간다)
 
 
 def d(day: str | None) -> date | None:
@@ -60,25 +56,73 @@ def members() -> list[Member]:
 
 
 def thread(
-    id_: str, title: str, state: str, owner: str | None, created: str, project: str = "p1"
+    id_: str,
+    title: str,
+    state: str,
+    owner: str | None,
+    created: str,
+    project: str = "p1",
+    description: str = "",
+    options: tuple[str, ...] = (),
+    due: str | None = None,
 ) -> Thread:
     return Thread(
         id=id_,
         project_id=project,
         title=title,
+        description=description,
         state=state,
         owner_id=owner,
+        due_date=d(due),
         parent_thread_id=None,
         created_at=at(created),
+        options=[
+            ThreadOption(id=f"{id_}o{i + 1}", thread_id=id_, text=text, sort_order=i)
+            for i, text in enumerate(options)
+        ],
     )
 
 
 def threads() -> list[Thread]:
     return [
         # 시나리오 1 — 개발 환경 설정 작업에서 갈라져 나온 둘
-        thread("t1", "서버 OS 결정", "decided", "u3", "2026-09-08T00:30:00Z"),
-        thread("t2", "DB 결정", "decided", "u3", "2026-09-08T00:35:00Z"),
-        thread("t3", "사내망에서 외부 모델 호출 허용 범위", "open", "u1", "2026-09-09T02:10:00Z"),
+        thread(
+            "t1",
+            "서버 OS 결정",
+            "decided",
+            "u3",
+            "2026-09-08T00:30:00Z",
+            description=(
+                "개발 환경 설정 작업에서 서버 OS가 정해지지 않아 서버 구성을 시작하지 못하고 있다."
+            ),
+            options=("우분투", "록키", "CentOS"),
+            due="2026-09-12",
+        ),
+        thread(
+            "t2",
+            "DB 결정",
+            "decided",
+            "u3",
+            "2026-09-08T00:35:00Z",
+            description=(
+                "개발 환경 설정 작업의 DB 선택. 기존 솔루션과의 호환성과 비용을 같이 봐야 한다."
+            ),
+            options=("PostgreSQL", "MySQL", "Supabase"),
+            due="2026-09-15",
+        ),
+        thread(
+            "t3",
+            "사내망에서 외부 모델 호출 허용 범위",
+            "open",
+            "u1",
+            "2026-09-09T02:10:00Z",
+            description=(
+                "가상비서가 외부 LLM API를 불러야 하는데 "
+                "사내망 보안 정책상 어디까지 허용되는지 정해지지 않았다."
+            ),
+            options=("전면 허용", "비식별 데이터만 허용", "사내 모델만 사용"),
+            due="2026-09-30",
+        ),
         thread("t4", "개발 서버 백업 주기", "queued", None, "2026-09-10T06:20:00Z"),
         # 시나리오 2 — 두 번 미뤄진 안건
         thread(
@@ -87,6 +131,11 @@ def threads() -> list[Thread]:
             "open",
             "u4",
             "2026-09-07T00:10:00Z",
+            description=(
+                "보험료 산출 기간계 API 개발 중 호출에 필요한 in · out 정의가 없어 개발이 멈췄다. "
+                "기간계 업무 정의가 먼저 나와야 한다."
+            ),
+            due="2026-10-19",
         ),
         # 시나리오 3 — 회의만으로 끝난 안건
         thread(
@@ -104,100 +153,9 @@ def threads() -> list[Thread]:
     ]
 
 
-def meeting(
-    id_: str, title: str, day: str, attendees: list[str], memos: list[tuple[str, str, str | None]]
-) -> Meeting:
-    return Meeting(
-        id=id_,
-        project_id="p1",
-        title=title,
-        date=date.fromisoformat(day),
-        created_at=at(day),
-        attendees=[MeetingAttendee(meeting_id=id_, member_id=m) for m in attendees],
-        memos=[
-            MeetingMemo(
-                id=mid, meeting_id=id_, text=text, promoted_thread_id=promoted, sort_order=i
-            )
-            for i, (mid, text, promoted) in enumerate(memos)
-        ],
-    )
-
-
-def meetings() -> list[Meeting]:
-    return [
-        meeting(
-            "m1",
-            "9월 1주차 주간회의",
-            "2026-09-04",
-            ["u1", "u2", "u3"],
-            [
-                ("mm1", "킥오프 이후 첫 주다. 설계 산출물 목록은 다음 주에 공유하기로 했다.", None),
-                ("mm2", "개발 장비는 9월 둘째 주에 들어온다.", None),
-                ("mm3", "정하늘이 9월 말 휴가다.", None),
-            ],
-        ),
-        meeting(
-            "m2",
-            "기간계 API in · out 회의",
-            "2026-09-07",
-            ["u1", "u2", "u4"],
-            [("mm4", "기간계 담당자가 이 자리에 없었다. 다음에는 부르기로 했다.", None)],
-        ),
-        meeting(
-            "m3",
-            "개발 환경 확정 회의",
-            "2026-09-10",
-            ["u1", "u2", "u3", "u4"],
-            [
-                (
-                    "mm5",
-                    "서버는 9월 9일에 발급됐다. OS 는 PM 이 우분투 최신 버전으로 정했다고 전달받아"
-                    " 안건에는 회의 밖 줄로 적어 두었다.",
-                    None,
-                ),
-                ("mm6", "방화벽은 정보보안팀에 따로 신청해야 한다. 양식은 사내 포털 > 보안.", None),
-                ("mm7", "개발 서버 백업 주기는 기간계와 맞추자는 이야기가 나왔다.", "t4"),
-            ],
-        ),
-        meeting(
-            "m4",
-            "9월 2주차 주간회의",
-            "2026-09-11",
-            ["u1", "u2", "u3", "u4"],
-            [
-                ("mm8", "데이터 설계는 9월 14일에 끝난다.", None),
-                ("mm9", "가상비서 tool01 은 붙였고 tool02 를 하는 중이다.", None),
-                ("mm10", "기간계 이슈로 보험료 산출 API 는 아직 못 들어갔다.", None),
-                ("mm11", "다음 주에 일정을 한 번 손봐야 할 것 같다.", None),
-            ],
-        ),
-        meeting(
-            "m5",
-            "기간계 API in · out 재회의",
-            "2026-09-14",
-            ["u1", "u4"],
-            [("mm12", "기간계 업무 정의 일정을 PM 이 확인해 주기로 했다.", None)],
-        ),
-        meeting(
-            "m6",
-            "일정 조율 회의",
-            "2026-09-15",
-            ["u1", "u2", "u3", "u4"],
-            [
-                (
-                    "mm13",
-                    "오픈 일정은 고객사와 이미 공유된 날짜라 건드릴 수 없다는 전제에서 시작했다.",
-                    None,
-                )
-            ],
-        ),
-    ]
-
-
 def entry(
     id_: str,
     thread_id: str,
-    meeting_id: str | None,
     kind: str,
     text: str,
     detail: list[str],
@@ -208,7 +166,6 @@ def entry(
     return Entry(
         id=id_,
         thread_id=thread_id,
-        meeting_id=meeting_id,
         kind=kind,
         text=text,
         note=note,
@@ -222,12 +179,13 @@ def entry(
 
 
 def entries() -> list[Entry]:
+    # 화면은 이력 줄의 날짜를 createdAt 의 KST 날짜로 찍는다(예전에는 회의 날짜였다).
+    # 회의에 붙어 있던 e2 · e3 · e4 · e5 · e6 은 KST 로 그 회의 날짜와 이미 같아 그대로 둔다
     return [
         # 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
         entry(
             "e1",
             "t1",
-            None,
             "decide",
             "우분투 최신 버전으로 한다",
             [],
@@ -239,7 +197,6 @@ def entries() -> list[Entry]:
         entry(
             "e2",
             "t5",
-            "m2",
             "defer",
             "이번 회의에서는 정하지 못했다",
             [],
@@ -251,7 +208,6 @@ def entries() -> list[Entry]:
         entry(
             "e3",
             "t2",
-            "m3",
             "decide",
             "mysql 을 쓴다",
             [
@@ -265,7 +221,6 @@ def entries() -> list[Entry]:
         entry(
             "e4",
             "t3",
-            "m3",
             "defer",
             "이번 회의에서는 정하지 못했다",
             [],
@@ -277,7 +232,6 @@ def entries() -> list[Entry]:
         entry(
             "e5",
             "t5",
-            "m5",
             "defer",
             "여전히 업무 정의가 없어 또 미룬다",
             [],
@@ -289,7 +243,6 @@ def entries() -> list[Entry]:
         entry(
             "e6",
             "t6",
-            "m6",
             "decide",
             "전체 일정은 그대로 두고 테스트 기간만 2주 줄인다",
             ["늘어난 개발 기간은 그대로 둔다", "통합 테스트를 3주에서 1주로 줄인다"],
@@ -434,29 +387,16 @@ TASK_THREAD_LINKS = [
     ("k3", "t9"),  # 프로그램 설계 ↔ 공통 코드 체계
 ]
 
-# 회의 ↔ 작업. 그 회의에서 정해진 것이 어느 작업을 움직이는지
-MEETING_TASK_LINKS = [
-    ("m3", "k4"),
-    ("m2", "k18"),
-    ("m5", "k18"),
-    ("m6", "k1"),
-    ("m6", "k5"),
-    ("m6", "k18"),
-]
-
 
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
-        MeetingTaskLink,
         TaskThreadLink,
         TaskLine,
         Task,
         EntryDetail,
         Entry,
-        MeetingMemo,
-        MeetingAttendee,
-        Meeting,
+        ThreadOption,
         Thread,
         Member,
         Project,
@@ -488,7 +428,7 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in ("thread", "entry", "meeting", "task"):
+    for table in ("thread", "entry", "task"):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
@@ -505,7 +445,6 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(members())
     await session.flush()
     session.add_all(in_order(threads()))
-    session.add_all(in_order(meetings()))
     await session.flush()
     session.add_all(in_order(entries()))
     session.add_all(in_order(tasks()))
@@ -513,7 +452,6 @@ async def seed(session: AsyncSession) -> None:
     await advance_identity(session)
     session.add_all(
         [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
-        + [MeetingTaskLink(meeting_id=m, task_id=t, project_id="p1") for m, t in MEETING_TASK_LINKS]
     )
     await session.commit()
 
@@ -526,10 +464,9 @@ async def run() -> None:
         "project": len(projects()),
         "member": len(members()),
         "thread": len(threads()),
-        "meeting": len(meetings()),
         "entry": len(entries()),
         "task": len(tasks()),
-        "link": len(TASK_THREAD_LINKS) + len(MEETING_TASK_LINKS),
+        "link": len(TASK_THREAD_LINKS),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     await engine.dispose()

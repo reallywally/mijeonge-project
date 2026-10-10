@@ -15,11 +15,11 @@
 | 베이스 | `/api` |
 | JSON 키 | camelCase — 서버 안은 snake_case 를 쓰고 경계에서 Pydantic alias 로 바꾼다 |
 | id | 전부 문자열. DB 가 UUID 라도 내보낼 때 `str` |
-| 날짜 | 사람이 고른 날짜(`Meeting.date` · `Task.start` · `Task.due`)는 `YYYY-MM-DD`, `createdAt` 은 **ISO 8601 UTC · 항상 `Z` 접미 한 가지 형식**. **오프셋(`+09:00`)을 섞지 않는다** — 프론트가 문자열 비교로 정렬한다 (Q3 닫힘 — 화면에 찍을 때 `lib/date.ts` 가 KST 로 옮긴다) |
+| 날짜 | 사람이 고른 날짜(`Task.start` · `Task.due` · `Thread.dueDate`)는 `YYYY-MM-DD`, `createdAt` 은 **ISO 8601 UTC · 항상 `Z` 접미 한 가지 형식**. **오프셋(`+09:00`)을 섞지 않는다** — 프론트가 문자열 비교로 정렬한다 (Q3 닫힘 — 화면에 찍을 때 `lib/date.ts` 가 KST 로 옮긴다) |
 | 스코프 | 경로에 프로젝트를 둔다 — `/api/projects/{projectId}/...`. 프로젝트 목록만 예외 |
 | 인증 | 없다. 담당자는 `member` id 로만 가리킨다 |
 | 집계 타입 | `ThreadRow` · `ThreadDetail` · `TaskRow` 는 서버가 주지 않는다 — 프론트 스토어가 계산한다 |
-| 빈 값 | 빈 문자열은 `''`, 빈 배열은 `[]`. **`null` 은 정해진 일곱 이름에서만 나간다** — 아래 '빈 값은 `null` 이 아니다' (Q17 닫힘) |
+| 빈 값 | 빈 문자열은 `''`, 빈 배열은 `[]`. **`null` 은 정해진 여섯 이름에서만 나간다** — 아래 '빈 값은 `null` 이 아니다' (Q17 닫힘) |
 | 에러 | HTTP 상태 + 본문 `{ code, message, detail? }` 한 가지 — 아래 '에러' (Q14 닫힘) |
 
 ## 에러
@@ -51,12 +51,11 @@
 
 | 상태 | `code` | 언제 |
 | --- | --- | --- |
-| 404 | `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `MEETING_NOT_FOUND` · `TASK_LINE_NOT_FOUND` | 경로가 가리키는 것이 없을 때 |
+| 404 | `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `TASK_LINE_NOT_FOUND` | 경로가 가리키는 것이 없을 때 |
 | 400 | `TASK_PARENT_SELF` · `TASK_PARENT_NOT_FOUND` · `TASK_PARENT_OTHER_PROJECT` · `TASK_PARENT_DESCENDANT` | 상위 작업이 고리를 만들거나 다른 프로젝트에 있을 때 (Q16) |
 | 400 | `THREAD_PARENT_NOT_FOUND` · `THREAD_PARENT_OTHER_PROJECT` | 상위 안건이 없거나 다른 프로젝트에 있을 때 (Q16) |
-| 400 | `TASK_THREAD_LINK_OTHER_PROJECT` · `MEETING_TASK_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
+| 400 | `TASK_THREAD_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
-| 400 | `MEETING_TEMP_ID_DUPLICATED` · `MEMBER_NOT_FOUND` | 새 회의 저장이 들고 온 값이 서로 안 맞을 때 |
 
 ## 엔드포인트
 
@@ -67,7 +66,7 @@
 | GET | `/api/health` | 앱이 떠 있는지 | `{ status }` | 구현 |
 | GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18) | `Project[]` (Q9 로 `taskKeyPrefix` 가 늘었다) | 구현 |
 | POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18) | `Project` · 201 | 구현 |
-| GET | `/api/members` | 멤버 목록. 담당자 · 참석자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 구현 |
+| GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 구현 |
 | GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 구현 |
 
 쓰기(3단계)는 스토어 함수 하나가 엔드포인트 하나다. 응답은 **바뀐 레코드**를 돌려준다.
@@ -78,11 +77,9 @@
 | PATCH | `/api/tasks/{taskId}` | 상태 · 담당자 · 기간 · 상위 작업 부분 수정 | `Task` | 구현 |
 | PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 구현 |
 | PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 구현 |
-| PUT · DELETE | `/api/tasks/{taskId}/meetings/{meetingId}` | 작업 ↔ 회의 링크 (멱등) | 링크 · 204 | 구현 |
-| POST | `/api/projects/{projectId}/threads` | 안건 등록 | `Thread` · 201 | 구현 |
-| POST | `/api/threads/{threadId}/entries` | 회의 밖 줄. `meetingId` 는 서버가 null 로 고정 | `{ entry, thread }` · 201 | 구현 |
-| POST | `/api/projects/{projectId}/meetings` | 새 회의 저장 — 안건 · 줄 · 상태 변경이 한 트랜잭션. 응답에 `threadIdByTempId` | `{ meeting, threads, entries, threadIdByTempId }` · 201 | 구현 |
-| PUT · DELETE | `/api/meetings/{meetingId}/tasks/{taskId}` | 회의 ↔ 작업 링크 (작업 쪽과 같은 링크) | 링크 · 204 | 구현 |
+| POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 구현 |
+| PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` 는 통째로 갈아끼운다. 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 구현 |
+| POST | `/api/threads/{threadId}/entries` | 이력 한 줄 — 결정 · 미룸 · 세부 추가. 이력을 남기는 유일한 길이다. `decide` 면 안건이 `decided`, 그 밖의 줄은 `queued` 면 `open` 으로 | `{ entry, thread }` · 201 | 구현 |
 
 읽기 넷은 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
 `uv run fastapi dev` 로 띄우고 `/api/projects` → `/api/projects/p1/snapshot` 순으로 받으면 목업과 같은 데이터가 온다
@@ -91,14 +88,14 @@
 ## 응답 스키마 — `ProjectSnapshot`
 
 `GET /api/projects/{projectId}/snapshot`.
-**원본만 준다.** `ThreadRow` · `ThreadDetail` · `MeetingRow` · `MeetingDetail` · `TaskRow` ·
+**원본만 준다.** `ThreadRow` · `ThreadDetail` · `TaskRow` ·
 `TaskDetail` · `TaskThreadRow` 같은 계산된 타입은 담지 않는다 — 지금대로 프론트 스토어가 만든다.
 
 타입은 전부 `web/src/types/domain.ts` 의 것을 그대로 쓴다. 서버가 이름을 새로 짓지 않는다.
 
 ```ts
 import type {
-  Entry, Meeting, MeetingTaskLink, Project, Task, TaskThreadLink, Thread,
+  Entry, Project, Task, TaskThreadLink, Thread,
 } from '@/types/domain'
 
 /** GET /api/projects/{projectId}/snapshot */
@@ -108,16 +105,14 @@ export interface ProjectSnapshot {
   project: Project
   threads: Thread[]
   entries: Entry[]
-  meetings: Meeting[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
-  meetingTaskLinks: MeetingTaskLink[]
 }
 ```
 
-`project` 를 뺀 여섯 배열이 `data.ts` 의 `allThreads` · `allEntries` · `allMeetings` · `allTasks` ·
-`taskThreads` · `meetingTasks` 로 들어간다. **JSON 키와 스토어 이름은 여섯 중 다섯이 다르다** —
-JSON 키는 픽스처 export 이름을 그대로 쓰고, 옮기는 여섯 줄은 `src/api/` 가 갖는다.
+`project` 를 뺀 네 배열이 `data.ts` 의 `allThreads` · `allEntries` · `allTasks` · `taskThreads` 로
+들어간다. **JSON 키와 스토어 이름은 넷 다 다르다** —
+JSON 키는 픽스처 export 이름을 그대로 쓰고, 옮기는 네 줄은 `src/api/` 가 갖는다.
 
 ### `Project` 가 한 필드 늘었다 (Q9)
 
@@ -144,9 +139,8 @@ export interface Project {
 
 | 테이블 | 접히는 자리 |
 | --- | --- |
-| `meeting_attendee` | `Meeting.attendeeIds: string[]` |
-| `meeting_memo` | `Meeting.memos: MeetingMemo[]` (`id` · `text` · `promotedThreadId`) |
 | `entry_detail` | `Entry.detail: string[]` |
+| `thread_option` | `Thread.options: string[]` |
 | `task_line` | `Task.body: TaskLine[]` (`id` · `kind` · `text` · `done` · `level`) |
 
 ### 무엇이 담기나 — 프로젝트로 거르는 기준
@@ -154,15 +148,13 @@ export interface Project {
 | 키 | 기준 |
 | --- | --- |
 | `threads` | `thread.projectId === projectId` |
-| `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다. `meetingId` 가 null 인 줄(회의 밖 처리)도 당연히 담긴다 |
-| `meetings` | `meeting.projectId === projectId`. 안건이 하나도 안 붙은 회의(메모만 남긴 주간회의)도 담는다 — 회의 목록이 유일한 입구다 |
+| `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
 | `tasks` | `task.projectId === projectId` |
 | `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지) |
-| `meetingTaskLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13) |
 
 페이징 · 필터 · 정렬 파라미터는 없다. 프로젝트 하나치를 통째로 준다 (Q8 닫힘).
 
-**다시 볼 기준** — 한 프로젝트가 **작업 500 · 안건 300 · 회의 100** 중 하나를 넘으면
+**다시 볼 기준** — 한 프로젝트가 **작업 500 · 안건 300** 중 하나를 넘으면
 `server/PLAN.md` 5단계(집계 · 페이징을 서버로)를 연다. 그때까지 프론트는 프로젝트를 바꿀 때마다
 스냅샷을 통째로 다시 받고 캐시하지 않는다(ETag · 증분 갱신도 그때 같이 본다).
 
@@ -181,7 +173,6 @@ export interface Project {
 | --- | --- | --- |
 | `entries` | `seq ASC` (= 등록 순서) | **그렇다** — 안건 이력의 동점을 이 순서로 가른다 |
 | `threads` | `created_at ASC, id ASC` | 아니다. 화면이 다시 정렬한다 |
-| `meetings` | `date ASC, id ASC` | 아니다 — `MeetingRow` 가 날짜로 다시 세운다 |
 | `tasks` | `created_at ASC, id ASC` | 아니다 |
 | 링크 둘 | 두 id 오름차순 | 아니다 |
 
@@ -189,16 +180,15 @@ export interface Project {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 일곱 이름뿐**이다. 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 여섯 이름뿐**이다. 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
-| `Thread` | `ownerId` · `parentThreadId` |
-| `Entry` | `meetingId`(회의 밖 처리) · `ownerId` |
-| `MeetingMemo` | `promotedThreadId` |
+| `Thread` | `ownerId` · `parentThreadId` · `dueDate` |
+| `Entry` | `ownerId` |
 | `Task` | `parentId` · `ownerId` · `start` · `due` |
 
-그래서 `Entry.note` 는 `''`, `Entry.detail` · `Meeting.memos` · `Meeting.attendeeIds` · `Task.body` 는
+그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Entry.detail` · `Task.body` 는
 `[]` 다. 보장은 **세 겹**이고, 한 겹이라도 새면 화면이 `.length` 에서 터진다.
 
 | 겹 | 어떻게 |
@@ -324,6 +314,8 @@ DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-10-11 | **회의(Meeting)를 걷어냈다.** 테이블 넷(`meeting` · `meeting_attendee` · `meeting_memo` · `meeting_task_link`)과 `entry.meeting_id`, 회의 API 셋, 스냅샷의 `meetings` · `meetingTaskLinks`, `Entry.meetingId` 가 빠졌다. 이력은 `POST /api/threads/{threadId}/entries` 로만 남고, 이력의 날짜는 `createdAt` 의 KST 날짜다. 안건 수정 `PATCH /api/threads/{threadId}` 를 더했다 | 사용자 결정 — 회의를 관리하는 건 '일을 위한 일' 이다. 이 제품의 목적은 결정이 미뤄지는 걸 막고 기록을 잘 남기는 것이고, 그건 안건과 그 이력이 맡는다. 회의와 안건이 비슷한 개념으로 겹쳐 무엇을 어디에 적을지 헷갈렸다. 아래 Q 들에 남은 회의 이야기는 그때의 기록이다 |
+| 2026-10-10 | `Thread` 에 **`description`(배경) · `options`(후보) · `dueDate`(결정 기한)** 를 더했다. 등록에서 셋 다 선택, 회의 중 새로 만든 안건은 `''` · `[]` · `null`. 후보는 자식 테이블 `thread_option` 으로 펴고 응답에서 접는다. '기한 지남'(`dueDate < 오늘(KST)` 이고 결정 전)은 프론트가 계산한다 | 제목만으로는 안건을 어떻게 써야 할지 어렵다는 사용자 테스트 의견. 안건은 '정해야 할 것 하나' 라 회의에서 바로 결정할 수 있게 하는 정보만 받는다 — 칸이 많아지면 안건 대신 메신저로 정하게 되니 제목만 필수로 둔다. 기한은 '미루는 걸 막는다' 는 제품의 이유와 바로 닿는다 |
 | 2026-09-29 | `createdAt` 을 계약대로 되돌렸다 — **ISO 8601 UTC · `Z` · 초까지**. 저장도 UTC 로 통일하고(회의에서 생긴 줄까지) naive 는 UTC 로 보고 Z 를 붙인다 (Q23) | 날짜로 자르던 이유(프론트의 옛 `monthDay`)가 Q3 에서 사라졌다. 잘라 내보내면 같은 날 여러 줄의 시각이 없어지고, 화면이 만든 줄(`nowIso()`)과 형식이 두 벌이 된다. 오프셋을 그대로 내보내는 것도 답이 아니다 — `localDay` 가 `Z` 가 아니면 문자열을 잘라 읽어서 KST 일 때만 우연히 맞는다 |
 | 2026-09-29 | 회의에서 생긴 안건 · 줄의 `created_at` 을 **회의 날짜 0시가 아니라 적은 시각**으로 바꿨다 (Q23) | `created_at` 은 그 줄을 적은 시각이다. 그날을 가리키는 것은 `meeting.date` 고, 이력 순서는 `seq` 가 잡는다. 지난 회의를 나중에 입력하면 옛 구현은 과거로 적혔다 |
 | 2026-09-29 | 등록 요청의 `taskKeyPrefix` 는 **빈 문자열도 '안 넣은 것'** 으로 접는다. 앞뒤 공백도 뗀다 (Q24) | 같은 화면 동작(입력칸을 비워 둠)이 보내는 쪽 구현에 따라 201 과 422 로 갈리면 안 된다. 그 422 는 사용자가 고칠 수도 없다 |

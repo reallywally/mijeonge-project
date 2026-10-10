@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Check, ChevronRight, FolderClosed } from 'lucide-vue-next'
+import { ChevronRight, FolderClosed } from 'lucide-vue-next'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
+import ThreadDecisionPanel from '@/components/app/ThreadDecisionPanel.vue'
+import ThreadFields from '@/components/app/ThreadFields.vue'
+import ThreadPropertyPanel from '@/components/app/ThreadPropertyPanel.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
-import { Button } from '@/components/ui/button'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { monthDay } from '@/lib/date'
 import { useDataStore } from '@/stores/data'
 import { useThreadStore } from '@/stores/thread'
-import type { EntryKind } from '@/types/domain'
 
+/* 안건 상세 — 목록 위 팝업. 작업 상세처럼 보는 자리가 곧 고치는 자리다: 칸을 고치고 벗어나면
+   그 값만 바로 들어가고 따로 저장 버튼이 없다. 칸 모양은 안건 추가와 같다(ThreadFields · ThreadPropertyPanel).
+   상태만은 칸으로 못 바꾼다 — 결정 영역에서 남긴 줄로만 바뀐다. */
 const props = defineProps<{ threadId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 /* 하위 안건을 누르면 그 안건으로 갈아탄다 — 목록을 거치지 않는다 */
@@ -21,244 +24,114 @@ const data = useDataStore()
 const threadStore = useThreadStore()
 const detail = computed(() => (props.threadId ? threadStore.threadDetail(props.threadId) : null))
 
-/* 회의 없이 처리 — 회의를 다시 잡지 않고 담당자 확인만으로 끝낸 줄을 여기서 남긴다 */
-type OutKind = Extract<EntryKind, 'decide' | 'refine' | 'defer'>
+/* 글 칸은 고치는 동안 여기서 들고 있다가 칸을 벗어날 때 넣는다 */
+const titleDraft = ref('')
+const descriptionDraft = ref('')
+const optionsDraft = ref('')
 
-const OUT_KINDS: { key: OutKind; label: string; placeholder: string }[] = [
-  { key: 'decide', label: '결정', placeholder: '한 줄로 — 어떻게 정했나요' },
-  { key: 'refine', label: '세부 추가', placeholder: '한 줄로 — 무엇을 더 정했나요' },
-  { key: 'defer', label: '미룸', placeholder: '한 줄로 — 어디까지 갔나요' },
-]
+const optionsText = (options: string[]) => options.join('\n')
 
-const outKind = ref<OutKind>('decide')
-const outText = ref('')
-const outNote = ref('')
-const outOwner = ref<string | null>(null)
+function fill(field?: 'title' | 'description' | 'options') {
+  const t = detail.value?.thread
+  if (!field || field === 'title') titleDraft.value = t?.title ?? ''
+  if (!field || field === 'description') descriptionDraft.value = t?.description ?? ''
+  if (!field || field === 'options') optionsDraft.value = optionsText(t?.options ?? [])
+}
 
-const outPlaceholder = computed(() => OUT_KINDS.find((k) => k.key === outKind.value)!.placeholder)
+/* 다른 안건으로 옮기거나 팝업을 다시 열면 칸들을 그 안건의 값으로 채운다 */
+watch([() => props.threadId, open], () => fill(), { immediate: true })
 
-watch(
-  () => props.threadId,
-  () => {
-    outKind.value = 'decide'
-    outText.value = ''
-    outNote.value = ''
-    outOwner.value = null
-  },
-)
+/* 바뀐 것이 있을 때만 보낸다 — 칸을 지나가기만 해도 저장 요청이 나가지 않게 */
+function commit(field: 'title' | 'description' | 'options') {
+  const t = detail.value?.thread
+  if (!t) return
+  if (field === 'title') {
+    /* 비우면 원래 제목으로 돌아간다 — 스토어도 빈 제목은 받지 않는다 */
+    if (titleDraft.value.trim() && titleDraft.value.trim() !== t.title)
+      threadStore.updateThread(t.id, { title: titleDraft.value })
+  } else if (field === 'description') {
+    if (descriptionDraft.value.trim() !== t.description)
+      threadStore.updateThread(t.id, { description: descriptionDraft.value })
+  } else {
+    const next = optionsDraft.value.split('\n')
+    const clean = next.map((o) => o.trim()).filter(Boolean)
+    if (clean.join('\n') !== t.options.join('\n')) threadStore.updateThread(t.id, { options: next })
+  }
+  /* 저장된 모양(앞뒤 공백 · 빈 줄이 빠진 것)으로 칸을 다시 채운다 */
+  fill(field)
+}
 
-function submitOutside() {
-  const text = outText.value.trim()
-  if (!text || !props.threadId) return
-  threadStore.addOutsideEntry(
-    props.threadId,
-    outKind.value,
-    text,
-    outNote.value.trim(),
-    outOwner.value,
-  )
-  outText.value = ''
-  outNote.value = ''
-  outOwner.value = null
+function setDueDate(value: string) {
+  const t = detail.value?.thread
+  if (t && (value || null) !== t.dueDate) threadStore.updateThread(t.id, { dueDate: value || null })
+}
+
+function setOwner(value: string | null) {
+  const t = detail.value?.thread
+  if (t && value !== t.ownerId) threadStore.updateThread(t.id, { ownerId: value })
 }
 </script>
 
 <template>
   <Dialog v-model:open="open">
-    <DialogScrollContent v-if="detail" class="max-w-[1000px] gap-0 p-0">
-      <div class="flex items-center gap-2.5 border-b border-border px-[26px] py-4 pr-[60px]">
+    <!-- 열자마자 제목 칸에 커서가 서면 고치는 중처럼 보인다 — 처음 포커스는 주지 않는다 -->
+    <DialogScrollContent v-if="detail" class="max-w-[1100px] gap-0 p-0" @open-auto-focus.prevent>
+      <div class="flex items-center gap-2 border-b border-border px-[22px] py-3.5 pr-[60px]">
         <FolderClosed class="size-3.5 text-muted-foreground" />
         <span class="text-xs text-muted-foreground">{{ data.currentProject?.name }}</span>
         <ChevronRight class="size-3 text-muted-foreground" />
         <span class="text-xs">안건</span>
+        <span class="grow" />
+        <span class="text-xs text-muted-foreground">고치면 바로 저장됩니다</span>
       </div>
 
-      <div class="flex justify-center px-[26px] py-[26px]">
-        <div class="flex w-full max-w-[780px] flex-col gap-6">
-          <header class="flex flex-col gap-3.5">
-            <div class="flex items-center gap-2.5">
-              <ThreadStateBadge :state="detail.thread.state" :defer-count="detail.deferCount" />
-              <DialogDescription class="text-xs text-muted-foreground">
-                이력 {{ detail.events.length }}건
-              </DialogDescription>
-            </div>
-            <DialogTitle class="text-2xl leading-snug font-semibold tracking-tight text-pretty">
-              {{ detail.thread.title }}
-            </DialogTitle>
-          </header>
-
-          <section
-            class="flex flex-col gap-3 rounded-lg border border-border bg-card px-5 py-[18px] shadow-sm"
+      <div class="flex items-stretch">
+        <div class="flex min-w-0 grow flex-col gap-8 px-[22px] pt-4 pb-6">
+          <ThreadFields
+            v-model:title="titleDraft"
+            v-model:description="descriptionDraft"
+            v-model:options="optionsDraft"
+            live
+            @commit="commit"
+            @revert="fill"
           >
-            <div class="text-xs font-medium tracking-wider text-muted-foreground">
-              지금 합의된 내용
-            </div>
+            <template #under-title>
+              <DialogTitle class="sr-only">{{ detail.thread.title }}</DialogTitle>
+              <DialogDescription class="text-xs text-muted-foreground">
+                {{ monthDay(detail.thread.createdAt) }} 등록 · 이력 {{ detail.events.length }}건
+              </DialogDescription>
+            </template>
 
-            <div v-if="detail.settled" class="flex flex-col gap-3.5">
-              <div class="flex items-start gap-3">
-                <span
-                  class="mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full bg-primary"
-                >
-                  <Check class="size-3 text-primary-foreground" />
-                </span>
-                <p class="min-w-0 grow text-[15px] leading-relaxed text-pretty">
-                  {{ detail.current }}
-                </p>
-              </div>
-
-              <div
-                v-if="detail.detail.length"
-                class="ml-[31px] flex flex-col gap-1.5 border-l-2 border-border pl-3.5"
-              >
-                <p
-                  v-for="(line, i) in detail.detail"
-                  :key="i"
-                  class="text-sm leading-relaxed text-pretty"
-                >
-                  {{ line }}
-                </p>
-                <p class="text-xs text-muted-foreground">
-                  조건별 상세 — 이 결정 안에 함께 적힌 줄입니다
-                </p>
-              </div>
-
-              <div v-if="detail.subThreads.length" class="ml-[31px] flex flex-col gap-2">
-                <div class="text-xs font-medium tracking-wider text-muted-foreground">
-                  따로 떼어낸 하위 안건
-                </div>
-                <button
-                  v-for="sub in detail.subThreads"
-                  :key="sub.thread.id"
-                  type="button"
-                  class="flex min-h-11 items-center gap-2.5 rounded-md border border-border bg-background px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
-                  @click="emit('open-thread', sub.thread.id)"
-                >
-                  <span
-                    class="size-1.5 shrink-0 rounded-full"
-                    :class="sub.thread.state === 'decided' ? 'bg-primary' : 'bg-muted-foreground'"
-                  />
-                  <span class="min-w-0 grow text-sm leading-snug text-pretty">{{
-                    sub.thread.title
-                  }}</span>
-                  <span class="shrink-0 text-xs text-muted-foreground">{{ sub.splitAtLabel }}</span>
-                  <ChevronRight class="size-3 shrink-0 text-muted-foreground" />
-                </button>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <PersonChip v-if="detail.settledOwnerName" :name="detail.settledOwnerName" />
-                <span class="text-xs text-muted-foreground">{{ detail.settledLabel }}</span>
-              </div>
-            </div>
-
-            <div v-else class="flex flex-col gap-2.5">
-              <div class="flex items-start gap-3">
-                <span
-                  class="mt-0.5 flex size-[19px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-muted-foreground"
-                >
-                  <span class="size-1.5 rounded-full bg-muted-foreground" />
-                </span>
-                <p class="min-w-0 grow text-[15px] leading-relaxed text-muted-foreground">
-                  아직 정해지지 않았습니다.
-                </p>
-              </div>
-              <p class="text-xs text-muted-foreground">
-                {{ detail.deferCount }}번 미뤄졌고, 처음 나온 뒤 이력이 {{ detail.events.length }}건
-                쌓였습니다.
-              </p>
-            </div>
-          </section>
+            <ThreadDecisionPanel :detail="detail" @open-thread="(id) => emit('open-thread', id)" />
+          </ThreadFields>
 
           <section class="flex flex-col gap-3.5">
-            <div class="flex flex-wrap items-center gap-2.5">
-              <span class="text-xs font-medium tracking-wider text-muted-foreground"
-                >회의별 이력</span
-              >
-              <span class="text-xs font-medium">{{ detail.events.length }}</span>
-              <span class="text-xs text-muted-foreground">
-                각 줄이 그 회의의 기록이기도 합니다 — 회의록을 따로 쓰지 않습니다
-              </span>
-            </div>
-
-            <div
-              class="flex flex-col gap-3 rounded-lg border border-border bg-card px-[18px] py-4 shadow-sm"
-            >
-              <div class="text-xs font-medium tracking-wider text-muted-foreground">
-                회의 없이 처리
-              </div>
-              <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
-                회의를 다시 잡지 않고 담당자 확인만으로 처리한 경우입니다. 남기면 이 안건의 이력에
-                회의 밖 줄로 올라가고, 어느 회의에도 붙지 않습니다.
-              </p>
-
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="k in OUT_KINDS"
-                  :key="k.key"
-                  type="button"
-                  class="inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors"
-                  :class="
-                    outKind === k.key
-                      ? 'border-primary bg-primary text-primary-foreground shadow'
-                      : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
-                  "
-                  @click="outKind = k.key"
-                >
-                  {{ k.label }}
-                </button>
-              </div>
-
-              <Input v-model="outText" :placeholder="outPlaceholder" @keyup.enter="submitOutside" />
-              <Input v-model="outNote" placeholder="근거 — 무엇을 확인했나요 (선택)" />
-
-              <div class="flex flex-col gap-2">
-                <span class="text-xs text-muted-foreground">처리한 사람</span>
-                <div class="flex flex-wrap gap-1.5">
-                  <button
-                    v-for="m in data.allMembers"
-                    :key="m.id"
-                    type="button"
-                    class="inline-flex h-[34px] items-center gap-1.5 rounded-md border py-0.5 pr-3 pl-1.5 text-xs transition-colors"
-                    :class="
-                      outOwner === m.id
-                        ? 'border-primary bg-accent font-medium text-accent-foreground'
-                        : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
-                    "
-                    @click="outOwner = outOwner === m.id ? null : m.id"
-                  >
-                    <span
-                      class="flex size-[22px] items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground"
-                    >
-                      {{ m.name.charAt(0) }}
-                    </span>
-                    {{ m.name }}
-                  </button>
-                </div>
-              </div>
-
-              <Button class="self-start" :disabled="!outText.trim()" @click="submitOutside"
-                >이력에 남기기</Button
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs font-medium">이력</span>
+              <span class="text-xs text-muted-foreground">{{ detail.events.length }}건</span>
+              <span class="grow" />
+              <span class="text-xs text-muted-foreground"
+                >새 줄이 위로 · 지운 줄 없이 쌓입니다</span
               >
             </div>
 
-            <div class="flex flex-col">
+            <p v-if="detail.events.length === 0" class="text-xs text-muted-foreground">
+              아직 남긴 기록이 없습니다.
+            </p>
+
+            <div v-else class="flex flex-col">
               <div v-for="e in detail.events" :key="e.entry.id" class="flex gap-4">
                 <div class="w-[74px] shrink-0 pt-0.5 text-right text-xs font-medium">
                   {{ monthDay(e.at) }}
                 </div>
                 <div class="w-px shrink-0 bg-border" />
-                <div class="flex min-w-0 grow flex-col gap-2.5 pb-[22px]">
+                <div class="flex min-w-0 grow flex-col gap-2 pb-[22px]">
                   <div class="flex flex-wrap items-center gap-2">
                     <EntryKindBadge :kind="e.entry.kind" />
-                    <span
-                      v-if="!e.meeting"
-                      class="inline-flex h-[22px] items-center rounded-sm border border-dashed border-border px-2 text-xs text-muted-foreground"
+                    <PersonChip v-if="e.ownerName" :name="e.ownerName" />
+                    <span v-if="e.superseded" class="text-xs text-muted-foreground"
+                      >뒤의 결정으로 바뀜</span
                     >
-                      회의 밖
-                    </span>
-                    <span class="text-xs text-muted-foreground">{{
-                      e.meeting?.title ?? '회의 없이 처리'
-                    }}</span>
                   </div>
 
                   <p
@@ -287,13 +160,40 @@ function submitOutside() {
                   >
                     {{ e.entry.note }}
                   </p>
-
-                  <PersonChip v-if="e.ownerName" :name="e.ownerName" class="self-start" />
                 </div>
               </div>
             </div>
           </section>
         </div>
+
+        <ThreadPropertyPanel
+          :due-date="detail.thread.dueDate ?? ''"
+          :owner-id="detail.thread.ownerId"
+          :overdue="detail.overdue"
+          @update:due-date="setDueDate"
+          @update:owner-id="setOwner"
+        >
+          <template #top>
+            <div class="flex items-center gap-2">
+              <ThreadStateBadge :state="detail.thread.state" :defer-count="detail.deferCount" />
+              <span class="text-xs text-muted-foreground">상태는 결정 · 미루기로 바뀝니다</span>
+            </div>
+          </template>
+
+          <div class="h-px bg-border" />
+          <dl class="flex flex-col gap-2 px-0.5 text-xs">
+            <div class="flex gap-2">
+              <dt class="w-[72px] shrink-0 text-muted-foreground">미룬 횟수</dt>
+              <dd :class="detail.deferCount >= 3 ? 'font-medium text-destructive' : ''">
+                {{ detail.deferCount }}번
+              </dd>
+            </div>
+            <div class="flex gap-2">
+              <dt class="w-[72px] shrink-0 text-muted-foreground">만든 날짜</dt>
+              <dd>{{ monthDay(detail.thread.createdAt) }}</dd>
+            </div>
+          </dl>
+        </ThreadPropertyPanel>
       </div>
     </DialogScrollContent>
   </Dialog>

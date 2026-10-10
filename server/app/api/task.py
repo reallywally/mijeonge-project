@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.schemas.task import (
-    MeetingTaskLinkOut,
     TaskCreate,
     TaskLinePatch,
     TaskOut,
@@ -45,13 +44,3 @@ async def link_thread(task_id: str, thread_id: str, session: Session) -> TaskThr
 @router.delete("/tasks/{task_id}/threads/{thread_id}", status_code=204)
 async def unlink_thread(task_id: str, thread_id: str, session: Session) -> None:
     await task_service.unlink_thread(session, task_id, thread_id)
-
-
-@router.put("/tasks/{task_id}/meetings/{meeting_id}")
-async def link_meeting(task_id: str, meeting_id: str, session: Session) -> MeetingTaskLinkOut:
-    return await task_service.link_meeting(session, task_id, meeting_id)
-
-
-@router.delete("/tasks/{task_id}/meetings/{meeting_id}", status_code=204)
-async def unlink_meeting(task_id: str, meeting_id: str, session: Session) -> None:
-    await task_service.unlink_meeting(session, task_id, meeting_id)

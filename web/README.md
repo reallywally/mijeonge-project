@@ -24,7 +24,7 @@ Windows 에서 깐 `node_modules` 는 WSL node 로 못 쓴다(네이티브 바�
 | 경로 | 무엇 |
 | --- | --- |
 | `src/assets/index.css` | shadcn-vue 기본 테마(new-york · neutral) 그대로. 본문 폰트만 IBM Plex Sans KR. 캔버스의 종이 톤(#faf8f4 · 세리프 제목)은 한 번 옮겼다가 되돌렸으니 다시 만들지 말 것 |
-| `src/types/domain.ts` | Thread / Meeting / Entry. **Entry 하나가 (회의 × 안건) 한 줄**이고 안건 이력과 회의 기록이 같은 Entry 를 각자 걸러 본다. `meetingId === null` 이면 회의 밖 처리 |
+| `src/types/domain.ts` | Project / Thread / Entry / Task. **Entry 하나가 안건에 남긴 한 줄**이고, 안건 상태는 Entry 로만 바뀐다(결정 → 결정됨, 그 밖의 줄 → 대기면 논의중) |
 | `src/stores/*.ts` | Pinia + 목업 데이터. 백엔드가 붙으면 이 파일만 바뀐다 |
 | `src/components/ui/*` | shadcn-vue 컴포넌트 (직접 고쳐도 되는 사본) |
 | `src/components/app/*` | 이 앱 것 — AppShell(3분할 레이아웃), ThreadStateBadge |

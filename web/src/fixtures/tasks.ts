@@ -1,4 +1,4 @@
-import type { MeetingTaskLink, Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
+import type { Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
 
 /**
  * 작업. memo 의 "기본 사용법" 에 적힌 트리를 그대로 깔았다.
@@ -99,14 +99,4 @@ export const taskThreadLinks: TaskThreadLink[] = [
   { taskId: 'k18', threadId: 't5' }, // 기간계 API ↔ in · out 정의
   { taskId: 'k13', threadId: 't8' }, // 모델링 ↔ 학습 데이터 범위
   { taskId: 'k3', threadId: 't9' }, // 프로그램 설계 ↔ 공통 코드 체계
-]
-
-/** 회의 ↔ 작업. 그 회의에서 정해진 것이 어느 작업을 움직이는지 */
-export const meetingTaskLinks: MeetingTaskLink[] = [
-  { meetingId: 'm3', taskId: 'k4' },
-  { meetingId: 'm2', taskId: 'k18' },
-  { meetingId: 'm5', taskId: 'k18' },
-  { meetingId: 'm6', taskId: 'k1' },
-  { meetingId: 'm6', taskId: 'k5' },
-  { meetingId: 'm6', taskId: 'k18' },
 ]

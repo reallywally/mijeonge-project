@@ -1,10 +1,8 @@
 import type { Entry, Thread } from '@/types/domain'
 
 /**
- * 안건과 그 이력.
- *
- * Entry 하나가 (회의 × 안건) 한 줄이다. meetingId 가 null 이면 회의 없이 담당자 확인으로
- * 처리한 줄이다 — 시나리오 1 의 "PM 으로부터 우분투 최신버전이라 전달받음" 이 그것이다.
+ * 안건과 그 이력. Entry 하나가 안건에 남긴 한 줄이다.
+ * 시나리오 1 의 "PM 으로부터 우분투 최신버전이라 전달받음" 처럼 담당자 확인만으로 정한 것도 같은 줄이다.
  */
 
 export const threads: Thread[] = [
@@ -13,6 +11,10 @@ export const threads: Thread[] = [
     id: 't1',
     projectId: 'p1',
     title: '서버 OS 결정',
+    description:
+      '개발 환경 설정 작업에서 서버 OS가 정해지지 않아 서버 구성을 시작하지 못하고 있다.',
+    options: ['우분투', '록키', 'CentOS'],
+    dueDate: '2026-09-12',
     state: 'decided',
     ownerId: 'u3',
     parentThreadId: null,
@@ -22,6 +24,9 @@ export const threads: Thread[] = [
     id: 't2',
     projectId: 'p1',
     title: 'DB 결정',
+    description: '개발 환경 설정 작업의 DB 선택. 기존 솔루션과의 호환성과 비용을 같이 봐야 한다.',
+    options: ['PostgreSQL', 'MySQL', 'Supabase'],
+    dueDate: '2026-09-15',
     state: 'decided',
     ownerId: 'u3',
     parentThreadId: null,
@@ -31,6 +36,10 @@ export const threads: Thread[] = [
     id: 't3',
     projectId: 'p1',
     title: '사내망에서 외부 모델 호출 허용 범위',
+    description:
+      '가상비서가 외부 LLM API를 불러야 하는데 사내망 보안 정책상 어디까지 허용되는지 정해지지 않았다.',
+    options: ['전면 허용', '비식별 데이터만 허용', '사내 모델만 사용'],
+    dueDate: '2026-09-30',
     state: 'open',
     ownerId: 'u1',
     parentThreadId: null,
@@ -40,6 +49,9 @@ export const threads: Thread[] = [
     id: 't4',
     projectId: 'p1',
     title: '개발 서버 백업 주기',
+    description: '',
+    options: [],
+    dueDate: null,
     state: 'queued',
     ownerId: null,
     parentThreadId: null,
@@ -50,16 +62,23 @@ export const threads: Thread[] = [
     id: 't5',
     projectId: 'p1',
     title: '보험료 산출 기간계 API 호출 in · out 정의',
+    description:
+      '보험료 산출 기간계 API 개발 중 호출에 필요한 in · out 정의가 없어 개발이 멈췄다. 기간계 업무 정의가 먼저 나와야 한다.',
+    options: [],
+    dueDate: '2026-10-19',
     state: 'open',
     ownerId: 'u4',
     parentThreadId: null,
     createdAt: '2026-09-07T00:10:00Z',
   },
-  // 시나리오 3 — 회의만으로 끝난 안건
+  // 시나리오 3 — 한 번에 정해진 안건
   {
     id: 't6',
     projectId: 'p1',
     title: '일정 조율 — 전체 일정을 미룰지, 테스트 기간을 줄일지',
+    description: '',
+    options: [],
+    dueDate: null,
     state: 'decided',
     ownerId: 'u1',
     parentThreadId: null,
@@ -69,6 +88,9 @@ export const threads: Thread[] = [
     id: 't7',
     projectId: 'p1',
     title: '가상비서 tool 만드는 순서',
+    description: '',
+    options: [],
+    dueDate: null,
     state: 'queued',
     ownerId: 'u4',
     parentThreadId: null,
@@ -78,6 +100,9 @@ export const threads: Thread[] = [
     id: 't8',
     projectId: 'p1',
     title: 'AI 심사 학습 데이터 범위',
+    description: '',
+    options: [],
+    dueDate: null,
     state: 'queued',
     ownerId: 'u1',
     parentThreadId: null,
@@ -87,6 +112,9 @@ export const threads: Thread[] = [
     id: 't9',
     projectId: 'p1',
     title: '공통 코드 체계 확정',
+    description: '',
+    options: [],
+    dueDate: null,
     state: 'queued',
     ownerId: 'u2',
     parentThreadId: null,
@@ -97,6 +125,9 @@ export const threads: Thread[] = [
     id: 't10',
     projectId: 'p2',
     title: '이관 범위 확정',
+    description: '',
+    options: [],
+    dueDate: null,
     state: 'queued',
     ownerId: 'u2',
     parentThreadId: null,
@@ -107,7 +138,7 @@ export const threads: Thread[] = [
 /**
  * 안건에 남긴 줄. **배열 순서가 등록 순서다** (오래된 것 → 새 것, API.md Q4).
  *
- * 같은 회의에서 같은 안건에 남긴 줄들은 날짜도 시각도 같아서 이 순서 말고는 가를 것이 없다.
+ * 같은 날 같은 안건에 남긴 줄들은 날짜가 같아서 이 순서로 가른다.
  * id 는 순서가 아니다 — 서버가 UUID 를 주면 사전순이 등록순과 무관해진다.
  */
 export const entries: Entry[] = [
@@ -115,7 +146,6 @@ export const entries: Entry[] = [
   {
     id: 'e2',
     threadId: 't5',
-    meetingId: 'm2',
     kind: 'defer',
     text: '이번 회의에서는 정하지 못했다',
     detail: [],
@@ -123,11 +153,10 @@ export const entries: Entry[] = [
     ownerId: 'u4',
     createdAt: '2026-09-07T07:30:00Z',
   },
-  // 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
+  // 시나리오 1 — 공유가 안 됐을 뿐 이미 정해져 있던 것
   {
     id: 'e1',
     threadId: 't1',
-    meetingId: null,
     kind: 'decide',
     text: '우분투 최신 버전으로 한다',
     detail: [],
@@ -135,11 +164,10 @@ export const entries: Entry[] = [
     ownerId: 'u3',
     createdAt: '2026-09-09T02:00:00Z',
   },
-  // 시나리오 1 — 회의에서 정한 것
+  // 시나리오 1 — 함께 보고 정한 것
   {
     id: 'e3',
     threadId: 't2',
-    meetingId: 'm3',
     kind: 'decide',
     text: 'mysql 을 쓴다',
     detail: ['postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다', 'supabase 는 비용 때문에 뺀다'],
@@ -150,7 +178,6 @@ export const entries: Entry[] = [
   {
     id: 'e4',
     threadId: 't3',
-    meetingId: 'm3',
     kind: 'defer',
     text: '이번 회의에서는 정하지 못했다',
     detail: [],
@@ -162,7 +189,6 @@ export const entries: Entry[] = [
   {
     id: 'e5',
     threadId: 't5',
-    meetingId: 'm5',
     kind: 'defer',
     text: '여전히 업무 정의가 없어 또 미룬다',
     detail: [],
@@ -174,7 +200,6 @@ export const entries: Entry[] = [
   {
     id: 'e6',
     threadId: 't6',
-    meetingId: 'm6',
     kind: 'decide',
     text: '전체 일정은 그대로 두고 테스트 기간만 2주 줄인다',
     detail: ['늘어난 개발 기간은 그대로 둔다', '통합 테스트를 3주에서 1주로 줄인다'],

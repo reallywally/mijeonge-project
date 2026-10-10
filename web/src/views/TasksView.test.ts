@@ -193,7 +193,7 @@ describe('작업 상세 팝업', () => {
     await mountView('/tasks/k18')
     expect(popupText()).toContain('보험료 산출 기간계 API 개발')
     expect(popupText()).toContain('기간 미정')
-    expect(popupText()).toContain('기간계 API in · out 회의')
+    expect(popupText()).toContain('여전히 업무 정의가 없어 또 미룬다')
   })
 
   it('안건은 찾아서 걸면 표에 들어가고, 해제하면 빠진다', async () => {
@@ -204,7 +204,7 @@ describe('작업 상세 팝업', () => {
     const search = 'input[placeholder="안건 제목으로 찾기"]'
     await type(search, '백업')
     /* 적은 말이 들어간 것만 펼친다 */
-    expect(options()).toEqual(['개발 서버 백업 주기다음 회의 대기'])
+    expect(options()).toEqual(['개발 서버 백업 주기대기'])
     await keydown(search, 'Enter')
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', 't4'])
     /* 고르고 나면 칸이 비고, 건 것은 다시 고를 수 없다 */
@@ -214,20 +214,6 @@ describe('작업 상세 팝업', () => {
 
     await click(document.body.querySelector('button[aria-label="개발 서버 백업 주기 연결 해제"]')!)
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
-  })
-
-  it('회의는 제목뿐 아니라 날짜로도 찾아 건다', async () => {
-    await mountView('/tasks/k4')
-    const taskStore = useTaskStore()
-    expect(taskStore.meetingsOfTask('k4').map((m) => m.id)).toEqual(['m3'])
-
-    const search = 'input[placeholder="제목 · 날짜 · 참석자로 찾기"]'
-    await type(search, '9월 15일')
-    expect(options()).toEqual(['일정 조율 회의9월 15일'])
-    const option = document.body.querySelector('[role="option"]')!
-    option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-    await flushPromises()
-    expect(taskStore.meetingsOfTask('k4').map((m) => m.id)).toEqual(['m3', 'm6'])
   })
 
   it('본문의 체크박스를 눌러서 켠다', async () => {
@@ -359,15 +345,13 @@ describe('작업 추가 팝업', () => {
     expect(w.text()).toContain('총 22건 중 1–8건')
   })
 
-  it('찾아서 골라 둔 안건 · 회의가 만들 때 같이 걸린다', async () => {
+  it('찾아서 골라 둔 안건이 만들 때 같이 걸린다', async () => {
     await mountView('/tasks/new')
     const taskStore = useTaskStore()
 
     await type('textarea[aria-label="제목"]', '백업 스크립트')
     await type('input[placeholder="안건 제목으로 찾기"]', '백업')
     await keydown('input[placeholder="안건 제목으로 찾기"]', 'Enter')
-    await type('input[placeholder="제목 · 날짜 · 참석자로 찾기"]', '일정 조율 회의')
-    await keydown('input[placeholder="제목 · 날짜 · 참석자로 찾기"]', 'Enter')
     /* 아직 만들기 전이라 표에만 서 있다 */
     expect(popupText()).toContain('개발 서버 백업 주기')
     expect(taskStore.rows).toHaveLength(21)
@@ -375,7 +359,6 @@ describe('작업 추가 팝업', () => {
     await click(popupButton('만들기'))
     const made = taskStore.rows.find((r) => r.task.title === '백업 스크립트')!
     expect(taskStore.threadsOfTask(made.task.id).map((t) => t.id)).toEqual(['t4'])
-    expect(taskStore.meetingsOfTask(made.task.id).map((m) => m.id)).toEqual(['m6'])
   })
 
   it('하위 작업 추가로 들어오면 상위 작업이 채워져 있다', async () => {

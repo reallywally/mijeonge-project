@@ -32,7 +32,6 @@ const rows = computed(() =>
     project,
     taskCount: data.allTasks.filter((t) => t.projectId === project.id).length,
     threadCount: data.allThreads.filter((t) => t.projectId === project.id).length,
-    meetingCount: data.allMeetings.filter((m) => m.projectId === project.id).length,
   })),
 )
 
@@ -99,7 +98,7 @@ function onCreated() {
             <h1 class="text-2xl font-semibold tracking-tight">프로젝트</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               가장 큰 단위입니다. 개발은 차세대 · 이관 같은 사업 단위로, 사무직은 파트 단위로
-              만듭니다. 여기서 고른 프로젝트 안에서만 작업 · 안건 · 회의가 돕니다.
+              만듭니다. 여기서 고른 프로젝트 안에서만 작업 · 안건이 돕니다.
             </p>
           </div>
           <Button class="shrink-0" @click="openCreate">
@@ -143,10 +142,6 @@ function onCreated() {
                   class="h-10 w-[64px] text-right text-xs font-medium text-muted-foreground"
                   >안건</TableHead
                 >
-                <TableHead
-                  class="h-10 w-[64px] text-right text-xs font-medium text-muted-foreground"
-                  >회의</TableHead
-                >
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -181,12 +176,9 @@ function onCreated() {
                 <TableCell class="text-right text-sm text-muted-foreground">{{
                   row.threadCount
                 }}</TableCell>
-                <TableCell class="text-right text-sm text-muted-foreground">{{
-                  row.meetingCount
-                }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="4" class="h-[110px] text-center text-sm text-muted-foreground">
                   {{
                     data.allProjects.length === 0
                       ? '등록된 프로젝트가 없습니다. 프로젝트를 먼저 만들어 주세요.'
