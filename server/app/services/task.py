@@ -20,6 +20,7 @@ from app.models import (
 from app.schemas.task import (
     TaskCreate,
     TaskLineOut,
+    TaskLinePatchIn,
     TaskOut,
     TaskPatch,
     TaskThreadLinkOut,
@@ -147,13 +148,35 @@ async def create_task(session: AsyncSession, project_id: str, payload: TaskCreat
 async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) -> TaskOut:
     task = await load_task(session, task_id)
     # exclude_unset — 안 보낸 것과 null 로 보낸 것을 가른다. ownerId: null 은 담당자 지우기다
-    changes = payload.model_dump(exclude_unset=True)
+    changes = payload.model_dump(exclude_unset=True, exclude={"body"})
+    if "body" in payload.model_fields_set:
+        _replace_body(task, payload.body)
     if "parent_id" in changes:
         await _guard_parent(session, task.project_id, task.id, changes["parent_id"])
     for field, value in changes.items():
         setattr(task, field, value)
     await session.commit()
     return to_task(task)
+
+
+def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:
+    """본문을 통째로 갈아끼운다. 기존 줄 id 는 행을 그대로 고쳐 써서 유지하고,
+    빠진 줄은 delete-orphan 이 지운다. 남의 작업 줄 id 는 이 작업의 줄 목록에 없으니 새 id 다."""
+    existing = {line.id: line for line in task.lines}
+    used: set[str] = set()
+    lines: list[TaskLine] = []
+    for order, item in enumerate(body):
+        line = existing.get(item.id) if item.id is not None and item.id not in used else None
+        if line is None:
+            line = TaskLine(id=new_id())
+        used.add(line.id)
+        line.kind = item.kind
+        line.text = item.text
+        line.done = item.done
+        line.level = item.level
+        line.sort_order = order
+        lines.append(line)
+    task.lines = lines
 
 
 async def set_line_done(session: AsyncSession, task_id: str, line_id: str, done: bool) -> TaskOut:

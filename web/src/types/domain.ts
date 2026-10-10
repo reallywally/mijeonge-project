@@ -238,3 +238,51 @@ export interface TaskInput {
   priority: TaskPriority
   threadIds: string[]
 }
+
+/**
+ * 작업을 고칠 때 화면이 넘기는 것 — PATCH /api/tasks/{id}. 보낸 필드만 바뀌고 null 은 비우기다.
+ * body 는 통째로 바뀐다. 이 작업의 기존 줄 id 를 실으면 그 id 가 유지되고, 처음 보는 id 는 서버가 새로 붙인다.
+ */
+export interface TaskPatch {
+  title?: string
+  parentId?: string | null
+  status?: TaskStatus
+  ownerId?: string | null
+  start?: string | null
+  due?: string | null
+  priority?: TaskPriority
+  body?: TaskLine[]
+}
+
+/** 프로젝트를 등록할 때 넘기는 것. 접두사를 비우면 서버가 만들어 준다 (API.md Q20 · Q24) */
+export interface ProjectInput {
+  name: string
+  taskKeyPrefix?: string
+}
+
+/** 안건 이력 한 줄을 남길 때 넘기는 것 — POST /api/threads/{id}/entries */
+export interface EntryInput {
+  kind: EntryKind
+  text: string
+  detail?: string[]
+  note?: string
+  ownerId?: string | null
+}
+
+/** GET /api/projects/{id}/snapshot — 그 프로젝트의 원본 전부. 키 이름은 픽스처 export 이름이다 */
+export interface ProjectSnapshot {
+  project: Project
+  threads: Thread[]
+  entries: Entry[]
+  tasks: Task[]
+  taskThreadLinks: TaskThreadLink[]
+}
+
+/** 성공이 아닌 응답의 본문 — 전부 이 한 가지 모양이다 (API.md Q14) */
+export interface ApiErrorBody {
+  code: string
+  /** 그대로 띄울 수 있는 한국어 한 줄 */
+  message: string
+  /** 폼 검증에서 필드별 메시지 */
+  detail?: Record<string, string>
+}

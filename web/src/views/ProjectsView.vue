@@ -30,8 +30,13 @@ const perPage = 8
 const rows = computed(() =>
   data.allProjects.map((project) => ({
     project,
-    taskCount: data.allTasks.filter((t) => t.projectId === project.id).length,
-    threadCount: data.allThreads.filter((t) => t.projectId === project.id).length,
+    /* 서버 모드는 고른 프로젝트 하나치만 받는다 — 안 받은 프로젝트의 수는 모른다 */
+    taskCount: data.holdsRecordsOf(project.id)
+      ? data.allTasks.filter((t) => t.projectId === project.id).length
+      : '—',
+    threadCount: data.holdsRecordsOf(project.id)
+      ? data.allThreads.filter((t) => t.projectId === project.id).length
+      : '—',
   })),
 )
 

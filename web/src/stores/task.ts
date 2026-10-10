@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
+import * as api from '@/api'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
+import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import { useThreadStore } from '@/stores/thread'
 import type {
@@ -8,6 +10,7 @@ import type {
   TaskDetail,
   TaskInput,
   TaskLine,
+  TaskPatch,
   TaskPriority,
   TaskRow,
   TaskStatus,
@@ -137,24 +140,52 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
+  /* 작업 상세는 보는 자리가 곧 고치는 자리다 — 칸 하나를 고치면 그 값만 바로 들어간다.
+     화면에 먼저 반영하고 서버에 보낸 뒤, 돌아온 레코드로 갈아끼운다. */
+  const findTask = (taskId: string) => data.allTasks.find((t) => t.id === taskId)
+
+  /* 본문은 타이핑마다 바뀌어 모아서 보낸다. 모으는 동안 다른 칸의 응답이 와도 본문은 화면 것을 지킨다 */
+  const BODY_DEBOUNCE_MS = 500
+  const bodyTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /* 화면이 붙인 임시 줄 id → 서버가 붙인 id. 편집기는 임시 id 를 그대로 들고 있어 줄 키(포커스)가
+     안 바뀌고, 다음에 보낼 때 여기서 서버 id 로 바꿔 실어 그 줄이 같은 줄로 남는다 */
+  const lineIds = new Map<string, string>()
+  const serverLineId = (id: string) => lineIds.get(id) ?? id
+
+  function replaceTask(next: Task) {
+    const at = data.allTasks.findIndex((t) => t.id === next.id)
+    if (at < 0) return
+    data.allTasks[at] = bodyTimers.has(next.id) ? { ...next, body: data.allTasks[at].body } : next
+  }
+
+  function patch(taskId: string, change: TaskPatch) {
+    if (data.mock) return
+    void data.save(`task:${taskId}`, () => api.patchTask(taskId, change), replaceTask)
+  }
+
   function setStatus(taskId: string, status: TaskStatus) {
-    const task = data.allTasks.find((t) => t.id === taskId)
-    if (task) task.status = status
+    const task = findTask(taskId)
+    if (!task) return
+    task.status = status
+    patch(taskId, { status })
   }
 
   function setOwner(taskId: string, ownerId: string | null) {
-    const task = data.allTasks.find((t) => t.id === taskId)
-    if (task) task.ownerId = ownerId
+    const task = findTask(taskId)
+    if (!task) return
+    task.ownerId = ownerId
+    patch(taskId, { ownerId })
   }
 
   /** 간트에서 막대를 끌거나 늘렸을 때 되돌아오는 자리. 둘 다 null 이면 기간 미정이다. */
   function setPeriod(taskId: string, start: string | null, due: string | null) {
-    const task = data.allTasks.find((t) => t.id === taskId)
+    const task = findTask(taskId)
     if (!task) return
     /* 한쪽만 아는 기간은 기간 미정과 구분이 안 된다 — 둘 다 있을 때만 기간으로 친다 */
     const both = start !== null && due !== null
     task.start = both ? start : null
     task.due = both ? due : null
+    patch(taskId, { start: task.start, due: task.due })
   }
 
   /** 자기와 자기 아래 작업들 — 상위 작업으로 고르면 계층이 고리가 된다 */
@@ -179,12 +210,11 @@ export const useTaskStore = defineStore('task', () => {
     return parentOptions.value.filter((o) => !blocked.has(o.id))
   }
 
-  /* 작업 상세는 보는 자리가 곧 고치는 자리다 — 칸 하나를 고치면 그 값만 바로 들어간다 */
-  const findTask = (taskId: string) => data.allTasks.find((t) => t.id === taskId)
-
   function setTitle(taskId: string, title: string) {
     const task = findTask(taskId)
-    if (task && title.trim()) task.title = title.trim()
+    if (!task || !title.trim()) return
+    task.title = title.trim()
+    patch(taskId, { title: task.title })
   }
 
   /** 자기나 자기 아래 작업을 상위로 고르면 계층이 고리가 되니 받지 않는다 */
@@ -193,29 +223,88 @@ export const useTaskStore = defineStore('task', () => {
     if (!task) return
     if (parentId && selfAndDescendants(taskId).has(parentId)) return
     task.parentId = parentId
+    patch(taskId, { parentId })
   }
 
   function setPriority(taskId: string, priority: TaskPriority) {
     const task = findTask(taskId)
-    if (task) task.priority = priority
+    if (!task) return
+    task.priority = priority
+    patch(taskId, { priority })
+  }
+
+  function sendBody(taskId: string, lines: TaskLine[]) {
+    const sent = lines.map((l) => ({ ...l, id: serverLineId(l.id) }))
+    void data.save(
+      `task:${taskId}`,
+      async () => {
+        const res = await api.patchTask(taskId, { body: sent })
+        /* 서버는 받은 순서대로 줄을 놓는다 — 같은 자리끼리 짝지으면 새 줄이 받은 id 를 안다.
+           뒤에 보낸 요청에 밀려 응답을 버리더라도 짝은 남긴다 */
+        if (res.body.length === lines.length) {
+          lines.forEach((l, i) => lineIds.set(l.id, res.body[i].id))
+        }
+        return res
+      },
+      replaceTask,
+    )
   }
 
   function setBody(taskId: string, body: TaskLine[]) {
     const task = findTask(taskId)
-    if (task) task.body = body
+    if (!task) return
+    task.body = body
+    if (data.mock) return
+    clearTimeout(bodyTimers.get(taskId))
+    bodyTimers.set(
+      taskId,
+      setTimeout(() => {
+        bodyTimers.delete(taskId)
+        sendBody(taskId, findTask(taskId)?.body ?? body)
+      }, BODY_DEBOUNCE_MS),
+    )
   }
 
   function toggleBodyLine(taskId: string, lineId: string) {
-    const line = data.allTasks.find((t) => t.id === taskId)?.body.find((l) => l.id === lineId)
-    if (line && line.kind === 'check') line.done = !line.done
+    const line = findTask(taskId)?.body.find((l) => l.id === lineId)
+    if (!line || line.kind !== 'check') return
+    line.done = !line.done
+    if (data.mock) return
+    const done = line.done
+    void data.save(
+      `task:${taskId}`,
+      () => api.patchTaskLine(taskId, serverLineId(lineId), done),
+      replaceTask,
+    )
   }
 
-  function addTask(input: TaskInput) {
+  function addLink(taskId: string, threadId: string) {
+    const already = data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId)
+    if (!already) data.taskThreads.push({ taskId, threadId })
+  }
+
+  /**
+   * 작업을 만든다. 서버 모드에서는 id · key 를 서버가 내므로 응답을 기다렸다가 넣는다.
+   * 실패하면 알리고 null 이다.
+   */
+  async function addTask(input: TaskInput): Promise<string | null> {
+    if (!data.mock) {
+      try {
+        const task = await api.createTask(data.currentProjectId, input)
+        data.allTasks.push(task)
+        /* 링크는 서버가 같이 세웠다 — 여기서는 들고만 있는다 */
+        for (const threadId of input.threadIds) addLink(task.id, threadId)
+        return task.id
+      } catch (e) {
+        toastError(e)
+        return null
+      }
+    }
     const id = data.nextId('nk')
     data.allTasks.push({
       id,
       projectId: data.currentProjectId,
-      /* 키는 프로젝트의 접두사와 그 프로젝트의 다음 번호로 선다 — 쓰기 API 가 서면 서버가 낸다 */
+      /* 목업에서는 키를 프로젝트의 접두사와 다음 번호로 세운다 — 서버 모드는 서버가 낸다 */
       key: data.takeTaskKey(data.currentProjectId),
       title: input.title,
       parentId: input.parentId,
@@ -227,19 +316,30 @@ export const useTaskStore = defineStore('task', () => {
       priority: input.priority,
       createdAt: nowIso(),
     })
-    for (const threadId of input.threadIds) linkThread(id, threadId)
+    for (const threadId of input.threadIds) addLink(id, threadId)
     return id
   }
 
   /** 작업 상세에서 안건을 걸고 뗀다. 안건 화면에서는 이 링크를 읽기만 한다. */
   function linkThread(taskId: string, threadId: string) {
-    const already = data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId)
-    if (!already) data.taskThreads.push({ taskId, threadId })
+    addLink(taskId, threadId)
+    if (data.mock) return
+    void data.save(
+      `link:${taskId}:${threadId}`,
+      () => api.linkTaskThread(taskId, threadId),
+      () => {},
+    )
   }
 
   function unlinkThread(taskId: string, threadId: string) {
     data.taskThreads = data.taskThreads.filter(
       (l) => !(l.taskId === taskId && l.threadId === threadId),
+    )
+    if (data.mock) return
+    void data.save(
+      `link:${taskId}:${threadId}`,
+      () => api.unlinkTaskThread(taskId, threadId),
+      () => {},
     )
   }
 

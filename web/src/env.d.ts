@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  /** 'true' 면 서버 없이 픽스처로 돈다. 읽는 자리는 src/api/mode.ts 하나다 */
+  readonly VITE_USE_MOCK?: string
+}
+
 declare module '*.vue' {
   import type { DefineComponent } from 'vue'
   /* eslint-disable @typescript-eslint/no-empty-object-type, @typescript-eslint/no-explicit-any --

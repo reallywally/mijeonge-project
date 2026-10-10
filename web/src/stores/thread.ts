@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
+import * as api from '@/api'
 import { kstToday, localDay, monthDay, nowIso } from '@/lib/date'
+import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import type {
   Entry,
@@ -130,21 +132,41 @@ export const useThreadStore = defineStore('thread', () => {
 
   const cleanOptions = (options: string[]) => options.map((o) => o.trim()).filter(Boolean)
 
+  /** 서버가 돌려준 안건으로 갈아끼운다 */
+  function replaceThread(next: Thread) {
+    const at = data.allThreads.findIndex((t) => t.id === next.id)
+    if (at >= 0) data.allThreads[at] = next
+  }
+
   /**
    * 안건을 먼저 등록해 둔다. 등록만 된 상태가 '대기'다 — POST /api/projects/{id}/threads.
    * 제목 말고는 다 비워도 들어간다 — 칸이 귀찮으면 안건 대신 메신저로 정하게 된다.
+   * 서버 모드에서는 id 를 서버가 내므로 응답을 기다렸다가 넣는다. 실패하면 알리고 null 이다.
    */
-  function addThread(input: ThreadInput) {
-    const id = data.nextId('nt')
-    data.allThreads.unshift({
-      id,
-      projectId: data.currentProjectId,
+  async function addThread(input: ThreadInput): Promise<string | null> {
+    const clean = {
       title: input.title.trim(),
       description: input.description?.trim() ?? '',
       options: cleanOptions(input.options ?? []),
       dueDate: input.dueDate || null,
-      state: 'queued',
       ownerId: input.ownerId ?? null,
+    }
+    if (!data.mock) {
+      try {
+        const thread = await api.createThread(data.currentProjectId, clean)
+        data.allThreads.unshift(thread)
+        return thread.id
+      } catch (e) {
+        toastError(e)
+        return null
+      }
+    }
+    const id = data.nextId('nt')
+    data.allThreads.unshift({
+      id,
+      projectId: data.currentProjectId,
+      ...clean,
+      state: 'queued',
       parentThreadId: null,
       createdAt: nowIso(),
     })
@@ -154,16 +176,22 @@ export const useThreadStore = defineStore('thread', () => {
   /**
    * 안건을 고친다 — PATCH /api/threads/{id}. 보낸 필드만 바뀐다.
    * 제목을 비우려 하면 아무것도 바꾸지 않는다(서버도 요청째 거절한다). 상태는 여기서 못 바꾼다.
+   * 화면에 먼저 반영하고 서버에 보낸 뒤 돌아온 안건으로 갈아끼운다.
    */
   function updateThread(threadId: string, patch: ThreadPatch) {
     const thread = data.allThreads.find((t) => t.id === threadId)
     if (!thread) return false
     if (patch.title !== undefined && !patch.title.trim()) return false
-    if (patch.title !== undefined) thread.title = patch.title.trim()
-    if (patch.description !== undefined) thread.description = patch.description.trim()
-    if (patch.options !== undefined) thread.options = cleanOptions(patch.options)
-    if (patch.dueDate !== undefined) thread.dueDate = patch.dueDate || null
-    if (patch.ownerId !== undefined) thread.ownerId = patch.ownerId
+    const clean: ThreadPatch = {}
+    if (patch.title !== undefined) clean.title = thread.title = patch.title.trim()
+    if (patch.description !== undefined)
+      clean.description = thread.description = patch.description.trim()
+    if (patch.options !== undefined) clean.options = thread.options = cleanOptions(patch.options)
+    if (patch.dueDate !== undefined) clean.dueDate = thread.dueDate = patch.dueDate || null
+    if (patch.ownerId !== undefined) clean.ownerId = thread.ownerId = patch.ownerId
+    if (!data.mock) {
+      void data.save(`thread:${threadId}`, () => api.patchThread(threadId, clean), replaceThread)
+    }
     return true
   }
 
@@ -171,14 +199,27 @@ export const useThreadStore = defineStore('thread', () => {
    * 이력 한 줄을 남긴다 — POST /api/threads/{id}/entries.
    * 결정으로 남기면 안건이 결정됨이 되고 처리한 사람이 있으면 담당자도 그 사람이 된다.
    * 그 밖의 줄은 대기 중이던 안건을 논의중으로 옮긴다.
+   * 서버 모드에서는 응답의 줄을 넣고 안건을 갈아끼운다. 남겼으면 true 다.
    */
-  function addEntry(
+  async function addEntry(
     threadId: string,
     kind: Extract<EntryKind, 'decide' | 'refine' | 'defer'>,
     text: string,
     note: string,
     ownerId: string | null,
-  ) {
+  ): Promise<boolean> {
+    if (!data.mock) {
+      try {
+        const res = await api.addEntry(threadId, { kind, text, detail: [], note, ownerId })
+        data.allEntries.push(res.entry)
+        replaceThread(res.thread)
+        return true
+      } catch (e) {
+        toastError(e)
+        return false
+      }
+    }
+
     data.allEntries.push({
       id: data.nextId('ne'),
       threadId,
@@ -191,13 +232,14 @@ export const useThreadStore = defineStore('thread', () => {
     })
 
     const thread = data.allThreads.find((t) => t.id === threadId)
-    if (!thread) return
+    if (!thread) return true
     if (kind === 'decide') {
       thread.state = 'decided'
       if (ownerId) thread.ownerId = ownerId
     } else if (thread.state === 'queued') {
       thread.state = 'open'
     }
+    return true
   }
 
   return {

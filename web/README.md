@@ -15,6 +15,30 @@ npm run test       # vitest
 
 개발 계획과 진행 상황은 [PLAN.md](./PLAN.md) 에 있다.
 
+## 띄우기 — 서버 먼저
+
+화면은 상대 경로 `/api` 만 부르고, 개발 중에는 Vite 가 `http://localhost:8000`(FastAPI)으로 넘긴다.
+**개발 기본값은 서버 연결이다.** 서버 띄우는 법은 [`../server/README.md`](../server/README.md) 에 있다.
+
+```bash
+# 1) 서버 (../server) — postgres · 마이그레이션 · 시드 · uvicorn 은 server/README 대로
+uv run fastapi dev app/main.py          # http://localhost:8000
+
+# 2) 화면
+npm run dev                             # http://localhost:5173 → /api 는 8000 으로
+
+# 서버 없이 픽스처로 — 네트워크를 안 탄다. 고친 것은 새로고침하면 사라진다
+VITE_USE_MOCK=true npm run dev
+
+# 다른 포트의 서버에 붙여 볼 때만
+API_PROXY_TARGET=http://localhost:8001 npm run dev
+```
+
+- 서버에 못 붙으면 첫 화면이 '서버에 연결할 수 없습니다' + 다시 시도다
+- `npm run test` 는 늘 목업으로 돈다(`vitest.config.ts` 의 `env`). 서버 모드를 보는 테스트
+  (`src/stores/server.test.ts` · `src/api/client.test.ts`)는 `fetch` 를 가짜로 바꾸고 `vi.stubEnv` 로 끈다
+- `VITE_USE_MOCK` 를 읽는 자리는 `src/api/mode.ts` 하나다
+
 **리포는 WSL 파일시스템(`~/workspace/mijeonge-project`)에 두고 WSL node 로만 쓴다.**
 `/mnt/c` 에 두면 inotify 가 없어 vite 가 폴링으로 돌아야 하고(느리고 CPU 를 먹는다),
 Windows 에서 깐 `node_modules` 는 WSL node 로 못 쓴다(네이티브 바이너리가 플랫폼 전용이다).
@@ -25,7 +49,8 @@ Windows 에서 깐 `node_modules` 는 WSL node 로 못 쓴다(네이티브 바�
 | --- | --- |
 | `src/assets/index.css` | shadcn-vue 기본 테마(new-york · neutral) 그대로. 본문 폰트만 IBM Plex Sans KR. 캔버스의 종이 톤(#faf8f4 · 세리프 제목)은 한 번 옮겼다가 되돌렸으니 다시 만들지 말 것 |
 | `src/types/domain.ts` | Project / Thread / Entry / Task. **Entry 하나가 안건에 남긴 한 줄**이고, 안건 상태는 Entry 로만 바뀐다(결정 → 결정됨, 그 밖의 줄 → 대기면 논의중) |
-| `src/stores/*.ts` | Pinia + 목업 데이터. 백엔드가 붙으면 이 파일만 바뀐다 |
+| `src/api/*.ts` | fetch 래퍼(`ApiError` — code · message · detail · status)와 도메인별 함수. 스냅샷 키 → 스토어 이름 매핑도 여기 |
+| `src/stores/*.ts` | Pinia. `data` 가 부팅(프로젝트 · 멤버 → 스냅샷)과 쓰기 동기화(낙관적 반영 · 레코드별 마지막 응답만 · 실패 시 스냅샷으로 되돌리기)를 맡고, 목업 모드면 픽스처로 돈다 |
 | `src/components/ui/*` | shadcn-vue 컴포넌트 (직접 고쳐도 되는 사본) |
 | `src/components/app/*` | 이 앱 것 — AppShell(3분할 레이아웃), ThreadStateBadge |
 | `src/views/*` | 화면 |

@@ -34,12 +34,20 @@ class TaskOut(Schema):
 
 
 class TaskLineIn(Schema):
-    """본문 한 줄. 화면이 실어 보내는 id 는 받지 않는다 — 서버가 새로 붙인다."""
+    """본문 한 줄. 등록(POST)에서는 id 를 받지 않는다 — 서버가 새로 붙인다.
+    수정(PATCH)은 id 를 실을 수 있는 `TaskLinePatchIn` 을 쓴다."""
 
     kind: TaskLineKindIn
     text: str
     done: bool = False
     level: int = 0
+
+
+class TaskLinePatchIn(TaskLineIn):
+    """본문 교체용 한 줄. 이 작업의 기존 줄 id 면 유지한다 — 저장 응답으로 id 가 바뀌면
+    편집 중인 화면의 포커스와 키가 흔들린다. 없거나 모르는 id 면 서버가 새로 붙인다."""
+
+    id: str | None = None
 
 
 class TaskCreate(Schema):
@@ -68,6 +76,9 @@ class TaskPatch(Schema):
     start: date | None = None
     due: date | None = None
     priority: TaskPriorityIn | None = None
+    # 보내면 본문을 통째로 갈아끼운다. 기본값은 '안 보냄' 표시일 뿐이고(exclude_unset 으로 가른다),
+    # 본문의 빈 값은 [] 라 null 은 타입에서 422 로 걸린다 (API.md '빈 값은 null 이 아니다')
+    body: list[TaskLinePatchIn] = []
 
 
 class TaskLinePatch(Schema):

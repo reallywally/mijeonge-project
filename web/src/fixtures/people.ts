@@ -24,6 +24,3 @@ export const projects: Project[] = [
   { id: 'p2', name: '삼성생명 PAS', taskKeyPrefix: 'PAS' },
   { id: 'p3', name: '경영지원 파트', taskKeyPrefix: 'OPS' },
 ]
-
-/** 지금 로그인한 사람 */
-export const currentMemberId = 'u3'

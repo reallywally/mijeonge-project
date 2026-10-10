@@ -91,6 +91,8 @@ const parentChoices = computed(() => (props.taskId ? taskStore.parentOptionsFor(
 const subOpen = ref(false)
 const subTitle = ref('')
 const subInput = ref<InstanceType<typeof Input> | null>(null)
+/* 서버가 만들어 돌려줄 때까지 Enter 를 또 받지 않는다 — 같은 작업이 두 번 생긴다 */
+const subSaving = ref(false)
 
 async function openSubtask() {
   subOpen.value = true
@@ -103,12 +105,13 @@ function closeSubtask() {
   subTitle.value = ''
 }
 
-function addSubtask(e: KeyboardEvent) {
+async function addSubtask(e: KeyboardEvent) {
   /* 한글 조합 중의 Enter 는 글자를 맺는 키다 — 그때 만들면 마지막 글자가 다음 칸으로 샌다 */
-  if (e.isComposing) return
+  if (e.isComposing || subSaving.value) return
   const title = subTitle.value.trim()
   if (!props.taskId || !title) return
-  taskStore.addTask({
+  subSaving.value = true
+  const id = await taskStore.addTask({
     title,
     parentId: props.taskId,
     body: [],
@@ -119,7 +122,8 @@ function addSubtask(e: KeyboardEvent) {
     priority: 'normal',
     threadIds: [],
   })
-  subTitle.value = ''
+  subSaving.value = false
+  if (id) subTitle.value = ''
 }
 
 /* 다른 작업으로 옮기거나 팝업을 다시 열면 칸들을 그 작업의 값으로 채운다 */
@@ -192,7 +196,12 @@ const threadChoices = computed(() => {
 
           <section class="flex flex-col gap-1.5">
             <span class="text-xs font-medium">내용</span>
-            <TaskBodyEditor :key="detail.task.id" :lines="detail.task.body" @change="saveBody" />
+            <!-- 스냅샷을 다시 받으면(쓰기 실패로 되돌릴 때) 편집기도 서버 값으로 다시 선다 -->
+            <TaskBodyEditor
+              :key="`${detail.task.id}:${data.snapshotRevision}`"
+              :lines="detail.task.body"
+              @change="saveBody"
+            />
           </section>
 
           <section class="flex flex-col gap-3">

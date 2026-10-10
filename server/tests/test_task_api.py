@@ -204,3 +204,91 @@ async def test_meeting_routes_are_gone(client: httpx.AsyncClient) -> None:
     assert (await client.put("/api/meetings/m1/tasks/k1")).status_code == 404
     res = await client.post("/api/projects/p1/meetings", json={"title": "x", "date": "2026-09-10"})
     assert res.status_code == 404
+
+
+async def _body_of(client: httpx.AsyncClient, task_id: str) -> list[dict[str, object]]:
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    task = next(each for each in snap["tasks"] if each["id"] == task_id)
+    lines: list[dict[str, object]] = task["body"]
+    return lines
+
+
+async def test_body_patch_replaces_the_whole_body_in_order(client: httpx.AsyncClient) -> None:
+    body = [
+        {"kind": "bullet", "text": "새 첫 줄", "level": 1},
+        {"id": "l3", "kind": "check", "text": "mysql 설치", "done": True},
+    ]
+    res = await client.patch("/api/tasks/k4", json={"body": body})
+    assert res.status_code == 200
+    task = res.json()
+
+    assert [line["text"] for line in task["body"]] == ["새 첫 줄", "mysql 설치"]
+    assert task["body"][0] == task["body"][0] | {"kind": "bullet", "done": False, "level": 1}
+    assert task["body"][1] | {"id": "l3", "done": True, "level": 0} == task["body"][1]
+    # 다시 읽어도 같은 순서 · 같은 줄만 남는다
+    assert await _body_of(client, "k4") == task["body"]
+
+
+async def test_body_patch_keeps_known_ids_and_gives_new_ones_otherwise(
+    client: httpx.AsyncClient,
+) -> None:
+    other = (await client.post("/api/projects/p1/tasks", json=NEW_TASK)).json()
+    other_line = other["body"][0]["id"]
+    body = [
+        {"id": "l1", "kind": "check", "text": "a"},
+        {"id": "모르는줄", "kind": "check", "text": "b"},
+        {"id": other_line, "kind": "check", "text": "c"},  # 남의 작업 줄
+        {"id": "l1", "kind": "check", "text": "d"},  # 같은 요청에 두 번
+        {"kind": "bullet", "text": "e"},
+    ]
+    task = (await client.patch("/api/tasks/k4", json={"body": body})).json()
+    ids = [line["id"] for line in task["body"]]
+
+    assert ids[0] == "l1"
+    assert "모르는줄" not in ids
+    assert other_line not in ids
+    assert ids.count("l1") == 1
+    assert len(set(ids)) == 5
+    # 남의 작업 본문은 손대지 않는다
+    assert [line["id"] for line in await _body_of(client, other["id"])] == [
+        line["id"] for line in other["body"]
+    ]
+
+
+async def test_empty_body_clears_it(client: httpx.AsyncClient) -> None:
+    task = (await client.patch("/api/tasks/k4", json={"body": []})).json()
+    assert task["body"] == []
+    assert await _body_of(client, "k4") == []
+
+
+async def test_null_body_is_422(client: httpx.AsyncClient) -> None:
+    res = await client.patch("/api/tasks/k4", json={"body": None})
+    assert res.status_code == 422
+
+
+async def test_body_left_out_stays(client: httpx.AsyncClient) -> None:
+    before = await _body_of(client, "k4")
+    task = (await client.patch("/api/tasks/k4", json={"status": "doing"})).json()
+    assert task["status"] == "doing"
+    assert task["body"] == before
+
+
+async def test_body_goes_with_other_fields(client: httpx.AsyncClient) -> None:
+    body = [{"id": "l3", "kind": "check", "text": "mysql"}]
+    task = (await client.patch("/api/tasks/k4", json={"title": "새 제목", "body": body})).json()
+    assert task["title"] == "새 제목"
+    assert [line["id"] for line in task["body"]] == ["l3"]
+
+
+async def test_line_toggle_works_on_a_kept_id(client: httpx.AsyncClient) -> None:
+    body = [
+        {"kind": "check", "text": "앞에 끼운 줄"},
+        {"id": "l3", "kind": "check", "text": "mysql"},
+    ]
+    patched = (await client.patch("/api/tasks/k4", json={"body": body})).json()
+    fresh = patched["body"][0]["id"]
+
+    task = (await client.patch("/api/tasks/k4/lines/l3", json={"done": True})).json()
+    assert next(each for each in task["body"] if each["id"] == "l3")["done"] is True
+    task = (await client.patch(f"/api/tasks/k4/lines/{fresh}", json={"done": True})).json()
+    assert all(line["done"] for line in task["body"])

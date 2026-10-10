@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    /* 테스트는 서버 없이 픽스처로 돈다. 서버 모드를 보는 테스트는 vi.stubEnv 로 끈다 */
+    env: { VITE_USE_MOCK: 'true' },
   },
   resolve: {
     alias: [

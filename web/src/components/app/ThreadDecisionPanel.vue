@@ -33,6 +33,7 @@ const note = ref('')
 const ownerId = ref<string | null>(null)
 /* 미룰 때 다시 볼 날 — 고르면 결정 기한도 그날로 옮긴다. 안 옮기면 미루자마자 '기한 지남' 이 된다 */
 const nextDue = ref('')
+const saving = ref(false)
 const NONE = 'none'
 
 const textInput = ref<InstanceType<typeof Input> | null>(null)
@@ -90,13 +91,19 @@ const look = computed(() =>
   mode.value === 'view' || mode.value === 'choose' ? null : LOOK[mode.value],
 )
 
-function submit() {
+async function submit() {
   const line = text.value.trim()
-  if (!line || mode.value === 'view' || mode.value === 'choose') return
+  const kind = mode.value
+  if (!line || kind === 'view' || kind === 'choose' || saving.value) return
   const id = props.detail.thread.id
-  threadStore.addEntry(id, mode.value, line, note.value.trim(), ownerId.value)
-  if (mode.value === 'defer' && nextDue.value)
-    threadStore.updateThread(id, { dueDate: nextDue.value })
+  const due = nextDue.value
+  saving.value = true
+  const saved = await threadStore.addEntry(id, kind, line, note.value.trim(), ownerId.value)
+  saving.value = false
+  /* 실패는 스토어가 알렸다 — 적은 것을 그대로 두어 다시 남길 수 있게 한다 */
+  if (!saved) return
+  /* 다시 볼 날은 줄이 남은 뒤에 안건 기한으로 옮긴다 — 줄 없이 기한만 바뀌면 왜 바뀌었는지가 사라진다 */
+  if (kind === 'defer' && due) threadStore.updateThread(id, { dueDate: due })
   reset()
 }
 
@@ -318,7 +325,7 @@ function onKeydown(e: KeyboardEvent) {
       </div>
 
       <div class="flex flex-wrap items-center gap-2 pt-1">
-        <Button :disabled="!text.trim()" @click="submit">
+        <Button :disabled="!text.trim() || saving" @click="submit">
           <Check v-if="mode === 'decide'" class="size-4" />
           <Clock v-else-if="mode === 'defer'" class="size-4" />
           {{ look.submit }}

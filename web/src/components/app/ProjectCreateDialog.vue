@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { makeTaskKeyPrefix, taskKeyPrefixError } from '@/lib/project'
+import { taskKeyPrefixError } from '@/lib/project'
 import { useDataStore } from '@/stores/data'
 
 /* 프로젝트 등록 — 목록 위 팝업. 접두사는 선택이고, 비우면 겹치지 않는 값이 붙는다 (API.md Q20) */
@@ -22,6 +22,7 @@ const data = useDataStore()
 
 const name = ref('')
 const prefix = ref('')
+const saving = ref(false)
 
 watch(open, (isOpen) => {
   if (isOpen) {
@@ -33,20 +34,26 @@ watch(open, (isOpen) => {
 const takenPrefixes = computed(() => data.allProjects.map((p) => p.taskKeyPrefix))
 const prefixError = computed(() => taskKeyPrefixError(prefix.value, takenPrefixes.value))
 
-/** 비워 두면 자동으로 붙을 값까지 미리 보여 준다 — 저장하고 놀라지 않게 */
+/** 비워 두면 자동으로 붙을 값까지 미리 보여 준다 — 저장하고 놀라지 않게.
+    서버가 만드는 값은 임의라 미리 맞힐 수 없어 '자동' 으로만 적는다 (API.md Q21) */
 const keyPreview = computed(() => {
   const typed = prefix.value.trim().toUpperCase()
   if (prefixError.value) return ''
-  const value = typed || makeTaskKeyPrefix(takenPrefixes.value)
-  return `${value}-1`
+  const value = typed || data.suggestTaskKeyPrefix()
+  return value ? `${value}-1` : null
 })
 
-const canSubmit = computed(() => name.value.trim() !== '' && prefixError.value === null)
+const canSubmit = computed(
+  () => name.value.trim() !== '' && prefixError.value === null && !saving.value,
+)
 
 /* 팝업을 여기서 닫지 않는다 — 주소가 팝업을 여닫으므로 만든 뒤 어디로 갈지는 화면이 정한다 */
-function submit() {
+async function submit() {
   if (!canSubmit.value) return
-  emit('created', data.addProject(name.value.trim(), prefix.value))
+  saving.value = true
+  const id = await data.addProject(name.value.trim(), prefix.value)
+  saving.value = false
+  if (id) emit('created', id)
 }
 </script>
 
@@ -77,16 +84,24 @@ function submit() {
           <p v-if="prefixError" class="text-xs leading-relaxed text-destructive">
             {{ prefixError }}
           </p>
-          <p v-else class="text-xs leading-relaxed text-muted-foreground text-pretty">
+          <p
+            v-else-if="keyPreview"
+            class="text-xs leading-relaxed text-muted-foreground text-pretty"
+          >
             대화에서 작업을 한 마디로 가리키는 값입니다. 첫 작업이
             <span class="font-medium text-foreground">{{ keyPreview }}</span> 로 섭니다.
+          </p>
+          <p v-else class="text-xs leading-relaxed text-muted-foreground text-pretty">
+            대화에서 작업을 한 마디로 가리키는 값입니다. 비워 두면 저장할 때 자동으로 붙습니다.
           </p>
         </div>
       </div>
 
       <DialogFooter>
         <Button variant="outline" @click="open = false">취소</Button>
-        <Button :disabled="!canSubmit" @click="submit">저장</Button>
+        <Button :disabled="!canSubmit" @click="submit">{{
+          saving ? '저장하는 중…' : '저장'
+        }}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

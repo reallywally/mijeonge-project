@@ -50,10 +50,13 @@ const router = createRouter({
   ],
 })
 
-/* 프로젝트가 하나도 없으면 다른 화면은 보여 줄 것이 없다 — 등록으로 보낸다 (API.md Q18) */
-router.beforeEach((to) => {
-  if (to.path.startsWith('/projects')) return true
-  return useDataStore().allProjects.length > 0 ? true : '/projects/new'
+/* 프로젝트 목록을 받아야 어디로 갈지 안다. 프로젝트가 하나도 없으면 다른 화면은 보여 줄 것이 없다 —
+   등록으로 보낸다 (API.md Q18). 받다가 실패하면 그대로 두고 App 이 다시 시도 화면을 띄운다 */
+router.beforeEach(async (to) => {
+  const data = useDataStore()
+  await data.boot()
+  if (data.status !== 'ready' || to.path.startsWith('/projects')) return true
+  return data.allProjects.length > 0 ? true : '/projects/new'
 })
 
 export default router

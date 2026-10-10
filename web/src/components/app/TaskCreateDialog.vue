@@ -36,6 +36,7 @@ const priority = ref<TaskPriority>('normal')
 const parent = ref<string | null>(null)
 const threadIds = ref<string[]>([])
 const keepOpen = ref(false)
+const saving = ref(false)
 /* 본문 편집기는 자기 줄을 들고 있으니, 폼을 비울 때는 새로 띄운다 */
 const bodyKey = ref(0)
 
@@ -94,12 +95,14 @@ const blocker = computed(() => {
   return periodProblem(start.value, due.value)
 })
 
-function submit() {
+async function submit() {
+  if (saving.value) return
   if (blocker.value) {
     if (!title.value.trim()) void focusTitle()
     return
   }
-  const id = taskStore.addTask({
+  saving.value = true
+  const id = await taskStore.addTask({
     title: title.value.trim(),
     parentId: parent.value,
     body: body.value,
@@ -110,6 +113,9 @@ function submit() {
     priority: priority.value,
     threadIds: [...threadIds.value],
   })
+  saving.value = false
+  /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
+  if (!id) return
   /* 만들고 계속 추가 — 폼만 비우고 팝업은 열어 둔다 */
   if (keepOpen.value) {
     resetForm()
@@ -213,7 +219,9 @@ function onKeydown(e: KeyboardEvent) {
         <div class="grow" />
         <span class="text-xs text-muted-foreground">{{ blocker || '⌘ / Ctrl + Enter' }}</span>
         <Button variant="outline" size="sm" @click="open = false">취소</Button>
-        <Button size="sm" :disabled="!!blocker" @click="submit">만들기</Button>
+        <Button size="sm" :disabled="!!blocker || saving" @click="submit">
+          {{ saving ? '만드는 중…' : '만들기' }}
+        </Button>
       </div>
     </DialogScrollContent>
   </Dialog>

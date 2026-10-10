@@ -159,9 +159,9 @@ describe('안건 목록', () => {
     expect(label('t4')).toBe('—')
   })
 
-  it('새 안건은 대기로 들어간다', () => {
+  it('새 안건은 대기로 들어간다', async () => {
     const thread = useThreadStore()
-    const id = thread.addThread({ title: '배포 창구 정하기', ownerId: 'u2' })
+    const id = await thread.addThread({ title: '배포 창구 정하기', ownerId: 'u2' })
     const row = thread.rows.find((r) => r.thread.id === id)!
 
     expect(row.thread.state).toBe('queued')
@@ -226,9 +226,9 @@ describe('안건 고치기', () => {
 })
 
 describe('안건 등록', () => {
-  it('배경 · 후보 · 기한을 같이 받는다', () => {
+  it('배경 · 후보 · 기한을 같이 받는다', async () => {
     const thread = useThreadStore()
-    const id = thread.addThread({
+    const id = await thread.addThread({
       title: '배포 창구 정하기',
       description: '배포 요청이 메신저로 흩어져 누가 받는지 모른다.',
       options: ['운영팀', '개발팀'],
@@ -242,9 +242,9 @@ describe('안건 등록', () => {
     expect(t.dueDate).toBe('2026-10-20')
   })
 
-  it("제목만 있어도 들어간다 — 나머지는 '' · [] · null", () => {
+  it("제목만 있어도 들어간다 — 나머지는 '' · [] · null", async () => {
     const thread = useThreadStore()
-    const id = thread.addThread({ title: '배포 창구 정하기' })
+    const id = await thread.addThread({ title: '배포 창구 정하기' })
     const t = thread.threads.find((x) => x.id === id)!
 
     expect(t.description).toBe('')
@@ -253,9 +253,9 @@ describe('안건 등록', () => {
     expect(t.ownerId).toBeNull()
   })
 
-  it('후보는 앞뒤 공백을 떼고 빈 줄은 버린다', () => {
+  it('후보는 앞뒤 공백을 떼고 빈 줄은 버린다', async () => {
     const thread = useThreadStore()
-    const id = thread.addThread({
+    const id = await thread.addThread({
       title: '배포 창구 정하기',
       options: ['  운영팀 ', '', '   ', '개발팀'],
     })
@@ -291,12 +291,12 @@ describe('기한 지남', () => {
     expect(isOverdue({ ...base, dueDate: null }, '2026-10-10')).toBe(false)
   })
 
-  it('오늘은 한국 시간으로 센다 — UTC 로는 전날 밤이어도 한국은 이미 다음 날이다', () => {
+  it('오늘은 한국 시간으로 센다 — UTC 로는 전날 밤이어도 한국은 이미 다음 날이다', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     /* UTC 10월 9일 16시 = KST 10월 10일 01시 */
     vi.setSystemTime(new Date('2026-10-09T16:00:00Z'))
     const thread = useThreadStore()
-    const id = thread.addThread({ title: '하루 지난 안건', dueDate: '2026-10-09' })
+    const id = await thread.addThread({ title: '하루 지난 안건', dueDate: '2026-10-09' })
 
     expect(thread.rows.find((r) => r.thread.id === id)!.overdue).toBe(true)
   })

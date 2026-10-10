@@ -25,6 +25,7 @@ const options = ref('')
 const dueDate = ref('')
 const ownerId = ref<string | null>(null)
 const keepOpen = ref(false)
+const saving = ref(false)
 
 const fields = ref<InstanceType<typeof ThreadFields> | null>(null)
 const focusTitle = () => fields.value?.focusTitle()
@@ -45,18 +46,23 @@ watch(
   { immediate: true },
 )
 
-function submit() {
+async function submit() {
+  if (saving.value) return
   if (!title.value.trim()) {
     focusTitle()
     return
   }
-  const id = threadStore.addThread({
+  saving.value = true
+  const id = await threadStore.addThread({
     title: title.value,
     description: description.value,
     options: options.value.split('\n'),
     dueDate: dueDate.value || null,
     ownerId: ownerId.value,
   })
+  saving.value = false
+  /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
+  if (!id) return
   /* 만들고 계속 추가 — 폼만 비우고 팝업은 열어 둔다 */
   if (keepOpen.value) {
     resetForm()
@@ -128,7 +134,9 @@ function onKeydown(e: KeyboardEvent) {
           title.trim() ? '⌘ / Ctrl + Enter' : '제목을 적어야 만들 수 있습니다'
         }}</span>
         <Button variant="outline" size="sm" @click="open = false">취소</Button>
-        <Button size="sm" :disabled="!title.trim()" @click="submit">만들기</Button>
+        <Button size="sm" :disabled="!title.trim() || saving" @click="submit">
+          {{ saving ? '만드는 중…' : '만들기' }}
+        </Button>
       </div>
     </DialogScrollContent>
   </Dialog>

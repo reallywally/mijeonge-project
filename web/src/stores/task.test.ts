@@ -128,24 +128,24 @@ describe('작업 추가', () => {
     threadIds: [],
   })
 
-  it('키는 그 프로젝트의 접두사로 선다 — 다른 프로젝트에 HW 가 붙지 않는다', () => {
+  it('키는 그 프로젝트의 접두사로 선다 — 다른 프로젝트에 HW 가 붙지 않는다', async () => {
     const task = useTaskStore()
     const data = useDataStore()
     data.setProject('p2')
 
-    const id = task.addTask(input('이관 도구 고르기'))
+    const id = await task.addTask(input('이관 도구 고르기'))
     expect(task.rows.find((r) => r.task.id === id)!.task.key).toBe('PAS-3')
   })
 
-  it('번호를 들고 세므로 목록에서 빠진 번호를 다시 쓰지 않는다', () => {
+  it('번호를 들고 세므로 목록에서 빠진 번호를 다시 쓰지 않는다', async () => {
     const task = useTaskStore()
     const data = useDataStore()
 
-    const first = task.addTask(input('CI 러너 늘리기'))
+    const first = await task.addTask(input('CI 러너 늘리기'))
     expect(data.allTasks.find((t) => t.id === first)!.key).toBe('HW-22')
 
     data.allTasks = data.allTasks.filter((t) => t.id !== first)
-    const second = task.addTask(input('배포 스크립트 정리'))
+    const second = await task.addTask(input('배포 스크립트 정리'))
     expect(data.allTasks.find((t) => t.id === second)!.key).toBe('HW-23')
   })
 })

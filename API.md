@@ -64,22 +64,22 @@
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/health` | 앱이 떠 있는지 | `{ status }` | 구현 |
-| GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18) | `Project[]` (Q9 로 `taskKeyPrefix` 가 늘었다) | 구현 |
-| POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18) | `Project` · 201 | 구현 |
-| GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 구현 |
-| GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 구현 |
+| GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18) | `Project[]` (Q9 로 `taskKeyPrefix` 가 늘었다) | 연결 |
+| POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18) | `Project` · 201 | 연결 |
+| GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 연결 |
+| GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 연결 |
 
 쓰기(3단계)는 스토어 함수 하나가 엔드포인트 하나다. 응답은 **바뀐 레코드**를 돌려준다.
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 구현 |
-| PATCH | `/api/tasks/{taskId}` | 상태 · 담당자 · 기간 · 상위 작업 부분 수정 | `Task` | 구현 |
-| PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 구현 |
-| PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 구현 |
-| POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 구현 |
-| PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` 는 통째로 갈아끼운다. 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 구현 |
-| POST | `/api/threads/{threadId}/entries` | 이력 한 줄 — 결정 · 미룸 · 세부 추가. 이력을 남기는 유일한 길이다. `decide` 면 안건이 `decided`, 그 밖의 줄은 `queued` 면 `open` 으로 | `{ entry, thread }` · 201 | 구현 |
+| POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 연결 |
+| PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 연결 |
+| PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 연결 |
+| PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 연결 |
+| POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 연결 |
+| PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` 는 통째로 갈아끼운다. 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 연결 |
+| POST | `/api/threads/{threadId}/entries` | 이력 한 줄 — 결정 · 미룸 · 세부 추가. 이력을 남기는 유일한 길이다. `decide` 면 안건이 `decided`, 그 밖의 줄은 `queued` 면 `open` 으로 | `{ entry, thread }` · 201 | 연결 |
 
 읽기 넷은 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
 `uv run fastapi dev` 로 띄우고 `/api/projects` → `/api/projects/p1/snapshot` 순으로 받으면 목업과 같은 데이터가 온다
@@ -314,6 +314,7 @@ DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-10-11 | 작업 본문을 `PATCH /api/tasks/{taskId}` 의 `body` 로 통째로 바꾼다. 줄 id 는 보내면 유지한다. 화면을 목업에서 실제 API 로 연결한다 — 개발 기본은 서버, `VITE_USE_MOCK=true` 면 목업, Vite 가 `/api` 를 `localhost:8000` 으로 넘긴다 | 화면에서 고친 게 새로고침하면 사라졌다(목업 메모리). 본문 편집만 짝이 되는 API 가 없었다. 줄 id 가 저장할 때마다 바뀌면 줄마다 편집하는 중에 포커스가 튄다 |
 | 2026-10-11 | **회의(Meeting)를 걷어냈다.** 테이블 넷(`meeting` · `meeting_attendee` · `meeting_memo` · `meeting_task_link`)과 `entry.meeting_id`, 회의 API 셋, 스냅샷의 `meetings` · `meetingTaskLinks`, `Entry.meetingId` 가 빠졌다. 이력은 `POST /api/threads/{threadId}/entries` 로만 남고, 이력의 날짜는 `createdAt` 의 KST 날짜다. 안건 수정 `PATCH /api/threads/{threadId}` 를 더했다 | 사용자 결정 — 회의를 관리하는 건 '일을 위한 일' 이다. 이 제품의 목적은 결정이 미뤄지는 걸 막고 기록을 잘 남기는 것이고, 그건 안건과 그 이력이 맡는다. 회의와 안건이 비슷한 개념으로 겹쳐 무엇을 어디에 적을지 헷갈렸다. 아래 Q 들에 남은 회의 이야기는 그때의 기록이다 |
 | 2026-10-10 | `Thread` 에 **`description`(배경) · `options`(후보) · `dueDate`(결정 기한)** 를 더했다. 등록에서 셋 다 선택, 회의 중 새로 만든 안건은 `''` · `[]` · `null`. 후보는 자식 테이블 `thread_option` 으로 펴고 응답에서 접는다. '기한 지남'(`dueDate < 오늘(KST)` 이고 결정 전)은 프론트가 계산한다 | 제목만으로는 안건을 어떻게 써야 할지 어렵다는 사용자 테스트 의견. 안건은 '정해야 할 것 하나' 라 회의에서 바로 결정할 수 있게 하는 정보만 받는다 — 칸이 많아지면 안건 대신 메신저로 정하게 되니 제목만 필수로 둔다. 기한은 '미루는 걸 막는다' 는 제품의 이유와 바로 닿는다 |
 | 2026-09-29 | `createdAt` 을 계약대로 되돌렸다 — **ISO 8601 UTC · `Z` · 초까지**. 저장도 UTC 로 통일하고(회의에서 생긴 줄까지) naive 는 UTC 로 보고 Z 를 붙인다 (Q23) | 날짜로 자르던 이유(프론트의 옛 `monthDay`)가 Q3 에서 사라졌다. 잘라 내보내면 같은 날 여러 줄의 시각이 없어지고, 화면이 만든 줄(`nowIso()`)과 형식이 두 벌이 된다. 오프셋을 그대로 내보내는 것도 답이 아니다 — `localDay` 가 `Z` 가 아니면 문자열을 잘라 읽어서 KST 일 때만 우연히 맞는다 |

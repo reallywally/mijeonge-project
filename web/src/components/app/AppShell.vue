@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, FolderClosed, ListTree, SquareKanban } from 'lucide-vue-next'
+import { ChevronRight, FolderClosed, ListTree, Loader2, SquareKanban } from 'lucide-vue-next'
 import {
   Select,
   SelectContent,
@@ -30,6 +30,12 @@ const threadStore = useThreadStore()
         <span :class="data.currentProject ? '' : 'text-muted-foreground'">
           {{ data.currentProject?.name ?? '고른 프로젝트 없음' }}
         </span>
+        <!-- 프로젝트를 바꾸고 그 프로젝트의 레코드를 받는 동안 -->
+        <Loader2
+          v-if="data.syncing"
+          class="size-3.5 animate-spin text-muted-foreground"
+          aria-label="불러오는 중"
+        />
       </div>
       <div class="grow" />
       <slot name="actions" />
