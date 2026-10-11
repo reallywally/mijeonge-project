@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, new_id
+from app.models.base import Base, new_id, trgm_index
 
 TASK_STATUSES = ("todo", "doing", "blocked", "done")
 TASK_PRIORITIES = ("low", "normal", "high")
@@ -40,6 +40,7 @@ class Task(Base):
         ForeignKeyConstraint(["parent_id", "project_id"], ["task.id", "task.project_id"]),
         Index("ix_task_project_id_status", "project_id", "status"),
         Index("ix_task_parent_id", "parent_id"),
+        trgm_index("task", "title"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -71,7 +72,10 @@ class TaskLine(Base):
     """작업 본문 한 줄 — 체크박스 또는 불릿. 배열 순서가 곧 화면 순서다."""
 
     __tablename__ = "task_line"
-    __table_args__ = (CheckConstraint(f"kind in {TASK_LINE_KINDS}", name="kind"),)
+    __table_args__ = (
+        CheckConstraint(f"kind in {TASK_LINE_KINDS}", name="kind"),
+        trgm_index("task_line", "text"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     task_id: Mapped[str] = mapped_column(ForeignKey("task.id", ondelete="CASCADE"))

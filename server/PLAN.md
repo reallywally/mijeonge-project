@@ -238,24 +238,45 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 | 방식 | **Claude + 도구 사용(tool use)**. 서버가 검색 함수 넷을 도구로 쥐여 주고 루프를 돈다 | 질문 → 검색어 → 안건 찾기 → 이력 읽기 → 답을 Claude 가 스스로 돈다. 스냅샷 통째 넣기는 프로젝트가 커지면 비싸고 느리다 |
 | 검색 | **Postgres `pg_trgm`** (trigram 유사도). 벡터 검색은 평가에서 놓치는 게 보이면 | 기본 전문검색(`tsvector`)은 한국어를 못 쪼갠다. 동의어("OS" ↔ "운영체제")는 Claude 가 검색어를 여러 벌 던져 메운다 |
 | SDK | `anthropic` 의 **async 클라이언트** (`AsyncAnthropic`) | 앱 전체가 async 다. 동기 클라이언트를 스레드로 돌리지 않는다 |
-| 모델 | `claude-opus-5-5` · effort `low` — **`config.py` 의 `chat_model` 하나로 바꾼다** (Q25) | 찾아서 요약하는 일이라 effort 를 낮춰도 된다. 모델 결정은 사용자 몫이다 |
-| 대화 | **서버에 남기지 않는다** — 화면이 지난 질문 · 답을 `messages` 로 보낸다 (Q26) | 로그인이 없어 남겨도 누구 것인지 못 가린다 |
+| 모델 | **`claude-sonnet-5-5` · effort `low`** — `config.py` 의 `chat_model` · `chat_effort` 로만 바꾼다 (Q25 닫힘) | 찾아서 요약하는 일이라 Sonnet 으로 충분하다. Sonnet 5.5 는 effort 기본값이 `high` 라 `low` 를 **명시한다**. 평가셋에서 모자라면 effort → 모델 순으로 올린다 |
+| 대화 | **서버에 남기지 않는다** — 화면이 지난 질문 · 답을 `messages` 로 보내고, 창을 닫으면 끝난다 (Q26 닫힘) | 로그인이 없어 남겨도 누구 것인지 못 가린다 |
 | 키 | `ANTHROPIC_API_KEY` 를 `.env` 로만. 없으면 앱은 뜨고 채팅만 503 `CHAT_UNAVAILABLE` | 키가 없는 개발 환경에서도 나머지 화면이 돌아야 한다 |
 
 ### 7-1 검색 (Claude 없이)
 
-- [ ] 리비전 — `CREATE EXTENSION IF NOT EXISTS pg_trgm` + GIN trigram 인덱스:
+- [x] 리비전 `20261011_0006_search_trgm.py` — `CREATE EXTENSION IF NOT EXISTS pg_trgm` + GIN trigram 인덱스:
       `thread.title` · `thread.description` · `thread_option.text` · `entry.text` · `entry.note` ·
-      `entry_detail.text` · `task.title` · `task_line.text`
-- [ ] `app/services/search.py` — 도구가 될 함수 넷. 전부 **`project_id` 로 먼저 거른다**
-  - `search_threads(project_id, query, state=None, limit=10)` — 맞은 자리(`matched`) · 한 줄 발췌 ·
+      `entry_detail.text` · `task.title` · `task_line.text`. 인덱스는 모델에도 있다(`models/base.py` 의
+      `trgm_index`) — 안 그러면 `alembic check` 가 매번 '지워라' 로 읽는다. 확장은 Postgres 에서만 켜고
+      sqlite 는 같은 이름의 보통 인덱스만 세운다(그래야 `test_schema` 의 리비전 ↔ 모델 대조가 돈다).
+      downgrade 는 인덱스를 지우고 확장을 `CASCADE` 없이 지운다
+- [x] `app/services/search.py` — 도구가 될 함수 넷. 전부 **`project_id` 로 먼저 거른다**
+  - `search_threads(session, project_id, query, state=None, limit=10)` — 맞은 자리(`matched`) · 한 줄 발췌 ·
     마지막 `decide` · `change` 줄을 같이 낸다 (`API.md` 의 `ThreadHit`)
-  - `get_thread(project_id, thread_id)` — 안건 + 후보 + 이력 전부(`seq` 순) + 연결된 작업 key · 제목
-  - `search_tasks(project_id, query, status=None, limit=10)` — 제목 · 본문 줄
-  - `get_task(project_id, task_id)` — 작업 + 본문 + 연결된 안건 제목 · 상태
-- [ ] `GET /api/projects/{projectId}/search` — `search_threads` · `search_tasks` 를 묶어 연다 (`SearchResult`)
-- [ ] 테스트 — 시드로 "OS" · "운영체제" 중 하나는 걸리는지, 다른 프로젝트 것이 안 섞이는지, 빈 결과가 `[]` 인지.
-      sqlite 에 `pg_trgm` 이 없는 문제는 Q27
+  - `get_thread(session, project_id, thread_id)` → `ThreadDoc` — 안건(후보 포함) + 이력 전부(`seq` 순) + 연결된 작업
+  - `search_tasks(session, project_id, query, status=None, limit=10)` — 제목 · 본문 줄
+  - `get_task(session, project_id, task_id)` → `TaskDoc` — 작업(본문 포함) + 연결된 안건 제목 · 상태
+  - get_thread · get_task 는 HTTP 로 열지 않았다(7-2 도구 전용). 다른 프로젝트의 id 면 `THREAD_NOT_FOUND` ·
+    `TASK_NOT_FOUND` 를 던진다 — 7-2 의 도구 감싸개가 받아 Claude 에 '못 찾았다' 로 넘긴다
+- [x] `GET /api/projects/{projectId}/search` — `search_threads` · `search_tasks` 를 묶어 연다 (`SearchResult`)
+- [x] 테스트 `tests/test_search.py` — sqlite 에서 도는 것(404 · 422 · get_thread · get_task · 발췌)과
+      Postgres 에서만 도는 것(실제로 찾기 · 프로젝트 경계 · 빈 결과 · 바뀐 결정 · 도구의 state/status 거르기)으로 나눴다 (Q27)
+
+**검색 방식** — 점수는 `GREATEST(word_similarity(q, 글), 글 ILIKE '%q%' 이면 0.9)`, **0.5 미만은 버린다.**
+거르는 조건은 `q <% 글 OR 글 ILIKE '%q%'` 라 GIN 인덱스를 탄다(`EXPLAIN` 으로 BitmapOr 확인).
+`<%` 의 문턱은 서버 설정이라 검색마다 `set_config('pg_trgm.word_similarity_threshold', '0.5', true)` 로
+그 트랜잭션에만 박는다. 한 레코드가 여러 자리에서 맞으면 점수 → 자리(제목 · 배경 · 후보 · 이력) → 자리 안 순서로 하나만 남긴다.
+
+**실제로 해 보고 알게 된 것**
+
+- `similarity()` 는 글 전체와 비교해 짧은 검색어가 긴 글에서 다 묻힌다('OS' ↔ '서버 OS 결정' 0.33).
+  `word_similarity()` 는 글 안의 가장 비슷한 조각과 비교해 1.0 이다
+- 한국어는 조사가 붙는다 — '미룸' ↔ '두 번째 미룸이다' 의 낱말 유사도는 0.67 이다. 그래서 '그대로 들어 있으면 0.9'
+  를 같이 둔다. 1 이 아니라 0.9 라 낱말째 맞은 것이 앞에 선다
+- en_US.utf8 로케일의 Postgres 17 에서 한글도 낱말로 쪼개진다(`show_trgm` 으로 확인)
+- 리비전은 **개발 DB(`innoflow`)에 올리지 않았다** — 같은 컨테이너를 다른 worktree 도 쓴다. 따로 만든 DB 에
+  `upgrade head` → `alembic check`("No new upgrade operations") → `downgrade -1` → 다시 `upgrade head` 로 확인하고 지웠다.
+  개발 DB 는 사람이 `uv run alembic upgrade head` 로 올린다
 
 ### 7-2 채팅
 
@@ -266,7 +287,10 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
     못 찾으면 지어내지 않기, 근거는 `[[thread:ID]]` · `[[task:ID]]` 로
   - 스트리밍(`messages.stream`)으로 받아 글자 조각을 바로 `delta` 로 흘린다. 도구를 부를 때마다 `tool` 이벤트
   - 루프 상한 **6회**, `max_tokens` 상한, 상한에 닿으면 그때까지 찾은 것으로 마무리하게 한다
-  - `stop_reason == "refusal"` 이면 `error` 이벤트로 접는다
+  - `stop_reason == "refusal"` 이면 `error` 이벤트로 접는다. 거절에 대비해 서버 쪽 대체 모델(`fallbacks: "default"` ·
+    베타 `server-side-fallback-2026-07-01`)을 켠다 — 쓰는 법은 `claude-api` 스킬에서 확인한다
+  - Sonnet 5.5 는 `thinking` 을 끌 수 없고(`disabled` 는 400) 강제 도구 호출(`tool_choice` `any`/`tool`)도 400 이다 —
+    `tool_choice` 는 `auto` 로 두고 프롬프트로 도구를 쓰게 한다
 - [ ] `app/api/chat.py` — `StreamingResponse(media_type="text/event-stream")`. 스트림 전 실패는 JSON, 뒤 실패는 `error` 이벤트
 - [ ] 제한 — 요청 크기(메시지 20개 · 2,000자), IP 당 분당 횟수(메모리 카운터로 충분하다 — 인증이 생기면 사람 기준으로)
 - [ ] 테스트 — **Claude 를 부르지 않는다.** 가짜 클라이언트로 ① 도구를 부르고 → 답하는 루프 ② SSE 이벤트 순서 · 모양
@@ -307,7 +331,7 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 | 4 프론트 붙이기 | 시작 전 |
 | 5 집계를 서버로 | 시작 전 |
 | 6 품질과 운영 | 시작 전 |
-| 7 AI 챗봇 | 계약 초안 (2026-10-11) — `API.md` '## AI 챗봇' · Q25 ~ Q28 |
+| 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `API.md` '## AI 챗봇' · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). 다음은 7-2 채팅 |
 
 ## 아직 안 정한 것
 

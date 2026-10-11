@@ -85,7 +85,7 @@ Vue 3 + TypeScript + Vite + Tailwind v4 + shadcn-vue(new-york · neutral) + Pini
 
 - 위젯(`components/app/ChatWidget.vue`)은 `App.vue` 에 **한 번만** 둔다. 화면마다 넣지 않는다
 - 스트림은 `src/api/chat.ts` 하나가 읽는다. `EventSource` 는 GET 만 돼서 못 쓴다 — `fetch` + `ReadableStream`
-- 대화는 `stores/chat.ts` 의 메모리에만 둔다. 프로젝트를 바꾸면 받는 중인 요청을 끊고 비운다
+- 대화는 `stores/chat.ts` 의 메모리에만 둔다. **창을 닫거나** 프로젝트를 바꾸면 받는 중인 요청을 끊고 비운다 (`API.md` Q26)
 - 답 본문은 **`v-html` 로 그리지 않는다** — AI 가 낸 글이다. `[[thread:ID]]` · `[[task:ID]]` 는 `lib/chat.ts` 가 쪼개
   칩으로 바꾸고, **스냅샷에 없는 id 는 그리지 않는다**
 - API 키 · 모델 이름은 화면에 없다. 서버만 안다

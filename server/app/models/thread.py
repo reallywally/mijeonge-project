@@ -16,7 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, new_id
+from app.models.base import Base, new_id, trgm_index
 
 # 상태는 셋뿐이다. '미룸'은 상태가 아니라 kind='defer' 인 Entry 다
 THREAD_STATES = ("queued", "open", "decided")
@@ -33,6 +33,8 @@ class Thread(Base):
         ForeignKeyConstraint(
             ["parent_thread_id", "project_id"], ["thread.id", "thread.project_id"]
         ),
+        trgm_index("thread", "title"),
+        trgm_index("thread", "description"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -63,6 +65,7 @@ class ThreadOption(Base):
     """후보 선택지 한 줄. 프론트는 string[] 이라 순서가 뜻을 갖는다."""
 
     __tablename__ = "thread_option"
+    __table_args__ = (trgm_index("thread_option", "text"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     thread_id: Mapped[str] = mapped_column(ForeignKey("thread.id", ondelete="CASCADE"))
@@ -79,6 +82,8 @@ class Entry(Base):
     __table_args__ = (
         CheckConstraint(f"kind in {ENTRY_KINDS}", name="kind"),
         Index("ix_entry_thread_id_created_at", "thread_id", "created_at"),
+        trgm_index("entry", "text"),
+        trgm_index("entry", "note"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -105,6 +110,7 @@ class EntryDetail(Base):
     """결정 안에 함께 적힌 조건별 상세 줄. 프론트는 배열이라 순서가 뜻을 갖는다."""
 
     __tablename__ = "entry_detail"
+    __table_args__ = (trgm_index("entry_detail", "text"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     entry_id: Mapped[str] = mapped_column(ForeignKey("entry.id", ondelete="CASCADE"))

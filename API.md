@@ -57,7 +57,7 @@
 | 400 | `TASK_THREAD_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
 
-챗봇의 `code` 는 아래와 같다 (초안). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
+챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
 열린 **뒤**의 실패는 `error` 이벤트에 같은 모양(`{ code, message }`)으로 실린다.
 
 | 상태 | `code` | 언제 |
@@ -98,8 +98,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 아래 '
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/projects/{projectId}/search?q=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다 | `SearchResult` | 초안 |
-| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 초안 |
+| GET | `/api/projects/{projectId}/search?q=&limit=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다. 빈 `q` 는 422, `limit` 은 1 ~ 50 (아래 '검색' 절) | `SearchResult` | 구현 |
+| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 합의 |
 
 ## 응답 스키마 — `ProjectSnapshot`
 
@@ -289,7 +289,7 @@ export interface ProjectInput {
 DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀스는 트랜잭션이 되돌아가도 번호가 안 돌아와
 구멍이 더 난다. `next_task_no` 는 롤백되면 번호도 같이 돌아온다.
 
-## AI 챗봇 — 초안 (2026-10-11)
+## AI 챗봇 — 합의 (2026-10-11)
 
 오른쪽 아래 팝업에서 "서버 OS 뭐로 하기로 했지?" 같은 질문에 **저장된 안건 · 이력 · 작업을 찾아** 답한다.
 서버가 Claude 에게 검색 도구를 쥐여 주고, Claude 가 검색어를 바꿔 가며 찾고 읽은 뒤 답한다.
@@ -300,7 +300,7 @@ DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀
 ```ts
 /** POST /api/projects/{projectId}/chat */
 export interface ChatInput {
-  /** 오래된 것 → 새 것. 마지막은 늘 user 다. 서버는 대화를 저장하지 않는다 (Q26) */
+  /** 오래된 것 → 새 것. 마지막은 늘 user 다. 서버는 대화를 저장하지 않고, 화면은 창을 닫으면 비운다 (Q26) */
   messages: ChatMessage[]
 }
 
@@ -350,7 +350,7 @@ export interface ChatRef {
 - 찾지 못하면 **지어내지 않고** 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
 - 경로의 `projectId` 밖은 찾지 않는다 (Q13 · Q16 과 같은 경계)
 
-### 검색 — `SearchResult`
+### 검색 — `SearchResult` — 구현 (2026-10-11)
 
 `GET /api/projects/{projectId}/search?q=<검색어>&limit=<기본 10>`. 챗봇의 `search_threads` · `search_tasks`
 도구가 부르는 서비스 함수를 그대로 연 것이다. 글자 일부만 맞아도 찾는다(trigram 유사도).
@@ -384,6 +384,52 @@ export interface TaskHit {
 
 - 점수가 높은 순. 같은 점수면 `seq` 오름차순 — 같은 데이터면 늘 같은 순서다
 - 빈 결과는 `{ threads: [], tasks: [] }` 이고 404 가 아니다
+
+계약이 비워 둔 자리는 구현하며 이렇게 정했다 (2026-10-11 · 서버). 화면이 아직 안 부르는 엔드포인트라
+지금 고르고, 화면이 부르게 되어 불편하면 새 Q 로 다시 연다.
+
+- **빈 `q` 는 422 `VALIDATION_ERROR`** 다 — 앞뒤 공백을 떼고 비면(`q=` · `q=%20`) `detail.q` 에
+  '검색어를 입력해 주세요.' 가 실린다. `q` 를 아예 빼도 422 다. 빈 검색어로 '전부' 를 내지 않는다 —
+  목록은 스냅샷이 이미 준다. `q` 는 200자까지(넘으면 422)
+- **`limit` 은 1 ~ 50, 기본 10.** `threads` · `tasks` 에 **따로** 걸린다(둘을 합쳐 자르지 않는다)
+- 없는 `projectId` 는 404 `PROJECT_NOT_FOUND` — 스냅샷과 같다
+- 한 안건 · 작업은 **한 번만** 나온다. 여러 자리가 맞으면 점수가 가장 높은 자리가 `matched` 고,
+  같은 점수면 제목 → 배경 → 후보 → 이력(작업은 제목 → 본문) 순으로 고른다
+- `matched: 'entry'` 는 이력 줄의 `text` · `note` · `detail` 중 하나가 맞은 것이고, `snippet` 은 **맞은 그 글**이다.
+  `snippet` 은 줄바꿈을 공백으로 편 한 줄이고, 80자가 넘으면 맞은 자리 둘레 80자를 잘라 앞뒤에 `…` 를 붙인다
+- 점수는 `pg_trgm` 의 `word_similarity(q, 글)` 이다. 검색어가 글 안에 그대로 들어 있으면(대소문자 무시)
+  최소 0.9 로 올린다 — 한국어는 조사가 붙어(`미룸이다`) 낱말 유사도만으로는 0.67 에 그친다.
+  **0.5 미만은 안 낸다.** 점수 자체는 응답에 싣지 않는다
+
+### 프론트 검토 (2026-10-11)
+
+초안을 `web/src/types/domain.ts` · `src/api/client.ts` · `stores/thread.ts` · `stores/task.ts` · `App.vue` 와
+맞춰 봤다. **계약을 고칠 자리는 없다** — 두 엔드포인트 모두 `합의` 로 올린다. 아래는 프론트가 계약을 어떻게
+읽고 쓰는지다. 서버가 보기에 틀린 해석이 있으면 새 Q 로 다시 연다.
+
+- **타입** — `ThreadHit.state` 는 `ThreadState`, `TaskHit.status` 는 `TaskStatus` 그대로라 새 이름이 없다.
+  id 는 전부 스냅샷의 문자열 id 다. `domain.ts` 에는 화면이 쓰는 넷(`ChatInput` · `ChatMessage` · `ChatEvent` ·
+  `ChatRef`)만 계약 모양 그대로 옮긴다(`web/PLAN.md` 7-2). `SearchResult` · `ThreadHit` · `TaskHit` 는 화면이
+  아직 안 부르므로 부르는 화면이 생길 때 옮긴다
+- **스트림 전 오류** — 본문이 `ApiErrorBody` 그대로라 `request` 와 같은 판정(`isErrorBody` → `ApiError`,
+  모양이 아닌 5xx → `SERVER_UNREACHABLE`)을 `src/api/chat.ts` 가 그대로 쓴다. 429 · 503 도 `code` 로 가른다
+- **스트림 중 오류** — `error` 이벤트의 `{ code, message }` 를 `new ApiError(res.status, { code, message })` 로
+  감싸 던진다. 이때 `status` 는 200 이라 화면은 **`status` 가 아니라 `code` 로만** 가른다
+- **이벤트 종류** — 프론트는 **`event:` 줄을 `type` 으로 읽는다.** `data` JSON 에 `type` 이 같이 있어도 되고
+  없어도 된다. `:` 로 시작하는 줄(keep-alive)과 모르는 `event` 는 건너뛴다. `tool` 은 `label` 만 띄우고
+  `name` 으로 가르지 않는다 — 도구가 늘어도 화면이 안 깨진다
+- **`done` 도 `error` 도 없이 끝난 스트림**은 끊긴 것으로 보고 `SERVER_UNREACHABLE` 로 다룬다
+- **보내는 대화** — `done` 으로 끝난 턴만 다음 `messages` 에 싣는다. 실패했거나 멈춘 턴은 user · assistant 둘 다
+  뺀다 — 빈 assistant(422)와 user 가 둘 잇따르는 일이 생기지 않는다. 20개를 넘으면 오래된 것부터 버리고
+  **첫 줄이 user 가 되게** 자른다
+- **근거 칩** — 안건 칩(제목 + `ThreadStateBadge`, 미룬 횟수 포함)과 작업 칩(`key` + 제목)에 필요한 것은
+  전부 스냅샷에 있다 — `thread` · `task` 스토어에서 id 로 찾는다. 스냅샷에 없는 id(지어낸 id, 그리고 스냅샷을
+  받은 뒤 다른 사람이 만든 것)는 안 그린다. 칩의 상태는 **화면이 들고 있는 스냅샷 기준**이다.
+  받는 중에 아직 닫히지 않은 `[[…` 꼬리는 글로 내보이지 않고 닫힐 때까지 미룬다
+- `done.refs` 는 본문에서 다시 뽑을 수 있어 화면이 꼭 기대지는 않는다 — 본문 파싱(`lib/chat.ts`)이 기준이다
+- **전제** — 이 합의는 Q26 의 초안(대화를 서버에 안 남긴다)을 깔고 있다. Q26 이 '남긴다' 로 닫히면
+  `ChatInput` 이 바뀌므로 `POST .../chat` 은 `초안` 으로 되돌린다. Q25 · Q27 은 화면에 닿지 않는다
+  → **Q26 은 '안 남긴다 · 창을 닫으면 끝' 으로 닫혔다(2026-10-11). 합의는 그대로 선다**
 
 ## 열린 질문
 
@@ -426,15 +472,18 @@ export interface TaskHit {
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |
-| Q25 | 사용자 | 챗봇 모델을 무엇으로 하나. **Claude Opus 5.5**(`claude-opus-5-5` · 정확도 우선)와 **Claude Sonnet 5.5**(`claude-sonnet-5-5` · 비용 절반) 중. 정하기 전까지는 Opus 5.5 · effort `low` 로 두고 `config.py` 의 설정 하나로 바꿀 수 있게 만든다 | | 열림 |
-| Q26 | 사용자 | 대화를 서버에 남길지. 초안은 **안 남긴다** — 화면이 지난 질문 · 답을 `messages` 로 같이 보낸다. 로그인이 없어 남겨도 누구 것인지 못 가린다. 새로고침해도 남아야 하면 `chat_session` · `chat_message` 테이블과 엔드포인트가 늘어난다 | | 열림 |
-| Q27 | 서버 | 검색 테스트를 어디서 돌리나. 지금 테스트는 메모리 sqlite 라 `pg_trgm` 이 없다. ① 검색 테스트만 Postgres 컨테이너에서 돌린다(없으면 건너뜀) ② sqlite 에서는 `LIKE` 로 대신하는 갈래를 서비스에 둔다. ②는 운영과 다른 코드가 테스트되는 것이라 ①로 기운다 | | 열림 |
-| Q28 | 프론트 | 오른쪽 아래 자리가 겹친다. `App.vue` 의 `<Toaster position="bottom-right" />` 와 챗봇 버튼이 같은 자리다. 토스트를 `top-right` 로 옮길지, 위젯 높이만큼 띄울지 | | 열림 |
+| Q25 | 사용자 | 챗봇 모델을 무엇으로 하나. **Claude Opus 5.5**(`claude-opus-5-5` · 정확도 우선)와 **Claude Sonnet 5.5**(`claude-sonnet-5-5` · 비용 절반) 중. 정하기 전까지는 Opus 5.5 · effort `low` 로 두고 `config.py` 의 설정 하나로 바꿀 수 있게 만든다 | **Claude Sonnet 5.5(`claude-sonnet-5-5`) 로 시작한다.** 찾아서 요약하는 일이라 Sonnet 으로 충분하고 비용이 Opus 의 절반이다. effort 는 `low` 부터 — Sonnet 5.5 는 기본값이 `high` 라 **명시해야 한다**. 7-3 평가셋에서 놓치는 게 많으면 effort 를 올리거나 Opus 로 바꾼다 — `config.py` 의 `chat_model` · `chat_effort` 만 바뀌고 계약은 그대로다 | 닫힘 |
+| Q26 | 사용자 | 대화를 서버에 남길지. 초안은 **안 남긴다** — 화면이 지난 질문 · 답을 `messages` 로 같이 보낸다. 로그인이 없어 남겨도 누구 것인지 못 가린다. 새로고침해도 남아야 하면 `chat_session` · `chat_message` 테이블과 엔드포인트가 늘어난다 | **서버에 안 남긴다. 화면에서도 챗봇 창을 닫으면 대화가 끝난다.** 창을 닫으면 받는 중인 요청을 끊고 메시지를 비운다 — 다시 열면 빈 대화다. 새로고침 · 프로젝트 전환도 같다. 초안 그대로라 `ChatInput` 은 안 바뀌고 `POST .../chat` 은 `합의` 그대로다 | 닫힘 |
+| Q27 | 서버 | 검색 테스트를 어디서 돌리나. 지금 테스트는 메모리 sqlite 라 `pg_trgm` 이 없다. ① 검색 테스트만 Postgres 컨테이너에서 돌린다(없으면 건너뜀) ② sqlite 에서는 `LIKE` 로 대신하는 갈래를 서비스에 둔다. ②는 운영과 다른 코드가 테스트되는 것이라 ①로 기운다 | **① 로 간다 — 검색 테스트만 진짜 Postgres 에서 돌리고, 닿지 않으면 건너뛴다.** 서비스에 sqlite 갈래(`LIKE`)를 두지 않는다 — 그러면 검사가 통과해도 운영 코드(`word_similarity` · `<%` · 문턱 설정)는 한 줄도 안 돈 것이다. 나눈 기준은 'trigram 을 타는가' 다. `tests/test_search.py` 에서 404 · 422 · `get_thread` · `get_task` · 발췌는 메모리 sqlite 로 늘 돌고, 실제로 찾는 열한 개만 `pg_session` · `pg_client` 를 쓴다(`tests/conftest.py`). 접속은 `TEST_DATABASE_URL`, 없으면 `innoflow-db` 컨테이너의 **`innoflow_pytest`** DB 다 — 개발 DB(`innoflow`)와 갈라 둔 것은 테스트가 스키마를 통째로 지우고 시드를 다시 넣기 때문이다. DB 가 없으면 만들고, 서버에 2초 안에 닿지 않으면 `pytest.skip` 이다. 그래서 **검사 넷은 DB 없이도 통과한다**(컨테이너 없이 116 통과 · 11 건너뜀, 있으면 127 통과). 테이블은 리비전이 아니라 모델로 세운다 — 인덱스까지 모델에 있고, 리비전과 모델의 일치는 `test_schema` 가 본다 | 닫힘 |
+| Q28 | 프론트 | 오른쪽 아래 자리가 겹친다. `App.vue` 의 `<Toaster position="bottom-right" />` 와 챗봇 버튼이 같은 자리다. 토스트를 `top-right` 로 옮길지, 위젯 높이만큼 띄울지 | **`top-right` 로 옮긴다.** 열린 패널(약 400×600)이 오른쪽 아래를 통째로 덮어서 위젯 높이만큼 띄우려면 열림 · 닫힘에 따라 `offset` 을 바꿔야 하고 낮은 화면에서는 띄울 자리도 없다 — 토스트는 쓰기 실패 알림(`lib/notify.ts`)뿐이라 위로 가도 잃는 것이 없고, 챗봇 오류는 토스트가 아니라 패널 안의 그 답 줄에 단다. 고치는 일은 `web/PLAN.md` 7-1 | 닫힘 |
 
 ## 결정 로그
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-10-11 | **`GET /api/projects/{projectId}/search` 를 `구현` 으로 올렸다**(채팅은 `합의` 그대로). 리비전 `0006_search_trgm` — `pg_trgm` + GIN 인덱스 여덟. 점수는 `word_similarity`, 검색어가 그대로 들어 있으면 0.9, 0.5 미만은 버린다. 빈 `q` 는 422 · `limit` 1 ~ 50 · 한 레코드는 한 번만 — '검색' 절에 적었다. Q27 닫힘 — 검색 테스트는 Postgres 가 있을 때만 돈다 | 기본 전문검색은 한국어를 못 쪼개고, `similarity()` 는 짧은 검색어를 긴 글에서 묻는다('OS' ↔ '서버 OS 결정' 0.33 → `word_similarity` 1.0). 한국어 조사('미룸이다') 때문에 그대로 들어 있는 경우를 따로 올린다. sqlite 대역 갈래를 두면 운영 코드가 검사되지 않는다 |
+| 2026-10-11 | 챗봇 모델은 **Claude Sonnet 5.5 · effort `low`** 로 시작한다 (Q25). 대화는 **서버에 안 남기고 창을 닫으면 끝난다** (Q26) | 찾아서 요약하는 일이라 Sonnet 으로 충분하다. 모델은 설정 하나로 바꾼다. 로그인이 없어 대화를 남겨도 누구 것인지 못 가린다 — 계약은 그대로다 |
+| 2026-10-11 | **AI 챗봇 계약을 `합의` 로 올렸다** — `GET .../search` · `POST .../chat` 둘 다. 프론트 검토는 '## AI 챗봇' 의 '프론트 검토 (2026-10-11)'. Q28 닫힘 — 토스트를 `top-right` 로 옮긴다 | 타입이 `domain.ts` 와 어긋나지 않고, 스트림 전 · 중 오류가 둘 다 `ApiError` 한 모양으로 모이며, 칩에 필요한 것은 스냅샷에 다 있다. Q26 이 '남긴다' 로 닫히면 `POST .../chat` 은 다시 `초안` 이다 |
 | 2026-10-11 | **AI 챗봇 계약 초안**을 올렸다 — `POST .../chat`(SSE) · `GET .../search` · 근거 표시 `[[kind:id]]` · 오류 코드 둘. 열린 질문 Q25 ~ Q28 | 계획은 `server/PLAN.md` 7단계 · `web/PLAN.md` 7단계. 계약을 먼저 세우고 양쪽이 동시에 만든다 |
 | 2026-10-11 | 작업 본문을 `PATCH /api/tasks/{taskId}` 의 `body` 로 통째로 바꾼다. 줄 id 는 보내면 유지한다. 화면을 목업에서 실제 API 로 연결한다 — 개발 기본은 서버, `VITE_USE_MOCK=true` 면 목업, Vite 가 `/api` 를 `localhost:8000` 으로 넘긴다 | 화면에서 고친 게 새로고침하면 사라졌다(목업 메모리). 본문 편집만 짝이 되는 API 가 없었다. 줄 id 가 저장할 때마다 바뀌면 줄마다 편집하는 중에 포커스가 튄다 |
 | 2026-10-11 | **회의(Meeting)를 걷어냈다.** 테이블 넷(`meeting` · `meeting_attendee` · `meeting_memo` · `meeting_task_link`)과 `entry.meeting_id`, 회의 API 셋, 스냅샷의 `meetings` · `meetingTaskLinks`, `Entry.meetingId` 가 빠졌다. 이력은 `POST /api/threads/{threadId}/entries` 로만 남고, 이력의 날짜는 `createdAt` 의 KST 날짜다. 안건 수정 `PATCH /api/threads/{threadId}` 를 더했다 | 사용자 결정 — 회의를 관리하는 건 '일을 위한 일' 이다. 이 제품의 목적은 결정이 미뤄지는 걸 막고 기록을 잘 남기는 것이고, 그건 안건과 그 이력이 맡는다. 회의와 안건이 비슷한 개념으로 겹쳐 무엇을 어디에 적을지 헷갈렸다. 아래 Q 들에 남은 회의 이야기는 그때의 기록이다 |

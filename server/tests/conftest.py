@@ -1,17 +1,20 @@
 """테스트용 DB.
 
-Postgres 없이 도는 것만 여기에 둔다 — 메모리 sqlite 에 모델 메타데이터로 테이블을 세운다.
-Postgres 고유 동작(트랜잭션 격리 · 동시성 · 실제 타입)이 필요해지면 그때 컨테이너를 물린다.
+기본은 메모리 sqlite 다 — 모델 메타데이터로 테이블을 세운다. 검사 넷은 DB 없이 돈다.
+Postgres 고유 동작이 필요한 검사(지금은 `pg_trgm` 검색 · API.md Q27)만 `pg_session` · `pg_client` 를
+쓴다. 로컬 Postgres(`docker compose up -d db`)가 없으면 그 검사는 건너뛴다.
 """
 
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
 import httpx
 import pytest
 from httpx import ASGITransport
-from sqlalchemy import event, func, select
-from sqlalchemy.engine import Engine
+from sqlalchemy import event, func, select, text
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
@@ -72,11 +75,7 @@ async def session() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 
-@pytest.fixture
-async def client(session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
-    """시드가 들어간 DB 를 물린 앱. 서버를 띄우지 않고 ASGI 에 직접 붙는다."""
-    await seed(session)
-
+async def _app_on(session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
     async def use_test_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
@@ -85,3 +84,66 @@ async def client(session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, Non
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def client(session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """시드가 들어간 DB 를 물린 앱. 서버를 띄우지 않고 ASGI 에 직접 붙는다."""
+    await seed(session)
+    async for c in _app_on(session):
+        yield c
+
+
+# 개발 DB(innoflow)와 따로 둔다 — 테스트가 스키마를 통째로 지우고 다시 세운다
+PG_TEST_URL = make_url(
+    os.environ.get(
+        "TEST_DATABASE_URL", "postgresql+asyncpg://innoflow:innoflow@localhost:5432/innoflow_pytest"
+    )
+)
+
+
+async def _ensure_pg_database() -> None:
+    """테스트 DB 가 없으면 만든다. 서버에 닿지 않으면 건너뛴다 — 띄우는 것은 사람 몫이다."""
+    admin = create_async_engine(
+        PG_TEST_URL.set(database="postgres"),
+        isolation_level="AUTOCOMMIT",
+        connect_args={"timeout": 2},
+    )
+    try:
+        async with admin.connect() as conn:
+            exists = await conn.scalar(
+                text("select 1 from pg_database where datname = :name"),
+                {"name": PG_TEST_URL.database},
+            )
+            if not exists:
+                await conn.execute(text(f'create database "{PG_TEST_URL.database}"'))
+    except (OSError, SQLAlchemyError) as exc:
+        pytest.skip(
+            f"Postgres 에 닿지 않아 건너뛴다 ({PG_TEST_URL.host}:{PG_TEST_URL.port}): {exc}"
+        )
+    finally:
+        await admin.dispose()
+
+
+@pytest.fixture
+async def pg_session() -> AsyncGenerator[AsyncSession, None]:
+    """진짜 Postgres 위의 시드. 마이그레이션 대신 모델로 세운다 — 리비전은 test_schema 가 본다."""
+    await _ensure_pg_database()
+    engine = create_async_engine(PG_TEST_URL)
+    async with engine.begin() as conn:
+        await conn.execute(text("drop schema if exists public cascade"))
+        await conn.execute(text("create schema public"))
+        # 0006 리비전과 같다 — 인덱스의 gin_trgm_ops 가 확장에 있다
+        await conn.execute(text("create extension if not exists pg_trgm"))
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as s:
+        await seed(s)
+        yield s
+    await engine.dispose()
+
+
+@pytest.fixture
+async def pg_client(pg_session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
+    async for c in _app_on(pg_session):
+        yield c
