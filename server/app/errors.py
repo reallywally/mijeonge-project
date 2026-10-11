@@ -58,6 +58,8 @@ _REASONS = {
     "date_parsing": "날짜 형식이 올바르지 않습니다.",
     "date_from_datetime_parsing": "날짜 형식이 올바르지 않습니다.",
     "literal_error": "고를 수 있는 값이 아닙니다.",
+    "too_short": "비어 있습니다.",
+    "too_long": "너무 많습니다.",
 }
 
 _HTTP_CODES = {
