@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
 import { ApiError, messageOf } from '@/api'
-import { toChatMessages } from '@/lib/chat'
+import { chatErrorText, toChatMessages } from '@/lib/chat'
 import { useDataStore } from '@/stores/data'
 import type { ChatLine } from '@/types/domain'
 
@@ -62,7 +62,7 @@ export const useChatStore = defineStore('chat', () => {
         e instanceof ApiError ? e : new ApiError(0, { code: 'UNKNOWN', message: messageOf(e) })
       answer.status = 'error'
       answer.tool = ''
-      answer.error = error.message
+      answer.error = chatErrorText(error)
       lastError.value = error
       return false
     } finally {

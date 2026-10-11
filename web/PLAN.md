@@ -286,7 +286,7 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 - [x] 빈 대화일 때 예시 질문 버튼 셋 ("서버 OS 뭐로 정했지?" · "아직 안 정해진 안건 뭐 있어?" · "막힌 작업 알려줘")
 - [x] 입력 — `Textarea`, `Enter` 보내기 · `Shift+Enter` 줄바꿈, 받는 중에는 보내기 막고 **멈추기** 버튼(`AbortController`)
 - [x] `VITE_USE_MOCK` 일 때는 `src/api/chat.ts` 가 가짜 스트림을 흘린다 — 서버 없이 화면을 만들고 테스트한다
-      — 서버 모드에서는 7-2 전까지 `CHAT_UNAVAILABLE` "아직 서버에 붙지 않았습니다" 를 그 답 줄에 단다
+      — ~~서버 모드에서는 7-2 전까지 `CHAT_UNAVAILABLE` "아직 서버에 붙지 않았습니다" 를 그 답 줄에 단다~~ 7-2 에서 지움
 
 7-1 에서 같이 세운 것 (2026-10-11) — 7-2 가 갈아 끼울 자리:
 `types/domain.ts` 의 `ChatMessage` · `ChatInput` · `ChatEvent` · `ChatRef`(계약 그대로) · `ChatLine`(화면 전용),
@@ -296,12 +296,20 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 
 ### 7-2 서버에 붙이기 (계약 `합의` 뒤)
 
-- [ ] `src/api/chat.ts` — `streamChat(projectId, messages, signal)` 이 `ChatEvent` 를 하나씩 내는 async iterator.
+- [x] `src/api/chat.ts` — `streamChat(projectId, messages, signal)` 이 `ChatEvent` 를 하나씩 내는 async iterator.
       스트림 전 실패는 `client.ts` 와 같이 `ApiError`, 스트림 중 `error` 이벤트도 `ApiError` 로 던진다
-- [ ] `types/domain.ts` 에 `ChatMessage` · `ChatInput` · `ChatEvent` · `ChatRef` (계약 그대로)
-- [ ] `stores/chat.ts` — `ask(text)`: user 줄을 넣고 → 빈 assistant 줄에 `delta` 를 이어 붙이고 →
+- [x] `types/domain.ts` 에 `ChatMessage` · `ChatInput` · `ChatEvent` · `ChatRef` (계약 그대로) — 7-1 에서 세움
+- [x] `stores/chat.ts` — `ask(text)`: user 줄을 넣고 → 빈 assistant 줄에 `delta` 를 이어 붙이고 →
       `tool` 이면 "‘OS’ 안건 찾는 중…" 한 줄 → `done` 에서 끝. 실패하면 그 줄에 오류를 달고 다시 묻기 버튼
-- [ ] **창을 닫거나** 프로젝트를 바꾸면 받는 중인 요청을 끊고 대화를 비운다 (Q26)
+- [x] **창을 닫거나** 프로젝트를 바꾸면 받는 중인 요청을 끊고 대화를 비운다 (Q26) — 서버 갈래에서도
+      `fetch` 의 signal 을 끊고 본문 reader 를 닫는다(테스트로 확인)
+
+7-2 에서 세운 것 (2026-10-11): `api/chat.ts` 의 `parseSse`(바이트 조각 → SSE 덩어리. 조각 경계 · 한글 바이트 ·
+`\r\n` · `\r` · `:` 줄 · 여러 줄 data) · `toChatEvent`(`event:` 줄이 type, 모르는 event 는 건너뜀, 모양이 아니면
+`SERVER_UNREACHABLE`) · 서버 갈래(`client.ts` 에서 뺀 `errorOf` 로 열리기 전 실패 판정). 오류 문구는
+`lib/chat.ts` 의 `chatErrorText` — 챗봇 code 는 서버 `message` 를 그대로, `VALIDATION_ERROR` 는 무엇이 길었는지,
+`SERVER_UNREACHABLE` 은 열리기 전(닿지 못함)과 받는 중(끊김)을 갈라 말한다. 테스트는 `api/chat.server.test.ts` ·
+`stores/chat.test.ts` 의 '서버 갈래' — `fetch` 를 가짜로 바꿔 돈다
 
 ### 7-3 근거 칩
 
@@ -328,7 +336,7 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 | 4 안건에 집중 | 회의 걷어냄 · 상세 = 수정 · 결정 입력 (2026-10-11) |
 | 5 프로젝트 | 시작 전 |
 | 6 품질 | 시작 전 |
-| 7 AI 챗봇 | 계약 **합의** (2026-10-11) · **7-1 껍데기(목업) 끝남** (2026-10-11) — `API.md` '## AI 챗봇' · Q25 · Q26 · Q28 닫힘 · Q27 열림 |
+| 7 AI 챗봇 | 계약 **합의** (2026-10-11) · **7-1 껍데기(목업) 끝남** · **7-2 서버 붙이기 끝남** (2026-10-11) — `API.md` '## AI 챗봇' · Q25 · Q26 · Q28 닫힘 · Q27 열림 |
 
 ## 아직 안 정한 것
 

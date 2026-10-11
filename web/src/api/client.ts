@@ -53,11 +53,16 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
     return (await res.json()) as T
   }
 
+  throw await errorOf(res)
+}
+
+/** 실패한 응답을 ApiError 로. 스트림(api/chat.ts)도 열리기 전 실패는 이걸 거친다 */
+export async function errorOf(res: Response): Promise<ApiError> {
   const payload: unknown = await res.json().catch(() => null)
-  if (isErrorBody(payload)) throw new ApiError(res.status, payload)
+  if (isErrorBody(payload)) return new ApiError(res.status, payload)
   /* 우리 서버는 500 도 계약 모양으로 낸다. 모양이 아닌 5xx 는 앞단(Vite 프록시)이 서버에 못 붙었다는 뜻이다 */
-  if (res.status >= 500) throw unreachable(res.status)
-  throw new ApiError(res.status, {
+  if (res.status >= 500) return unreachable(res.status)
+  return new ApiError(res.status, {
     code: `HTTP_${res.status}`,
     message: '요청을 처리하지 못했습니다.',
   })

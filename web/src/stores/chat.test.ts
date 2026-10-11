@@ -129,3 +129,144 @@ describe('챗봇 대화', () => {
     expect(chat.lines).toEqual([])
   })
 })
+
+describe('챗봇 대화 — 서버 갈래', () => {
+  const encoder = new TextEncoder()
+  const sse = (type: string, payload: object) =>
+    `event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`
+
+  /** 내보낼 조각을 손으로 밀어 넣는 가짜 서버. 끊기면 signal 과 cancel 로 알 수 있다 */
+  function server() {
+    let push: (text: string) => void = () => undefined
+    let close: () => void = () => undefined
+    const cancel = vi.fn()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        push = (text) => controller.enqueue(encoder.encode(text))
+        close = () => controller.close()
+      },
+      cancel,
+    })
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    return {
+      push: (text: string) => push(text),
+      close: () => close(),
+      cancel,
+      fetch,
+      signal: () => fetch.mock.calls[0][1]?.signal as AbortSignal,
+    }
+  }
+
+  const settle = () => new Promise((r) => setTimeout(r, 0))
+
+  beforeEach(() => {
+    vi.useRealTimers()
+    vi.stubEnv('VITE_USE_MOCK', 'false')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+  })
+
+  it('tool 이면 찾는 중 한 줄, delta 는 이어 붙이고, done 에서 끝난다', async () => {
+    const s = server()
+    const chat = useChatStore()
+    const done = chat.ask('서버 OS 뭐로 하기로 했지?')
+
+    s.push(sse('tool', { name: 'search_threads', label: '"OS" 안건 찾는 중' }))
+    await settle()
+    expect(chat.lines[1]).toMatchObject({ status: 'streaming', tool: '"OS" 안건 찾는 중' })
+
+    s.push(sse('delta', { text: '우분투로 ' }) + sse('delta', { text: '정했습니다.' }).slice(0, 9))
+    await settle()
+    expect(chat.lines[1]).toMatchObject({ text: '우분투로 ', tool: '' })
+
+    s.push(sse('delta', { text: '정했습니다.' }).slice(9) + sse('done', { refs: [] }))
+    await expect(done).resolves.toBe(true)
+    expect(chat.lines[1]).toMatchObject({ status: 'done', text: '우분투로 정했습니다.' })
+    expect(chat.receiving).toBe(false)
+  })
+
+  it('스트림 중 CHAT_REFUSED 는 서버 문구를 그 줄에 달고, 다시 묻기를 할 수 있다', async () => {
+    const s = server()
+    const chat = useChatStore()
+    const done = chat.ask('아무거나')
+    s.push(
+      sse('error', {
+        code: 'CHAT_REFUSED',
+        message: '이 질문에는 답할 수 없습니다. 질문을 바꿔 다시 물어 주세요.',
+      }),
+    )
+    await expect(done).resolves.toBe(false)
+    expect(chat.lines[1]).toMatchObject({
+      status: 'error',
+      error: '이 질문에는 답할 수 없습니다. 질문을 바꿔 다시 물어 주세요.',
+    })
+    expect(chat.lastError).toMatchObject({ status: 200, code: 'CHAT_REFUSED' })
+  })
+
+  it('done 없이 닫히면 끊겼다고 그 줄에 단다', async () => {
+    const s = server()
+    const chat = useChatStore()
+    const done = chat.ask('OS')
+    s.push(sse('delta', { text: '반쯤' }))
+    s.close()
+    await expect(done).resolves.toBe(false)
+    expect(chat.lines[1]).toMatchObject({
+      status: 'error',
+      text: '반쯤',
+      error: '답을 받다가 연결이 끊겼습니다. 다시 물어 주세요.',
+    })
+  })
+
+  it('창을 닫으면(reset) 받는 중인 요청을 끊고 비운다', async () => {
+    const s = server()
+    const chat = useChatStore()
+    const done = chat.ask('OS')
+    s.push(sse('delta', { text: '반쯤' }))
+    await settle()
+
+    chat.reset()
+    expect(s.signal().aborted).toBe(true)
+    await expect(done).resolves.toBe(false)
+    expect(s.cancel).toHaveBeenCalled()
+    expect(chat.lines).toEqual([])
+    expect(chat.lastError).toBeNull()
+  })
+
+  it('프로젝트를 바꾸면 받는 중인 요청을 끊고 비운다', async () => {
+    /* 프로젝트 목록은 목업으로 세워 두고 챗봇만 서버로 보낸다 — 스냅샷까지 가짜로 만들 일이 아니다 */
+    vi.stubEnv('VITE_USE_MOCK', 'true')
+    const data = useDataStore()
+    vi.stubEnv('VITE_USE_MOCK', 'false')
+    const s = server()
+    const chat = useChatStore()
+    const done = chat.ask('OS')
+    await settle()
+
+    data.setProject(data.allProjects[1].id)
+    await nextTick()
+    expect(s.signal().aborted).toBe(true)
+    await expect(done).resolves.toBe(false)
+    expect(chat.lines).toEqual([])
+  })
+
+  it('멈추면 끊고 받은 데까지 남긴다', async () => {
+    const s = server()
+    const chat = useChatStore()
+    const done = chat.ask('OS')
+    s.push(sse('delta', { text: '반쯤' }))
+    await settle()
+
+    chat.stop()
+    expect(s.signal().aborted).toBe(true)
+    await expect(done).resolves.toBe(false)
+    expect(chat.lines[1]).toMatchObject({ status: 'stopped', text: '반쯤' })
+    expect(chat.lastError).toBeNull()
+  })
+})

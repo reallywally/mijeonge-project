@@ -4,7 +4,7 @@ import { isAbort, settle, streamChat } from '@/api/chat'
 import { CHAT_MOCK_ERROR_KEYWORD, chatFallback, chatReplies } from '@/fixtures/chat'
 import type { ChatEvent } from '@/types/domain'
 
-/* 목업 스트림이 계약의 ChatEvent 모양 · 순서 그대로 흐르는지 본다 — 7-2 에서 서버 스트림으로 갈아 끼운다 */
+/* 목업 스트림이 계약의 ChatEvent 모양 · 순서 그대로 흐르는지 본다. 서버 갈래는 chat.server.test.ts */
 beforeEach(() => {
   vi.useFakeTimers()
 })
@@ -94,12 +94,6 @@ describe('목업 스트림', () => {
     expect(isAbort(error)).toBe(true)
     expect(events.filter((e) => e.type === 'delta')).toHaveLength(1)
     expect(vi.getTimerCount()).toBe(0)
-  })
-
-  it('서버 모드는 7-2 전까지 붙지 않았다는 오류다', async () => {
-    vi.stubEnv('VITE_USE_MOCK', 'false')
-    const { error } = await collect(streamChat('p1', ask('OS'), new AbortController().signal))
-    expect(error).toMatchObject({ code: 'CHAT_UNAVAILABLE' })
   })
 })
 
