@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_core import PydanticCustomError
 
 from app.schemas.base import Schema
@@ -8,6 +8,9 @@ from app.schemas.base import Schema
 # API.md '## AI 챗봇' — 화면이 들고 있는 대화 크기의 상한
 MESSAGES_MAX = 20
 TEXT_MAX = 2000
+# 답은 chat_max_tokens 만큼 길어지고 화면이 그대로 돌려보낸다
+# — 질문 상한을 걸면 긴 답 뒤로 다 막힌다
+ANSWER_MAX = 20000
 
 ToolName = Literal["search_threads", "get_thread", "search_tasks", "get_task"]
 
@@ -15,13 +18,16 @@ ToolName = Literal["search_threads", "get_thread", "search_tasks", "get_task"]
 class ChatMessage(Schema):
     role: Literal["user", "assistant"]
     # 화면에 보인 글 그대로 — 근거 표시([[thread:ID]])도 지우지 않고 돌아온다
-    text: str = Field(max_length=TEXT_MAX)
+    text: str
 
     @field_validator("text")
     @classmethod
-    def _not_blank(cls, value: str) -> str:
+    def _check_text(cls, value: str, info: ValidationInfo) -> str:
         if not value.strip():
             raise PydanticCustomError("blank_text", "내용을 입력해 주세요.")
+        limit = ANSWER_MAX if info.data.get("role") == "assistant" else TEXT_MAX
+        if len(value) > limit:
+            raise PydanticCustomError("string_too_long", "너무 깁니다.")
         return value
 
 

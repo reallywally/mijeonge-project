@@ -165,6 +165,7 @@ watch(
           ref="input"
           v-model="draft"
           rows="1"
+          maxlength="2000"
           aria-label="질문"
           placeholder="질문을 입력하세요"
           class="max-h-32 min-h-9 resize-none"

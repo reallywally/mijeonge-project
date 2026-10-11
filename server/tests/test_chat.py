@@ -366,6 +366,14 @@ async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:
         ([], "messages"),
         ([{"role": "user", "text": "질문"}] * 21, "messages"),
         ([{"role": "user", "text": "가" * 2001}], "text"),
+        (
+            [
+                {"role": "user", "text": "질문"},
+                {"role": "assistant", "text": "가" * 20001},
+                {"role": "user", "text": "질문"},
+            ],
+            "text",
+        ),
         ([{"role": "user", "text": "   "}], "text"),
         ([{"role": "user", "text": "질문"}, {"role": "assistant", "text": "답"}], "messages"),
         ([{"role": "system", "text": "질문"}], "role"),
@@ -391,6 +399,19 @@ async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
     res = await client.post(URL, json={"messages": messages})
     assert res.status_code == 200
     assert len(fake.calls[0]["messages"]) == 20
+
+
+async def test_long_answer_does_not_block_next_question(client: httpx.AsyncClient) -> None:
+    """답은 질문 상한(2,000자)을 넘을 수 있다 — 그대로 돌려보내도 다음 질문이 막히지 않는다."""
+    fake = FakeClient(Turn(texts=["답"]))
+    use(fake)
+    messages = [
+        {"role": "user", "text": "질문"},
+        {"role": "assistant", "text": "가" * 20000},
+        {"role": "user", "text": "다음 질문"},
+    ]
+    res = await client.post(URL, json={"messages": messages})
+    assert res.status_code == 200
 
 
 async def test_leading_assistant_is_dropped(session: AsyncSession) -> None:

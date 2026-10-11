@@ -297,7 +297,7 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 - [x] `app/api/chat.py` — `StreamingResponse(media_type="text/event-stream")`. 스트림 전(404 · 422 · 503 · 429)은 JSON,
       뒤(Claude 429 → `CHAT_RATE_LIMITED`, 그 밖의 SDK 오류 → `CHAT_UNAVAILABLE`, 거절 → `CHAT_REFUSED`, 나머지 → `INTERNAL_ERROR`)는 `error` 이벤트.
       클라이언트는 첫 요청에 한 번 만들고 키가 없으면 `None` — 앱은 뜨고 채팅만 503
-- [x] 제한 — 메시지 1 ~ 20개 · 한 개 2,000자 · 공백뿐 · 마지막이 user 아님은 422. IP 당 분당 10회(`RateLimiter`, 메모리 · 미끄러지는 창)
+- [x] 제한 — 메시지 1 ~ 20개 · 질문 2,000자 · 답 20,000자(지난 답을 그대로 돌려받으니 질문 상한을 걸면 긴 답 뒤로 다 막힌다) · 공백뿐 · 마지막이 user 아님은 422. IP 당 분당 10회(`RateLimiter`, 메모리 · 미끄러지는 창)
 - [x] 테스트 `tests/test_chat.py` 33개 — **Claude 를 부르지 않는다.** 가짜 클라이언트가 `beta.messages.stream` 모양만 흉내 내고
       마지막 메시지는 SDK 의 진짜 `BetaMessage` 다. ① 도구 → 답 ② SSE 순서 · 모양 ③ 루프 상한 ④ 키 없음 503
       ⑤ 다른 프로젝트 id(t10 · x1)를 넣어도 못 읽음 + 요청 파라미터(모델 · effort · fallbacks · tool_choice · thinking 없음) · 422 · 429 · 거절.
