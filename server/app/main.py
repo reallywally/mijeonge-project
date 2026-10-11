@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, project, task, thread
+from app.api import health, project, search, task, thread
 from app.config import settings
 from app.errors import install_error_handlers
 
@@ -22,3 +22,4 @@ app.include_router(health.router, prefix="/api")
 app.include_router(project.router, prefix="/api")
 app.include_router(task.router, prefix="/api")
 app.include_router(thread.router, prefix="/api")
+app.include_router(search.router, prefix="/api")
