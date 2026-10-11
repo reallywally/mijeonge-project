@@ -286,3 +286,49 @@ export interface ApiErrorBody {
   /** 폼 검증에서 필드별 메시지 */
   detail?: Record<string, string>
 }
+
+/* AI 챗봇 — API.md '## AI 챗봇' 의 모양 그대로 */
+
+/** POST /api/projects/{projectId}/chat */
+export interface ChatInput {
+  /** 오래된 것 → 새 것. 마지막은 늘 user 다. 서버는 대화를 저장하지 않고, 화면은 창을 닫으면 비운다 (Q26) */
+  messages: ChatMessage[]
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  /** 화면에 보인 글 그대로. 근거 표시(`[[thread:ID]]`)도 지우지 않고 돌려보낸다 */
+  text: string
+}
+
+export type ChatEvent =
+  /** 답 글자 조각. 이어 붙이면 답 전체다 */
+  | { type: 'delta'; text: string }
+  /** 지금 무엇을 찾는 중인지 — 화면은 label 만 띄우고 name 으로 가르지 않는다 */
+  | {
+      type: 'tool'
+      name: 'search_threads' | 'get_thread' | 'search_tasks' | 'get_task'
+      label: string
+    }
+  /** 끝. 답에 실제로 나온 근거만 모은다 */
+  | { type: 'done'; refs: ChatRef[] }
+  /** 스트림이 열린 뒤의 실패. 이것이 오면 done 은 안 온다 */
+  | { type: 'error'; code: string; message: string }
+
+export interface ChatRef {
+  kind: 'thread' | 'task'
+  id: string
+}
+
+/** 챗봇 창의 한 줄. 화면만 쓰는 모양이라 서버로는 role · text 만 나간다 */
+export interface ChatLine {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  /** assistant 줄만 — 받는 중 · 다 받음 · 실패 · 멈춤 */
+  status: 'streaming' | 'done' | 'error' | 'stopped'
+  /** 받는 중에 띄울 '무엇을 찾는 중' 한 줄 */
+  tool: string
+  /** 실패한 줄에 다는 한국어 한 줄 */
+  error: string
+}

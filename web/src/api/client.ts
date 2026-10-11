@@ -16,7 +16,7 @@ export class ApiError extends Error {
 }
 
 export const UNREACHABLE = 'SERVER_UNREACHABLE'
-const unreachable = (status: number) =>
+export const unreachable = (status: number) =>
   new ApiError(status, { code: UNREACHABLE, message: '서버에 연결할 수 없습니다.' })
 
 /** 서버에 닿지 못해 난 오류인가 — 다시 시도 화면을 띄울지 가른다 */
