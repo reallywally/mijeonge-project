@@ -280,21 +280,36 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 
 ### 7-2 채팅
 
-- [ ] `uv add anthropic` · `config.py` 에 `anthropic_api_key: str | None` · `chat_model` · `chat_effort`
-- [ ] `app/services/chat.py` — 도구 루프
-  - 도구 정의는 7-1 함수 넷을 감싼 것. 도구 결과는 **JSON 문자열**로 돌려준다 (id · 상태 · 이력 kind 를 그대로)
-  - 시스템 프롬프트에 `API.md` '답하는 규칙' 넷 — 마지막 `decide`/`change` 가 지금의 결정, 안 정해졌으면 그렇다고,
-    못 찾으면 지어내지 않기, 근거는 `[[thread:ID]]` · `[[task:ID]]` 로
-  - 스트리밍(`messages.stream`)으로 받아 글자 조각을 바로 `delta` 로 흘린다. 도구를 부를 때마다 `tool` 이벤트
-  - 루프 상한 **6회**, `max_tokens` 상한, 상한에 닿으면 그때까지 찾은 것으로 마무리하게 한다
-  - `stop_reason == "refusal"` 이면 `error` 이벤트로 접는다. 거절에 대비해 서버 쪽 대체 모델(`fallbacks: "default"` ·
-    베타 `server-side-fallback-2026-07-01`)을 켠다 — 쓰는 법은 `claude-api` 스킬에서 확인한다
-  - Sonnet 5.5 는 `thinking` 을 끌 수 없고(`disabled` 는 400) 강제 도구 호출(`tool_choice` `any`/`tool`)도 400 이다 —
-    `tool_choice` 는 `auto` 로 두고 프롬프트로 도구를 쓰게 한다
-- [ ] `app/api/chat.py` — `StreamingResponse(media_type="text/event-stream")`. 스트림 전 실패는 JSON, 뒤 실패는 `error` 이벤트
-- [ ] 제한 — 요청 크기(메시지 20개 · 2,000자), IP 당 분당 횟수(메모리 카운터로 충분하다 — 인증이 생기면 사람 기준으로)
-- [ ] 테스트 — **Claude 를 부르지 않는다.** 가짜 클라이언트로 ① 도구를 부르고 → 답하는 루프 ② SSE 이벤트 순서 · 모양
-      ③ 루프 상한 ④ 키 없음 503 ⑤ 다른 프로젝트 id 를 도구에 넣어도 못 읽는지
+- [x] `uv add anthropic`(1.13.0) · `config.py` 에 `anthropic_api_key: SecretStr | None` · `chat_model`(`claude-sonnet-5-5`) ·
+      `chat_effort`(`low`) · `chat_max_tokens`(8000) · `chat_timeout_seconds` · `chat_rate_per_minute`(10)
+- [x] `app/services/chat.py` — 도구 루프
+  - 도구 정의는 7-1 함수 넷을 감싼 것. 도구 결과는 **JSON 문자열**(camelCase · id · 상태 · 이력 kind 그대로).
+    입력은 `schemas/chat.py` 의 모델로 검증하고, `project_id` 는 **경로에서 온 것만** 넘긴다 — 도구 입력에 없다.
+    못 찾음(`THREAD_NOT_FOUND` 등) · 잘못된 입력 · 없는 도구는 `is_error` 인 도구 결과로 Claude 에 돌려준다
+  - 시스템 프롬프트에 `API.md` '답하는 규칙' 넷 + 근거 표시 `[[thread:ID]]` · `[[task:ID]]` + 프로젝트 이름
+  - `client.beta.messages.stream` 으로 받아 `text` 이벤트를 바로 `delta` 로 흘린다. 도구를 돌리기 직전마다 `tool` 이벤트.
+    차례가 바뀌어 다시 글이 나오면 앞 글과 붙지 않게 `\n\n` 을 끼운다
+  - 루프 상한 **6회**(Claude 호출 횟수). 5번째 도구 결과에 '더 찾지 말고 지금까지로 답하라' 를 덧붙이고,
+    6번째에도 도구를 부르면 돌리지 않고 '정리하지 못했다' 한 줄로 끝낸다. `max_tokens` 에 닿으면 끊었다는 줄을 붙이고 `done`
+  - `stop_reason == "refusal"` → `error` 이벤트(`CHAT_REFUSED`). `fallbacks="default"` + 베타 `server-side-fallback-2026-07-01`
+  - `thinking` 은 넘기지 않고, `tool_choice` 는 `{"type": "auto"}` 로 명시한다. effort 는 `output_config={"effort": ...}`
+  - 도구 하나를 돌릴 때마다 `session.rollback()` — 읽기뿐이라 다음 Claude 호출 동안 트랜잭션을 붙잡지 않는다
+- [x] `app/api/chat.py` — `StreamingResponse(media_type="text/event-stream")`. 스트림 전(404 · 422 · 503 · 429)은 JSON,
+      뒤(Claude 429 → `CHAT_RATE_LIMITED`, 그 밖의 SDK 오류 → `CHAT_UNAVAILABLE`, 거절 → `CHAT_REFUSED`, 나머지 → `INTERNAL_ERROR`)는 `error` 이벤트.
+      클라이언트는 첫 요청에 한 번 만들고 키가 없으면 `None` — 앱은 뜨고 채팅만 503
+- [x] 제한 — 메시지 1 ~ 20개 · 질문 2,000자 · 답 20,000자(지난 답을 그대로 돌려받으니 질문 상한을 걸면 긴 답 뒤로 다 막힌다) · 공백뿐 · 마지막이 user 아님은 422. IP 당 분당 10회(`RateLimiter`, 메모리 · 미끄러지는 창)
+- [x] 테스트 `tests/test_chat.py` 33개 — **Claude 를 부르지 않는다.** 가짜 클라이언트가 `beta.messages.stream` 모양만 흉내 내고
+      마지막 메시지는 SDK 의 진짜 `BetaMessage` 다. ① 도구 → 답 ② SSE 순서 · 모양 ③ 루프 상한 ④ 키 없음 503
+      ⑤ 다른 프로젝트 id(t10 · x1)를 넣어도 못 읽음 + 요청 파라미터(모델 · effort · fallbacks · tool_choice · thinking 없음) · 422 · 429 · 거절.
+      검색 도구의 프로젝트 경계는 Postgres 에서만(`pg_session`) 본다
+
+**실제로 해 보고 알게 된 것**
+
+- (SDK 1.13.0 소스로 확인) `fallbacks` · `betas` 는 **`client.beta.messages`** 에만 있다(`client.messages.stream` 에는 없다). 그래서 루프 전체가 beta 쪽이다
+- effort 는 최상위 인자가 아니라 `output_config={"effort": "low"}` 다(`BetaOutputConfigParam`)
+- 대체 모델이 넘겨받으면 `content` 에 `fallback` 블록이 끼고(델타 없음), 차례를 이어 보낼 때 `BetaMessage.to_param()` 이
+  thinking · fallback 블록까지 그대로 싣는다 — 손으로 블록을 다시 짜지 않는다
+- 스트리밍 응답 안에서 DB 세션을 쓴다. FastAPI 0.141 의 `yield` 의존성은 응답을 다 보낸 뒤에 닫혀서 그대로 된다
 
 ### 7-3 평가셋
 
@@ -331,7 +346,7 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 | 4 프론트 붙이기 | 시작 전 |
 | 5 집계를 서버로 | 시작 전 |
 | 6 품질과 운영 | 시작 전 |
-| 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `API.md` '## AI 챗봇' · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). 다음은 7-2 채팅 |
+| 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `API.md` '## AI 챗봇' · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). **7-2 채팅 끝남** (2026-10-11) — `POST .../chat` SSE · 도구 루프 · 제한 · 가짜 클라이언트 검사 33개. 다음은 7-3 평가셋 |
 
 ## 아직 안 정한 것
 

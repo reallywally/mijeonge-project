@@ -1,3 +1,6 @@
+from typing import Literal
+
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +12,17 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     # 쿼리 로그는 필요할 때만 켠다
     sql_echo: bool = False
+
+    # 없어도 앱은 뜬다 — 채팅만 503 CHAT_UNAVAILABLE. SecretStr 이라 repr · 로그에 안 찍힌다
+    anthropic_api_key: SecretStr | None = None
+    # 모델 · effort 는 여기서만 바꾼다 (API.md Q25). Sonnet 5.5 는 effort 기본값이 high 라 명시한다
+    chat_model: str = "claude-sonnet-5-5"
+    chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    # thinking 을 끌 수 없어 그 몫까지 들어간다
+    chat_max_tokens: int = 8000
+    chat_timeout_seconds: float = 120.0
+    # IP 하나가 1분에 보낼 수 있는 질문 수
+    chat_rate_per_minute: int = 10
 
 
 settings = Settings()

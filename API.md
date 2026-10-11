@@ -65,6 +65,8 @@
 | 503 | `CHAT_UNAVAILABLE` | 서버에 API 키가 없거나 AI 쪽이 응답하지 않을 때 |
 | 429 | `CHAT_RATE_LIMITED` | 짧은 시간에 너무 많이 물을 때 (서버의 제한 · AI 쪽의 제한 둘 다) |
 | 422 | `VALIDATION_ERROR` | 메시지가 비었거나, 너무 길거나, 너무 많을 때 — 위의 공통 코드를 그대로 쓴다 |
+| 200 (`error` 이벤트) | `CHAT_REFUSED` | AI 가 답하기를 거절했을 때. 스트림 중에만 나온다 |
+| 200 (`error` 이벤트) | `INTERNAL_ERROR` | 스트림 중 서버 안의 오류 — 위의 공통 코드를 그대로 쓴다 |
 
 ## 엔드포인트
 
@@ -99,7 +101,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 아래 '
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/projects/{projectId}/search?q=&limit=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다. 빈 `q` 는 422, `limit` 은 1 ~ 50 (아래 '검색' 절) | `SearchResult` | 구현 |
-| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 합의 |
+| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 구현 |
 
 ## 응답 스키마 — `ProjectSnapshot`
 
@@ -311,7 +313,7 @@ export interface ChatMessage {
 }
 ```
 
-- `messages` 는 1 ~ 20개, `text` 하나는 2,000자까지 (넘으면 422 `VALIDATION_ERROR`)
+- `messages` 는 1 ~ 20개, `text` 하나는 질문(`user`) 2,000자 · 답(`assistant`) 20,000자까지 (넘으면 422 `VALIDATION_ERROR`). 답은 화면에 보인 그대로 돌려보내므로 질문보다 넉넉하다
 - 마지막이 `user` 가 아니거나 `text` 가 공백뿐이면 422
 
 ### 응답 — SSE 스트림 (`ChatEvent`)
@@ -481,6 +483,8 @@ export interface TaskHit {
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-10-11 | 챗봇 `text` 상한을 역할별로 나눴다 — 질문 2,000자 · 답 20,000자. 화면 입력칸에도 2,000자를 건다 | 답은 `max_tokens` 8000 이라 2,000자를 넘을 수 있고, 화면이 지난 답을 그대로 돌려보내므로 한 번 긴 답이 나오면 창을 닫을 때까지 다음 질문이 전부 422 였다 |
+| 2026-10-11 | **`POST /api/projects/{projectId}/chat` 을 `구현` 으로 올렸다.** 스트림 중 오류 코드에 `CHAT_REFUSED`(AI 거절) · `INTERNAL_ERROR`(공통 코드)를 더했다. 스트림 전 확인 순서는 프로젝트 → 키 → IP 당 횟수(분당 10회) | 거절은 키 없음 · 횟수 초과와 원인이 달라 화면이 다르게 말할 수 있어야 한다. 화면은 `code` 로 가르고 `message` 를 그대로 띄우므로 새 코드가 화면을 깨지 않는다 |
 | 2026-10-11 | **`GET /api/projects/{projectId}/search` 를 `구현` 으로 올렸다**(채팅은 `합의` 그대로). 리비전 `0006_search_trgm` — `pg_trgm` + GIN 인덱스 여덟. 점수는 `word_similarity`, 검색어가 그대로 들어 있으면 0.9, 0.5 미만은 버린다. 빈 `q` 는 422 · `limit` 1 ~ 50 · 한 레코드는 한 번만 — '검색' 절에 적었다. Q27 닫힘 — 검색 테스트는 Postgres 가 있을 때만 돈다 | 기본 전문검색은 한국어를 못 쪼개고, `similarity()` 는 짧은 검색어를 긴 글에서 묻는다('OS' ↔ '서버 OS 결정' 0.33 → `word_similarity` 1.0). 한국어 조사('미룸이다') 때문에 그대로 들어 있는 경우를 따로 올린다. sqlite 대역 갈래를 두면 운영 코드가 검사되지 않는다 |
 | 2026-10-11 | 챗봇 모델은 **Claude Sonnet 5.5 · effort `low`** 로 시작한다 (Q25). 대화는 **서버에 안 남기고 창을 닫으면 끝난다** (Q26) | 찾아서 요약하는 일이라 Sonnet 으로 충분하다. 모델은 설정 하나로 바꾼다. 로그인이 없어 대화를 남겨도 누구 것인지 못 가린다 — 계약은 그대로다 |
 | 2026-10-11 | **AI 챗봇 계약을 `합의` 로 올렸다** — `GET .../search` · `POST .../chat` 둘 다. 프론트 검토는 '## AI 챗봇' 의 '프론트 검토 (2026-10-11)'. Q28 닫힘 — 토스트를 `top-right` 로 옮긴다 | 타입이 `domain.ts` 와 어긋나지 않고, 스트림 전 · 중 오류가 둘 다 `ApiError` 한 모양으로 모이며, 칩에 필요한 것은 스냅샷에 다 있다. Q26 이 '남긴다' 로 닫히면 `POST .../chat` 은 다시 `초안` 이다 |

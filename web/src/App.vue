@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import AppBootScreen from '@/components/app/AppBootScreen.vue'
+import ChatWidget from '@/components/app/ChatWidget.vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useDataStore } from '@/stores/data'
 
@@ -23,7 +24,12 @@ async function retry() {
 </script>
 
 <template>
-  <RouterView v-if="data.status === 'ready'" />
+  <template v-if="data.status === 'ready'">
+    <RouterView />
+    <!-- 화면마다 두지 않는다 — 옮겨 다녀도 같은 대화가 이어진다 -->
+    <ChatWidget />
+  </template>
   <AppBootScreen v-else @retry="retry" />
-  <Toaster position="bottom-right" />
+  <!-- 오른쪽 아래는 챗봇 자리다 (API.md Q28) -->
+  <Toaster position="top-right" />
 </template>
