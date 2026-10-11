@@ -1,17 +1,19 @@
 ---
 name: backend
-description: server/ 의 FastAPI 백엔드를 만들거나 고칠 때 쓴다 — 새 API 추가, 스키마·모델 변경, Alembic 마이그레이션, 쿼리·집계 로직, pytest 작성. server/ 를 건드리는 작업이면 이 에이전트를 쓴다. 화면(web/) 은 frontend 에이전트가 맡는다.
+description: server/ 의 FastAPI 백엔드를 만들거나 고칠 때 쓴다 — 새 API 추가, 스키마·모델 변경, Alembic 마이그레이션, 쿼리·집계·검색 로직, AI 챗봇(Claude 도구 루프), pytest 작성. server/ 를 건드리는 작업이면 이 에이전트를 쓴다. 화면(web/) 은 frontend 에이전트가 맡는다.
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
-회의 · 안건 · 작업을 한 곳에서 관리하는 사내 웹앱(innoFlow)의 서버를 만든다.
+안건 · 작업을 한 곳에서 관리하는 사내 웹앱(innoFlow)의 서버를 만든다.
 `server/` 안에서만 일한다. `web/` 는 읽기만 한다 — 고치지 않는다.
 
 ## 스펙이 어디 있나
 
-- `memo.md` — 엔티티(project · task · meeting · agenda), 연관 관계, 화면 목록, 시나리오. **제품 결정의 기준**
+- `memo.md` — 엔티티 · 연관 관계 · 화면 목록 · 시나리오. **제품 결정의 기준**.
+  단, 회의(meeting)는 2026-10-11 에 걷어냈다 — memo 의 회의 대목은 옛 기록이다 (`API.md` 결정 로그)
 - `web/src/types/domain.ts` — **API 계약의 기준**. 화면이 이미 이 모양으로 돌고 있다
 - `web/src/stores/*.ts` — 지금 목업이 무엇을 계산해 화면에 주는지. 서버가 넘겨받을 후보가 여기 있다
+- `server/PLAN.md` — 서버를 무엇을 어떤 순서로 만드는지. **일을 받으면 몇 단계의 일인지 여기서 찾는다**
 - `web/PLAN.md` — 프론트가 정해 둔 것과 남은 것
 - `API.md` — **프론트와 맺은 계약**. 엔드포인트 표 · 열린 질문 · 결정 로그
 
@@ -36,26 +38,40 @@ Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0(async) + asyncpg + Alembic 
 - **JSON 키는 프론트 타입 그대로 camelCase.** 파이썬 안에서는 snake_case 를 쓰고,
   경계에서 Pydantic 의 `alias_generator=to_camel` + `populate_by_name=True` 로 바꾼다
 - **id 는 문자열.** DB 는 UUID 라도 내보낼 때 `str` 이다 (프론트가 `id: string` 으로 들고 있다)
-- **날짜는 전부 `YYYY-MM-DD` 문자열로 내보낸다. `createdAt` 도 그렇다** — 저장은 `timestamptz`
-  지만 경계에서 KST 기준 날짜로 자른다(`app/schemas/base.py` 의 `DayStamp`).
-  프론트 `lib/date.ts` 의 `monthDay` 가 `split('-')` 로 읽어서, 시각을 실어 보내면
-  화면에 `9월 NaN일` 이 찍힌다. 시각이 필요해지면 그 필드를 따로 추가하지 이 규칙을 깨지 않는다
+- **날짜는 두 가지다.** 사람이 고른 날짜(`Task.start` · `Task.due` · `Thread.dueDate`)는 `YYYY-MM-DD`,
+  `createdAt` 은 **ISO 8601 UTC · `Z` 로 끝나고 초까지** 한 가지 형식이다(`app/time.py` 의 `iso_z`).
+  저장도 UTC 다. `+09:00` 오프셋을 섞지 않는다 — 프론트가 문자열 비교로 정렬한다 (`API.md` Q3 · Q23)
 - 경로는 프로젝트 안에서만 돈다 — `/api/projects/{projectId}/tasks` 처럼 스코프를 경로에 둔다.
   프로젝트 목록만 예외(`/api/projects`)
 - `ThreadRow` · `ThreadDetail` · `TaskRow` 같은 **계산된 타입은 지금 프론트 스토어가 만든다.**
-  서버는 원본(Thread · Entry · Meeting · Task · 링크)을 주는 것이 기본이고,
+  서버는 원본(Thread · Entry · Task · 링크)을 주는 것이 기본이고,
   집계를 서버로 옮기려면 화면 하나씩 옮기며 그때 스토어도 같이 고친다 (frontend 에이전트에게 넘긴다)
 
 ### 모델에서 지켜야 할 것
 
-- **Entry 하나가 (회의 × 안건) 한 줄이다.** 옮겨 적은 사본이 아니다.
-  `meeting_id` 가 null 이면 회의 없이 처리한 줄이다 — nullable 을 지운다면 모델이 틀린 것이다
+- **Entry 가 결정 · 미룸이 남는 유일한 자리다.** 안건 상태는 Entry 를 남겨서만 바뀐다(`PATCH` 로 못 바꾼다).
+  순서는 `seq` 가 정한다 — `created_at` 으로 정렬하지 않는다 (`API.md` Q15)
+- **결정이 바뀐 안건은 마지막 `decide` · `change` 줄이 지금의 결정이다.** 검색 · 챗봇이 '결정' 을 낼 때 이 규칙을 따른다
 - **안건 상태는 셋** — `queued` · `open` · `decided`. '미룸'은 상태가 아니라 `kind='defer'` 인 Entry 다
   (같은 안건이 여러 번 미뤄진다). memo 의 '대기 · 논의중 · 결정 · 미룸' 은 아직 안 맞춘 옛 표기다
 - 작업은 `parent_id` 로 계층을 이룬다. **자기 자신 · 자손을 부모로 두면 고리가 생긴다 — 서버에서 막는다**
 - 작업의 `start` · `due` 는 둘 다 null 일 수 있다(기간 미정). 둘 중 하나만 채우는 것도 허용한다
-- 맵핑은 링크 테이블 둘 — `task_thread_link` · `meeting_task_link`.
+- 맵핑은 링크 테이블 하나 — `task_thread_link`. 같은 프로젝트 안에서만 선다 (복합 FK · `API.md` Q13).
   "안건 상세에서는 맵핑 불가"는 **화면의 규칙이지 모델의 제약이 아니다**. 링크는 양쪽에서 읽는다
+
+### AI 챗봇 — Claude 를 부를 때
+
+계약은 `API.md` 의 '## AI 챗봇', 순서는 `server/PLAN.md` 7단계다.
+
+- `anthropic` SDK 의 **async 클라이언트**(`AsyncAnthropic`)만 쓴다. `requests` · `httpx` 로 API 를 직접 부르지 않는다.
+  SDK 사용법은 기억으로 쓰지 말고 `claude-api` 스킬을 먼저 불러 확인한다 — 모델 id · 파라미터가 자주 바뀐다
+- 모델 · effort 는 `config.py` 설정으로만 정한다. 코드에 모델 id 를 박지 않는다 (`API.md` Q25)
+- API 키는 `.env` 의 `ANTHROPIC_API_KEY` 로만 읽는다. 로그 · 오류 메시지 · 응답에 싣지 않는다.
+  키가 없어도 앱은 떠야 한다 — 채팅만 503 `CHAT_UNAVAILABLE`
+- 도구는 `app/services/search.py` 의 함수를 감싼 것이다. **도구 안에서도 `project_id` 로 먼저 거른다** —
+  Claude 가 다른 프로젝트 id 를 넣어도 못 읽어야 한다
+- 루프 상한(6회) · `max_tokens` · 요청 크기 제한을 둔다. 끝없이 도는 루프는 돈이 샌다
+- **테스트는 Claude 를 부르지 않는다.** 가짜 클라이언트를 주입한다. 실제 호출은 `server/scripts/eval_chat.py` 로 사람이 돌린다
 
 ## 프론트와 소통하는 법
 
@@ -73,13 +89,14 @@ Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0(async) + asyncpg + Alembic 
 | 무엇 | 어디 |
 | --- | --- |
 | 앱 · 설정 | `server/app/main.py` · `app/config.py` |
-| 라우트 | `server/app/api/<domain>.py` — project · task · thread · meeting |
+| 라우트 | `server/app/api/<domain>.py` — project · task · thread · search · chat |
 | 요청 · 응답 스키마 | `server/app/schemas/<domain>.py` — 전부 `schemas/base.py` 의 `Schema` 를 상속한다 |
 | ORM 모델 | `server/app/models/<domain>.py` |
 | 도메인 규칙 · 집계 | `server/app/services/<domain>.py` — 라우트에 로직을 쌓지 않는다 |
 | DB 세션 | `server/app/db.py` |
 | 마이그레이션 | `server/alembic/versions/` |
 | 테스트 | `server/tests/test_<domain>.py` |
+| 챗봇 평가셋 · 실행 스크립트 | `server/evals/` · `server/scripts/eval_chat.py` — 실제 API 를 부른다. 검사 넷에 넣지 않는다 |
 
 ## 먼저 읽을 것
 

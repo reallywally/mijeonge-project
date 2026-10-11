@@ -226,13 +226,70 @@
 - [ ] 인증 — 사내 계정을 어디에 기댈지 정해진 다음
 - [ ] 배포 — Dockerfile, 마이그레이션을 배포에서 언제 돌릴지
 
-## 7단계 · 그 다음 — 메일과 AI
+## 7단계 · AI 챗봇 — 저장된 안건 · 작업을 찾아 답한다
 
-README 의 핵심 컨셉이지만 화면도 스펙도 아직 없다. **모델이 다 선 뒤에** 손댄다.
+README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 에 **안건 이력으로** 답한다.
+계약은 `../API.md` 의 '## AI 챗봇' 절이고, 화면은 `../web/PLAN.md` 7단계가 맡는다.
 
-- [ ] 회의 참석자에게 메일 보내기 (회의 저장 뒤, 그날 남긴 줄을 모아서)
-- [ ] AI — "땡땡 기능 보안 수준 어떻게 하기로 했지?" 같은 질문에 안건 이력으로 답하기,
-      회의 전 체크리스트 뽑기. DB 에 다 쌓여 있는 것이 이 제품의 강점이다
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 방식 | **Claude + 도구 사용(tool use)**. 서버가 검색 함수 넷을 도구로 쥐여 주고 루프를 돈다 | 질문 → 검색어 → 안건 찾기 → 이력 읽기 → 답을 Claude 가 스스로 돈다. 스냅샷 통째 넣기는 프로젝트가 커지면 비싸고 느리다 |
+| 검색 | **Postgres `pg_trgm`** (trigram 유사도). 벡터 검색은 평가에서 놓치는 게 보이면 | 기본 전문검색(`tsvector`)은 한국어를 못 쪼갠다. 동의어("OS" ↔ "운영체제")는 Claude 가 검색어를 여러 벌 던져 메운다 |
+| SDK | `anthropic` 의 **async 클라이언트** (`AsyncAnthropic`) | 앱 전체가 async 다. 동기 클라이언트를 스레드로 돌리지 않는다 |
+| 모델 | `claude-opus-5-5` · effort `low` — **`config.py` 의 `chat_model` 하나로 바꾼다** (Q25) | 찾아서 요약하는 일이라 effort 를 낮춰도 된다. 모델 결정은 사용자 몫이다 |
+| 대화 | **서버에 남기지 않는다** — 화면이 지난 질문 · 답을 `messages` 로 보낸다 (Q26) | 로그인이 없어 남겨도 누구 것인지 못 가린다 |
+| 키 | `ANTHROPIC_API_KEY` 를 `.env` 로만. 없으면 앱은 뜨고 채팅만 503 `CHAT_UNAVAILABLE` | 키가 없는 개발 환경에서도 나머지 화면이 돌아야 한다 |
+
+### 7-1 검색 (Claude 없이)
+
+- [ ] 리비전 — `CREATE EXTENSION IF NOT EXISTS pg_trgm` + GIN trigram 인덱스:
+      `thread.title` · `thread.description` · `thread_option.text` · `entry.text` · `entry.note` ·
+      `entry_detail.text` · `task.title` · `task_line.text`
+- [ ] `app/services/search.py` — 도구가 될 함수 넷. 전부 **`project_id` 로 먼저 거른다**
+  - `search_threads(project_id, query, state=None, limit=10)` — 맞은 자리(`matched`) · 한 줄 발췌 ·
+    마지막 `decide` · `change` 줄을 같이 낸다 (`API.md` 의 `ThreadHit`)
+  - `get_thread(project_id, thread_id)` — 안건 + 후보 + 이력 전부(`seq` 순) + 연결된 작업 key · 제목
+  - `search_tasks(project_id, query, status=None, limit=10)` — 제목 · 본문 줄
+  - `get_task(project_id, task_id)` — 작업 + 본문 + 연결된 안건 제목 · 상태
+- [ ] `GET /api/projects/{projectId}/search` — `search_threads` · `search_tasks` 를 묶어 연다 (`SearchResult`)
+- [ ] 테스트 — 시드로 "OS" · "운영체제" 중 하나는 걸리는지, 다른 프로젝트 것이 안 섞이는지, 빈 결과가 `[]` 인지.
+      sqlite 에 `pg_trgm` 이 없는 문제는 Q27
+
+### 7-2 채팅
+
+- [ ] `uv add anthropic` · `config.py` 에 `anthropic_api_key: str | None` · `chat_model` · `chat_effort`
+- [ ] `app/services/chat.py` — 도구 루프
+  - 도구 정의는 7-1 함수 넷을 감싼 것. 도구 결과는 **JSON 문자열**로 돌려준다 (id · 상태 · 이력 kind 를 그대로)
+  - 시스템 프롬프트에 `API.md` '답하는 규칙' 넷 — 마지막 `decide`/`change` 가 지금의 결정, 안 정해졌으면 그렇다고,
+    못 찾으면 지어내지 않기, 근거는 `[[thread:ID]]` · `[[task:ID]]` 로
+  - 스트리밍(`messages.stream`)으로 받아 글자 조각을 바로 `delta` 로 흘린다. 도구를 부를 때마다 `tool` 이벤트
+  - 루프 상한 **6회**, `max_tokens` 상한, 상한에 닿으면 그때까지 찾은 것으로 마무리하게 한다
+  - `stop_reason == "refusal"` 이면 `error` 이벤트로 접는다
+- [ ] `app/api/chat.py` — `StreamingResponse(media_type="text/event-stream")`. 스트림 전 실패는 JSON, 뒤 실패는 `error` 이벤트
+- [ ] 제한 — 요청 크기(메시지 20개 · 2,000자), IP 당 분당 횟수(메모리 카운터로 충분하다 — 인증이 생기면 사람 기준으로)
+- [ ] 테스트 — **Claude 를 부르지 않는다.** 가짜 클라이언트로 ① 도구를 부르고 → 답하는 루프 ② SSE 이벤트 순서 · 모양
+      ③ 루프 상한 ④ 키 없음 503 ⑤ 다른 프로젝트 id 를 도구에 넣어도 못 읽는지
+
+### 7-3 평가셋
+
+검사 넷은 코드가 맞는지만 본다. 답이 맞는지는 따로 본다 — **실제 API 를 부르니 돈이 든다. 사람이 돌린다.**
+
+- [ ] `server/evals/chat_cases.yaml` — 시드(한화손보 차세대 + memo 시나리오 넷)로 15 ~ 20개
+  - 표현을 바꾼 질문("운영체제 뭐 쓰기로 했지?"), 결정이 **바뀐** 안건, 아직 **안 정해진** 안건, **없는** 내용
+  - 각 줄에 기대하는 근거 id 와 답에 들어가야 할 말
+- [ ] `server/scripts/eval_chat.py` — 돌리고 ① 기대 근거를 찾았나 ② 최신 결정을 말했나 ③ 없는 걸 지어내지 않았나를 센다
+- [ ] 놓치는 질문이 많으면 7-4 를 연다
+
+### 7-4 그 다음 (필요해지면)
+
+- [ ] 벡터 검색 — `pgvector` + 임베딩(Claude 에는 임베딩 API 가 없어 별도 제공자가 필요하다)
+- [ ] "이 안건을 정하려면 무엇을 체크해야 하나" — 같은 도구에 비슷한 과거 안건 · 연결된 작업을 엮는다
+- [ ] 지금 열려 있는 안건 · 작업 id 를 같이 받아 "이거" 로 가리킬 수 있게 (계약 변경)
+- [ ] 메일 보내기 — 회의를 걷어내 대상이 사라졌다. 다시 필요해지면 안건 단위로 본다
+
+**커밋** — ① 검색 ② 채팅 ③ 평가셋
 
 ---
 
@@ -250,7 +307,7 @@ README 의 핵심 컨셉이지만 화면도 스펙도 아직 없다. **모델이
 | 4 프론트 붙이기 | 시작 전 |
 | 5 집계를 서버로 | 시작 전 |
 | 6 품질과 운영 | 시작 전 |
-| 7 메일과 AI | 시작 전 |
+| 7 AI 챗봇 | 계약 초안 (2026-10-11) — `API.md` '## AI 챗봇' · Q25 ~ Q28 |
 
 ## 아직 안 정한 것
 

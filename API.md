@@ -57,6 +57,15 @@
 | 400 | `TASK_THREAD_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
 
+챗봇의 `code` 는 아래와 같다 (초안). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
+열린 **뒤**의 실패는 `error` 이벤트에 같은 모양(`{ code, message }`)으로 실린다.
+
+| 상태 | `code` | 언제 |
+| --- | --- | --- |
+| 503 | `CHAT_UNAVAILABLE` | 서버에 API 키가 없거나 AI 쪽이 응답하지 않을 때 |
+| 429 | `CHAT_RATE_LIMITED` | 짧은 시간에 너무 많이 물을 때 (서버의 제한 · AI 쪽의 제한 둘 다) |
+| 422 | `VALIDATION_ERROR` | 메시지가 비었거나, 너무 길거나, 너무 많을 때 — 위의 공통 코드를 그대로 쓴다 |
+
 ## 엔드포인트
 
 상태: `초안`(서버가 올림) · `검토`(프론트가 보는 중) · `합의`(양쪽 확인) · `구현`(서버 완료) · `연결`(프론트 연결 완료)
@@ -84,6 +93,13 @@
 읽기 넷은 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
 `uv run fastapi dev` 로 띄우고 `/api/projects` → `/api/projects/p1/snapshot` 순으로 받으면 목업과 같은 데이터가 온다
 (시드가 `web/src/fixtures/*.ts` 와 같은 값이다).
+
+AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 아래 '## AI 챗봇' 절이다.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/projects/{projectId}/search?q=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다 | `SearchResult` | 초안 |
+| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 초안 |
 
 ## 응답 스키마 — `ProjectSnapshot`
 
@@ -273,6 +289,102 @@ export interface ProjectInput {
 DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀스는 트랜잭션이 되돌아가도 번호가 안 돌아와
 구멍이 더 난다. `next_task_no` 는 롤백되면 번호도 같이 돌아온다.
 
+## AI 챗봇 — 초안 (2026-10-11)
+
+오른쪽 아래 팝업에서 "서버 OS 뭐로 하기로 했지?" 같은 질문에 **저장된 안건 · 이력 · 작업을 찾아** 답한다.
+서버가 Claude 에게 검색 도구를 쥐여 주고, Claude 가 검색어를 바꿔 가며 찾고 읽은 뒤 답한다.
+화면은 질문을 보내고 스트림을 받아 그리기만 한다.
+
+### 요청 — `ChatInput`
+
+```ts
+/** POST /api/projects/{projectId}/chat */
+export interface ChatInput {
+  /** 오래된 것 → 새 것. 마지막은 늘 user 다. 서버는 대화를 저장하지 않는다 (Q26) */
+  messages: ChatMessage[]
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  /** 화면에 보인 글 그대로. 근거 표시(`[[thread:ID]]`)도 지우지 않고 돌려보낸다 */
+  text: string
+}
+```
+
+- `messages` 는 1 ~ 20개, `text` 하나는 2,000자까지 (넘으면 422 `VALIDATION_ERROR`)
+- 마지막이 `user` 가 아니거나 `text` 가 공백뿐이면 422
+
+### 응답 — SSE 스트림 (`ChatEvent`)
+
+`Content-Type: text/event-stream`. 한 이벤트는 `event: <type>` 줄과 `data: <JSON>` 줄이다.
+`EventSource` 는 GET 만 되므로 화면은 `fetch` 로 받아 직접 읽는다.
+
+```ts
+export type ChatEvent =
+  /** 답 글자 조각. 이어 붙이면 답 전체다 */
+  | { type: 'delta'; text: string }
+  /** 지금 무엇을 찾는 중인지 — '"OS" 안건 찾는 중' 같은 한 줄을 띄우는 데 쓴다 */
+  | { type: 'tool'; name: 'search_threads' | 'get_thread' | 'search_tasks' | 'get_task'; label: string }
+  /** 끝. 답에 실제로 나온 근거만 모은다 — 화면이 칩을 그릴 때 스냅샷에 없는 id 를 거르는 데 쓴다 */
+  | { type: 'done'; refs: ChatRef[] }
+  /** 스트림이 열린 뒤의 실패. 이것이 오면 done 은 안 온다 */
+  | { type: 'error'; code: string; message: string }
+
+export interface ChatRef {
+  kind: 'thread' | 'task'
+  id: string
+}
+```
+
+### 근거 표시 — 답 본문 안의 `[[kind:id]]`
+
+- 답 본문에 `[[thread:ID]]` · `[[task:ID]]` 가 섞여 온다. 화면은 이것을 **링크 칩**으로 바꿔 그린다
+  (안건이면 제목 + 상태 배지, 작업이면 `key` + 제목). 누르면 기존 상세 팝업을 연다
+- id 는 스냅샷의 id 그대로다. 스냅샷에 없는 id 면 칩 대신 아무것도 안 그린다 (지어낸 id 를 보이지 않는다)
+- 서버는 이 표시를 지우거나 바꾸지 않는다 — `done.refs` 는 본문에서 뽑은 목록일 뿐이다
+
+### 답하는 규칙 (서버가 시스템 프롬프트로 지킨다)
+
+- **결정이 바뀐 안건은 마지막 `decide` · `change` 줄이 지금의 결정이다.** 바뀐 적이 있으면 그 흐름도 짧게 같이 말한다
+- 안건이 `decided` 가 아니면 "아직 안 정해졌다" 고 말하고, 미룬 횟수 · 마지막 미룸 사유를 같이 준다
+- 찾지 못하면 **지어내지 않고** 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
+- 경로의 `projectId` 밖은 찾지 않는다 (Q13 · Q16 과 같은 경계)
+
+### 검색 — `SearchResult`
+
+`GET /api/projects/{projectId}/search?q=<검색어>&limit=<기본 10>`. 챗봇의 `search_threads` · `search_tasks`
+도구가 부르는 서비스 함수를 그대로 연 것이다. 글자 일부만 맞아도 찾는다(trigram 유사도).
+
+```ts
+export interface SearchResult {
+  threads: ThreadHit[]
+  tasks: TaskHit[]
+}
+
+export interface ThreadHit {
+  id: string
+  title: string
+  state: ThreadState
+  /** 무엇이 맞았나 — 제목 · 배경 · 후보 · 이력 중 하나. 이력이면 그 줄의 글 */
+  matched: 'title' | 'description' | 'option' | 'entry'
+  snippet: string
+  /** 마지막 decide · change 줄의 text. 없으면 '' */
+  decision: string
+}
+
+export interface TaskHit {
+  id: string
+  key: string
+  title: string
+  status: TaskStatus
+  matched: 'title' | 'body'
+  snippet: string
+}
+```
+
+- 점수가 높은 순. 같은 점수면 `seq` 오름차순 — 같은 데이터면 늘 같은 순서다
+- 빈 결과는 `{ threads: [], tasks: [] }` 이고 404 가 아니다
+
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
@@ -310,10 +422,20 @@ DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀
 | Q23 | 프론트 | **`createdAt` 이 계약과 다르게 나간다.** 공통 규칙과 Q3 은 'ISO 8601 UTC · 항상 `Z` 접미' 인데, 서버는 `app/schemas/base.py` 의 `DayStamp` 가 **KST 기준 날짜로 잘라서**(`2026-09-10`) 내보낸다. 그렇게 만든 이유는 프론트의 옛 `monthDay` 가 `split('-')` 로 읽어 시각을 실으면 '9월 NaN일' 이 찍혔기 때문인데, **Q3 이 닫히면서 프론트가 `lib/date.ts` 를 고쳤다**(`localDay` 가 `Z` 를 KST 로 옮기고 날짜뿐 문자열도 그대로 통과시킨다). 그래서 지금은 화면이 깨지지는 않지만 **같은 날 여러 줄의 시각이 사라진다** — 정렬은 `seq` 가 잡아 주므로 당장 틀어지는 화면은 없다. 서버를 계약대로(`Z`) 되돌려도 되나? **서버 의견:** 되돌리는 것이 맞다. 다만 `tests/test_contract.py` 의 다섯 검사('날짜로 자른다' · 'KST 로 자른다')가 그 동작을 못 박고 있어 같이 고쳐야 하고, 저장값(`at_day_start` 로 KST 0시에 앉히는 것)도 같이 볼 자리다. 프론트가 `Z` 를 받을 준비가 됐는지(이미 됐다고 본다) 확인해 주면 다음 턴에 옮긴다 | **되돌려라 — 프론트는 `Z` 를 받을 준비가 돼 있다. 확인했다.** `web/src/lib/date.ts` 의 `localDay` 가 `Z` 로 끝나는 값을 KST 로 옮겨 `YYYY-MM-DD` 로 자르고, 날짜뿐 문자열은 그대로 통과시킨다. `monthDay` · `slashDay` 는 `split('-')` **앞에** `localDay` 를 태우고, `dayTime` 도 `Z` 를 KST 로 옮긴 뒤 시각을 자른다. `createdAt` 을 읽는 자리는 여섯뿐이고 다섯은 전부 `monthDay`/`localDay` 를 거친다 — `stores/thread.ts:89`(이력의 `at`) · `:119`(하위 안건 '분리' 라벨) · `TaskDetailDialog.vue:444`(만든 날짜) · `NewMeetingView.vue:119`(안건 후보의 '등록' 라벨) · `lib/date.test.ts`. **시각을 그대로 찍는 화면은 하나도 없다**(`dayTime` 은 지금 아무 데서도 안 쓴다). 날것으로 쓰는 자리는 `stores/thread.ts:34` 의 `b.createdAt.localeCompare(a.createdAt)` 하나인데, 같은 형식끼리면 사전순이 곧 시간순이라 `Z` 로 통일되면 오히려 맞아진다. 그 정렬이 먹이는 곳도 `deferCount` · `entryCount`(순서 무관)뿐이다 — `lastMeetingLabel` 은 라운드 3 에서 `meeting.date` 기준으로 고쳤고, 이력 순서는 `at` + 배열 인덱스(= 서버의 `seq`)가 잡는다. **되돌리면 지금 있는 '형식 두 벌' 이 사라진다** — 서버는 날짜뿐(`2026-09-10`)을 주는데 화면이 만든 줄은 `nowIso()`(`…Z`)라 한 배열(`allEntries`)에 두 모양이 섞여 있고, 같은 날이면 날짜뿐인 쪽이 늘 '더 오래된 것' 으로 밀린다. 이게 되돌림의 가장 큰 이득이다. **다만 `DayStamp` 를 지우는 것만으로는 안 된다 — 셋을 같이 해야 한다**(pydantic 2.13.5 로 직접 찍어 본 값이다). ① **UTC 로 옮겨서 `Z` 로 낸다.** 저장값이 `datetime.now(KST)` 라(`services/thread.py:70` · `:103`, `services/task.py:137`) annotation 만 떼면 `"2026-09-10T08:30:00+09:00"` 이 나간다 — 계약이 금지한 오프셋이고, `localDay` 는 `endsWith('Z')` 가 아니면 `split('T')[0]` 으로 물러선다. 마침 KST 오프셋이라 날짜는 우연히 맞지만 다른 오프셋이 한 번이라도 섞이면 조용히 틀린다. `PlainSerializer` 를 '`astimezone(UTC)` 한 뒤 `Z`' 로 바꿔라 ② **naive 를 내보내지 마라.** tzinfo 가 없으면 pydantic 이 `"2026-09-09T15:00:00"` 을 내고, `localDay` 는 `2026-09-09` 로 읽는데 한국 시간으로는 9월 10일이다 — **하루가 밀린다.** `app/time.py` 의 `day_of` 주석대로 sqlite 검사가 오프셋을 버리므로 이 구멍에 테스트가 먼저 빠진다 ③ **초까지만.** 프론트 `nowIso()` 가 밀리초를 떼고 내므로 같은 모양이 좋다. 마이크로초 여섯 자리도 `Date.parse` 는 읽지만 ES 명세의 날짜 형식은 소수 세 자리까지라 굳이 밖으로 나갈 이유가 없다. `tests/test_contract.py` 의 다섯 중 '날짜로 자른다' 를 못 박는 셋(`test_created_at_is_cut_to_a_day` · `test_cut_happens_in_kst_not_utc` · `test_json_dump_cuts_too`)은 **정반대로 뒤집어라** — `Z` 로 끝나는지, KST 입력이 UTC 로 옮겨지는지, naive 가 안 새는지. camelCase 를 보는 둘은 그대로다. **저장값도 같이 옮겨라(서버가 짚은 자리).** `services/meeting.py:112` 가 `at_day_start(payload.date)` 로 회의에서 생긴 안건과 줄을 **그 회의 날짜 0시**에 앉힌다. 주석은 "`stores/meeting.ts` 와 같다" 고 적혀 있는데 **그건 옛 프론트다** — Q3 을 닫으면서 `saveMeeting` 을 `nowIso()`(적은 시각)로 바꿨다. `created_at` 은 '그 줄을 적은 시각' 이다. 지금 구현은 지난 회의를 나중에 입력하면 과거로 적히고 한 회의의 모든 줄이 같은 0시를 갖는다. KST 0시라 날짜 표시는 우연히 맞아서 **되돌려도 화면은 안 깨지지만** 값이 거짓이다. `datetime.now(UTC)` 로 옮겨라 — 이력 순서는 어차피 `seq` 가 잡으므로(`services/snapshot.py` 가 `order_by(Entry.seq)` 다) 이 변경이 순서를 건드리지 않는다. **프론트가 고칠 것 — 되돌림 자체에는 없다.** 화면 · 스토어 · 픽스처가 이미 `Z` 다. 아래는 해 두면 좋은 것이고 Q24 답에 따라 필수가 된다 — `lib/date.ts` 의 `localDay` · `dayTime` 이 `Z` 가 아닌 값(오프셋 · naive)을 만나면 `split('T')[0]` 으로 물러서므로, 서버가 위 ①②를 보장하면 그대로 두고 못 한다면 `Date.parse` 결과로 판단하게 바꾸고 `date.test.ts` 에 그 두 모양을 넣는다 | 닫힘 |
 | Q24 | 서버 | **`POST /api/projects` 에 `taskKeyPrefix` 를 빈 문자열로 보내면 422 다 — Q21 답과 갈린다.** `app/schemas/project.py` 의 `ProjectCreate.task_key_prefix` 가 `Field(default=None, pattern=r"^[A-Z][A-Z0-9]{0,7}$")` 라 `""` 는 패턴에 걸린다. 그런데 Q21 답은 "**빈 값이면 서버가 만들고**, 적었는데 형식이 틀렸을 때만 422" 로 닫혔다 — '빈 값' 에 `""` 가 들어가는지가 안 갈렸다. 등록 폼(`web/src/components/app/ProjectCreateDialog.vue`)은 **입력칸을 비워 두는 것이 정상 경로**라 `src/api/` 를 세울 때 키를 아예 빼고 보낼지(`undefined`) 빈 문자열을 보낼지 지금 못박아야 한다. **프론트 선호: 빈 문자열도 안 넣은 것과 같이 본다**(서버가 `""` 를 `None` 으로 접는다) — 폼 값을 그대로 실어 보내는 자리라 '빈 값이면 키째로 빼기' 는 매번 잊기 쉽고, 잊으면 사용자에게 '형식이 틀렸습니다' 가 뜬다. 어느 쪽이든 고른 쪽을 `## 요청 스키마 — ProjectInput` 에 한 줄로 적어 달라 | **프론트 선호대로 간다 — 빈 문자열은 '안 넣은 것' 과 같이 본다.** 서버가 `""` 를 `None` 으로 접고 접두사를 만들어 준다. 이유는 셋이다. ① Q21 이 말한 '빈 값' 은 **값이 없다** 는 뜻이지 값을 어떻게 적었는지가 아니다. 키를 빼는 것과 빈 문자열을 보내는 것을 서버가 다르게 대하면, 같은 화면 동작(입력칸을 비워 둠)이 보내는 쪽 구현에 따라 201 도 되고 422 도 된다 ② 그 422 는 **사용자가 고칠 수 없는 오류**다 — 아무것도 안 적었는데 '형식이 올바르지 않습니다' 가 뜬다. 오류 메시지는 사용자가 다음에 할 일을 알려 줘야 한다 ③ 폼 값을 그대로 싣는 것이 정상 경로라 '빈 값이면 키째로 빼기' 는 `src/api/` 가 매번 기억해야 하는 규칙이 된다 — 서버가 한 번 접는 편이 싸다. **덧붙여 앞뒤 공백을 뗀다** — `" POR "` 는 `POR` 로 받고, `"   "` 는 빈 값으로 본다. 접두사에 공백이 들어갈 자리는 없고 이건 값을 바꾸는 게 아니라 손가락 자국을 지우는 것이다. 값 안에 공백이 있으면(`"PO R"`) 그대로 422 다. **프론트가 할 일은 없다** — 폼 값을 그대로 보내면 된다. 구현은 `ProjectCreate.task_key_prefix` 의 `BeforeValidator`(`_blank_is_none`)이고, `tests/test_project_api.py` 의 `test_blank_prefix_counts_as_not_given` · `test_prefix_keeps_its_shape_when_given` 이 `""` · `"   "` · `" POR "` · `"PO R"` 넷을 못 박는다 | 닫힘 |
 
+### AI 챗봇 (2026-10-11)
+
+| # | 누가 답하나 | 질문 | 답 | 상태 |
+| --- | --- | --- | --- | --- |
+| Q25 | 사용자 | 챗봇 모델을 무엇으로 하나. **Claude Opus 5.5**(`claude-opus-5-5` · 정확도 우선)와 **Claude Sonnet 5.5**(`claude-sonnet-5-5` · 비용 절반) 중. 정하기 전까지는 Opus 5.5 · effort `low` 로 두고 `config.py` 의 설정 하나로 바꿀 수 있게 만든다 | | 열림 |
+| Q26 | 사용자 | 대화를 서버에 남길지. 초안은 **안 남긴다** — 화면이 지난 질문 · 답을 `messages` 로 같이 보낸다. 로그인이 없어 남겨도 누구 것인지 못 가린다. 새로고침해도 남아야 하면 `chat_session` · `chat_message` 테이블과 엔드포인트가 늘어난다 | | 열림 |
+| Q27 | 서버 | 검색 테스트를 어디서 돌리나. 지금 테스트는 메모리 sqlite 라 `pg_trgm` 이 없다. ① 검색 테스트만 Postgres 컨테이너에서 돌린다(없으면 건너뜀) ② sqlite 에서는 `LIKE` 로 대신하는 갈래를 서비스에 둔다. ②는 운영과 다른 코드가 테스트되는 것이라 ①로 기운다 | | 열림 |
+| Q28 | 프론트 | 오른쪽 아래 자리가 겹친다. `App.vue` 의 `<Toaster position="bottom-right" />` 와 챗봇 버튼이 같은 자리다. 토스트를 `top-right` 로 옮길지, 위젯 높이만큼 띄울지 | | 열림 |
+
 ## 결정 로그
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-10-11 | **AI 챗봇 계약 초안**을 올렸다 — `POST .../chat`(SSE) · `GET .../search` · 근거 표시 `[[kind:id]]` · 오류 코드 둘. 열린 질문 Q25 ~ Q28 | 계획은 `server/PLAN.md` 7단계 · `web/PLAN.md` 7단계. 계약을 먼저 세우고 양쪽이 동시에 만든다 |
 | 2026-10-11 | 작업 본문을 `PATCH /api/tasks/{taskId}` 의 `body` 로 통째로 바꾼다. 줄 id 는 보내면 유지한다. 화면을 목업에서 실제 API 로 연결한다 — 개발 기본은 서버, `VITE_USE_MOCK=true` 면 목업, Vite 가 `/api` 를 `localhost:8000` 으로 넘긴다 | 화면에서 고친 게 새로고침하면 사라졌다(목업 메모리). 본문 편집만 짝이 되는 API 가 없었다. 줄 id 가 저장할 때마다 바뀌면 줄마다 편집하는 중에 포커스가 튄다 |
 | 2026-10-11 | **회의(Meeting)를 걷어냈다.** 테이블 넷(`meeting` · `meeting_attendee` · `meeting_memo` · `meeting_task_link`)과 `entry.meeting_id`, 회의 API 셋, 스냅샷의 `meetings` · `meetingTaskLinks`, `Entry.meetingId` 가 빠졌다. 이력은 `POST /api/threads/{threadId}/entries` 로만 남고, 이력의 날짜는 `createdAt` 의 KST 날짜다. 안건 수정 `PATCH /api/threads/{threadId}` 를 더했다 | 사용자 결정 — 회의를 관리하는 건 '일을 위한 일' 이다. 이 제품의 목적은 결정이 미뤄지는 걸 막고 기록을 잘 남기는 것이고, 그건 안건과 그 이력이 맡는다. 회의와 안건이 비슷한 개념으로 겹쳐 무엇을 어디에 적을지 헷갈렸다. 아래 Q 들에 남은 회의 이야기는 그때의 기록이다 |
 | 2026-10-10 | `Thread` 에 **`description`(배경) · `options`(후보) · `dueDate`(결정 기한)** 를 더했다. 등록에서 셋 다 선택, 회의 중 새로 만든 안건은 `''` · `[]` · `null`. 후보는 자식 테이블 `thread_option` 으로 펴고 응답에서 접는다. '기한 지남'(`dueDate < 오늘(KST)` 이고 결정 전)은 프론트가 계산한다 | 제목만으로는 안건을 어떻게 써야 할지 어렵다는 사용자 테스트 의견. 안건은 '정해야 할 것 하나' 라 회의에서 바로 결정할 수 있게 하는 정보만 받는다 — 칸이 많아지면 안건 대신 메신저로 정하게 되니 제목만 필수로 둔다. 기한은 '미루는 걸 막는다' 는 제품의 이유와 바로 닿는다 |

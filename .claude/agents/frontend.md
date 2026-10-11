@@ -1,17 +1,19 @@
 ---
 name: frontend
-description: web/ 의 Vue 3 화면을 만들거나 고칠 때 쓴다 — 새 화면 추가, 기존 뷰 수정, shadcn-vue 컴포넌트 도입, Pinia 목업 스토어 확장, design/ 캔버스 시안을 코드로 옮기는 일. web/src 를 건드리는 작업이면 이 에이전트를 쓴다.
+description: web/ 의 Vue 3 화면을 만들거나 고칠 때 쓴다 — 새 화면 추가, 기존 뷰 수정, shadcn-vue 컴포넌트 도입, Pinia 스토어 · src/api/ 확장, AI 챗봇 팝업, design/ 캔버스 시안을 코드로 옮기는 일. web/src 를 건드리는 작업이면 이 에이전트를 쓴다.
 tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
-회의 · 안건 · 작업을 한 곳에서 관리하는 사내 웹앱의 프론트를 만든다.
+안건 · 작업을 한 곳에서 관리하는 사내 웹앱(innoFlow)의 프론트를 만든다.
 `web/` 안에서만 일한다.
 
 ## 스펙이 어디 있나
 
-- `memo.md` — 엔티티(project · task · meeting · agenda), 연관 관계, 화면 목록. **제품 결정의 기준**
+- `memo.md` — 엔티티 · 연관 관계 · 화면 목록. **제품 결정의 기준**.
+  단, 회의(meeting)는 2026-10-11 에 걷어냈다 — memo 와 캔버스의 회의 대목은 옛 기록이다
 - `design/*.dc.html` — 화면 시안. 코드로 옮길 때의 기준이다. 캔버스 메모에 "왜 이렇게 그렸는지"가 적혀 있다
 - `web/README.md` — 구조표와 shadcn-vue 컴포넌트 받는 법
+- `web/PLAN.md` — 무엇을 어떤 순서로 만드는지. **일을 받으면 몇 단계의 일인지 여기서 찾는다**
 - `API.md` — **서버와 맺은 계약**. 엔드포인트 표 · 열린 질문 · 결정 로그
 
 시안과 코드가 어긋나면 임의로 고르지 말고 무엇이 다른지 말하고 확인을 받는다.
@@ -25,9 +27,13 @@ Vue 3 + TypeScript + Vite + Tailwind v4 + shadcn-vue(new-york · neutral) + Pini
   hex 를 새로 박거나 `text-[13.5px]` 같은 임의 값을 남발하지 않는다. 시안의 값이 토큰에 없으면 토큰을 먼저 추가하고 쓴다
 - 아이콘은 `lucide-vue-next`. 이모지·아이콘 폰트 금지
 - import 는 `@/` 별칭 (`@/components/app/...`, `@/lib/utils`)
-- 데이터는 **Pinia 스토어**에서만 나온다 — `src/stores/` 의 `data`(원본) · `thread` · `meeting` · `task`(도메인별 계산).
-  예시 데이터는 `src/fixtures/` 에 있고 백엔드가 붙으면 그쪽만 바뀐다.
-  컴포넌트 안에서 데이터를 만들어 쓰지 않는다. `fetch`·axios·API 호출을 넣지 않는다 (아직 서버가 없다)
+- 데이터는 **Pinia 스토어**에서만 나온다 — `src/stores/` 의 `data`(원본) · `thread` · `task`(도메인별 계산).
+  컴포넌트 안에서 데이터를 만들어 쓰지 않는다
+- **서버 호출은 `src/api/` 에만 있다.** 스토어가 `src/api/` 를 부르고, 컴포넌트는 스토어만 부른다.
+  `fetch` 는 `src/api/client.ts` 의 `request` 를 거친다(오류가 `ApiError` 한 모양으로 모인다). axios 를 들이지 않는다.
+  스트림처럼 `request` 로 안 되는 것만 `src/api/` 안에서 `fetch` 를 직접 쓰고, 오류는 같은 `ApiError` 로 맞춘다
+- `VITE_USE_MOCK=true` 면 서버 대신 `src/fixtures/` 를 쓴다(`src/api/mode.ts`). vitest 는 늘 목업이다 —
+  새 API 를 붙이면 목업 갈래도 같이 만든다
 - 타입은 `src/types/domain.ts` 에 모은다. 고른 값은 이름이 아니라 **id** 로 들고 다닌다(`ownerId`, `parentId`, `agendaIds`) — 나중에 그대로 FK 가 된다
 - UI 카피와 주석은 한국어. 주석은 "왜"만 짧게 단다. 파일마다 설명 블록을 붙이지 않는다
 
@@ -40,7 +46,7 @@ Vue 3 + TypeScript + Vite + Tailwind v4 + shadcn-vue(new-york · neutral) + Pini
   무엇이 왜 어긋나는지 `API.md` 의 '열린 질문'에 적는다.** 타입 이름과 모양을 임의로 바꾸지 않는다
 - 서버에 물을 것도 같은 자리에 적는다. 추측으로 메우지 않는다. 적은 질문은 보고에도 그대로 옮긴다
 - 서버가 남긴 질문에 답할 때는 그 줄을 지우지 말고 답을 채우고 닫는다
-- 계약이 `합의` 로 닫히기 전에는 `fetch` · axios 를 넣지 않는다. 데이터는 아직 픽스처에서 나온다
+- 계약이 `합의` 로 닫히기 전에는 그 엔드포인트를 `src/api/` 에 붙이지 않는다. 그동안은 목업 갈래로 화면을 만든다
 
 ## 파일을 어디에 두나
 
@@ -62,19 +68,27 @@ Vue 3 + TypeScript + Vite + Tailwind v4 + shadcn-vue(new-york · neutral) + Pini
 팝업은 `src/components/app/ThreadDetailDialog.vue`, 레이아웃은 `src/components/app/AppShell.vue`.
 새 관례를 만들지 말고 있는 것을 늘린다.
 
-스토어 계산 로직은 테스트가 있다 (`src/stores/task.test.ts` · `thread.test.ts`). 계산을 건드리면 테스트도 같이 고친다.
+스토어 계산 로직은 테스트가 있다 (`src/stores/task.test.ts` · `thread.test.ts` · `server.test.ts`). 계산을 건드리면 테스트도 같이 고친다.
 
-## 아직 코드에 없는 것 — 작업(task) 화면
-
-모델과 스토어(`types/domain.ts` 의 `Task*`, `stores/task.ts`)와 `views/TasksView.vue` 까지는 서 있다.
-남은 것은 캔버스 '작업 시안' 페이지의 나머지다 — 간트차트 · 칸반보드 · 작업 추가 · 작업 상세.
+## 작업 화면에서 지킬 것
 
 - 목록은 계층 트리가 아니라 **한 줄에 하나씩 놓는 게시판**이다. 상위 경로는 제목 아래 회색 글씨
-- 간트차트는 **dhtmlx-gantt v10 Community**(v10부터 MIT)로 만든다
+- 간트차트는 **dhtmlx-gantt v10 Community**(v10부터 MIT)다 (`TaskGantt.vue`)
   - 기본 편집창(lightbox)은 끄고 우리 작업 상세 팝업을 띄운다
   - 기간 미정 작업은 `unscheduled: true` — 그리드에는 서고 막대는 안 그린다
   - 상태·담당자 열은 `columns` 의 `template`/`onrender` 로 직접 그린다
   - Community 에 없는 것: 자동 일정 계산 · 크리티컬 패스 · 베이스라인 · 리소스 관리 · undo/redo · 다중 선택 · 그룹핑 · 작업 분할. 이것들을 전제로 설계하지 않는다
+
+## AI 챗봇 팝업에서 지킬 것
+
+계약은 `API.md` 의 '## AI 챗봇', 순서는 `web/PLAN.md` 7단계다.
+
+- 위젯(`components/app/ChatWidget.vue`)은 `App.vue` 에 **한 번만** 둔다. 화면마다 넣지 않는다
+- 스트림은 `src/api/chat.ts` 하나가 읽는다. `EventSource` 는 GET 만 돼서 못 쓴다 — `fetch` + `ReadableStream`
+- 대화는 `stores/chat.ts` 의 메모리에만 둔다. 프로젝트를 바꾸면 받는 중인 요청을 끊고 비운다
+- 답 본문은 **`v-html` 로 그리지 않는다** — AI 가 낸 글이다. `[[thread:ID]]` · `[[task:ID]]` 는 `lib/chat.ts` 가 쪼개
+  칩으로 바꾸고, **스냅샷에 없는 id 는 그리지 않는다**
+- API 키 · 모델 이름은 화면에 없다. 서버만 안다
 
 ## 다 하고 나서
 
