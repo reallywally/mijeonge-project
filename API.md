@@ -58,7 +58,7 @@
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
 | 404 | `COMMENT_NOT_FOUND` | 경로의 댓글이 없을 때(수정 · 삭제). 댓글 목록 · 등록에서 작업이 없으면 `TASK_NOT_FOUND` |
 | 400 | `COMMENT_AUTHOR_NOT_FOUND` | 댓글 등록의 `authorId` 가 없는 멤버일 때. 빈 `body`(앞뒤 공백을 뗀 뒤)는 422 `VALIDATION_ERROR` |
-| 400 | `TASK_OWNER_NOT_FOUND` | 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때. `detail` 에 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
+| 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때. `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
 열린 **뒤**의 실패는 `error` 이벤트에 같은 모양(`{ code, message }`)으로 실린다.
