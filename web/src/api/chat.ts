@@ -1,7 +1,14 @@
 import { ApiError, errorOf, id, unreachable } from '@/api/client'
 import { isMockMode } from '@/api/mode'
 import { CHAT_MOCK_ERROR_KEYWORD, chatFallback, chatMockError, chatReplies } from '@/fixtures/chat'
-import type { ChatEvent, ChatInput, ChatMessage, ChatRef } from '@/types/domain'
+import type {
+  ChatEvent,
+  ChatInput,
+  ChatMessage,
+  ChatRef,
+  ProposedTask,
+  TaskProposal,
+} from '@/types/domain'
 
 /** 목업 스트림이 조각 사이에 쉬는 시간 — 받는 중 · 멈추기를 눈으로 보려고 늦춘다 */
 export const MOCK_STEP_MS = 40
@@ -27,7 +34,7 @@ function sleep(ms: number, signal: AbortSignal) {
   })
 }
 
-/** 서버가 흘릴 것과 같은 순서로 흘린다 — tool → delta 조각들 → done (오류 낱말이면 error) */
+/** 서버가 흘릴 것과 같은 순서로 흘린다 — tool → proposal → delta 조각들 → done (오류 낱말이면 error) */
 async function* mockEvents(
   messages: ChatMessage[],
   signal: AbortSignal,
@@ -40,6 +47,7 @@ async function* mockEvents(
     await sleep(MOCK_STEP_MS * 3, signal)
     yield { type: 'tool', ...tool }
   }
+  if (reply.proposal) yield { type: 'proposal', proposal: structuredClone(reply.proposal) }
 
   const chars = Array.from(reply.answer)
   for (let i = 0; i < chars.length; i += CHUNK) {
@@ -147,9 +155,29 @@ async function* chunksOf(body: ReadableStream<Uint8Array>, signal: AbortSignal) 
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
+const isDayOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string'
+
+/** 초안 한 항목. 아는 칸만 옮긴다 — 다음 질문에 그대로 돌려보내므로 모르는 칸을 싣지 않는다 */
+function toProposedTask(v: unknown): ProposedTask | null {
+  if (!isRecord(v)) return null
+  const { tempId, parentTempId, title, ownerId, start, due, priority } = v
+  if (typeof tempId !== 'string' || typeof title !== 'string') return null
+  if (parentTempId !== null && typeof parentTempId !== 'string') return null
+  if (ownerId !== null && typeof ownerId !== 'string') return null
+  if (!isDayOrNull(start) || !isDayOrNull(due)) return null
+  if (priority !== 'low' && priority !== 'normal' && priority !== 'high') return null
+  return { tempId, parentTempId, title, ownerId, start, due, priority }
+}
+
+function toProposal(v: unknown): TaskProposal | null {
+  if (!isRecord(v) || !Array.isArray(v.tasks) || v.tasks.length === 0) return null
+  const tasks = v.tasks.map(toProposedTask)
+  return tasks.every((t): t is ProposedTask => t !== null) ? { tasks } : null
+}
+
 /** event 줄이 type 이다. 모르는 event 는 건너뛰고(null), 아는 event 의 data 가 모양이 아니면 깨진 스트림이다 */
 export function toChatEvent({ event, data }: SseMessage, status = 200): ChatEvent | null {
-  if (event !== 'delta' && event !== 'tool' && event !== 'done' && event !== 'error') return null
+  if (!['delta', 'tool', 'proposal', 'done', 'error'].includes(event)) return null
   let body: unknown
   try {
     body = JSON.parse(data)
@@ -165,6 +193,10 @@ export function toChatEvent({ event, data }: SseMessage, status = 200): ChatEven
         name: body.name as Extract<ChatEvent, { type: 'tool' }>['name'],
         label: body.label,
       }
+    if (event === 'proposal') {
+      const proposal = toProposal(body.proposal)
+      if (proposal) return { type: 'proposal', proposal }
+    }
     if (event === 'done')
       return { type: 'done', refs: Array.isArray(body.refs) ? (body.refs as ChatRef[]) : [] }
     if (event === 'error' && typeof body.code === 'string' && typeof body.message === 'string')

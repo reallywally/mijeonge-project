@@ -23,7 +23,9 @@ from app.api import chat as chat_api
 from app.config import Settings, settings
 from app.main import app
 from app.services import chat as chat_service
+from app.time import today_kst
 from scripts.seed import seed
+from tests.test_contract_types import FIELDS
 
 URL = "/api/projects/p1/chat"
 ASK = {"messages": [{"role": "user", "text": "서버 OS 뭐로 하기로 했지?"}]}
@@ -195,6 +197,8 @@ async def test_request_follows_the_settings(session: AsyncSession) -> None:
         "get_thread",
         "search_tasks",
         "get_task",
+        "list_members",
+        "propose_tasks",
     }
     assert "한화손보 차세대" in call["system"]
     assert call["messages"] == [{"role": "user", "content": "서버 OS 뭐로 하기로 했지?"}]
@@ -501,3 +505,202 @@ async def test_search_tools_stay_in_project(pg_session: AsyncSession) -> None:
         pg_session, "p2", "search_tasks", {"query": "개발 환경 설정"}
     )
     assert (content, is_error) == ("[]", False)
+
+
+# --- ⑥ 작업 초안 — propose_tasks 는 저장하지 않고 proposal 로 낸다 -------------
+
+DRAFT = {
+    "tasks": [
+        {"temp_id": "t1", "parent_temp_id": None, "title": "간담회 준비", "owner_id": None,
+         "start": None, "due": None, "priority": "normal"},
+        {"temp_id": "t2", "parent_temp_id": "t1", "title": "일정 체크", "owner_id": "u1",
+         "start": None, "due": "2026-10-16", "priority": "normal"},
+        {"temp_id": "t3", "parent_temp_id": "t1", "title": "준비물 체크", "owner_id": "u2",
+         "start": None, "due": None, "priority": "normal"},
+    ]
+}  # fmt: skip
+ASK_DRAFT = {
+    "messages": [
+        {
+            "role": "user",
+            "text": "간담회 준비 작업 만들어줘. 김서연한테 일정체크, 박지훈한테 준비물 체크",
+        }
+    ]
+}
+
+
+async def task_count(client: httpx.AsyncClient, project_id: str = "p3") -> int:
+    snap = (await client.get(f"/api/projects/{project_id}/snapshot")).json()
+    return len(snap["tasks"])
+
+
+async def test_propose_tasks_emits_one_proposal_before_done(client: httpx.AsyncClient) -> None:
+    fake = FakeClient(
+        Turn(tools=[("list_members", {})]),
+        Turn(tools=[("propose_tasks", DRAFT)]),
+        Turn(texts=["아래처럼 등록할까요?"]),
+    )
+    use(fake)
+    events = parse_sse((await client.post("/api/projects/p3/chat", json=ASK_DRAFT)).text)
+
+    assert [name for name, _ in events] == ["tool", "tool", "delta", "proposal", "done"]
+    assert events[0][1]["label"] == "멤버 확인 중"
+    assert events[1][1] == {
+        "type": "tool",
+        "name": "propose_tasks",
+        "label": "작업 초안 만드는 중",
+    }
+    proposal = events[3][1]["proposal"]
+    # 화면 계약대로 camelCase · 날짜는 YYYY-MM-DD
+    assert proposal["tasks"][1] == {
+        "tempId": "t2",
+        "parentTempId": "t1",
+        "title": "일정 체크",
+        "ownerId": "u1",
+        "start": None,
+        "due": "2026-10-16",
+        "priority": "normal",
+    }
+    assert set(proposal["tasks"][0]) == set(FIELDS["ProposedTask"])
+
+    # 멤버 목록이 도구 결과로 실려 간다
+    (members,) = tool_results(fake.calls[1])
+    assert {"id": "u1", "name": "김서연"} in json.loads(members["content"])
+    (proposed,) = tool_results(fake.calls[2])
+    assert proposed["is_error"] is False
+    assert json.loads(proposed["content"])["ok"] is True
+    # 저장하지 않는다
+    assert await task_count(client) == 0
+
+
+async def test_bad_draft_goes_back_as_tool_error(session: AsyncSession) -> None:
+    await seed(session)
+    bad = {
+        "tasks": [
+            DRAFT["tasks"][1],  # 상위 t1 이 앞에 없다
+            DRAFT["tasks"][0] | {"title": "  "},
+            DRAFT["tasks"][2] | {"owner_id": "없음"},
+        ]
+    }
+    fake = FakeClient(
+        Turn(tools=[("propose_tasks", bad)]),
+        Turn(texts=["누구인지 알려 주세요."]),
+    )
+    events = await run(session, fake, project_id="p3")
+
+    assert [e.type for e in events] == ["tool", "delta", "done"]
+    (result,) = tool_results(fake.calls[1])
+    assert result["is_error"] is True
+    problems = json.loads(result["content"])["problems"]
+    # 일괄 등록과 같은 검사 — 같은 자리 이름으로 짚는다
+    assert set(problems) == {"tasks.0.parentTempId", "tasks.1.title"}
+
+
+async def test_unknown_owner_goes_back_as_tool_error(session: AsyncSession) -> None:
+    await seed(session)
+    bad = {"tasks": [DRAFT["tasks"][0] | {"owner_id": "없음"}]}
+    content, is_error, proposal = await chat_service.check_proposal(session, bad)
+    assert is_error and proposal is None
+    assert json.loads(content)["problems"] == {"tasks.0.ownerId": "담당자를 찾을 수 없습니다."}
+
+    content, is_error, proposal = await chat_service.check_proposal(session, {"tasks": "x"})
+    assert is_error and proposal is None and "입력이 올바르지 않다" in content
+
+
+async def test_only_the_last_proposal_is_sent(session: AsyncSession) -> None:
+    await seed(session)
+    second = {"tasks": [DRAFT["tasks"][0] | {"title": "간담회 준비 (수정)"}]}
+    fake = FakeClient(
+        Turn(tools=[("propose_tasks", DRAFT)]),
+        Turn(tools=[("propose_tasks", second)]),
+        Turn(texts=["아래처럼 등록할까요?"]),
+    )
+    events = await run(session, fake, project_id="p3")
+
+    assert [e.type for e in events] == ["tool", "tool", "delta", "proposal", "done"]
+    (proposal,) = [e for e in events if e.type == "proposal"]
+    assert [t.title for t in proposal.proposal.tasks] == ["간담회 준비 (수정)"]
+
+
+async def test_no_proposal_after_an_error(session: AsyncSession) -> None:
+    await seed(session)
+    fake = FakeClient(
+        Turn(tools=[("propose_tasks", DRAFT)]),
+        Turn(texts=["그건"], stop_reason="refusal"),
+    )
+    events = await run(session, fake, project_id="p3")
+    assert [e.type for e in events] == ["tool", "delta", "error"]
+
+
+async def test_today_is_in_the_system_prompt(session: AsyncSession) -> None:
+    await seed(session)
+    fake = FakeClient(Turn(texts=["답"]))
+    await run(session, fake)
+    today = today_kst()
+    weekday = "월화수목금토일"[today.weekday()]
+    assert f"오늘은 {today.isoformat()} ({weekday})" in fake.calls[0]["system"]
+
+
+async def test_past_proposal_is_written_after_the_answer(client: httpx.AsyncClient) -> None:
+    fake = FakeClient(Turn(texts=["답"]))
+    use(fake)
+    tasks = [
+        {"tempId": "t1", "parentTempId": None, "title": "간담회 준비", "ownerId": None,
+         "start": None, "due": None, "priority": "normal"},
+        {"tempId": "t2", "parentTempId": "t1", "title": "일정 체크", "ownerId": "u1",
+         "start": None, "due": "2026-10-16", "priority": "normal"},
+    ]  # fmt: skip
+    messages = [
+        {"role": "user", "text": "간담회 준비 작업 만들어줘"},
+        {
+            "role": "assistant",
+            "text": "아래처럼 등록할까요?",
+            "proposal": {
+                "tasks": tasks,
+                "status": "registered",
+                "keyByTempId": {"t1": "MG-7", "t2": "MG-8"},
+            },
+        },
+        {"role": "user", "text": "방금 만든 것에 하나 더"},
+    ]
+    res = await client.post("/api/projects/p3/chat", json={"messages": messages})
+    assert res.status_code == 200
+
+    sent = fake.calls[0]["messages"]
+    assert [m["role"] for m in sent] == ["user", "assistant", "user"]
+    note = sent[1]["content"]
+    assert note.startswith("아래처럼 등록할까요?\n\n[작업 초안 · 등록됨")
+    assert '"key": "MG-8"' in note and '"owner_id": "u1"' in note
+    assert '"due": "2026-10-16"' in note
+
+
+@pytest.mark.parametrize("status", ["pending", "cancelled"])
+async def test_unregistered_proposal_has_no_keys(status: str) -> None:
+    proposal = chat_service.ChatProposal.model_validate(
+        {
+            "tasks": [{"tempId": "t1", "title": "간담회 준비"}],
+            "status": status,
+            "keyByTempId": {"t1": "MG-7"},
+        }
+    )
+    note = chat_service.proposal_note(proposal)
+    assert "MG-7" not in note
+    assert ("대기" if status == "pending" else "취소") in note
+
+
+async def test_proposal_on_user_is_422(client: httpx.AsyncClient) -> None:
+    fake = FakeClient(Turn(texts=["답"]))
+    use(fake)
+    messages = [
+        {
+            "role": "user",
+            "text": "질문",
+            "proposal": {"tasks": [], "status": "pending"},
+        }
+    ]
+    res = await client.post("/api/projects/p3/chat", json={"messages": messages})
+    assert res.status_code == 422
+    body = res.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "proposal" in body["detail"]
+    assert fake.calls == []

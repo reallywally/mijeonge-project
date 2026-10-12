@@ -6,7 +6,9 @@ import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import { useThreadStore } from '@/stores/thread'
 import type {
+  ProposedTask,
   Task,
+  TaskBatchResult,
   TaskDetail,
   TaskInput,
   TaskLine,
@@ -321,6 +323,28 @@ export const useTaskStore = defineStore('task', () => {
     return id
   }
 
+  /**
+   * 챗봇 초안을 한 번에 만든다. 목업 · 서버 모두 응답을 기다렸다가 넣는다 — 한 트랜잭션이라 반쯤 들어가는 일이 없다.
+   * 실패하면 알리고 null 이다.
+   */
+  async function addTaskBatch(drafts: ProposedTask[]): Promise<TaskBatchResult | null> {
+    const projectId = data.currentProjectId
+    let result: TaskBatchResult
+    try {
+      result = await api.createTasksBatch(projectId, { tasks: drafts })
+    } catch (e) {
+      toastError(e)
+      return null
+    }
+    /* 목업에서는 작업 키를 데이터 스토어 한 곳에서 센다 — 작업 추가(addTask)와 번호가 겹치지 않게 */
+    const made = data.mock
+      ? result.tasks.map((t) => ({ ...t, key: data.takeTaskKey(projectId) }))
+      : result.tasks
+    /* 그사이 프로젝트를 바꿨으면 지금 레코드에 섞지 않는다 — 돌아가면 스냅샷에 있다 */
+    if (data.holdsRecordsOf(projectId)) data.allTasks.push(...made)
+    return { tasks: made, taskIdByTempId: result.taskIdByTempId }
+  }
+
   /** 작업 상세에서 안건을 걸고 뗀다. 안건 화면에서는 이 링크를 읽기만 한다. */
   function linkThread(taskId: string, threadId: string) {
     addLink(taskId, threadId)
@@ -376,6 +400,7 @@ export const useTaskStore = defineStore('task', () => {
     setPriority,
     setBody,
     addTask,
+    addTaskBatch,
     linkThread,
     unlinkThread,
   }

@@ -1,5 +1,5 @@
 import type { ApiError } from '@/api/client'
-import type { ChatLine, ChatMessage } from '@/types/domain'
+import type { ChatLine, ChatMessage, ChatProposal } from '@/types/domain'
 
 /** 계약의 messages 상한 (API.md '## AI 챗봇') */
 export const MAX_CHAT_MESSAGES = 20
@@ -7,6 +7,7 @@ export const MAX_CHAT_MESSAGES = 20
 /**
  * 다음 질문에 실어 보낼 대화. done 으로 끝난 턴(user + assistant)만 싣는다 — 실패 · 멈춘 턴을 실으면
  * 빈 assistant(422)나 user 가 둘 잇따르는 일이 생긴다. 넘치면 오래된 것부터 버리고 첫 줄이 user 가 되게 자른다.
+ * 답이 낸 초안은 화면에서의 결과(status · keyByTempId)째로 돌려보낸다 — 서버가 대화를 안 남긴다 (API.md Q26).
  */
 export function toChatMessages(lines: ChatLine[], question: string): ChatMessage[] {
   const messages: ChatMessage[] = []
@@ -14,7 +15,12 @@ export function toChatMessages(lines: ChatLine[], question: string): ChatMessage
     const ask = lines[i]
     const answer = lines[i + 1]
     if (ask.role === 'user' && answer.role === 'assistant' && answer.status === 'done') {
-      messages.push({ role: 'user', text: ask.text }, { role: 'assistant', text: answer.text })
+      messages.push(
+        { role: 'user', text: ask.text },
+        answer.proposal
+          ? { role: 'assistant', text: answer.text, proposal: plainProposal(answer.proposal) }
+          : { role: 'assistant', text: answer.text },
+      )
       i += 1
     }
   }
@@ -23,6 +29,23 @@ export function toChatMessages(lines: ChatLine[], question: string): ChatMessage
   const kept = messages.slice(-MAX_CHAT_MESSAGES)
   while (kept[0]?.role !== 'user') kept.shift()
   return kept
+}
+
+/** 계약의 칸만 새 객체로 — 스토어의 반응형 객체를 그대로 실으면 나중 수정이 보낸 요청 기록까지 바꾼다 */
+function plainProposal(p: ChatProposal): ChatProposal {
+  return {
+    tasks: p.tasks.map((t) => ({
+      tempId: t.tempId,
+      parentTempId: t.parentTempId,
+      title: t.title,
+      ownerId: t.ownerId,
+      start: t.start,
+      due: t.due,
+      priority: t.priority,
+    })),
+    status: p.status,
+    ...(p.keyByTempId ? { keyByTempId: { ...p.keyByTempId } } : {}),
+  }
 }
 
 /* 서버의 챗봇 message 는 사람이 읽으라고 쓴 한국어 한 줄이라 그대로 띄운다. 비었을 때만 이것을 쓴다 */

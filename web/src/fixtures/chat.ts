@@ -1,4 +1,4 @@
-import type { ChatEvent } from '@/types/domain'
+import type { ChatEvent, TaskProposal } from '@/types/domain'
 
 type ToolEvent = Extract<ChatEvent, { type: 'tool' }>
 
@@ -7,7 +7,47 @@ export interface MockChatReply {
   keywords: string[]
   tools: Omit<ToolEvent, 'type'>[]
   answer: string
+  /** 작업을 만들어 달라는 말이면 초안을 같이 낸다 — 서버처럼 답 본문은 짧게 */
+  proposal?: TaskProposal
 }
+
+/* 작업 초안 예시 — "간담회 준비 작업 만들어줘. 김서연한테 일정체크, 박지훈한테 준비물 체크" */
+const meetupProposal = (packOwnerId: string): TaskProposal => ({
+  tasks: [
+    {
+      tempId: 't1',
+      parentTempId: null,
+      title: '간담회 준비',
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal',
+    },
+    {
+      tempId: 't2',
+      parentTempId: 't1',
+      title: '일정 체크',
+      ownerId: 'u1',
+      start: '2026-10-13',
+      due: '2026-10-16',
+      priority: 'high',
+    },
+    {
+      tempId: 't3',
+      parentTempId: 't1',
+      title: '준비물 체크',
+      ownerId: packOwnerId,
+      start: null,
+      due: null,
+      priority: 'normal',
+    },
+  ],
+})
+
+const proposeTools: MockChatReply['tools'] = [
+  { name: 'list_members', label: '멤버 확인 중' },
+  { name: 'propose_tasks', label: '작업 초안 만드는 중' },
+]
 
 /*
  * 목업 챗봇의 답. 서버 없이 화면을 만들려는 것이라 질문을 이해하지 않고 낱말로만 고른다.
@@ -40,6 +80,18 @@ export const chatReplies: MockChatReply[] = [
     answer:
       '막힌 작업은 HW-18 보험료 산출 기간계 API 개발 하나입니다.\n' +
       '연결된 안건 ‘보험료 산출 기간계 API 호출 in · out 정의’ 가 아직 정해지지 않아 멈춰 있습니다.',
+  },
+  {
+    keywords: ['만들어', '등록해', '추가해'],
+    tools: proposeTools,
+    answer: '‘간담회 준비’ 아래에 작업 둘을 두었습니다. 아래처럼 등록할까요?',
+    proposal: meetupProposal('u2'),
+  },
+  {
+    keywords: ['말고', '바꿔'],
+    tools: proposeTools,
+    answer: '준비물 체크 담당을 정하늘로 바꿨습니다. 아래처럼 등록할까요?',
+    proposal: meetupProposal('u4'),
   },
 ]
 
