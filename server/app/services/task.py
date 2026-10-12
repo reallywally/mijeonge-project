@@ -172,8 +172,20 @@ async def _insert_task(session: AsyncSession, project: Project, payload: TaskCre
     return task
 
 
+async def _guard_owner(session: AsyncSession, owner_id: str | None) -> None:
+    """없는 멤버를 담당자로 두려 하면 400. FK 에 맡기면 500 이다 — 일괄 등록은 `missing_owners`."""
+    if owner_id is not None and await session.get(Member, owner_id) is None:
+        raise ApiError(
+            400,
+            "TASK_OWNER_NOT_FOUND",
+            "담당자를 찾을 수 없습니다.",
+            {"ownerId": "담당자를 찾을 수 없습니다."},
+        )
+
+
 async def create_task(session: AsyncSession, project_id: str, payload: TaskCreate) -> TaskOut:
     project = await project_service.load_project(session, project_id)
+    await _guard_owner(session, payload.owner_id)
     task = await _insert_task(session, project, payload)
     await session.commit()
     # 방금 만든 작업이라 댓글이 있을 수 없다
@@ -274,6 +286,8 @@ async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) ->
         _replace_body(task, payload.body)
     if "parent_id" in changes:
         await _guard_parent(session, task.project_id, task.id, changes["parent_id"])
+    if "owner_id" in changes:
+        await _guard_owner(session, changes["owner_id"])
     for field, value in changes.items():
         setattr(task, field, value)
     await session.commit()

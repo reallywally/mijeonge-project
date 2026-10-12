@@ -82,6 +82,17 @@ async def test_add_task_on_unknown_project_is_404(client: httpx.AsyncClient) -> 
     assert res.status_code == 404
 
 
+async def test_add_task_with_unknown_owner_is_400(client: httpx.AsyncClient) -> None:
+    before = len((await client.get("/api/projects/p1/snapshot")).json()["tasks"])
+    res = await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"ownerId": "없음"})
+
+    assert res.status_code == 400
+    assert res.json()["code"] == "TASK_OWNER_NOT_FOUND"
+    assert res.json()["detail"] == {"ownerId": "담당자를 찾을 수 없습니다."}
+    after = len((await client.get("/api/projects/p1/snapshot")).json()["tasks"])
+    assert after == before
+
+
 async def test_written_task_shows_up_at_the_end_of_the_snapshot(
     client: httpx.AsyncClient,
 ) -> None:
@@ -129,6 +140,24 @@ async def test_patch_touches_only_what_was_sent(client: httpx.AsyncClient) -> No
     again = (await client.patch("/api/tasks/k4", json={"status": "done"})).json()
     assert again["status"] == "done"
     assert again["ownerId"] is None  # 지운 담당자가 되살아나지 않는다
+
+
+async def test_patch_with_unknown_owner_is_400(client: httpx.AsyncClient) -> None:
+    before = next(
+        t
+        for t in (await client.get("/api/projects/p1/snapshot")).json()["tasks"]
+        if t["id"] == "k4"
+    )
+    res = await client.patch("/api/tasks/k4", json={"ownerId": "없음", "status": "done"})
+
+    assert res.status_code == 400
+    assert res.json()["code"] == "TASK_OWNER_NOT_FOUND"
+    after = next(
+        t
+        for t in (await client.get("/api/projects/p1/snapshot")).json()["tasks"]
+        if t["id"] == "k4"
+    )
+    assert after == before  # 같이 보낸 status 도 안 바뀐다
 
 
 async def test_patch_can_set_one_side_of_the_period(client: httpx.AsyncClient) -> None:
