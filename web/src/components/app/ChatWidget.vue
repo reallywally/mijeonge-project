@@ -123,13 +123,17 @@ watch(
             <p
               v-if="line.role === 'user'"
               class="max-w-[85%] rounded-lg bg-primary px-3 py-2 text-sm break-words whitespace-pre-wrap text-primary-foreground"
-            >{{ line.text }}</p>
+            >
+              {{ line.text }}
+            </p>
             <template v-else>
               <!-- 답은 AI 가 낸 글이라 v-html 로 그리지 않는다. 줄바꿈만 살린다 -->
               <p
                 v-if="line.text"
                 class="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm break-words whitespace-pre-wrap"
-              >{{ line.text }}</p>
+              >
+                {{ line.text }}
+              </p>
               <p
                 v-if="line.status === 'streaming' && (line.tool || !line.text)"
                 class="flex items-center gap-1.5 text-xs text-muted-foreground"
@@ -160,7 +164,10 @@ watch(
         </ol>
       </div>
 
-      <form class="flex shrink-0 items-end gap-2 border-t border-border p-3" @submit.prevent="send()">
+      <form
+        class="flex shrink-0 items-end gap-2 border-t border-border p-3"
+        @submit.prevent="send()"
+      >
         <Textarea
           ref="input"
           v-model="draft"

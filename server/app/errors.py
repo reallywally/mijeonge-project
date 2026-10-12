@@ -79,8 +79,10 @@ async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, RequestValidationError)
     detail: dict[str, str] = {}
     for err in exc.errors():
-        # loc 은 ('body', 'name') 처럼 온다 — 화면이 쓰는 건 마지막 이름이다
-        names = [part for part in err["loc"] if isinstance(part, str) and part != "body"]
+        # loc 은 ('body', 'name') 처럼 온다 — 화면이 쓰는 건 마지막 이름이다.
+        # 앞의 'body' 만 뗀다 — 필드 이름이 body 인 자리(댓글 · 작업 본문)까지 지우면 안 된다
+        loc = err["loc"][1:] if err["loc"][:1] == ("body",) else err["loc"]
+        names = [part for part in loc if isinstance(part, str)]
         field = names[-1] if names else "요청"
         detail[field] = _REASONS.get(err["type"], err["msg"])
     return JSONResponse(

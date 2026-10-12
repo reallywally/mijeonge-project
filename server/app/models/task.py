@@ -109,3 +109,25 @@ class TaskThreadLink(Base):
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     thread_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(36))
+
+
+class TaskComment(Base):
+    """작업에 붙는 댓글. 작업을 지우면 같이 지워진다.
+
+    로그인이 없어 작성자 일치를 서버가 따지지 않는다 —
+    자기 댓글에만 수정 · 삭제를 여는 건 화면 몫이다.
+    """
+
+    __tablename__ = "task_comment"
+    __table_args__ = (Index("ix_task_comment_task_id_seq", "task_id", "seq"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    task_id: Mapped[str] = mapped_column(ForeignKey("task.id", ondelete="CASCADE"))
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # 한 번도 안 고쳤으면 null — 화면이 '수정됨' 을 이것으로 가른다
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 목록 순서. created_at 은 한 트랜잭션 안에서 같고 시계가 되감길 수 있다 (API.md Q15)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)

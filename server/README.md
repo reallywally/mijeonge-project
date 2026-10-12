@@ -38,6 +38,8 @@ uv run fastapi dev app/main.py        # http://localhost:8000
 | 작업 수정 | `PATCH /api/tasks/{taskId}` (상태 · 담당자 · 기간 · 상위 작업을 하나로 받는다) |
 | 작업 본문 줄 토글 | `PATCH /api/tasks/{taskId}/lines/{lineId}` |
 | 작업 ↔ 안건 | `PUT` · `DELETE /api/tasks/{taskId}/threads/{threadId}` |
+| 작업 댓글 목록 · 등록 | `GET` · `POST /api/tasks/{taskId}/comments` (등록 순 · 오래된 것 먼저) |
+| 댓글 수정 · 삭제 | `PATCH` · `DELETE /api/comments/{commentId}` (로그인이 없어 작성자 일치는 안 본다) |
 | 작업 ↔ 회의 | `PUT` · `DELETE /api/tasks/{taskId}/meetings/{meetingId}` |
 | 안건 등록 | `POST /api/projects/{projectId}/threads` |
 | 회의 밖 줄 | `POST /api/threads/{threadId}/entries` |

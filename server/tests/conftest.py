@@ -20,11 +20,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.main import app
-from app.models import Base, Entry, Task, Thread
+from app.models import Base, Entry, Task, TaskComment, Thread
 from scripts.seed import seed
 
-# 등록 순서 열을 가진 셋. Postgres 에서는 Identity 가 채운다
-SEQ_MODELS = (Thread, Entry, Task)
+# 등록 순서 열을 가진 넷. Postgres 에서는 Identity 가 채운다
+SEQ_MODELS = (Thread, Entry, Task, TaskComment)
 
 
 @event.listens_for(Engine, "connect")

@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ChevronRight, FolderClosed, ListTree, Loader2, SquareKanban } from 'lucide-vue-next'
+import {
+  ChevronRight,
+  FolderClosed,
+  ListTree,
+  Loader2,
+  SquareKanban,
+  UserRound,
+} from 'lucide-vue-next'
+import PersonChip from '@/components/app/PersonChip.vue'
 import {
   Select,
   SelectContent,
@@ -15,6 +23,13 @@ import { useThreadStore } from '@/stores/thread'
 const data = useDataStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
+
+/* '나' — 로그인이 없어 여기서 고른다. 댓글을 누가 남기는지가 이 값이다 */
+const NO_MEMBER = 'none'
+function pickMe(value: unknown) {
+  const id = String(value)
+  data.setCurrentMember(id === NO_MEMBER ? null : id)
+}
 </script>
 
 <template>
@@ -39,6 +54,25 @@ const threadStore = useThreadStore()
       </div>
       <div class="grow" />
       <slot name="actions" />
+      <Select :model-value="data.currentMemberId ?? NO_MEMBER" @update:model-value="pickMe">
+        <SelectTrigger class="h-9 w-auto gap-2 border-transparent shadow-none" aria-label="나">
+          <span class="text-xs text-muted-foreground">나</span>
+          <PersonChip
+            v-if="data.currentMemberId"
+            :name="data.memberName(data.currentMemberId) ?? ''"
+          />
+          <span v-else class="flex items-center gap-1 text-xs text-muted-foreground">
+            <UserRound class="size-3.5" />
+            고르기
+          </span>
+        </SelectTrigger>
+        <SelectContent align="end">
+          <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">
+            {{ m.name }}
+          </SelectItem>
+          <SelectItem :value="NO_MEMBER">고르지 않음</SelectItem>
+        </SelectContent>
+      </Select>
     </header>
 
     <div class="flex min-h-0 grow">

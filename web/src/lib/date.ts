@@ -33,6 +33,21 @@ export function dayTime(iso: string) {
   return time ? `${monthDay(date)} ${time.slice(0, 5)}` : monthDay(date)
 }
 
+/** 방금 · 5분 전 · 3시간 전 · 2일 전, 일주일이 넘으면 dayTime. 댓글처럼 최근 것이 많이 오가는 곳에 쓴다.
+    now 를 받는 건 테스트가 지금을 고정하려고다. 시계가 어긋나 미래로 찍힌 것도 '방금'이다. */
+export function relativeTime(iso: string, now: Date = new Date()) {
+  const t = Date.parse(iso)
+  if (Number.isNaN(t)) return iso
+  const minutes = Math.floor((now.getTime() - t) / 60_000)
+  if (minutes < 1) return '방금'
+  if (minutes < 60) return `${minutes}분 전`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}시간 전`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}일 전`
+  return dayTime(iso)
+}
+
 /** 지금을 createdAt 모양으로 — ISO 8601 UTC. 밀리초는 읽기 나쁘기만 해서 뗀다. */
 export function nowIso() {
   return `${new Date().toISOString().slice(0, 19)}Z`

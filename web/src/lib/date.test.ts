@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { dayTime, kstToday, localDay, monthDay, nowIso, slashDay, today } from './date'
+import {
+  dayTime,
+  kstToday,
+  localDay,
+  monthDay,
+  nowIso,
+  relativeTime,
+  slashDay,
+  today,
+} from './date'
 
 describe('localDay', () => {
   it('UTC 를 한국 시간으로 옮겨 날짜만 남긴다', () => {
@@ -57,5 +66,24 @@ describe('kstToday', () => {
 describe('nowIso', () => {
   it('계약대로 Z 로 끝나는 UTC 로 준다 — 밀리초는 뗀다', () => {
     expect(nowIso()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
+  })
+})
+
+describe('relativeTime', () => {
+  const now = new Date('2026-09-09T03:00:00Z')
+
+  it('일주일 안은 지금에서 얼마나 지났는지로 적는다', () => {
+    expect(relativeTime('2026-09-09T02:59:30Z', now)).toBe('방금')
+    expect(relativeTime('2026-09-09T02:55:00Z', now)).toBe('5분 전')
+    expect(relativeTime('2026-09-09T00:00:00Z', now)).toBe('3시간 전')
+    expect(relativeTime('2026-09-07T03:00:00Z', now)).toBe('2일 전')
+  })
+
+  it('일주일이 넘으면 날짜와 시각을 한국 시간으로 적는다', () => {
+    expect(relativeTime('2026-08-20T01:12:00Z', now)).toBe('8월 20일 10:12')
+  })
+
+  it('시계가 어긋나 미래로 찍힌 것은 방금이다', () => {
+    expect(relativeTime('2026-09-09T03:05:00Z', now)).toBe('방금')
   })
 })

@@ -175,6 +175,31 @@ export interface Task {
   due: string | null
   priority: TaskPriority
   createdAt: string
+  /** 댓글 수. 본문은 스냅샷에 없어 상세를 열 때 따로 받는다 */
+  commentCount: number
+}
+
+/** 작업 댓글 — GET /api/tasks/{taskId}/comments 는 오래된 것부터 낸다 */
+export interface TaskComment {
+  id: string
+  taskId: string
+  /** 남긴 사람. 멤버가 지워졌거나 고르지 않고 남긴 것이면 null */
+  authorId: string | null
+  body: string
+  createdAt: string
+  /** 고친 적이 없으면 null */
+  editedAt: string | null
+}
+
+/** POST /api/tasks/{taskId}/comments — 서버가 body 를 trim 하고 빈 값은 거절한다 */
+export interface TaskCommentInput {
+  authorId: string | null
+  body: string
+}
+
+/** PATCH /api/comments/{commentId} */
+export interface TaskCommentPatch {
+  body: string
 }
 
 /**

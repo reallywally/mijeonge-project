@@ -42,6 +42,7 @@ TASK_KEYS = {
     "due",
     "priority",
     "createdAt",
+    "commentCount",
 }
 
 
