@@ -70,6 +70,22 @@ describe('목업 스트림', () => {
     expect(events[0]).toMatchObject({ type: 'tool', label: '막힌 작업 찾는 중' })
   })
 
+  it('작업을 만들어 달라면 tool → proposal → delta → done 으로 초안을 하나 낸다', async () => {
+    const { events, error } = await collect(
+      streamChat('p1', ask('간담회 준비 작업 만들어줘'), new AbortController().signal),
+    )
+    const reply = chatReplies.find((r) => r.proposal)!
+    expect(error).toBeNull()
+    const types = events.map((e) => e.type).filter((t, i, all) => t !== all[i - 1])
+    expect(types).toEqual(['tool', 'proposal', 'delta', 'done'])
+    const proposals = events.filter(
+      (e): e is Extract<ChatEvent, { type: 'proposal' }> => e.type === 'proposal',
+    )
+    expect(proposals).toEqual([{ type: 'proposal', proposal: reply.proposal }])
+    /* 픽스처를 그대로 내보내면 받는 쪽이 고칠 때 픽스처까지 바뀐다 */
+    expect(proposals[0].proposal).not.toBe(reply.proposal)
+  })
+
   it('스트림 중 error 이벤트는 status 200 의 ApiError 로 던진다', async () => {
     const { events, error } = await collect(
       streamChat('p1', ask(CHAT_MOCK_ERROR_KEYWORD), new AbortController().signal),

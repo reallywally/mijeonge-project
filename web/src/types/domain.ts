@@ -324,6 +324,49 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   /** 화면에 보인 글 그대로. 근거 표시(`[[thread:ID]]`)도 지우지 않고 돌려보낸다 */
   text: string
+  /** assistant 에만. 그 답이 낸 초안과 화면에서의 결과 — 서버가 대화를 안 남겨 화면이 돌려보낸다 */
+  proposal?: ChatProposal
+}
+
+/** 챗봇이 낸 작업 초안 — 사람이 [등록] 을 눌러야 저장된다 (API.md '## AI 챗봇 — 작업 초안') */
+export interface TaskProposal {
+  /** 배열 순서 = 등록 순서 = 화면 순서. 상위가 늘 하위보다 앞이다 */
+  tasks: ProposedTask[]
+}
+
+export interface ProposedTask {
+  /** 이 초안 안에서만 쓰는 임시 이름 — 't1', 't2' … */
+  tempId: string
+  /** 같은 초안 안의 상위 작업 */
+  parentTempId: string | null
+  title: string
+  ownerId: string | null
+  /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */
+  start: string | null
+  due: string | null
+  priority: TaskPriority
+}
+
+/** 초안 카드의 결과. 대기 중인 카드는 늘 하나다 — 새 초안이 오면 앞의 것은 cancelled */
+export type ProposalStatus = 'pending' | 'registered' | 'cancelled'
+
+/** ChatMessage.proposal 의 모양 — 계약의 `TaskProposal & { status, keyByTempId? }` */
+export interface ChatProposal extends TaskProposal {
+  status: ProposalStatus
+  /** registered 일 때만 — tempId → 저장된 작업 key(MG-7) */
+  keyByTempId?: Record<string, string>
+}
+
+/** POST /api/projects/{projectId}/tasks/batch — 초안 그대로 보낸다. 상태는 todo, 본문은 빈 배열로 선다 */
+export interface TaskBatchInput {
+  tasks: ProposedTask[]
+}
+
+/** 201 응답 — 한 트랜잭션이라 하나라도 틀리면 아무것도 안 남는다 */
+export interface TaskBatchResult {
+  /** 요청 순서 그대로 */
+  tasks: Task[]
+  taskIdByTempId: Record<string, string>
 }
 
 export type ChatEvent =
@@ -332,9 +375,17 @@ export type ChatEvent =
   /** 지금 무엇을 찾는 중인지 — 화면은 label 만 띄우고 name 으로 가르지 않는다 */
   | {
       type: 'tool'
-      name: 'search_threads' | 'get_thread' | 'search_tasks' | 'get_task'
+      name:
+        | 'search_threads'
+        | 'get_thread'
+        | 'search_tasks'
+        | 'get_task'
+        | 'list_members'
+        | 'propose_tasks'
       label: string
     }
+  /** 작업 초안. 한 답에 많아야 하나, done 보다 먼저 온다 */
+  | { type: 'proposal'; proposal: TaskProposal }
   /** 끝. 답에 실제로 나온 근거만 모은다 */
   | { type: 'done'; refs: ChatRef[] }
   /** 스트림이 열린 뒤의 실패. 이것이 오면 done 은 안 온다 */
@@ -345,7 +396,7 @@ export interface ChatRef {
   id: string
 }
 
-/** 챗봇 창의 한 줄. 화면만 쓰는 모양이라 서버로는 role · text 만 나간다 */
+/** 챗봇 창의 한 줄. 화면만 쓰는 모양이라 서버로는 role · text · proposal 만 나간다 */
 export interface ChatLine {
   id: string
   role: 'user' | 'assistant'
@@ -356,4 +407,6 @@ export interface ChatLine {
   tool: string
   /** 실패한 줄에 다는 한국어 한 줄 */
   error: string
+  /** assistant 줄만 — 이 답이 낸 작업 초안. done 으로 끝난 답에만 붙는다 */
+  proposal?: ChatProposal
 }

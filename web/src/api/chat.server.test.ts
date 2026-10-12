@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, isUnreachable } from '@/api/client'
 import { isAbort, parseSse, streamChat, toChatEvent } from '@/api/chat'
-import type { ChatEvent } from '@/types/domain'
+import type { ChatEvent, ProposedTask } from '@/types/domain'
 
 /* 서버 갈래 — fetch 를 가짜로 바꿔 SSE 바이트를 흘린다. 실제 서버 · Claude 는 부르지 않는다 */
 beforeEach(() => {
@@ -133,6 +133,63 @@ describe('SSE 읽기', () => {
     expect(isUnreachable(catchOf(() => toChatEvent({ event: 'delta', data: '{"t":1}' })))).toBe(
       true,
     )
+  })
+})
+
+describe('작업 초안 이벤트', () => {
+  const task: ProposedTask = {
+    tempId: 't1',
+    parentTempId: null,
+    title: '간담회 준비',
+    ownerId: 'u1',
+    start: '2026-10-13',
+    due: null,
+    priority: 'normal',
+  }
+  const proposalOf = (proposal: unknown) =>
+    toChatEvent({ event: 'proposal', data: JSON.stringify({ type: 'proposal', proposal }) })
+
+  it('proposal 은 계약의 칸만 옮겨 낸다 — 모르는 칸은 떼어 다음 질문에 안 실린다', () => {
+    expect(
+      proposalOf({
+        tasks: [
+          { ...task, extra: 1 },
+          { ...task, tempId: 't2', parentTempId: 't1' },
+        ],
+      }),
+    ).toEqual({
+      type: 'proposal',
+      proposal: { tasks: [task, { ...task, tempId: 't2', parentTempId: 't1' }] },
+    })
+  })
+
+  it('초안 모양이 아니면 끊긴 것으로 본다 — 빈 목록 · 빠진 칸 · 모르는 우선순위', () => {
+    for (const bad of [
+      null,
+      { tasks: [] },
+      { tasks: [{ ...task, title: undefined }] },
+      { tasks: [{ ...task, priority: 'urgent' }] },
+      { tasks: [{ ...task, start: 3 }] },
+    ])
+      expect(isUnreachable(catchOf(() => proposalOf(bad)))).toBe(true)
+  })
+
+  it('스트림에서 done 앞에 온 proposal 을 그대로 낸다', async () => {
+    const PROPOSAL: ChatEvent = {
+      type: 'proposal',
+      proposal: { tasks: [task] },
+    }
+    const { stream } = body([
+      sse({ type: 'tool', name: 'propose_tasks', label: '작업 초안 만드는 중' }),
+      sse(PROPOSAL),
+      ...deltas('아래처럼 등록할까요?'),
+      sse(DONE),
+    ])
+    serve(streamOk(stream))
+    const { events, error } = await collect(streamChat('p1', ask, new AbortController().signal))
+    expect(error).toBeNull()
+    expect(events.map((e) => e.type)).toEqual(['tool', 'proposal', 'delta', 'done'])
+    expect(events[1]).toEqual(PROPOSAL)
   })
 })
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { ArrowUp, Loader2, MessageCircle, RotateCcw, Square, X } from 'lucide-vue-next'
+import ChatProposalCard from '@/components/app/ChatProposalCard.vue'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useChatStore } from '@/stores/chat'
@@ -33,7 +34,7 @@ function close() {
 }
 
 function send(text = draft.value) {
-  if (!text.trim() || chat.receiving) return
+  if (!text.trim() || chat.receiving || chat.registering) return
   draft.value = ''
   void chat.ask(text)
   focusInput()
@@ -52,7 +53,8 @@ function onPanelKeydown(e: KeyboardEvent) {
 
 /* 새 글이 붙으면 맨 아래를 보여 준다 */
 watch(
-  () => chat.lines.map((l) => l.text.length + l.tool + l.status).join(),
+  () =>
+    chat.lines.map((l) => l.text.length + l.tool + l.status + (l.proposal?.status ?? '')).join(),
   async () => {
     await nextTick()
     const el = scroller.value
@@ -134,6 +136,13 @@ watch(
               >
                 {{ line.text }}
               </p>
+              <ChatProposalCard
+                v-if="line.proposal"
+                :proposal="line.proposal"
+                :registering="chat.registering === line.id"
+                @register="chat.register(line.id)"
+                @cancel="chat.cancelProposal(line.id)"
+              />
               <p
                 v-if="line.status === 'streaming' && (line.tool || !line.text)"
                 class="flex items-center gap-1.5 text-xs text-muted-foreground"
@@ -195,7 +204,7 @@ watch(
           size="icon"
           aria-label="보내기"
           class="shrink-0"
-          :disabled="!draft.trim()"
+          :disabled="!draft.trim() || !!chat.registering"
         >
           <ArrowUp />
         </Button>

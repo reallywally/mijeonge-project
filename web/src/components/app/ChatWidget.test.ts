@@ -3,8 +3,10 @@ import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { chatReplies } from '@/fixtures/chat'
 import { useChatStore } from '@/stores/chat'
+import { useDataStore } from '@/stores/data'
 import ChatWidget from './ChatWidget.vue'
 
 /* 여닫기 · 입력 키 · 멈추기가 화면에서 스토어까지 닿는지 본다 */
@@ -105,5 +107,32 @@ describe('챗봇 창', () => {
     await nextTick()
     expect(w.find('b').exists()).toBe(false)
     expect(w.text()).toContain('<b>굵게</b>')
+  })
+})
+
+describe('챗봇 창 — 작업 초안', () => {
+  it('답 안에 초안 카드가 서고, [등록] 을 누르면 작업 칩으로 바뀐다', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:any(.*)*', component: { template: '<div />' } }],
+    })
+    const w = mount(ChatWidget, { attachTo: document.body, global: { plugins: [router] } })
+    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    await textarea(w).setValue('간담회 준비 작업 만들어줘')
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await vi.runAllTimersAsync()
+
+    expect(w.findAll('[data-proposed-task]')).toHaveLength(3)
+    await w
+      .findAll('button')
+      .find((b) => b.text() === '등록')!
+      .trigger('click')
+    await vi.runAllTimersAsync()
+
+    const made = useDataStore().allTasks.slice(-3)
+    expect(w.findAll('a').map((a) => a.attributes('href'))).toEqual(
+      made.map((t) => `/tasks/${t.id}`),
+    )
+    expect(w.text()).toContain('작업 3건을 등록했습니다')
   })
 })

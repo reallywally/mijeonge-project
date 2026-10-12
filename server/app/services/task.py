@@ -5,11 +5,14 @@
 여기 둔다 — 변환을 두 벌 갖지 않는다.
 """
 
+from collections.abc import Sequence
+
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.errors import bad_request, not_found
+from app.errors import ApiError, bad_request, not_found
 from app.models import (
+    Member,
     Project,
     Task,
     TaskComment,
@@ -19,6 +22,10 @@ from app.models import (
     new_id,
 )
 from app.schemas.task import (
+    PROPOSAL_MAX,
+    ProposedTask,
+    TaskBatchInput,
+    TaskBatchResult,
     TaskCreate,
     TaskLineOut,
     TaskLinePatchIn,
@@ -128,13 +135,13 @@ async def _guard_parent(
         walker = await session.scalar(select(Task.parent_id).where(Task.id == walker))
 
 
-async def create_task(session: AsyncSession, project_id: str, payload: TaskCreate) -> TaskOut:
-    project = await project_service.load_project(session, project_id)
-    await _guard_parent(session, project_id, None, payload.parent_id)
+async def _insert_task(session: AsyncSession, project: Project, payload: TaskCreate) -> Task:
+    """작업 하나를 넣는다. 커밋하지 않는다 — 일괄 등록이 여럿을 한 트랜잭션에 묶는다."""
+    await _guard_parent(session, project.id, None, payload.parent_id)
 
     task = Task(
         id=new_id(),
-        project_id=project_id,
+        project_id=project.id,
         key=await _next_key(session, project),
         title=payload.title,
         parent_id=payload.parent_id,
@@ -162,9 +169,101 @@ async def create_task(session: AsyncSession, project_id: str, payload: TaskCreat
 
     for thread_id in dict.fromkeys(payload.thread_ids):
         await _attach_thread(session, task, thread_id)
+    return task
+
+
+async def create_task(session: AsyncSession, project_id: str, payload: TaskCreate) -> TaskOut:
+    project = await project_service.load_project(session, project_id)
+    task = await _insert_task(session, project, payload)
     await session.commit()
     # 방금 만든 작업이라 댓글이 있을 수 없다
     return to_task(task, comment_count=0)
+
+
+def proposal_problems(tasks: Sequence[ProposedTask]) -> dict[str, str]:
+    """초안 검사 규칙(API.md '작업 초안'). 챗봇의 propose_tasks 와 일괄 등록이 이 하나를 같이 쓴다.
+
+    DB 를 안 보는 것만 여기서 본다 — 멤버가 있는지는 `missing_owners`.
+    """
+    if not tasks:
+        return {"tasks": "작업이 하나도 없습니다."}
+    if len(tasks) > PROPOSAL_MAX:
+        return {"tasks": f"작업은 한 번에 {PROPOSAL_MAX}개까지입니다."}
+
+    problems: dict[str, str] = {}
+    seen: set[str] = set()
+    for index, item in enumerate(tasks):
+        at = f"tasks.{index}"
+        if not item.temp_id.strip():
+            problems[f"{at}.tempId"] = "값을 입력해 주세요."
+        elif item.temp_id in seen:
+            problems[f"{at}.tempId"] = "앞의 작업과 tempId 가 겹칩니다."
+        # 앞에 있는 것만 상위가 될 수 있다 — 자기 자신 · 뒤의 것을 가리키면 고리가 생길 수 있다
+        if item.parent_temp_id is not None and item.parent_temp_id not in seen:
+            problems[f"{at}.parentTempId"] = "상위 작업은 이 작업보다 앞에 있어야 합니다."
+        if not item.title.strip():
+            problems[f"{at}.title"] = "제목을 입력해 주세요."
+        if item.start is not None and item.due is not None and item.start > item.due:
+            problems[f"{at}.due"] = "마감이 시작보다 빠릅니다."
+        seen.add(item.temp_id)
+    return problems
+
+
+async def missing_owners(session: AsyncSession, tasks: Sequence[ProposedTask]) -> dict[str, str]:
+    """없는 멤버를 가리키는 자리. FK 에 맡기면 500 이라 먼저 거른다."""
+    wanted = {item.owner_id for item in tasks if item.owner_id is not None}
+    if not wanted:
+        return {}
+    found = set((await session.scalars(select(Member.id).where(Member.id.in_(wanted)))).all())
+    return {
+        f"tasks.{index}.ownerId": "담당자를 찾을 수 없습니다."
+        for index, item in enumerate(tasks)
+        if item.owner_id is not None and item.owner_id not in found
+    }
+
+
+async def create_tasks(
+    session: AsyncSession, project_id: str, payload: TaskBatchInput
+) -> TaskBatchResult:
+    """초안을 한 트랜잭션에 넣는다. 하나라도 틀리면 아무것도 안 남는다 — 발번한 번호까지."""
+    project = await project_service.load_project(session, project_id)
+    problems = proposal_problems(payload.tasks)
+    if problems:
+        raise ApiError(422, "VALIDATION_ERROR", "요청 값이 올바르지 않습니다.", problems)
+    missing = await missing_owners(session, payload.tasks)
+    if missing:
+        raise ApiError(400, "TASK_OWNER_NOT_FOUND", "담당자를 찾을 수 없습니다.", missing)
+
+    id_by_temp: dict[str, str] = {}
+    created: list[Task] = []
+    try:
+        # 배열 순서대로 넣는다 — 번호가 그 순서로 나가고, 상위가 늘 먼저 들어가 있다
+        for item in payload.tasks:
+            task = await _insert_task(
+                session,
+                project,
+                TaskCreate(
+                    title=item.title.strip(),
+                    parent_id=(
+                        id_by_temp[item.parent_temp_id] if item.parent_temp_id is not None else None
+                    ),
+                    owner_id=item.owner_id,
+                    start=item.start,
+                    due=item.due,
+                    priority=item.priority,
+                ),
+            )
+            id_by_temp[item.temp_id] = task.id
+            created.append(task)
+        await session.commit()
+    except Exception:
+        # 세션을 누가 닫든 여기서 되돌린다 — 반쯤 들어간 작업이 다음 쿼리에 끌려 나가지 않게
+        await session.rollback()
+        raise
+    return TaskBatchResult(
+        tasks=[to_task(task, comment_count=0) for task in created],
+        task_id_by_temp_id=id_by_temp,
+    )
 
 
 async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) -> TaskOut:

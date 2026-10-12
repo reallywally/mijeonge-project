@@ -30,18 +30,25 @@ from app.errors import ApiError
 from app.schemas.chat import (
     ChatEvent,
     ChatMessage,
+    ChatProposal,
     ChatRef,
     DeltaEvent,
     DoneEvent,
     ErrorEvent,
     GetTaskInput,
     GetThreadInput,
+    ProposalEvent,
     SearchTasksInput,
     SearchThreadsInput,
+    TaskProposal,
     ToolEvent,
     ToolName,
 )
+from app.schemas.task import PROPOSAL_MAX
+from app.services import project as project_service
 from app.services import search as search_service
+from app.services import task as task_service
+from app.time import today_kst
 
 log = logging.getLogger(__name__)
 
@@ -50,12 +57,15 @@ MAX_ROUNDS = 6
 # 거절에 대비해 서버 쪽 대체 모델을 켠다 — fallbacks 는 이 베타가 있어야 받는다
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
+WEEKDAYS = "월화수목금토일"
+
 REF_PATTERN = re.compile(r"\[\[(thread|task):([^\[\]\s]+)\]\]")
 
 SYSTEM_PROMPT = """\
 너는 사내 업무 도구 innoFlow 의 도우미다. 지금 프로젝트는 '{project_name}' 이다.
+오늘은 {today} 이다(한국 시간).
 사용자의 질문에 이 프로젝트에 저장된 안건(thread) · 안건 이력(entry) · 작업(task)을
-찾아 근거로 답한다.
+찾아 근거로 답한다. 작업을 만들어 달라고 하면 작업 초안을 낸다.
 
 ## 찾는 법
 - 답하기 전에 반드시 도구로 찾는다. 기억이나 짐작으로 답하지 않는다
@@ -77,6 +87,25 @@ SYSTEM_PROMPT = """\
 - 도구 결과에 없던 ID 는 절대 쓰지 않는다
 - 답은 한국어로, 짧고 분명하게 쓴다.
   이력의 kind 이름(decide 등)을 그대로 쓰지 말고 우리말로 풀어 쓴다
+
+## 작업 초안
+너는 작업을 저장하지 못한다. 초안을 내면 화면이 카드로 보여 주고, 사용자가 [등록] 을 눌러야
+이 프로젝트에 저장된다.
+1. 작업을 만들어 달라는 말에는 **초안만 낸다.** propose_tasks 로 낸다
+2. 담당자 이름은 list_members 로 id 를 찾아 owner_id 에 넣는다.
+   이름이 멤버에 없거나 여럿에 걸리면 **초안을 내지 말고** 누구인지 되묻는다
+3. 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업으로, 할 일을 하위 작업
+   (parent_temp_id 가 묶음의 temp_id)으로 둔다. 할 일이 하나면 상위 없이 하나만 낸다
+4. 상위 작업은 같은 초안 안의 앞 항목만 될 수 있다. 이미 있는 작업 밑에는 붙이지 못한다 —
+   그렇게 해 달라면 할 수 없다고 말한다
+5. 날짜("다음 주 금요일")는 오늘을 기준으로 YYYY-MM-DD 로 바꾼다.
+   말하지 않은 기간은 null, 우선순위는 normal 로 둔다. 짐작으로 채우지 않는다
+6. propose_tasks 가 오류를 돌려주면 고쳐서 다시 부른다. 한 답에서 마지막으로 낸 초안만 화면에 보인다
+7. 초안을 낸 뒤의 답은 짧게 — "아래처럼 등록할까요?" 정도. 초안 내용을 본문에 다시 늘어놓지 않고,
+   "등록했다" 고 말하지 않는다
+8. 지난 답 뒤의 [작업 초안 …] 은 화면이 덧붙인 기록이다 — 네가 쓰는 형식이 아니다.
+   '대기' · '취소' 인 초안을 고쳐 달라면 고친 새 초안을 낸다.
+   '등록됨' 인 작업은 이미 저장됐다 — 채팅으로는 고치지 못하니 화면에서 고치라고 말한다
 """
 
 WRAP_UP = (
@@ -85,6 +114,13 @@ WRAP_UP = (
 )
 GAVE_UP = "여러 번 찾아봤지만 답을 정리하지 못했습니다. 질문을 조금 더 구체적으로 해 주세요."
 TRUNCATED = "\n\n(답이 길어 여기서 끊었습니다.)"
+
+PROPOSED = (
+    "초안을 화면에 보였다. 아직 저장되지 않았다 — 사용자가 [등록] 을 눌러야 저장된다. "
+    "답은 '아래처럼 등록할까요?' 정도로 짧게 하라."
+)
+
+_DATE_OR_NULL = {"type": ["string", "null"], "description": "YYYY-MM-DD. 말하지 않았으면 null"}
 
 TOOLS: list[BetaToolParam] = [
     {
@@ -147,6 +183,60 @@ TOOLS: list[BetaToolParam] = [
             "required": ["task_id"],
         },
     },
+    {
+        "name": "list_members",
+        "description": "멤버 목록(id · name)을 준다. 담당자 이름을 owner_id 로 바꿀 때 쓴다.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "propose_tasks",
+        "description": (
+            "작업 초안을 화면에 보인다. 저장하지 않는다 — 사용자가 [등록] 을 눌러야 저장된다. "
+            "배열 순서가 등록 순서이고, 상위 작업이 늘 하위보다 앞이다. "
+            "틀리면 오류로 돌려준다 — 고쳐서 다시 부른다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": PROPOSAL_MAX,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "temp_id": {
+                                "type": "string",
+                                "description": "이 초안 안에서만 쓰는 이름 — t1, t2 …",
+                            },
+                            "parent_temp_id": {
+                                "type": ["string", "null"],
+                                "description": "상위 작업의 temp_id — 앞 항목만. 없으면 null",
+                            },
+                            "title": {"type": "string"},
+                            "owner_id": {
+                                "type": ["string", "null"],
+                                "description": "list_members 의 id. 말하지 않았으면 null",
+                            },
+                            "start": _DATE_OR_NULL,
+                            "due": _DATE_OR_NULL,
+                            "priority": {"type": "string", "enum": ["low", "normal", "high"]},
+                        },
+                        "required": [
+                            "temp_id",
+                            "parent_temp_id",
+                            "title",
+                            "owner_id",
+                            "start",
+                            "due",
+                            "priority",
+                        ],
+                    },
+                },
+            },
+            "required": ["tasks"],
+        },
+    },
 ]
 
 _TOOL_NAMES: frozenset[str] = frozenset(tool["name"] for tool in TOOLS)
@@ -205,6 +295,10 @@ def tool_label(name: ToolName, raw: object) -> str:
             return "안건 이력 읽는 중"
         case "get_task":
             return "작업 읽는 중"
+        case "list_members":
+            return "멤버 확인 중"
+        case "propose_tasks":
+            return "작업 초안 만드는 중"
 
 
 async def run_tool(
@@ -233,6 +327,9 @@ async def run_tool(
                 d = GetTaskInput.model_validate(raw)
                 task = await search_service.get_task(session, project_id, d.task_id)
                 return task.model_dump_json(by_alias=True), False
+            case "list_members":
+                # 멤버는 전사 공통이라 프로젝트로 거르지 않는다 (GET /api/members 와 같다)
+                return _dump_list(await project_service.list_members(session)), False
             case _:
                 return _tool_error(f"없는 도구다: {name}"), True
     except ApiError as exc:
@@ -246,6 +343,31 @@ async def run_tool(
         await session.rollback()
 
 
+async def check_proposal(
+    session: AsyncSession, raw: object
+) -> tuple[str, bool, TaskProposal | None]:
+    """propose_tasks. DB 에 쓰지 않는다 — 일괄 등록과 같은 검사로 보고, 맞으면 초안을 돌려준다."""
+    try:
+        proposal = TaskProposal.model_validate(raw)
+        problems = task_service.proposal_problems(proposal.tasks)
+        if not problems:
+            problems = await task_service.missing_owners(session, proposal.tasks)
+        if problems:
+            return (
+                json.dumps(
+                    {"error": "초안이 올바르지 않다. 고쳐서 다시 불러라.", "problems": problems},
+                    ensure_ascii=False,
+                ),
+                True,
+                None,
+            )
+        return json.dumps({"ok": True, "message": PROPOSED}, ensure_ascii=False), False, proposal
+    except ValidationError as exc:
+        return _tool_error(f"입력이 올바르지 않다: {exc.errors(include_url=False)}"), True, None
+    finally:
+        await session.rollback()
+
+
 def _dump_list(items: Sequence[Any]) -> str:
     return "[" + ",".join(item.model_dump_json(by_alias=True) for item in items) + "]"
 
@@ -254,8 +376,41 @@ def _tool_error(message: str) -> str:
     return json.dumps({"error": message}, ensure_ascii=False)
 
 
+_PROPOSAL_STATUS = {
+    "pending": "대기 — 사용자가 아직 등록하지 않았다",
+    "registered": "등록됨 — 사용자가 [등록] 을 눌러 저장했다",
+    "cancelled": "취소 — 저장되지 않았다",
+}
+
+
+def proposal_note(proposal: ChatProposal) -> str:
+    """지난 초안을 Claude 가 읽을 글로. 서버가 대화를 저장하지 않아 화면이 돌려보낸 것이다."""
+    keys = proposal.key_by_temp_id or {}
+    lines = [f"[작업 초안 · {_PROPOSAL_STATUS[proposal.status]}]"]
+    for item in proposal.tasks:
+        fields = {
+            "temp_id": item.temp_id,
+            "parent_temp_id": item.parent_temp_id,
+            "title": item.title,
+            "owner_id": item.owner_id,
+            "start": item.start.isoformat() if item.start else None,
+            "due": item.due.isoformat() if item.due else None,
+            "priority": item.priority,
+        }
+        if proposal.status == "registered" and item.temp_id in keys:
+            fields["key"] = keys[item.temp_id]
+        lines.append("- " + json.dumps(fields, ensure_ascii=False))
+    return "\n".join(lines)
+
+
+def _content(message: ChatMessage) -> str:
+    if message.proposal is None:
+        return message.text
+    return f"{message.text}\n\n{proposal_note(message.proposal)}"
+
+
 def _to_params(messages: Sequence[ChatMessage]) -> list[BetaMessageParam]:
-    params: list[BetaMessageParam] = [{"role": m.role, "content": m.text} for m in messages]
+    params: list[BetaMessageParam] = [{"role": m.role, "content": _content(m)} for m in messages]
     # 대화는 질문으로 시작해야 한다 — 화면이 앞을 잘라도 assistant 가 먼저 오면 떼어 낸다
     while params and params[0]["role"] != "user":
         params.pop(0)
@@ -294,12 +449,17 @@ async def answer(
     스트림이 열린 뒤의 실패는 여기서 error 이벤트로 접는다 — 이게 오면 done 은 안 온다.
     """
     written: list[str] = []
+    # 한 답에 초안은 많아야 하나 — 여러 번 내면 마지막 것만 done 바로 앞에 낸다
+    proposal: ProposalEvent | None = None
     try:
         # 일찍 끝나도 안쪽 루프(열린 스트림)를 바로 닫는다
         async with aclosing(
             _loop(client, session, settings, project_id, project_name, messages)
         ) as events:
             async for event in events:
+                if isinstance(event, ProposalEvent):
+                    proposal = event
+                    continue
                 yield event
                 if isinstance(event, ErrorEvent):
                     return
@@ -312,6 +472,8 @@ async def answer(
         log.exception("채팅 처리 중 오류")
         yield ErrorEvent(code="INTERNAL_ERROR", message="서버에서 오류가 발생했습니다.")
         return
+    if proposal is not None:
+        yield proposal
     yield DoneEvent(refs=extract_refs("".join(written)))
 
 
@@ -324,7 +486,10 @@ async def _loop(
     messages: Sequence[ChatMessage],
 ) -> AsyncGenerator[ChatEvent, None]:
     history = _to_params(messages)
-    system = SYSTEM_PROMPT.format(project_name=project_name)
+    today = today_kst()
+    system = SYSTEM_PROMPT.format(
+        project_name=project_name, today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})"
+    )
     wrote = False
 
     for round_no in range(1, MAX_ROUNDS + 1):
@@ -388,7 +553,12 @@ async def _loop(
             if call.name in _TOOL_NAMES:
                 name = cast(ToolName, call.name)
                 yield ToolEvent(name=name, label=tool_label(name, call.input))
-            content, is_error = await run_tool(session, project_id, call.name, call.input)
+            if call.name == "propose_tasks":
+                content, is_error, proposal = await check_proposal(session, call.input)
+                if proposal is not None:
+                    yield ProposalEvent(proposal=proposal)
+            else:
+                content, is_error = await run_tool(session, project_id, call.name, call.input)
             results.append(
                 {
                     "type": "tool_result",

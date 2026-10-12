@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.schemas.task import (
+    TaskBatchInput,
+    TaskBatchResult,
     TaskCreate,
     TaskLinePatch,
     TaskOut,
@@ -21,6 +23,14 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 @router.post("/projects/{project_id}/tasks", status_code=201)
 async def create_task(project_id: str, payload: TaskCreate, session: Session) -> TaskOut:
     return await task_service.create_task(session, project_id, payload)
+
+
+@router.post("/projects/{project_id}/tasks/batch", status_code=201)
+async def create_tasks(
+    project_id: str, payload: TaskBatchInput, session: Session
+) -> TaskBatchResult:
+    """챗봇 초안을 한 번에 등록한다. 한 트랜잭션 — 하나라도 틀리면 아무것도 안 남는다."""
+    return await task_service.create_tasks(session, project_id, payload)
 
 
 @router.patch("/tasks/{task_id}")

@@ -85,6 +85,35 @@ class TaskPatch(Schema):
     body: list[TaskLinePatchIn] = []
 
 
+# 초안 하나에 담을 수 있는 작업 수 (API.md '작업 초안')
+PROPOSAL_MAX = 20
+
+
+class ProposedTask(Schema):
+    """챗봇 초안의 한 줄 — `domain.ts` 의 ProposedTask. 일괄 등록도 이것을 그대로 받는다.
+
+    검사 규칙(개수 · tempId · 상위 순서 · 빈 제목 · 기간)은 여기 두지 않는다 — 몇 번째의 어느 칸인지
+    `tasks.1.parentTempId` 로 짚어야 해서 `services/task.py` 의 `proposal_problems` 가 본다."""
+
+    temp_id: str
+    parent_temp_id: str | None = None
+    title: str
+    owner_id: str | None = None
+    start: date | None = None
+    due: date | None = None
+    priority: TaskPriorityIn = "normal"
+
+
+class TaskBatchInput(Schema):
+    tasks: list[ProposedTask]
+
+
+class TaskBatchResult(Schema):
+    # 요청 순서 그대로
+    tasks: list[TaskOut]
+    task_id_by_temp_id: dict[str, str]
+
+
 class TaskLinePatch(Schema):
     done: bool
 

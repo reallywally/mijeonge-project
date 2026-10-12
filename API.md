@@ -58,6 +58,7 @@
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
 | 404 | `COMMENT_NOT_FOUND` | 경로의 댓글이 없을 때(수정 · 삭제). 댓글 목록 · 등록에서 작업이 없으면 `TASK_NOT_FOUND` |
 | 400 | `COMMENT_AUTHOR_NOT_FOUND` | 댓글 등록의 `authorId` 가 없는 멤버일 때. 빈 `body`(앞뒤 공백을 뗀 뒤)는 422 `VALIDATION_ERROR` |
+| 400 | `TASK_OWNER_NOT_FOUND` | 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때. `detail` 에 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
 열린 **뒤**의 실패는 `error` 이벤트에 같은 모양(`{ code, message }`)으로 실린다.
@@ -87,6 +88,7 @@
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 연결 |
+| POST | `/api/projects/{projectId}/tasks/batch` | 챗봇 초안을 한 번에 등록 — **한 트랜잭션**, `tempId` → 실제 id 치환, `key` 는 배열 순서대로 발번. 검사 규칙 위반은 422(`detail` 에 `tasks.1.parentTempId`), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND` (아래 '작업 초안' 절) | `TaskBatchResult` · 201 | 구현 |
 | PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 연결 |
 | PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 연결 |
 | PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 연결 |
@@ -440,6 +442,111 @@ export interface TaskHit {
   `ChatInput` 이 바뀌므로 `POST .../chat` 은 `초안` 으로 되돌린다. Q25 · Q27 은 화면에 닿지 않는다
   → **Q26 은 '안 남긴다 · 창을 닫으면 끝' 으로 닫혔다(2026-10-11). 합의는 그대로 선다**
 
+## AI 챗봇 — 작업 초안 — 합의 (2026-10-12)
+
+"간담회 준비 작업 만들어줘. 김서연한테 일정체크, 박지훈한테 준비물 체크" 처럼 말하면 챗봇이
+**초안을 보여 주고, 사람이 [등록] 을 눌러야 저장된다.** 챗봇은 어떤 경우에도 직접 저장하지 않는다 —
+초안 도구는 DB 를 읽기만 하고, 저장은 화면이 아래 `POST .../tasks/batch` 로 한다.
+
+### 흐름
+
+1. Claude 가 `list_members` 로 이름을 id 로 바꾸고, `propose_tasks` 로 초안을 낸다
+2. 서버가 초안을 검사한다(아래 규칙). 틀리면 도구 결과로 Claude 에게 돌려줘 고치게 하고, 맞으면
+   스트림에 `proposal` 이벤트를 한 번 낸다. 한 답에 초안은 **많아야 하나** — 두 번 부르면 마지막 것만 낸다
+3. 화면은 그 답 말풍선 안에 미리보기 카드를 그린다 — [취소] · [등록]
+4. 고치고 싶으면 채팅으로 말한다("박지훈 말고 정하늘로"). 새 답이 새 초안을 내고, **이전 카드는 화면이
+   `cancelled` 로 접는다**(대기 중인 카드는 늘 하나다). 카드 안에서 직접 고치는 것은 이번 범위 밖이다
+5. [등록] → `POST /api/projects/{projectId}/tasks/batch` → 화면 스토어에 작업을 넣고 카드를 작업 칩으로 바꾼다.
+   같은 카드는 두 번 등록되지 않는다(누르는 동안 버튼을 막고, 끝나면 `registered`)
+
+### 초안 — `TaskProposal`
+
+```ts
+export interface TaskProposal {
+  /** 배열 순서 = 등록 순서 = 화면 순서. 상위가 늘 하위보다 앞이다 */
+  tasks: ProposedTask[]
+}
+
+export interface ProposedTask {
+  /** 이 초안 안에서만 쓰는 임시 이름 — 't1', 't2' … */
+  tempId: string
+  /** 같은 초안 안의 상위 작업. 기존 작업 밑에 붙이는 것은 이번 범위 밖이다 */
+  parentTempId: string | null
+  title: string
+  ownerId: string | null
+  /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */
+  start: string | null
+  due: string | null
+  priority: 'low' | 'normal' | 'high'
+}
+```
+
+**검사 규칙**(서버가 `propose_tasks` 에서, 그리고 `tasks/batch` 에서 똑같이 본다)
+- 1 ~ 20개. `tempId` 는 서로 다르다. `parentTempId` 는 **자기보다 앞에 있는** 항목의 `tempId` 다
+- `title` 은 앞뒤 공백을 떼고 비지 않는다. `ownerId` 는 있는 멤버다. `start ≤ due`(둘 다 있을 때)
+
+### 스트림에 늘어난 것 — `ChatEvent`
+
+```ts
+  /** 작업 초안. 한 답에 많아야 하나, done 보다 먼저 온다 */
+  | { type: 'proposal'; proposal: TaskProposal }
+```
+
+`tool` 이벤트의 `name` 에 `'list_members' | 'propose_tasks'` 가 늘어난다(라벨 예: '멤버 확인 중', '작업 초안 만드는 중').
+
+### 요청에 늘어난 것 — `ChatMessage.proposal`
+
+서버는 대화를 저장하지 않으므로(Q26) 화면이 지난 초안과 그 결과를 돌려보낸다. 그래야 "정하늘로 바꿔줘" ·
+"방금 만든 것에 하나 더" 를 알아듣는다.
+
+```ts
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  text: string
+  /** assistant 에만. 그 답이 낸 초안과 화면에서의 결과 */
+  proposal?: TaskProposal & {
+    status: 'pending' | 'registered' | 'cancelled'
+    /** registered 일 때만 — tempId → 저장된 작업 key(MG-7) */
+    keyByTempId?: Record<string, string>
+  }
+}
+```
+
+- `user` 에 `proposal` 이 오면 422 `VALIDATION_ERROR`
+- 서버는 이것을 Claude 에게 넘길 때 그 assistant 답 뒤에 글로 덧붙인다 — 형식은 서버가 정한다
+
+### 한 번에 등록 — `POST /api/projects/{projectId}/tasks/batch`
+
+```ts
+/** 요청 */
+export interface TaskBatchInput {
+  tasks: ProposedTask[]   // 초안 그대로 보낸다. 상태는 todo, 본문은 빈 배열로 만든다
+}
+/** 201 응답 */
+export interface TaskBatchResult {
+  /** 요청 순서 그대로 */
+  tasks: Task[]
+  taskIdByTempId: Record<string, string>
+}
+```
+
+- **한 트랜잭션**이다 — 하나라도 틀리면 아무것도 안 남는다. `key` 는 배열 순서대로 발번한다
+- 오류: 없는 프로젝트 404 `PROJECT_NOT_FOUND`, 검사 규칙 위반은 422 `VALIDATION_ERROR`(`detail` 에
+  `tasks.1.parentTempId` 처럼 몇 번째의 어느 칸인지), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`
+- 구현 (2026-10-12, 서버) — `detail` 의 자리 이름: 개수(0개 · 21개 이상)는 `tasks`, `start > due` 는
+  `tasks.N.due`, 날짜 형식 · `priority` 같은 타입 오류도 `tasks.N.칸` 이다. 없는 멤버의 400 에도 `detail` 이
+  `tasks.N.ownerId` 로 붙는다. 검사가 끝난 뒤에만 쓰고, 쓰다 터지면 발번한 번호까지 되돌린다.
+  `title` 은 앞뒤 공백을 떼고 저장한다. **이 `tasks.N.칸` 표기는 `tasks/batch` 에만 쓴다** — 다른 자리의
+  `detail` 은 지금처럼 마지막 필드 이름이다
+
+### 답하는 규칙에 늘어난 것
+
+- 작업을 만들어 달라는 말에는 **초안만 낸다.** 답 본문은 짧게 — "아래처럼 등록할까요?" 정도. "등록했다" 고 말하지 않는다
+- 이름이 멤버에 없거나 여럿에 걸리면 **초안을 내지 않고 되묻는다**
+- 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업, 할 일을 하위 작업으로 둔다. 할 일이 하나면 상위 없이 하나다
+- 날짜("다음 주 금요일")는 오늘(KST) 기준으로 바꾼다 — 서버가 시스템 프롬프트에 오늘 날짜를 넣는다. 말하지 않은 기간 · 우선순위는 채우지 않는다(null · normal)
+- 경로의 `projectId` 안에만 만든다
+
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
@@ -492,6 +599,7 @@ export interface TaskHit {
 | --- | --- | --- |
 | 2026-10-11 | 챗봇 `text` 상한을 역할별로 나눴다 — 질문 2,000자 · 답 20,000자. 화면 입력칸에도 2,000자를 건다 | 답은 `max_tokens` 8000 이라 2,000자를 넘을 수 있고, 화면이 지난 답을 그대로 돌려보내므로 한 번 긴 답이 나오면 창을 닫을 때까지 다음 질문이 전부 422 였다 |
 | 2026-10-11 | **`POST /api/projects/{projectId}/chat` 을 `구현` 으로 올렸다.** 스트림 중 오류 코드에 `CHAT_REFUSED`(AI 거절) · `INTERNAL_ERROR`(공통 코드)를 더했다. 스트림 전 확인 순서는 프로젝트 → 키 → IP 당 횟수(분당 10회) | 거절은 키 없음 · 횟수 초과와 원인이 달라 화면이 다르게 말할 수 있어야 한다. 화면은 `code` 로 가르고 `message` 를 그대로 띄우므로 새 코드가 화면을 깨지 않는다 |
+| 2026-10-12 | **챗봇 작업 초안 계약을 `합의` 로 올렸다** — `propose_tasks` · `list_members` 도구, 스트림 `proposal` 이벤트, `ChatMessage.proposal`, `POST .../tasks/batch` | 사용자 결정 — 챗봇은 초안만 내고 사람이 [등록] 을 눌러야 저장된다. AI 가 잘못 알아들어도 DB 에 남지 않는다. 묶음은 한 트랜잭션이어야 상위만 남는 일이 없다 |
 | 2026-10-12 | Q12 를 고쳤다 — "나"(`currentMemberId`)는 상수가 아니라 화면 헤더에서 고르고 브라우저에 기억한다. `lib/session.ts` 를 지웠다 | 댓글은 누가 썼는지가 곧 내용이다. 모두가 `u3` 로 적히면 쓸모가 없다. 로그인 전까지 사람이 고르는 것이 가장 싼 길이고, 인증이 붙으면 이 값만 서버에서 받으면 된다 |
 | 2026-10-12 | **작업 댓글을 더했다** — `GET` · `POST /api/tasks/{taskId}/comments`, `PATCH` · `DELETE /api/comments/{commentId}`, 테이블 `task_comment`(리비전 `0007_task_comment`, 작업을 지우면 같이 지워진다). `Task` 에 `commentCount` 가 늘었다 — 스냅샷 · 작업 쓰기 응답 · 검색의 작업 모두에 실린다. 댓글 본문은 스냅샷에 안 싣는다. 오류 코드 `COMMENT_NOT_FOUND`(404) · `COMMENT_AUTHOR_NOT_FOUND`(400). **작성자 일치는 서버가 검사하지 않는다** | 사용자가 프론트와 맞춘 계약 그대로다. 목록 · 칸반은 개수만 찍고 본문은 상세에서만 읽어 스냅샷을 무겁게 하지 않는다. 로그인이 없어 요청이 누구 것인지 가릴 수 없다 — 인증이 붙으면(`server/PLAN.md` 6단계) 서버가 막는다 |
 | 2026-10-11 | **`GET /api/projects/{projectId}/search` 를 `구현` 으로 올렸다**(채팅은 `합의` 그대로). 리비전 `0006_search_trgm` — `pg_trgm` + GIN 인덱스 여덟. 점수는 `word_similarity`, 검색어가 그대로 들어 있으면 0.9, 0.5 미만은 버린다. 빈 `q` 는 422 · `limit` 1 ~ 50 · 한 레코드는 한 번만 — '검색' 절에 적었다. Q27 닫힘 — 검색 테스트는 Postgres 가 있을 때만 돈다 | 기본 전문검색은 한국어를 못 쪼개고, `similarity()` 는 짧은 검색어를 긴 글에서 묻는다('OS' ↔ '서버 OS 결정' 0.33 → `word_similarity` 1.0). 한국어 조사('미룸이다') 때문에 그대로 들어 있는 경우를 따로 올린다. sqlite 대역 갈래를 두면 운영 코드가 검사되지 않는다 |

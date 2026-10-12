@@ -4,7 +4,7 @@
 (`web/src/lib/date.ts` 의 `localDay`), 서버는 오프셋을 섞지 않는다 — 늘 `Z` 로 끝난다.
 """
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
 
@@ -12,6 +12,11 @@ KST = timezone(timedelta(hours=9))
 def now() -> datetime:
     """지금. 저장값은 늘 UTC aware 다 — naive 를 만들지 않는다."""
     return datetime.now(UTC)
+
+
+def today_kst() -> date:
+    """사람이 말하는 '오늘'. 챗봇이 '다음 주 금요일' 을 날짜로 바꿀 기준이다."""
+    return now().astimezone(KST).date()
 
 
 def as_utc(moment: datetime) -> datetime:

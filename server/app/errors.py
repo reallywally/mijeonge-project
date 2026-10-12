@@ -62,6 +62,10 @@ _REASONS = {
     "too_long": "너무 많습니다.",
 }
 
+# 이 목록 아래의 칸은 몇 번째인지까지 짚는다 — `tasks.1.parentTempId` (API.md '한 번에 등록').
+# 다른 자리는 지금처럼 마지막 이름만 쓴다
+_INDEXED = {("tasks",)}
+
 _HTTP_CODES = {
     404: ("NOT_FOUND", "요청한 경로를 찾을 수 없습니다."),
     405: ("METHOD_NOT_ALLOWED", "이 경로에서는 쓸 수 없는 방식입니다."),
@@ -82,8 +86,11 @@ async def _validation_error(request: Request, exc: Exception) -> JSONResponse:
         # loc 은 ('body', 'name') 처럼 온다 — 화면이 쓰는 건 마지막 이름이다.
         # 앞의 'body' 만 뗀다 — 필드 이름이 body 인 자리(댓글 · 작업 본문)까지 지우면 안 된다
         loc = err["loc"][1:] if err["loc"][:1] == ("body",) else err["loc"]
-        names = [part for part in loc if isinstance(part, str)]
-        field = names[-1] if names else "요청"
+        if loc[:1] in _INDEXED and len(loc) > 1 and isinstance(loc[1], int):
+            field = ".".join(str(part) for part in loc)
+        else:
+            names = [part for part in loc if isinstance(part, str)]
+            field = names[-1] if names else "요청"
         detail[field] = _REASONS.get(err["type"], err["msg"])
     return JSONResponse(
         status_code=422,
