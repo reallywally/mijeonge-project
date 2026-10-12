@@ -30,7 +30,7 @@ from app.schemas.search import (
     ThreadPlace,
 )
 from app.services import project as project_service
-from app.services.task import to_task
+from app.services.task import comment_count, to_task
 from app.services.thread import DECIDING_KINDS, to_entry, to_thread
 
 ThreadState = Literal["queued", "open", "decided"]
@@ -304,7 +304,7 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
         .order_by(Thread.seq)
     )
     return TaskDoc(
-        task=to_task(task),
+        task=to_task(task, await comment_count(session, task.id)),
         threads=[
             LinkedThread(id=id_, title=title, state=state) for id_, title, state in threads.all()
         ],

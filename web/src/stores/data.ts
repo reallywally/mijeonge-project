@@ -5,22 +5,23 @@ import type { ApiError } from '@/api'
 import { entries, members, projects, tasks, taskThreadLinks, threads } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { makeTaskKeyPrefix } from '@/lib/project'
-import { CURRENT_MEMBER_ID } from '@/lib/session'
 import type { Entry, Member, Project, Task, TaskThreadLink, Thread } from '@/types/domain'
 
 const REMEMBERED_PROJECT = 'innoflow.projectId'
+const REMEMBERED_MEMBER = 'innoflow.memberId'
 
-function recall(): string | null {
+function recall(key: string): string | null {
   try {
-    return localStorage.getItem(REMEMBERED_PROJECT)
+    return localStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-function remember(projectId: string) {
+function remember(key: string, value: string | null) {
   try {
-    localStorage.setItem(REMEMBERED_PROJECT, projectId)
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
   } catch {
     /* 사생활 보호 모드 등에서 막혀 있어도 앱은 돈다 */
   }
@@ -110,7 +111,7 @@ export const useDataStore = defineStore('data', () => {
         ])
         allProjects.value = projectList
         allMembers.value = memberList
-        const wanted = recall()
+        const wanted = recall(REMEMBERED_PROJECT)
         const picked = projectList.find((p) => p.id === wanted) ?? projectList[0]
         currentProjectId.value = picked?.id ?? ''
         if (picked) await loadSnapshot(picked.id)
@@ -134,7 +135,7 @@ export const useDataStore = defineStore('data', () => {
       currentProjectId.value = id
       return
     }
-    remember(id)
+    remember(REMEMBERED_PROJECT, id)
     if (id === currentProjectId.value && loadedProjectId.value === id) return
     currentProjectId.value = id
     syncing.value = true
@@ -225,8 +226,18 @@ export const useDataStore = defineStore('data', () => {
     }
   }
 
-  /** 지금 로그인한 사람. 인증이 붙기 전까지 프론트가 들고 있는 상수다 (API.md Q12) */
-  const currentMemberId = ref(CURRENT_MEMBER_ID)
+  /* '나' — 로그인이 없어 머리글에서 사람이 고르고 이 브라우저에 기억한다 (API.md Q12 는 프론트가 든다고 닫았다).
+     기억한 id 가 멤버 목록에 없으면(지워졌거나 서버를 바꿨으면) 고르지 않은 것으로 본다 */
+  const pickedMemberId = ref<string | null>(recall(REMEMBERED_MEMBER))
+  const currentMemberId = computed<string | null>(() =>
+    allMembers.value.some((m) => m.id === pickedMemberId.value) ? pickedMemberId.value : null,
+  )
+
+  function setCurrentMember(id: string | null) {
+    if (id !== null && !allMembers.value.some((m) => m.id === id)) return
+    pickedMemberId.value = id
+    remember(REMEMBERED_MEMBER, id)
+  }
   const memberName = (id: string | null) =>
     id ? (allMembers.value.find((m) => m.id === id)?.name ?? null) : null
 
@@ -262,6 +273,7 @@ export const useDataStore = defineStore('data', () => {
     takeTaskKey,
     save,
     currentMemberId,
+    setCurrentMember,
     memberName,
     nextId,
   }

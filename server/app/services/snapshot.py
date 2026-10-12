@@ -22,7 +22,7 @@ from app.schemas.project import ProjectOut
 from app.schemas.snapshot import SnapshotOut
 from app.schemas.task import TaskThreadLinkOut
 from app.services import project as project_service
-from app.services.task import to_task
+from app.services.task import comment_counts, to_task
 from app.services.thread import to_entry, to_thread
 
 
@@ -47,6 +47,7 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
     tasks = await _all(
         session, select(Task).where(Task.project_id == project_id).order_by(Task.seq)
     )
+    counts = await comment_counts(session, project_id)
     # 링크는 양쪽이 같은 프로젝트라 project_id 하나로 갈린다 (API.md Q13)
     task_threads = await _all(
         session,
@@ -59,6 +60,6 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
         project=ProjectOut.model_validate(project),
         threads=[to_thread(row) for row in threads],
         entries=[to_entry(row) for row in entries],
-        tasks=[to_task(row) for row in tasks],
+        tasks=[to_task(row, counts.get(row.id, 0)) for row in tasks],
         task_thread_links=[TaskThreadLinkOut.model_validate(row) for row in task_threads],
     )

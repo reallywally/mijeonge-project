@@ -1,5 +1,7 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import StringConstraints
 
 from app.schemas.base import Schema, Utc
 
@@ -31,6 +33,8 @@ class TaskOut(Schema):
     due: date | None
     priority: str
     created_at: Utc
+    # 댓글 본문은 안 싣는다 — 목록 · 칸반이 개수만 찍고, 본문은 상세가 따로 받는다
+    comment_count: int
 
 
 class TaskLineIn(Schema):
@@ -88,3 +92,27 @@ class TaskLinePatch(Schema):
 class TaskThreadLinkOut(Schema):
     task_id: str
     thread_id: str
+
+
+# 앞뒤 공백을 떼고 비면 422 다(string_too_short)
+CommentBody = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class TaskCommentOut(Schema):
+    id: str
+    task_id: str
+    author_id: str | None
+    body: str
+    created_at: Utc
+    # 한 번도 안 고쳤으면 null
+    edited_at: Utc | None
+
+
+class TaskCommentCreate(Schema):
+    # 로그인이 없어 화면이 자기 멤버 id 를 실어 보낸다 — 서버는 있는 멤버인지만 본다
+    author_id: str | None = None
+    body: CommentBody
+
+
+class TaskCommentPatch(Schema):
+    body: CommentBody

@@ -7,6 +7,7 @@ import {
   Download,
   GanttChartSquare,
   List,
+  MessageSquare,
   Plus,
   Search,
   SquareKanban,
@@ -476,11 +477,22 @@ function bulkOwner(value: string) {
                       }"
                     />
                     <span class="flex min-w-0 flex-col gap-0.5">
-                      <span
-                        class="truncate text-sm underline-offset-4 group-hover:underline"
-                        :class="row.task.status === 'done' ? 'text-muted-foreground' : ''"
-                        >{{ row.task.title }}</span
-                      >
+                      <span class="flex min-w-0 items-center gap-2">
+                        <span
+                          class="truncate text-sm underline-offset-4 group-hover:underline"
+                          :class="row.task.status === 'done' ? 'text-muted-foreground' : ''"
+                          >{{ row.task.title }}</span
+                        >
+                        <span
+                          v-if="row.task.commentCount > 0"
+                          class="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
+                          :aria-label="`댓글 ${row.task.commentCount}개`"
+                          :title="`댓글 ${row.task.commentCount}개`"
+                        >
+                          <MessageSquare class="size-3" />
+                          {{ row.task.commentCount }}
+                        </span>
+                      </span>
                       <span class="truncate text-xs text-muted-foreground">{{
                         row.pathLabel
                       }}</span>

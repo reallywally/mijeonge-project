@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
+import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
@@ -23,7 +24,7 @@ import type { TaskLine, TaskStatus } from '@/types/domain'
 
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
    따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 연결, 오른쪽이 속성이다.
-   안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. */
+   안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. 맨 아래가 댓글이다. */
 const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{
@@ -295,6 +296,9 @@ const threadChoices = computed(() => {
             @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
             @open-thread="(id) => emit('open-thread', id)"
           />
+
+          <div class="h-px bg-border" />
+          <TaskComments :task-id="detail.task.id" />
         </div>
 
         <TaskPropertyPanel

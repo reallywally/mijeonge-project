@@ -1,3 +1,4 @@
+import { taskComments } from '@/fixtures/comments'
 import type { Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
 
 /**
@@ -31,6 +32,7 @@ function mk(
     due,
     priority: 'normal',
     createdAt: '2026-09-04T00:20:00Z',
+    commentCount: taskComments.filter((c) => c.taskId === id).length,
   }
 }
 

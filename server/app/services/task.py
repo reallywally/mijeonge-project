@@ -5,13 +5,14 @@
 여기 둔다 — 변환을 두 벌 갖지 않는다.
 """
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import bad_request, not_found
 from app.models import (
     Project,
     Task,
+    TaskComment,
     TaskLine,
     TaskThreadLink,
     Thread,
@@ -29,7 +30,8 @@ from app.services import project as project_service
 from app.time import now
 
 
-def to_task(row: Task) -> TaskOut:
+def to_task(row: Task, comment_count: int) -> TaskOut:
+    """개수를 따로 받는다 — 작업마다 세면 목록 하나가 쿼리 수십 개가 된다(`comment_counts`)."""
     return TaskOut(
         id=row.id,
         project_id=row.project_id,
@@ -43,7 +45,26 @@ def to_task(row: Task) -> TaskOut:
         due=row.due,
         priority=row.priority,
         created_at=row.created_at,
+        comment_count=comment_count,
     )
+
+
+async def comment_counts(session: AsyncSession, project_id: str) -> dict[str, int]:
+    """그 프로젝트 작업들의 댓글 수를 한 번에 센다. 댓글이 없는 작업은 키가 없다(0 으로 읽는다)."""
+    rows = await session.execute(
+        select(TaskComment.task_id, func.count())
+        .join(Task, Task.id == TaskComment.task_id)
+        .where(Task.project_id == project_id)
+        .group_by(TaskComment.task_id)
+    )
+    return {task_id: count for task_id, count in rows.tuples().all()}
+
+
+async def comment_count(session: AsyncSession, task_id: str) -> int:
+    counted = await session.scalar(
+        select(func.count()).select_from(TaskComment).where(TaskComment.task_id == task_id)
+    )
+    return counted or 0
 
 
 async def load_task(session: AsyncSession, task_id: str) -> Task:
@@ -142,7 +163,8 @@ async def create_task(session: AsyncSession, project_id: str, payload: TaskCreat
     for thread_id in dict.fromkeys(payload.thread_ids):
         await _attach_thread(session, task, thread_id)
     await session.commit()
-    return to_task(task)
+    # 방금 만든 작업이라 댓글이 있을 수 없다
+    return to_task(task, comment_count=0)
 
 
 async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) -> TaskOut:
@@ -156,7 +178,7 @@ async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) ->
     for field, value in changes.items():
         setattr(task, field, value)
     await session.commit()
-    return to_task(task)
+    return to_task(task, await comment_count(session, task.id))
 
 
 def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:
@@ -188,7 +210,7 @@ async def set_line_done(session: AsyncSession, task_id: str, line_id: str, done:
         raise bad_request("TASK_LINE_NOT_CHECKABLE", "체크박스가 아닌 줄은 켜고 끌 수 없습니다.")
     line.done = done
     await session.commit()
-    return to_task(task)
+    return to_task(task, await comment_count(session, task.id))
 
 
 async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> None:

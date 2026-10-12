@@ -1,6 +1,7 @@
 export { ApiError, isUnreachable, messageOf } from './client'
 export { isMockMode } from './mode'
 export * from './chat'
+export * from './comments'
 export * from './projects'
 export * from './tasks'
 export * from './threads'

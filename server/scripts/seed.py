@@ -23,6 +23,7 @@ from app.models import (
     Member,
     Project,
     Task,
+    TaskComment,
     TaskLine,
     TaskThreadLink,
     Thread,
@@ -388,9 +389,51 @@ TASK_THREAD_LINKS = [
 ]
 
 
+def comments() -> list[TaskComment]:
+    """`fixtures/comments.ts` — 작업마다 오래된 것부터."""
+    rows = [
+        (
+            "cm1",
+            "k4",
+            "u1",
+            "방화벽 신청서는 제가 올려 두었습니다.\n승인까지 이틀 정도 걸린다고 합니다.",
+            "2026-09-09T01:12:00Z",
+            None,
+        ),
+        (
+            "cm2",
+            "k4",
+            "u3",
+            "확인했습니다. 승인 나면 계정 네 개 바로 만들겠습니다.",
+            "2026-09-09T02:40:00Z",
+            "2026-09-09T02:45:00Z",
+        ),
+        (
+            "cm3",
+            "k18",
+            "u4",
+            "in · out 정의 안건이 정해져야 시작할 수 있습니다.",
+            "2026-09-15T05:00:00Z",
+            None,
+        ),
+    ]
+    return [
+        TaskComment(
+            id=id_,
+            task_id=task_id,
+            author_id=author_id,
+            body=body,
+            created_at=at(created),
+            edited_at=at(edited) if edited else None,
+        )
+        for id_, task_id, author_id, body, created, edited in rows
+    ]
+
+
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        TaskComment,
         TaskThreadLink,
         TaskLine,
         Task,
@@ -428,7 +471,7 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in ("thread", "entry", "task"):
+    for table in ("thread", "entry", "task", "task_comment"):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
@@ -449,6 +492,8 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(in_order(entries()))
     session.add_all(in_order(tasks()))
     await session.flush()
+    session.add_all(in_order(comments()))
+    await session.flush()
     await advance_identity(session)
     session.add_all(
         [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
@@ -466,6 +511,7 @@ async def run() -> None:
         "thread": len(threads()),
         "entry": len(entries()),
         "task": len(tasks()),
+        "comment": len(comments()),
         "link": len(TASK_THREAD_LINKS),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))

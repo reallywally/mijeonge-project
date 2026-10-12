@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ListTree, Plus } from 'lucide-vue-next'
+import { ListTree, MessageSquare, Plus } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -91,6 +91,15 @@ const threadTitles = (taskId: string) =>
             <div class="flex items-center gap-2">
               <span class="text-xs text-muted-foreground">{{ row.task.key }}</span>
               <div class="grow" />
+              <span
+                v-if="row.task.commentCount > 0"
+                class="flex items-center gap-1 text-xs text-muted-foreground"
+                :aria-label="`댓글 ${row.task.commentCount}개`"
+                :title="`댓글 ${row.task.commentCount}개`"
+              >
+                <MessageSquare class="size-3" />
+                {{ row.task.commentCount }}
+              </span>
               <button
                 v-if="row.threadCount > 0"
                 type="button"
