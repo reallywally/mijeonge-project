@@ -179,6 +179,14 @@
 
 **커밋** — ① 작업 쓰기 ② 안건 쓰기 ③ 새 회의 저장 ④ 링크
 
+## 4단계 · 프론트 붙이기 (`web/PLAN.md` 3단계와 같은 일)
+
+- [x] ~~OpenAPI 스키마를 프론트에 넘기고 `openapi-typescript` 로 타입 생성~~ — **안 하기로 했다.** 계약이 `web/src/types/domain.ts` 를
+      정본으로 삼고 서버가 그 모양에 맞춰 낸다(`web/PLAN.md` 3단계). 어긋남은 `tests/test_contract_types.py` 가 domain.ts 와 대조해 잡는다
+- [x] 에러 응답 형식을 하나로 정한다 — `{ code, message, detail? }` (2026-09-28 · Q14). 핸들러 넷이 같은 모양으로 바꾼다
+- [x] `VITE_USE_MOCK` 스위치 — 개발 기본은 서버, `'true'` 면 목업, vitest 는 목업 (2026-10-11 · `web/src/api/mode.ts`)
+- [x] 화면 작업은 **frontend 에이전트**가 했다 — `src/api/` · 부팅 · 쓰기 동기화 (`web/PLAN.md` 3단계)
+
 ## 8단계 · 인증과 권한 — 누가 부르는지 서버가 안다
 
 계약은 `../docs/api/auth.md`, 화면은 `../web/PLAN.md` 8단계가 맡는다. 관리자가 DB 에 손으로 등록하는
