@@ -13,7 +13,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
   단, 회의(meeting)는 2026-10-11 에 걷어냈다 — memo 의 회의 대목은 옛 기록이다 (`API.md` 결정 로그)
 - `web/src/types/domain.ts` — **API 계약의 기준**. 화면이 이미 이 모양으로 돌고 있다
 - `web/src/stores/*.ts` — 지금 목업이 무엇을 계산해 화면에 주는지. 서버가 넘겨받을 후보가 여기 있다
-- `server/PLAN.md` — 서버를 무엇을 어떤 순서로 만드는지. **일을 받으면 몇 단계의 일인지 여기서 찾는다**
+- `server/PLAN.md` — 서버를 무엇을 어떤 순서로 만드는지. **일을 받으면 몇 단계의 일인지 여기서 찾는다**. 끝난 단계의 자세한 기록은 `server/PLAN.done.md`
 - `web/PLAN.md` — 프론트가 정해 둔 것과 남은 것
 - `API.md` — **프론트와 맺은 계약**의 목차 — 공통 규칙 · 엔드포인트 표 · 열린 질문. 도메인별 모양은 `docs/api/*.md`, 닫힌 질문(Qn) · 결정 로그는 `docs/api/decisions.md`. **일에 걸린 파일만 읽는다**
 
