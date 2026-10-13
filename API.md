@@ -8,6 +8,21 @@
 - 계약을 바꾸는 일은 **코드보다 여기가 먼저다**
 - 무엇을 어떤 순서로 만들지는 `server/PLAN.md` · `web/PLAN.md` 가 갖는다
 
+### 문서 지도
+
+이 파일은 **지금 살아 있는 계약의 목차**만 둔다 — 공통 규칙 · 에러 · 엔드포인트 표 · 열린 질문.
+도메인별 자세한 모양은 `docs/api/` 에 나눠 두고, 일에 걸린 파일만 읽는다.
+
+| 파일 | 담는 것 |
+| --- | --- |
+| `docs/api/snapshot.md` | `ProjectSnapshot` 응답 · `ProjectInput` 요청 · `task.key` 발번 |
+| `docs/api/chat.md` | AI 챗봇 — 요청 · SSE 스트림 · 근거 표시 · 검색 · 작업 초안 · 한 번에 등록 |
+| `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
+| `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
+
+- 새 도메인의 계약이 길어지면(표 한 줄로 안 끝나면) `docs/api/<도메인>.md` 를 새로 세우고 위 표에 줄을 더한다
+- 질문이 닫히면 '열린 질문' 에서 `docs/api/decisions.md` 로 옮긴다. 결정 로그도 그 파일 맨 위에 더한다
+
 ## 공통 규칙
 
 | | |
@@ -17,9 +32,9 @@
 | id | 전부 문자열. DB 가 UUID 라도 내보낼 때 `str` |
 | 날짜 | 사람이 고른 날짜(`Task.start` · `Task.due` · `Thread.dueDate`)는 `YYYY-MM-DD`, `createdAt` 은 **ISO 8601 UTC · 항상 `Z` 접미 한 가지 형식**. **오프셋(`+09:00`)을 섞지 않는다** — 프론트가 문자열 비교로 정렬한다 (Q3 닫힘 — 화면에 찍을 때 `lib/date.ts` 가 KST 로 옮긴다) |
 | 스코프 | 경로에 프로젝트를 둔다 — `/api/projects/{projectId}/...`. 프로젝트 목록만 예외 |
-| 인증 | 없다. 담당자는 `member` id 로만 가리킨다 |
+| 인증 | **세션 쿠키** — `/api/health` · `POST /api/auth/login` 말고는 전부 로그인이 필요하다. 권한은 시스템 관리자 · 프로젝트 관리자 · 일반 사용자 셋 (`docs/api/auth.md`, 8단계 · 구현) |
 | 집계 타입 | `ThreadRow` · `ThreadDetail` · `TaskRow` 는 서버가 주지 않는다 — 프론트 스토어가 계산한다 |
-| 빈 값 | 빈 문자열은 `''`, 빈 배열은 `[]`. **`null` 은 정해진 여섯 이름에서만 나간다** — 아래 '빈 값은 `null` 이 아니다' (Q17 닫힘) |
+| 빈 값 | 빈 문자열은 `''`, 빈 배열은 `[]`. **`null` 은 정해진 여섯 이름에서만 나간다** — `docs/api/snapshot.md` 의 '빈 값은 `null` 이 아니다' (Q17 닫힘) |
 | 에러 | HTTP 상태 + 본문 `{ code, message, detail? }` 한 가지 — 아래 '에러' (Q14 닫힘) |
 
 ## 에러
@@ -57,8 +72,8 @@
 | 400 | `TASK_THREAD_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
 | 404 | `COMMENT_NOT_FOUND` | 경로의 댓글이 없을 때(수정 · 삭제). 댓글 목록 · 등록에서 작업이 없으면 `TASK_NOT_FOUND` |
-| 400 | `COMMENT_AUTHOR_NOT_FOUND` | 댓글 등록의 `authorId` 가 없는 멤버일 때. 빈 `body`(앞뒤 공백을 뗀 뒤)는 422 `VALIDATION_ERROR` |
-| 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때. `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
+| ~~400~~ | ~~`COMMENT_AUTHOR_NOT_FOUND`~~ | **8단계부터 안 나온다** — 작성자는 로그인한 사람이고 `authorId` 를 받지 않는다(`docs/api/auth.md`). 빈 `body`(앞뒤 공백을 뗀 뒤)는 422 `VALIDATION_ERROR` |
+| 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때 — **8단계부터는 그 프로젝트의 활성 멤버가 아닐 때**(이미 걸린 담당자를 그대로 두는 수정은 통과). `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
 열린 **뒤**의 실패는 `error` 이벤트에 같은 모양(`{ code, message }`)으로 실린다.
@@ -88,552 +103,49 @@
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 연결 |
-| POST | `/api/projects/{projectId}/tasks/batch` | 챗봇 초안을 한 번에 등록 — **한 트랜잭션**, `tempId` → 실제 id 치환, `key` 는 배열 순서대로 발번. 검사 규칙 위반은 422(`detail` 에 `tasks.1.parentTempId`), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND` (아래 '작업 초안' 절) | `TaskBatchResult` · 201 | 구현 |
+| POST | `/api/projects/{projectId}/tasks/batch` | 챗봇 초안을 한 번에 등록 — **한 트랜잭션**, `tempId` → 실제 id 치환, `key` 는 배열 순서대로 발번. 검사 규칙 위반은 422(`detail` 에 `tasks.1.parentTempId`), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND` (`docs/api/chat.md` '작업 초안') | `TaskBatchResult` · 201 | 구현 |
 | PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 연결 |
 | PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 연결 |
 | PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 연결 |
 | POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 연결 |
 | PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` 는 통째로 갈아끼운다. 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 연결 |
 | GET | `/api/tasks/{taskId}/comments` | 작업 댓글 목록 — **등록 순(`seq` 오름차순, 오래된 것 먼저)**. 없는 작업은 404 `TASK_NOT_FOUND` | `TaskComment[]` | 구현 |
-| POST | `/api/tasks/{taskId}/comments` | 댓글 등록 — `{ authorId, body }`. `body` 는 앞뒤 공백을 떼고 비면 422. 없는 멤버는 400 `COMMENT_AUTHOR_NOT_FOUND` | `TaskComment` · 201 | 구현 |
-| PATCH | `/api/comments/{commentId}` | 댓글 본문 수정 — `{ body }`. `editedAt` 이 지금 시각이 된다. 빈 `body` 는 422, 없는 댓글은 404 `COMMENT_NOT_FOUND`. **작성자 일치는 서버가 안 본다** — 로그인이 없어 자기 댓글에만 메뉴를 여는 건 화면 몫이다 | `TaskComment` | 구현 |
-| DELETE | `/api/comments/{commentId}` | 댓글 삭제. 없는 댓글은 404 `COMMENT_NOT_FOUND`. 작성자 일치는 안 본다(위와 같다) | 204 | 구현 |
+| POST | `/api/tasks/{taskId}/comments` | 댓글 등록 — `{ body }`. `body` 는 앞뒤 공백을 떼고 비면 422. **작성자는 로그인한 사람** — `authorId` 를 보내도 무시한다 (8단계) | `TaskComment` · 201 | 구현 |
+| PATCH | `/api/comments/{commentId}` | 댓글 본문 수정 — `{ body }`. `editedAt` 이 지금 시각이 된다. 빈 `body` 는 422, 없는 댓글은 404 `COMMENT_NOT_FOUND`. **작성자만** 고친다 — 그 밖은 403 `FORBIDDEN` (8단계) | `TaskComment` | 구현 |
+| DELETE | `/api/comments/{commentId}` | 댓글 삭제. 없는 댓글은 404 `COMMENT_NOT_FOUND`. 작성자 · 그 프로젝트 관리자 · 시스템 관리자만 — 그 밖은 403 `FORBIDDEN` (8단계) | 204 | 구현 |
 | POST | `/api/threads/{threadId}/entries` | 이력 한 줄 — 결정 · 미룸 · 세부 추가. 이력을 남기는 유일한 길이다. `decide` 면 안건이 `decided`, 그 밖의 줄은 `queued` 면 `open` 으로 | `{ entry, thread }` · 201 | 연결 |
 
 읽기 넷은 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
 `uv run fastapi dev` 로 띄우고 `/api/projects` → `/api/projects/p1/snapshot` 순으로 받으면 목업과 같은 데이터가 온다
 (시드가 `web/src/fixtures/*.ts` 와 같은 값이다).
 
-AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 아래 '## AI 챗봇' 절이다.
+AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/api/chat.md` 다.
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/projects/{projectId}/search?q=&limit=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다. 빈 `q` 는 422, `limit` 은 1 ~ 50 (아래 '검색' 절) | `SearchResult` | 구현 |
+| GET | `/api/projects/{projectId}/search?q=&limit=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다. 빈 `q` 는 422, `limit` 은 1 ~ 50 (`docs/api/chat.md` '검색') | `SearchResult` | 구현 |
 | POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 구현 |
 
-## 응답 스키마 — `ProjectSnapshot`
-
-`GET /api/projects/{projectId}/snapshot`.
-**원본만 준다.** `ThreadRow` · `ThreadDetail` · `TaskRow` ·
-`TaskDetail` · `TaskThreadRow` 같은 계산된 타입은 담지 않는다 — 지금대로 프론트 스토어가 만든다.
-
-타입은 전부 `web/src/types/domain.ts` 의 것을 그대로 쓴다. 서버가 이름을 새로 짓지 않는다.
-
-```ts
-import type {
-  Entry, Project, Task, TaskThreadLink, Thread,
-} from '@/types/domain'
-
-/** GET /api/projects/{projectId}/snapshot */
-export interface ProjectSnapshot {
-  /** 고른 프로젝트 자신 (Q7). 딥링크로 바로 들어와도 헤더가 서고,
-      프로젝트를 빨리 바꿨을 때 늦게 온 옛 응답을 id 로 가릴 수 있다 */
-  project: Project
-  threads: Thread[]
-  entries: Entry[]
-  tasks: Task[]
-  taskThreadLinks: TaskThreadLink[]
-}
-```
-
-`project` 를 뺀 네 배열이 `data.ts` 의 `allThreads` · `allEntries` · `allTasks` · `taskThreads` 로
-들어간다. **JSON 키와 스토어 이름은 넷 다 다르다** —
-JSON 키는 픽스처 export 이름을 그대로 쓰고, 옮기는 네 줄은 `src/api/` 가 갖는다.
-
-### `Project` 가 한 필드 늘었다 (Q9)
-
-`task.key` 의 접두사를 꺼낼 자리가 없어 `domain.ts` 의 `Project` 에 필드를 하나 더한다.
-**`GET /api/projects` 와 스냅샷의 `project` 가 같은 모양이다.**
-
-```ts
-export interface Project {
-  id: string
-  name: string
-  /** task.key 의 접두사 — 'HW' 면 그 프로젝트의 작업 키가 HW-1 · HW-2 … 가 된다 */
-  taskKeyPrefix: string
-}
-```
-
-이름은 `taskKeyPrefix` 로 굳었다 — 값이 무엇을 만드는지가 이름에 그대로 있다.
-**프로젝트 사이에 유일하고**(DB 유니크), 빈 문자열은 나가지 않는다. 등록할 때 사람이 안 넣으면
-서버가 만들어 채우므로 **이 필드는 응답에서 늘 채워져 있다** (Q20). 번호 규칙은 Q19 다.
-
-### 중첩은 접어서 낸다
-
-서버 테이블은 행으로 펴 두지만(`server/PLAN.md` 1-1) 응답은 `domain.ts` 모양으로 다시 접는다.
-`order` 열은 배열 순서로만 나타나고 JSON 에 따로 나가지 않는다.
-
-| 테이블 | 접히는 자리 |
-| --- | --- |
-| `entry_detail` | `Entry.detail: string[]` |
-| `thread_option` | `Thread.options: string[]` |
-| `task_line` | `Task.body: TaskLine[]` (`id` · `kind` · `text` · `done` · `level`) |
-
-### 무엇이 담기나 — 프로젝트로 거르는 기준
-
-| 키 | 기준 |
-| --- | --- |
-| `threads` | `thread.projectId === projectId` |
-| `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
-| `tasks` | `task.projectId === projectId` |
-| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지) |
-
-페이징 · 필터 · 정렬 파라미터는 없다. 프로젝트 하나치를 통째로 준다 (Q8 닫힘).
-
-**다시 볼 기준** — 한 프로젝트가 **작업 500 · 안건 300** 중 하나를 넘으면
-`server/PLAN.md` 5단계(집계 · 페이징을 서버로)를 연다. 그때까지 프론트는 프로젝트를 바꿀 때마다
-스냅샷을 통째로 다시 받고 캐시하지 않는다(ETag · 증분 갱신도 그때 같이 본다).
-
-### 배열 순서 — `entries` 는 순서 자체가 계약이다
-
-**`entries` 배열 순서 = 등록 순서(오래된 것 → 새 것).** 정렬 키가 아니라 순서를 약속한다 (Q4 닫힘).
-`stores/thread.ts` 의 `threadDetail` 이 같은 날짜 줄의 동점을 **배열 인덱스**(`seqNo`)로 가르기 때문에,
-서버가 내는 순서가 곧 안건 이력의 순서다.
-
-서버는 `entry` 에 **단조 증가 열 `seq`(bigserial)** 를 두고 `ORDER BY seq ASC` **하나**로 낸다 (Q15).
-`created_at` 을 정렬 1순위로 쓰지 않는다 — 지난 회의를 나중에 입력하면 `created_at` 과 등록 순서가
-갈리고, 한 트랜잭션 안에서는 `created_at` 이 아예 같은 값이 된다.
-`seq` 는 **JSON 에 나가지 않는다** — `domain.ts` 의 `Entry` 는 그대로다.
-
-| 키 | 순서 | 화면이 순서에 기대나 |
-| --- | --- | --- |
-| `entries` | `seq ASC` (= 등록 순서) | **그렇다** — 안건 이력의 동점을 이 순서로 가른다 |
-| `threads` | `created_at ASC, id ASC` | 아니다. 화면이 다시 정렬한다 |
-| `tasks` | `created_at ASC, id ASC` | 아니다 |
-| 링크 둘 | 두 id 오름차순 | 아니다 |
-
-기대하지 않는 넷도 **같은 데이터면 늘 같은 순서**로 낸다. 응답이 요청마다 흔들리면 눈으로 비교할 수 없다.
-
-### 빈 값은 `null` 이 아니다
-
-`null` 이 나갈 수 있는 필드는 **아래 여섯 이름뿐**이다. 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
-
-| 타입 | `null` 을 내는 필드 |
-| --- | --- |
-| `Thread` | `ownerId` · `parentThreadId` · `dueDate` |
-| `Entry` | `ownerId` |
-| `Task` | `parentId` · `ownerId` · `start` · `due` |
-| `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
-
-그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Entry.detail` · `Task.body` 는
-`[]` 다. 보장은 **세 겹**이고, 한 겹이라도 새면 화면이 `.length` 에서 터진다.
-
-| 겹 | 어떻게 |
-| --- | --- |
-| DB | `entry.note TEXT NOT NULL DEFAULT ''`. 배열이 되는 것은 전부 자식 테이블이라 행이 없으면 자연히 빈 배열이다 |
-| ORM | `Mapped[str]` — Optional 을 쓰지 않는다. `null` 을 내는 위 일곱 자리만 `Mapped[str \| None]` |
-| 응답 스키마 | Pydantic 필드를 `note: str = ''` · `detail: list[str] = Field(default_factory=list)` 로 둔다. 타입이 `str` · `list[str]` 이라 **`None` 이 오면 응답 직렬화에서 터진다** — 조용히 새지 않는다 |
-
-응답 직전에 `None` 을 `''` 로 바꾸는 변환은 두지 않는다. 그 변환은 모델이 틀린 것을 덮는다.
-
-### 아직 안 담은 것 — 질문으로 남긴다
-
-| 후보 | 왜 안 담나 |
-| --- | --- |
-| `members: Member[]` | 멤버가 프로젝트에 매여 있지 않다. 프로젝트를 바꿀 때마다 같은 목록을 다시 받게 된다 — `GET /api/members` 를 따로 둔다 (Q5 닫힘. **Q6 이 '프로젝트별' 로 닫히면 뒤집는다**) |
-| `currentMemberId` | 인증이 없어 서버가 낼 값이 없다. 화면 헤더에서 사람이 고르고 브라우저에 기억한다 (Q12 — 2026-10-12 바뀜) |
-| `Meeting.createdAt` | 화면이 회의를 놓는 기준은 사람이 고른 `date` 뿐이다. 서버 테이블에만 둔다 (Q10 닫힘) |
-
-`project: Project` 는 **담는다** — 일곱 번째 키다 (Q7 닫힘. 위 스키마 블록).
-
-### 프론트 검토 (2026-09-28)
-
-초안을 `web/src/types/domain.ts` · `src/stores/data.ts` · `src/fixtures/*.ts` 와 한 줄씩 맞춰 봤다.
-**타입 이름과 모양을 서버가 임의로 바꾼 자리는 없다** — `Entry.detail` · `Task.body` · `Meeting.memos` ·
-`Meeting.attendeeIds` 를 접는 방식도 `domain.ts` 와 같다. 고칠 자리는 아래 셋이다.
-
-- **키 이름은 초안대로 두고, 스토어 이름은 안 바꾼다.** 초안은 "이름만 `taskThreads` ↔ `taskThreadLinks`
-  로 다르다" 고 적었지만 실제로는 **여섯 중 다섯이 다르다** — 스토어는 `allThreads` · `allEntries` ·
-  `allMeetings` · `allTasks` · `taskThreads` · `meetingTasks` 다. 어차피 한 벌 매핑이 필요하니
-  JSON 키는 픽스처 export 이름(`threads` · `entries` · `meetings` · `tasks` · `taskThreadLinks` ·
-  `meetingTaskLinks`)을 그대로 쓰고, `src/api/` 에서 `data.ts` 에 대입할 때 여섯 줄로 옮긴다.
-  스토어 쪽 `allThreads` 는 `thread` 스토어의 `threads`(프로젝트로 거른 것)와 이름이 겹쳐서 못 바꾼다.
-- **`project: Project` 를 일곱 번째 키로 더한다** (Q7). 스키마 블록에 추가가 필요하다.
-- **`members` 는 안 싣는다** (Q5). `GET /api/members` 를 그대로 둔다 — Q6 이 '프로젝트별' 로
-  닫히면 뒤집는다.
-
-빠진 데이터는 위 둘(`project` · `members`)뿐이다. `stores/data.ts` 가 들고 있는 여덟 가지 중
-나머지 여섯은 스냅샷이 다 덮고, `currentMemberId` 는 프론트가 든다 — 헤더에서 고른 값이다(Q12).
-
-## 요청 스키마 — `ProjectInput` (`POST /api/projects`)
-
-프로젝트가 하나도 없으면 첫 화면이 등록이다 (Q18 닫힘). 그래서 **이 쓰기 하나만 2단계(읽기 API)와 같이
-선다** — 나머지 쓰기는 3단계 그대로다. 빈 DB 에 마이그레이션만 돌린 상태에서 화면이 끝까지 도는지를
-시드가 아니라 이 엔드포인트로 확인한다.
-
-```ts
-/** POST /api/projects → 201 Project */
-export interface ProjectInput {
-  name: string
-  /** 선택. 안 넣으면 서버가 겹치지 않는 값을 만들어 응답에 실어 준다 */
-  taskKeyPrefix?: string
-}
-```
-
-- **`taskKeyPrefix` 는 선택이다** (Q20). 넣으면 그 값을 쓰고, 안 넣으면 **서버가 만들어 응답에 실어 준다** —
-  등록 화면의 입력칸은 비워 둘 수 있고, 돌아온 `Project.taskKeyPrefix` 를 그대로 보여주면 된다
-- **빈 문자열은 '안 넣은 것' 과 같다** (Q24). 키를 빼도 되고 `""` 를 보내도 된다 — 서버가 접고 만들어 준다.
-  앞뒤 공백은 떼어 받는다(`" POR "` → `POR`). 값 안에 공백이 있으면 형식 오류다
-- **글자 모양** — `^[A-Z][A-Z0-9]{0,7}$`(대문자로 시작하는 영숫자 1~8자). `HW-4` 처럼 회의에서 소리 내어
-  가리키는 값이라 공백 · 한글 · 소문자는 받지 않는다. 어긋나면 422 `VALIDATION_ERROR` 이고
-  `detail` 은 `{"taskKeyPrefix": "형식이 올바르지 않습니다."}` 다 (서버가 정했다 · 결정 로그)
-- **서버가 만드는 값** — 헷갈리는 글자(`I` · `O` · `0` · `1`)를 뺀 대문자 · 숫자에서 **네 글자**를 뽑는다.
-  이미 쓰는 값이면 다시 뽑는다. 이름에서 뽑지 않는다 — 한글 이름에서 규칙을 세울 수 없다
-- **겹치면 409 `PROJECT_PREFIX_TAKEN`** — 접두사는 프로젝트 사이에 유일하다. 사용자가 넣은 값이 이미
-  쓰이고 있을 때만 난다(서버가 만드는 쪽은 겹치지 않을 때까지 다시 뽑는다).
-  형식이 틀린 것은 422, 이미 있는 값은 409 로 갈랐다 — 요청이 잘못된 게 아니라 자원이 부딪힌 것이다
-- `name` 은 빈 문자열을 받지 않는다 — 422 `VALIDATION_ERROR`
-- 등록 직후 그 프로젝트의 다음 작업 번호는 **1** 이다 — 첫 작업이 `HW-1` (Q19)
-- `id` 는 서버가 만든다. 요청에 `id` 가 와도 무시한다
-
-### `task.key` 발번 (Q19)
-
-번호는 **프로젝트별**로 세고 **지운 번호를 다시 쓰지 않는다**. `key` 는 `{taskKeyPrefix}-{번호}` 다.
-
-`project` 에 `next_task_no` 열을 두고 작업을 만들 때 한 문장으로 잠가 올린다 —
-`UPDATE project SET next_task_no = next_task_no + 1 WHERE id = :id RETURNING next_task_no - 1`.
-그 `UPDATE` 가 프로젝트 행의 잠금을 잡아 같은 프로젝트의 동시 등록을 줄 세운다. 안전망으로
-`task(project_id, key)` 에 UNIQUE 를 건다 — 발번이 어디서 새도 같은 키가 두 번 저장되지 않는다.
-
-안 고른 둘 — **`MAX(번호)+1`** 은 동시 등록에서 두 트랜잭션이 같은 `MAX` 를 읽어 겹친다(UNIQUE 로 막아도
-한쪽이 실패해 재시도가 잦다). **프로젝트마다 진짜 시퀀스**(`CREATE SEQUENCE`)는 프로젝트를 만들 때마다
-DDL 이 돌아 마이그레이션 · 백업 · 복제가 무거워지고, 시퀀스는 트랜잭션이 되돌아가도 번호가 안 돌아와
-구멍이 더 난다. `next_task_no` 는 롤백되면 번호도 같이 돌아온다.
-
-## AI 챗봇 — 합의 (2026-10-11)
-
-오른쪽 아래 팝업에서 "서버 OS 뭐로 하기로 했지?" 같은 질문에 **저장된 안건 · 이력 · 작업을 찾아** 답한다.
-서버가 Claude 에게 검색 도구를 쥐여 주고, Claude 가 검색어를 바꿔 가며 찾고 읽은 뒤 답한다.
-화면은 질문을 보내고 스트림을 받아 그리기만 한다.
-
-### 요청 — `ChatInput`
-
-```ts
-/** POST /api/projects/{projectId}/chat */
-export interface ChatInput {
-  /** 오래된 것 → 새 것. 마지막은 늘 user 다. 서버는 대화를 저장하지 않고, 화면은 창을 닫으면 비운다 (Q26) */
-  messages: ChatMessage[]
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  /** 화면에 보인 글 그대로. 근거 표시(`[[thread:ID]]`)도 지우지 않고 돌려보낸다 */
-  text: string
-}
-```
-
-- `messages` 는 1 ~ 20개, `text` 하나는 질문(`user`) 2,000자 · 답(`assistant`) 20,000자까지 (넘으면 422 `VALIDATION_ERROR`). 답은 화면에 보인 그대로 돌려보내므로 질문보다 넉넉하다
-- 마지막이 `user` 가 아니거나 `text` 가 공백뿐이면 422
-
-### 응답 — SSE 스트림 (`ChatEvent`)
-
-`Content-Type: text/event-stream`. 한 이벤트는 `event: <type>` 줄과 `data: <JSON>` 줄이다.
-`EventSource` 는 GET 만 되므로 화면은 `fetch` 로 받아 직접 읽는다.
-
-```ts
-export type ChatEvent =
-  /** 답 글자 조각. 이어 붙이면 답 전체다 */
-  | { type: 'delta'; text: string }
-  /** 지금 무엇을 찾는 중인지 — '"OS" 안건 찾는 중' 같은 한 줄을 띄우는 데 쓴다 */
-  | { type: 'tool'; name: 'search_threads' | 'get_thread' | 'search_tasks' | 'get_task'; label: string }
-  /** 끝. 답에 실제로 나온 근거만 모은다 — 화면이 칩을 그릴 때 스냅샷에 없는 id 를 거르는 데 쓴다 */
-  | { type: 'done'; refs: ChatRef[] }
-  /** 스트림이 열린 뒤의 실패. 이것이 오면 done 은 안 온다 */
-  | { type: 'error'; code: string; message: string }
-
-export interface ChatRef {
-  kind: 'thread' | 'task'
-  id: string
-}
-```
-
-### 근거 표시 — 답 본문 안의 `[[kind:id]]`
-
-- 답 본문에 `[[thread:ID]]` · `[[task:ID]]` 가 섞여 온다. 화면은 이것을 **링크 칩**으로 바꿔 그린다
-  (안건이면 제목 + 상태 배지, 작업이면 `key` + 제목). 누르면 기존 상세 팝업을 연다
-- id 는 스냅샷의 id 그대로다. 스냅샷에 없는 id 면 칩 대신 아무것도 안 그린다 (지어낸 id 를 보이지 않는다)
-- 서버는 이 표시를 지우거나 바꾸지 않는다 — `done.refs` 는 본문에서 뽑은 목록일 뿐이다
-
-### 답하는 규칙 (서버가 시스템 프롬프트로 지킨다)
-
-- **결정이 바뀐 안건은 마지막 `decide` · `change` 줄이 지금의 결정이다.** 바뀐 적이 있으면 그 흐름도 짧게 같이 말한다
-- 안건이 `decided` 가 아니면 "아직 안 정해졌다" 고 말하고, 미룬 횟수 · 마지막 미룸 사유를 같이 준다
-- 찾지 못하면 **지어내지 않고** 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
-- 경로의 `projectId` 밖은 찾지 않는다 (Q13 · Q16 과 같은 경계)
-
-### 검색 — `SearchResult` — 구현 (2026-10-11)
-
-`GET /api/projects/{projectId}/search?q=<검색어>&limit=<기본 10>`. 챗봇의 `search_threads` · `search_tasks`
-도구가 부르는 서비스 함수를 그대로 연 것이다. 글자 일부만 맞아도 찾는다(trigram 유사도).
-
-```ts
-export interface SearchResult {
-  threads: ThreadHit[]
-  tasks: TaskHit[]
-}
-
-export interface ThreadHit {
-  id: string
-  title: string
-  state: ThreadState
-  /** 무엇이 맞았나 — 제목 · 배경 · 후보 · 이력 중 하나. 이력이면 그 줄의 글 */
-  matched: 'title' | 'description' | 'option' | 'entry'
-  snippet: string
-  /** 마지막 decide · change 줄의 text. 없으면 '' */
-  decision: string
-}
-
-export interface TaskHit {
-  id: string
-  key: string
-  title: string
-  status: TaskStatus
-  matched: 'title' | 'body'
-  snippet: string
-}
-```
-
-- 점수가 높은 순. 같은 점수면 `seq` 오름차순 — 같은 데이터면 늘 같은 순서다
-- 빈 결과는 `{ threads: [], tasks: [] }` 이고 404 가 아니다
-
-계약이 비워 둔 자리는 구현하며 이렇게 정했다 (2026-10-11 · 서버). 화면이 아직 안 부르는 엔드포인트라
-지금 고르고, 화면이 부르게 되어 불편하면 새 Q 로 다시 연다.
-
-- **빈 `q` 는 422 `VALIDATION_ERROR`** 다 — 앞뒤 공백을 떼고 비면(`q=` · `q=%20`) `detail.q` 에
-  '검색어를 입력해 주세요.' 가 실린다. `q` 를 아예 빼도 422 다. 빈 검색어로 '전부' 를 내지 않는다 —
-  목록은 스냅샷이 이미 준다. `q` 는 200자까지(넘으면 422)
-- **`limit` 은 1 ~ 50, 기본 10.** `threads` · `tasks` 에 **따로** 걸린다(둘을 합쳐 자르지 않는다)
-- 없는 `projectId` 는 404 `PROJECT_NOT_FOUND` — 스냅샷과 같다
-- 한 안건 · 작업은 **한 번만** 나온다. 여러 자리가 맞으면 점수가 가장 높은 자리가 `matched` 고,
-  같은 점수면 제목 → 배경 → 후보 → 이력(작업은 제목 → 본문) 순으로 고른다
-- `matched: 'entry'` 는 이력 줄의 `text` · `note` · `detail` 중 하나가 맞은 것이고, `snippet` 은 **맞은 그 글**이다.
-  `snippet` 은 줄바꿈을 공백으로 편 한 줄이고, 80자가 넘으면 맞은 자리 둘레 80자를 잘라 앞뒤에 `…` 를 붙인다
-- 점수는 `pg_trgm` 의 `word_similarity(q, 글)` 이다. 검색어가 글 안에 그대로 들어 있으면(대소문자 무시)
-  최소 0.9 로 올린다 — 한국어는 조사가 붙어(`미룸이다`) 낱말 유사도만으로는 0.67 에 그친다.
-  **0.5 미만은 안 낸다.** 점수 자체는 응답에 싣지 않는다
-
-### 프론트 검토 (2026-10-11)
-
-초안을 `web/src/types/domain.ts` · `src/api/client.ts` · `stores/thread.ts` · `stores/task.ts` · `App.vue` 와
-맞춰 봤다. **계약을 고칠 자리는 없다** — 두 엔드포인트 모두 `합의` 로 올린다. 아래는 프론트가 계약을 어떻게
-읽고 쓰는지다. 서버가 보기에 틀린 해석이 있으면 새 Q 로 다시 연다.
-
-- **타입** — `ThreadHit.state` 는 `ThreadState`, `TaskHit.status` 는 `TaskStatus` 그대로라 새 이름이 없다.
-  id 는 전부 스냅샷의 문자열 id 다. `domain.ts` 에는 화면이 쓰는 넷(`ChatInput` · `ChatMessage` · `ChatEvent` ·
-  `ChatRef`)만 계약 모양 그대로 옮긴다(`web/PLAN.md` 7-2). `SearchResult` · `ThreadHit` · `TaskHit` 는 화면이
-  아직 안 부르므로 부르는 화면이 생길 때 옮긴다
-- **스트림 전 오류** — 본문이 `ApiErrorBody` 그대로라 `request` 와 같은 판정(`isErrorBody` → `ApiError`,
-  모양이 아닌 5xx → `SERVER_UNREACHABLE`)을 `src/api/chat.ts` 가 그대로 쓴다. 429 · 503 도 `code` 로 가른다
-- **스트림 중 오류** — `error` 이벤트의 `{ code, message }` 를 `new ApiError(res.status, { code, message })` 로
-  감싸 던진다. 이때 `status` 는 200 이라 화면은 **`status` 가 아니라 `code` 로만** 가른다
-- **이벤트 종류** — 프론트는 **`event:` 줄을 `type` 으로 읽는다.** `data` JSON 에 `type` 이 같이 있어도 되고
-  없어도 된다. `:` 로 시작하는 줄(keep-alive)과 모르는 `event` 는 건너뛴다. `tool` 은 `label` 만 띄우고
-  `name` 으로 가르지 않는다 — 도구가 늘어도 화면이 안 깨진다
-- **`done` 도 `error` 도 없이 끝난 스트림**은 끊긴 것으로 보고 `SERVER_UNREACHABLE` 로 다룬다
-- **보내는 대화** — `done` 으로 끝난 턴만 다음 `messages` 에 싣는다. 실패했거나 멈춘 턴은 user · assistant 둘 다
-  뺀다 — 빈 assistant(422)와 user 가 둘 잇따르는 일이 생기지 않는다. 20개를 넘으면 오래된 것부터 버리고
-  **첫 줄이 user 가 되게** 자른다
-- **근거 칩** — 안건 칩(제목 + `ThreadStateBadge`, 미룬 횟수 포함)과 작업 칩(`key` + 제목)에 필요한 것은
-  전부 스냅샷에 있다 — `thread` · `task` 스토어에서 id 로 찾는다. 스냅샷에 없는 id(지어낸 id, 그리고 스냅샷을
-  받은 뒤 다른 사람이 만든 것)는 안 그린다. 칩의 상태는 **화면이 들고 있는 스냅샷 기준**이다.
-  받는 중에 아직 닫히지 않은 `[[…` 꼬리는 글로 내보이지 않고 닫힐 때까지 미룬다
-- `done.refs` 는 본문에서 다시 뽑을 수 있어 화면이 꼭 기대지는 않는다 — 본문 파싱(`lib/chat.ts`)이 기준이다
-- **전제** — 이 합의는 Q26 의 초안(대화를 서버에 안 남긴다)을 깔고 있다. Q26 이 '남긴다' 로 닫히면
-  `ChatInput` 이 바뀌므로 `POST .../chat` 은 `초안` 으로 되돌린다. Q25 · Q27 은 화면에 닿지 않는다
-  → **Q26 은 '안 남긴다 · 창을 닫으면 끝' 으로 닫혔다(2026-10-11). 합의는 그대로 선다**
-
-## AI 챗봇 — 작업 초안 — 합의 (2026-10-12)
-
-"간담회 준비 작업 만들어줘. 김서연한테 일정체크, 박지훈한테 준비물 체크" 처럼 말하면 챗봇이
-**초안을 보여 주고, 사람이 [등록] 을 눌러야 저장된다.** 챗봇은 어떤 경우에도 직접 저장하지 않는다 —
-초안 도구는 DB 를 읽기만 하고, 저장은 화면이 아래 `POST .../tasks/batch` 로 한다.
-
-### 흐름
-
-1. Claude 가 `list_members` 로 이름을 id 로 바꾸고, `propose_tasks` 로 초안을 낸다
-2. 서버가 초안을 검사한다(아래 규칙). 틀리면 도구 결과로 Claude 에게 돌려줘 고치게 하고, 맞으면
-   스트림에 `proposal` 이벤트를 한 번 낸다. 한 답에 초안은 **많아야 하나** — 두 번 부르면 마지막 것만 낸다
-3. 화면은 그 답 말풍선 안에 미리보기 카드를 그린다 — [취소] · [등록]
-4. 고치고 싶으면 채팅으로 말한다("박지훈 말고 정하늘로"). 새 답이 새 초안을 내고, **이전 카드는 화면이
-   `cancelled` 로 접는다**(대기 중인 카드는 늘 하나다). 카드 안에서 직접 고치는 것은 이번 범위 밖이다
-5. [등록] → `POST /api/projects/{projectId}/tasks/batch` → 화면 스토어에 작업을 넣고 카드를 작업 칩으로 바꾼다.
-   같은 카드는 두 번 등록되지 않는다(누르는 동안 버튼을 막고, 끝나면 `registered`)
-
-### 초안 — `TaskProposal`
-
-```ts
-export interface TaskProposal {
-  /** 배열 순서 = 등록 순서 = 화면 순서. 상위가 늘 하위보다 앞이다 */
-  tasks: ProposedTask[]
-}
-
-export interface ProposedTask {
-  /** 이 초안 안에서만 쓰는 임시 이름 — 't1', 't2' … */
-  tempId: string
-  /** 같은 초안 안의 상위 작업. 기존 작업 밑에 붙이는 것은 이번 범위 밖이다 */
-  parentTempId: string | null
-  title: string
-  ownerId: string | null
-  /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */
-  start: string | null
-  due: string | null
-  priority: 'low' | 'normal' | 'high'
-}
-```
-
-**검사 규칙**(서버가 `propose_tasks` 에서, 그리고 `tasks/batch` 에서 똑같이 본다)
-- 1 ~ 20개. `tempId` 는 서로 다르다. `parentTempId` 는 **자기보다 앞에 있는** 항목의 `tempId` 다
-- `title` 은 앞뒤 공백을 떼고 비지 않는다. `ownerId` 는 있는 멤버다. `start ≤ due`(둘 다 있을 때)
-
-### 스트림에 늘어난 것 — `ChatEvent`
-
-```ts
-  /** 작업 초안. 한 답에 많아야 하나, done 보다 먼저 온다 */
-  | { type: 'proposal'; proposal: TaskProposal }
-```
-
-`tool` 이벤트의 `name` 에 `'list_members' | 'propose_tasks'` 가 늘어난다(라벨 예: '멤버 확인 중', '작업 초안 만드는 중').
-
-### 요청에 늘어난 것 — `ChatMessage.proposal`
-
-서버는 대화를 저장하지 않으므로(Q26) 화면이 지난 초안과 그 결과를 돌려보낸다. 그래야 "정하늘로 바꿔줘" ·
-"방금 만든 것에 하나 더" 를 알아듣는다.
-
-```ts
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  text: string
-  /** assistant 에만. 그 답이 낸 초안과 화면에서의 결과 */
-  proposal?: TaskProposal & {
-    status: 'pending' | 'registered' | 'cancelled'
-    /** registered 일 때만 — tempId → 저장된 작업 key(MG-7) */
-    keyByTempId?: Record<string, string>
-  }
-}
-```
-
-- `user` 에 `proposal` 이 오면 422 `VALIDATION_ERROR`
-- 서버는 이것을 Claude 에게 넘길 때 그 assistant 답 뒤에 글로 덧붙인다 — 형식은 서버가 정한다
-
-### 한 번에 등록 — `POST /api/projects/{projectId}/tasks/batch`
-
-```ts
-/** 요청 */
-export interface TaskBatchInput {
-  tasks: ProposedTask[]   // 초안 그대로 보낸다. 상태는 todo, 본문은 빈 배열로 만든다
-}
-/** 201 응답 */
-export interface TaskBatchResult {
-  /** 요청 순서 그대로 */
-  tasks: Task[]
-  taskIdByTempId: Record<string, string>
-}
-```
-
-- **한 트랜잭션**이다 — 하나라도 틀리면 아무것도 안 남는다. `key` 는 배열 순서대로 발번한다
-- 오류: 없는 프로젝트 404 `PROJECT_NOT_FOUND`, 검사 규칙 위반은 422 `VALIDATION_ERROR`(`detail` 에
-  `tasks.1.parentTempId` 처럼 몇 번째의 어느 칸인지), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`
-- 구현 (2026-10-12, 서버) — `detail` 의 자리 이름: 개수(0개 · 21개 이상)는 `tasks`, `start > due` 는
-  `tasks.N.due`, 날짜 형식 · `priority` 같은 타입 오류도 `tasks.N.칸` 이다. 없는 멤버의 400 에도 `detail` 이
-  `tasks.N.ownerId` 로 붙는다. 검사가 끝난 뒤에만 쓰고, 쓰다 터지면 발번한 번호까지 되돌린다.
-  `title` 은 앞뒤 공백을 떼고 저장한다. **이 `tasks.N.칸` 표기는 `tasks/batch` 에만 쓴다** — 다른 자리의
-  `detail` 은 지금처럼 마지막 필드 이름이다
-
-### 답하는 규칙에 늘어난 것
-
-- 작업을 만들어 달라는 말에는 **초안만 낸다.** 답 본문은 짧게 — "아래처럼 등록할까요?" 정도. "등록했다" 고 말하지 않는다
-- 이름이 멤버에 없거나 여럿에 걸리면 **초안을 내지 않고 되묻는다**
-- 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업, 할 일을 하위 작업으로 둔다. 할 일이 하나면 상위 없이 하나다
-- 날짜("다음 주 금요일")는 오늘(KST) 기준으로 바꾼다 — 서버가 시스템 프롬프트에 오늘 날짜를 넣는다. 말하지 않은 기간 · 우선순위는 채우지 않는다(null · normal)
-- 경로의 `projectId` 안에만 만든다
+인증 · 권한 · 사용자 관리(`server/PLAN.md` 8단계 · `web/PLAN.md` 8단계). 모양과 권한 규칙은 `docs/api/auth.md` 다.
+**이미 있는 API 도 바뀐다** — 그 파일의 '이미 있는 API 에서 바뀌는 것'.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| POST | `/api/auth/login` | 이메일 + 비밀번호로 로그인, 세션 쿠키 | `Me` | 구현 |
+| POST | `/api/auth/logout` | 이 세션 끝내기 (멱등) | 204 | 구현 |
+| GET | `/api/auth/me` | 지금 로그인한 사람 · 내 프로젝트 역할 | `Me` | 구현 |
+| POST | `/api/auth/password` | 내 비밀번호 바꾸기 | 204 | 구현 |
+| GET · POST | `/api/admin/members` | 사용자 목록 · 등록 (시스템 관리자) | `MemberAccount[]` · `MemberAccount` 201 | 구현 |
+| PATCH | `/api/admin/members/{memberId}` | 이름 · 이메일 · 시스템 역할 · 활성 (시스템 관리자) | `MemberAccount` | 구현 |
+| PUT | `/api/admin/members/{memberId}/password` | 비밀번호 새로 걸기 (시스템 관리자) | 204 | 구현 |
+| GET | `/api/projects/{projectId}/members` | 프로젝트에 부여된 사람 · 역할 | `ProjectMember[]` | 구현 |
+| PUT · DELETE | `/api/projects/{projectId}/members/{memberId}` | 부여 · 역할 변경 · 빼기 (프로젝트 관리자 · 시스템 관리자) | `ProjectMember` · 204 | 구현 |
+| PATCH | `/api/projects/{projectId}` | 프로젝트 이름 수정 (프로젝트 관리자 · 시스템 관리자) | `Project` | 구현 |
 
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-답이 나오면 줄을 지우지 말고 답을 채우고 닫는다 — 왜 그렇게 정했는지가 남아야 한다.
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q32).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |
-| Q1 | 사용자 | 안건 상태를 셋(`queued` · `open` · `decided`)으로 갈지, memo 의 넷(대기 · 논의중 · 결정 · 미룸)으로 갈지. 코드는 셋으로 돌고 '미룸'은 `kind='defer'` 인 Entry 다 (`memo.md` 정해야 할 것 6) | **셋이다 — `queued` · `open` · `decided`.** '미룸' 은 상태가 아니라 `kind='defer'` 인 Entry 다 — 같은 안건이 여러 번 미뤄지고(시나리오 2) 그 횟수가 이력에 쌓여야 뜻이 산다. 코드가 이미 이 모양으로 돌고, 화면은 미룬 횟수를 `deferCount` 배지로 보여준다. **따라올 것** — `memo.md` 화면 목록 4번의 "대기 · 논의중 · 결정 · 미룸" 을 셋으로 고치고 '정해야 할 것' 6번을 지운다 | 닫힘 |
-| Q2 | 사용자 | 작업 상태를 넷(해야 할 일 · 진행 중 · 막힘 · 완료)으로 확정할지. memo 본문에는 '막힘'이 없다 (`memo.md` 정해야 할 것 1) | **넷이다 — 해야 할 일 · 진행 중 · 막힘 · 완료.** '막힘' 은 걸어 둔 안건이 안 정해져 멈춘 상태로, 이 제품에서 작업이 멈추는 가장 흔한 이유라 칸반의 칸으로도 세운다. 코드가 이미 넷 전제다(`TaskBoard.vue` 의 칸 · `TaskStatusBadge` · `blockedCount` · 픽스처 `k18`). 서버는 `task.status` 에 넷을 둔다. **따라올 것** — `memo.md` '정해야 할 것' 1번을 본문 규칙으로 옮긴다 | 닫힘 |
-| Q3 | 프론트 | `createdAt` 을 ISO 8601(`2026-09-08T01:00:00Z`)로 낼지, 지금 픽스처처럼 날짜뿐(`2026-09-08`)으로 낼지. `lib/date.ts` 의 `monthDay` · `slashDay` 가 `split('-')` 로 읽어서 ISO 를 주면 `9월 NaN일` 이 된다. 서버가 날짜뿐으로 맞출지, 프론트가 파서를 고칠지 | **ISO 8601 UTC 로 낸다 — 프론트가 파서를 고친다.** `created_at` 은 DB 에서 타임스탬프고, 한 회의에서 여러 줄이 같은 날 들어오므로 날짜뿐이면 같은 날 안의 순서를 잃는다(Q4 가 그 자리다). 서버가 지킬 것은 하나 — `createdAt` 은 **항상 `Z` 접미 UTC 한 가지 형식**으로 낸다(`+09:00` 오프셋을 섞지 않는다. 프론트가 문자열 비교로 정렬한다). 프론트가 고칠 것 — ① `src/lib/date.ts` 에 `localDay(iso)` 를 더한다(UTC → KST 로 옮겨 `YYYY-MM-DD` 로 자른다). `monthDay` · `slashDay` 는 `split('-')` 앞에 `localDay` 를 태워 날짜뿐 문자열도 그대로 통과하게 한다 ② `src/lib/date.ts` 에 `nowIso()` 를 더하고 `stores/thread.ts` 의 `addThread` · `addOutsideEntry`, `stores/task.ts` 의 `addTask`, `stores/meeting.ts` 의 `saveMeeting`(지금 `createdAt: input.date`)이 그것을 쓰게 한다 — 화면이 만든 줄만 날짜뿐이면 정렬이 섞인다 ③ `stores/thread.ts` 의 `threadDetail` 에서 `at: meeting?.date ?? entry.createdAt` → `at: meeting?.date ?? localDay(entry.createdAt)`. `at` 은 회의 날짜(`YYYY-MM-DD`)와 문자열로 비교되고 `monthDay(at)` 로 찍히므로 날짜뿐이어야 한다. **`Meeting.date` · `Task.start` · `Task.due` 는 지금대로 `YYYY-MM-DD` 다** — 사람이 고른 날짜라 시간대가 없다 | 닫힘 |
-| Q4 | 프론트 | `entries` 배열 순서를 `createdAt ASC, id ASC` 로 고정해도 되는지. `stores/thread.ts` 의 `threadDetail` 이 같은 날짜 줄의 동점을 **배열 인덱스(seqNo)** 로 가르고 있어 서버가 낸 순서가 곧 화면의 이력 순서다. 인덱스 대신 `id` 로 가르게 프론트를 고칠지 | **배열 인덱스를 유지한다. `id` 로 가르지 않는다.** id 가 UUID 면 사전순이 등록순과 무관하고, 지금 목업의 `e1`…`e10` 도 문자열 비교면 `e10 < e2` 라 뒤집힌다. 동점이 실제로 생기는 자리는 '한 회의에서 한 안건에 남긴 여러 줄'(예: `decide` 뒤에 `refine`)이다 — `at` 이 회의 날짜라 같고 `saveMeeting` 이 `createdAt` 까지 같은 값으로 넣어서 시간으로도 못 가른다. 화면이 기대는 건 **적은 순서**뿐이다. 그래서 계약에 적을 것은 정렬 키가 아니라 **`entries` 배열 순서 = 등록 순서(오래된 것 → 새 것)** 다. `createdAt ASC, id ASC` 는 그 순서를 깨지 않는 한에서만 맞다 — 같은 `createdAt` 안의 등록 순서를 서버가 복원할 수 있는지는 **Q15** 로 물었다. 덧붙임: 초안의 "목업의 `allEntries` 와 같은, 오래된 것부터" 는 사실이 아니다(목업 배열은 `e1`=09-09 가 `e2`=09-07 보다 앞이다). 다만 같은 안건 · 같은 날짜로 겹치는 Entry 가 목업에 없어 `threadDetail` 결과는 어느 쪽으로 정렬해도 같고 `thread.test.ts` 도 그대로 통과한다. 프론트가 고칠 것 — `threadDetail` 의 `seqNo` 가 **전역 `allEntries` 인덱스**라는 게 지금 암묵적이다. "배열 순서가 계약" 임을 주석으로 못박고 `fixtures/threads.ts` 의 `entries` 를 등록 순서(= `createdAt` 오름차순)로 다시 늘어놓는다 | 닫힘 |
-| Q5 | 프론트 | 멤버를 스냅샷에 실을지(`members: Member[]`), `GET /api/members` 를 따로 부를지. 화면 시작에 요청이 둘이 된다 | **스냅샷에 싣지 않는다. `GET /api/members` 를 따로 부른다.** 멤버는 프로젝트를 바꿔도 안 바뀌는데 스냅샷은 프로젝트를 바꿀 때마다 다시 받는다 — 같이 실으면 같은 목록을 매번 다시 받게 된다. `data.allMembers` 는 앱이 뜰 때 한 번 채우면 되고, 부팅에서 `projects` · `members` 를 병렬로 받은 뒤 프로젝트가 정해지면 스냅샷을 받으므로 '요청이 둘' 이 화면을 늦추지 않는다. **단 Q6 이 '프로젝트마다 참여자가 갈린다' 로 닫히면 이 답을 뒤집는다** — 그때는 그 프로젝트의 `members`(또는 `memberIds`)가 스냅샷 안으로 들어와야 하고, 담당자 · 참석자 고르는 자리(`ThreadListView` · `TasksView` · `MeetingListView` · `NewMeetingView` · `ThreadDetailDialog` · `TaskCreateDialog`)가 전부 그것으로 갈린다 | 닫힘 |
-| Q6 | 사용자 | member 가 전사 공통인지, 프로젝트마다 참여자가 갈리는지. 지금 픽스처는 넷을 전 프로젝트가 같이 쓴다. 프로젝트별이면 스냅샷 안으로 들어가야 한다 | **전사 공통이다.** 멤버는 프로젝트를 가리지 않는다 — 지금 픽스처 그대로다. 따라서 **Q5 의 답이 그대로 산다** — 멤버는 스냅샷에 싣지 않고 `GET /api/members` 를 따로 부른다. `member` 테이블에 `project_id` 를 두지 않고, 담당자 · 참석자 고르는 자리는 전부 같은 목록을 쓴다. 프로젝트마다 참여자를 갈라야 할 일이 생기면 그때 `project_member` 링크 테이블을 더하고 이 계약을 다시 연다 | 닫힘 |
-| Q7 | 프론트 | 스냅샷에 `project: Project` 를 같이 실을지. `GET /api/projects` 로 이미 갖고 있어 중복이지만, 딥링크로 바로 들어온 화면은 목록 없이 이름을 못 쓴다 | **싣는다 — `project: Project` 를 스냅샷의 일곱 번째 키로 둔다.** ① 딥링크(`/tasks/k4`)로 바로 들어와도 스냅샷 하나로 헤더가 선다. 지금 `AppShell` · `TaskDetailDialog` · `ThreadDetailDialog` · `MeetingDetailDialog` · `TaskCreateDialog` · `NewMeetingView` 여섯 자리가 `data.currentProject.name` 을 찍는다 ② 프로젝트를 빨리 바꾸면 스냅샷 응답 둘이 순서 없이 도착할 수 있다 — 응답 안에 `project.id` 가 있으면 늦게 온 옛 응답을 버릴 수 있다. 중복되는 건 필드 둘(`id` · `name`)이라 값싸다. `GET /api/projects` 는 그대로 둔다 — 상단 프로젝트 선택이 목록을 필요로 한다 | 닫힘 |
-| Q8 | 프론트 | 페이징 없이 프로젝트 레코드 전부를 한 번에 주는 것으로 시작해도 되는지. 한 프로젝트가 작업 수백 · 회의 수십이 되면 응답이 커진다 (`server/PLAN.md` 5단계로 미루기로 한 자리) | **좋다. 페이징 없이 프로젝트 하나치를 통째로 받는 것으로 시작한다.** 지금 계산이 전부 '프로젝트 레코드 전부' 를 전제로 돈다 — `threadDetail` 은 `allEntries` 를 통째로 훑고, `pathLabel` 은 조상 체인을 타고 올라가고, `statusCounts` · `undatedCount` · `blockedCount` · `queuedCount` · 간트 · 칸반은 필터 · 페이징 **이전의 전체 집합**을 센다. 목록 화면의 페이징은 이미 클라이언트 쪽 슬라이스다(`ThreadListView` · `TasksView`). 서버 페이징을 지금 넣으면 이 계산을 서버로 옮겨야 하고, 스토어 테스트와 같은 계산이 두 벌이 된다. 다시 볼 기준만 계약에 적어 두자 — **한 프로젝트가 작업 500 · 안건 300 · 회의 100 중 하나를 넘으면** `server/PLAN.md` 5단계를 연다. 그 전까지 프론트는 프로젝트를 바꿀 때마다 스냅샷을 통째로 다시 받고 캐시하지 않는다(ETag · 증분 갱신도 그때 같이 본다) | 닫힘 |
-| Q9 | 사용자 | `task.key` 의 접두사(`HW-4` 의 `HW`)가 어디서 오나. `domain.ts` 의 `Project` 에 `id` · `name` 밖에 없어 서버가 발번하려면 프로젝트에 접두사 필드가 하나 늘어난다 — **계약이 바뀐다**. 번호를 프로젝트별로 셀지, 지운 작업 번호를 다시 쓸지도 같이 | **`Project` 에 접두사 필드를 더하고 서버가 발번한다.** **계약이 바뀐다** — `domain.ts` 의 `Project` 가 `id` · `name` 에서 하나 는다. 이름은 `taskKeyPrefix` 로 제안한다(이견 있으면 이름만 프론트가 정한다). 지금 `stores/task.ts` 의 `addTask` 가 프론트에서 `HW-${n}` 을 직접 만들어 p2 작업에도 `HW-` 가 붙는데, 쓰기 API 가 서면 그 자리를 걷어내고 응답 레코드의 `key` 를 쓴다. **번호 매기는 규칙은 아직 안 정했다 — Q19 로 뗀다** | 닫힘 |
-| Q10 | 프론트 | `Meeting` 에 `createdAt` 이 없다(`Thread` · `Task` · `Entry` 에는 있다). 서버 테이블 계획에는 `meeting.created_at` 이 있다. 응답에 넣고 `domain.ts` 에 필드를 더할지, 서버 안에만 둘지 | **응답에 넣지 않는다. 서버 안에만 둔다 — `domain.ts` 의 `Meeting` 은 그대로다.** 화면이 회의를 놓는 기준은 사용자가 고른 `meeting.date` 뿐이다. 목록 정렬 · `dateLabel` · 안건 이력의 `at` 이 전부 `date` 를 쓴다. `createdAt` 이 같이 오면 '언제 열린 회의' 와 '언제 입력했는지' 둘이 생겨 화면마다 뭘 쓸지 고르게 되고, 지난 회의를 나중에 입력하는 흔한 경우에 두 값이 크게 갈린다. 같은 날 회의 둘의 순서에 화면이 뜻을 두지 않으므로 `date ASC, id ASC` 로 충분하다. '입력 시각' 을 보여줘야 할 화면이 생기면 그때 계약을 다시 연다 | 닫힘 |
-| Q11 | 사용자 | 회의 '녹음' 을 둘지. `stores/meeting.ts` 주석은 "회의가 짊어지는 것은 날짜 · 참석자 · 녹음뿐"이라 적혀 있는데 `domain.ts` 의 `Meeting` 에도 서버 테이블에도 녹음 필드가 없다 | **두지 않는다.** `domain.ts` 의 `Meeting` 도 `meeting` 테이블도 지금 모양 그대로다. **따라올 것** — `stores/meeting.ts` 의 "회의가 짊어지는 것은 날짜 · 참석자 · 녹음뿐" 주석에서 '녹음' 을 걷어낸다. 타입에도 테이블에도 없는 것이 주석에만 살아 있으면 다음 사람이 있는 줄 알고 찾는다. 녹음이 필요해지면 파일 업로드 · 스토리지가 같이 따라오는 일이라 그때 계약을 새로 연다 | 닫힘 |
-| Q12 | 프론트 | `currentMemberId` 를 서버가 줄지(`GET /api/me` 같은 자리), 인증이 붙기 전까지 프론트가 상수로 들고 있을지. 지금은 픽스처의 `'u3'` 다 | **프론트가 상수로 들고 있는다. `GET /api/me` 를 만들지 않는다.** 서버에 인증이 없어(`server/PLAN.md` 6단계) 서버가 낼 수 있는 값도 결국 상수다 — 상수를 왕복시킬 이유가 없고, 있으면 "서버가 주니까 진짜 로그인" 으로 오해된다. 지금 자리는 `src/fixtures/people.ts` 의 `currentMemberId = 'u3'` 이고, 픽스처가 빠질 때 이 상수만 `src/lib/` 로 옮긴다(`stores/data.ts` 의 `currentMemberId` ref 는 그대로 둔다). 그때까지 **서버는 `ownerId` 를 추론하지 않는다** — 쓰기 API 는 프론트가 명시해 보낸 `ownerId` 만 쓰고, `null` 이면 담당자 없음이다. 인증이 붙으면 그때 `GET /api/me` 를 계약에 새로 연다. **2026-10-12 바뀜** — 댓글 작성자를 남기려고 상수 `'u3'` 대신 헤더에서 "나"를 고르고 localStorage(`innoflow.memberId`)에 기억한다. `GET /api/me` 를 만들지 않는 것 · 서버가 추론하지 않는 것은 그대로다 | 닫힘 |
-| Q13 | 사용자 | 작업 ↔ 안건, 회의 ↔ 작업 링크가 프로젝트 경계를 넘을 수 있나. 넘을 수 있다면 스냅샷에 상대가 없는 링크가 섞여 화면이 빈 줄을 만든다. 서버가 아예 막을지, 양쪽 다 이 프로젝트인 링크만 낼지. **서버 의견:** 막는 쪽이 맞다. 링크를 만들 때 양쪽 `project_id` 가 같은지 보고 다르면 400 으로 돌려주고, 링크 테이블에 `project_id` 를 두어 복합 FK 로 DB 까지 못 박을 수 있다(Q16 과 같은 수법). '스냅샷에서 상대 없는 링크를 빼고 준다' 는 임시 방편이다 — 이미 들어간 링크는 어느 화면에서도 못 고치고, 지운 것도 아니어서 DB 에 영영 남는다. 다만 **한 작업이 다른 프로젝트 안건을 기다리는 일이 실제로 있는지**는 제품 질문이라 사용자가 답해야 한다 | **서버가 막는다. 링크는 양쪽이 같은 프로젝트일 때만 선다.** 프론트 · 서버 의견이 같았다. 다르면 400(`TASK_THREAD_LINK_OTHER_PROJECT` · `MEETING_TASK_LINK_OTHER_PROJECT` 같은 `code`), 그리고 링크 테이블에 `project_id` 를 두어 복합 FK 로 DB 까지 막는다 — Q16 과 같은 수법이다. '스냅샷에서 상대 없는 링크를 빼고 준다' 는 임시 방편이라 안 쓴다. 이미 들어간 링크는 어느 화면에서도 못 고치고 DB 에 영영 남기 때문이다. 덕분에 스냅샷의 링크 두 배열은 거르는 기준이 단순해진다 — `project_id` 하나로 갈린다 | 닫힘 |
-| Q14 | 프론트 | 없는 `projectId` 로 스냅샷을 부르면 404 로 낼지, 빈 배열 여섯으로 낼지. 에러 본문을 `{ code, message, detail? }` (한국어 message)로 지금 확정할지 | **404 다. 빈 배열 여섯은 안 된다** — '레코드가 없는 새 프로젝트' 와 '없는 프로젝트' 를 구분 못 해서 화면이 오타 난 주소를 빈 목록으로 정상인 척 그린다. 에러 본문 `{ code, message, detail? }` 도 지금 확정한다 — `code` 는 화면이 갈라 보는 기계용 문자열(`PROJECT_NOT_FOUND` 처럼 SCREAMING_SNAKE), `message` 는 손대지 않고 그대로 띄울 수 있는 한국어 한 줄, `detail` 은 선택(폼 검증에서 필드별로 쓸 자리). FastAPI 기본 `{"detail": "..."}` 로 새지 않게 예외 핸들러로 통일하고 **422 검증 오류도 같은 모양**으로 낸다. 프론트가 할 것 — `src/api/` 를 세울 때 `ApiError { code, message, detail? }` 를 `src/types/` 에 두고, `stores/data.ts` 의 `currentProjectId` 초기값(`allProjects.value[0].id`)이 404 를 만나면 프로젝트 선택으로 되돌린다 | 닫힘 |
-| Q15 | 서버 | 같은 `createdAt` 안에서 `entries` 의 **등록 순서**를 복원할 수 있나. `server/PLAN.md` 1-1 의 `entry` 테이블에는 `order` 도 시퀀스도 없는데(`entry_detail` · `meeting_memo` · `task_line` 에는 있다), `saveMeeting` 은 한 회의의 줄 여러 개를 한 트랜잭션에 넣어 `created_at` 이 같아질 수 있고 `id` 가 UUID 면 사전순이 등록순과 무관하다. 그 순서가 곧 안건 이력의 순서다(Q4). ① `entry` 에 단조 증가 열(bigserial `seq`)을 두고 `created_at ASC, seq ASC` 로 낼지 ② `created_at` 에 마이크로초까지 실어 한 트랜잭션 안에서도 값이 갈리게 할지. 어느 쪽이든 **JSON 에 새 필드는 필요 없다** — 배열 순서만 지켜지면 된다 | **복원할 수 있다 — ① `entry` 에 `seq BIGSERIAL` 을 둔다.** ②(마이크로초)는 못 쓴다: Postgres 의 `now()` · `CURRENT_TIMESTAMP` 는 **트랜잭션 시작 시각**이라 `saveMeeting` 한 번에 들어간 줄이 전부 같은 값이 된다. `clock_timestamp()` 나 파이썬에서 줄마다 찍으면 갈리긴 하지만, 순서를 시계에 맡기면 NTP 되감김 · 여러 인스턴스에서 뒤집힐 수 있다 — '등록 순서' 는 시각이 아니라 순서라 그것을 직접 들고 있는 열이 맞다. `seq` 는 DB 가 보장하는 단조 증가라 한 트랜잭션 안에서도 삽입 순서대로 는다. 스냅샷의 `entries` 는 **`ORDER BY seq ASC` 하나**로 낸다 — `created_at` 을 1순위로 두면 지난 회의를 나중에 입력한 줄이 튄다(그 줄도 `threadDetail` 은 회의 날짜로 다시 정렬하고 배열 순서는 동점에만 쓴다). **`seq` 는 JSON 에 안 나간다** — `domain.ts` 의 `Entry` 는 그대로다. 시드는 `fixtures/threads.ts` 의 **배열 순서대로** 넣어 `seq` 가 목업 순서와 같아진다. **따라간 것** — `server/PLAN.md` 1-1 의 `entry` 행에 `seq` 를 더했다 | 닫힘 |
-| Q16 | 서버 | `thread.parentThreadId` · `task.parentId` 가 프로젝트 경계를 넘을 수 있나. Q13 은 링크 테이블 둘만 다룬다. 스냅샷이 `projectId` 로 거르므로 부모가 다른 프로젝트에 있으면 `taskDetail.parent` 가 조용히 null 이 되고 `pathLabel` 이 '최상위 작업' 으로 잘못 찍히며, 안건의 `subThreads` 가 통째로 빠진다 — 화면에 에러가 안 뜨고 계층만 틀린다. `server/PLAN.md` 1-2 에 '고리 금지' 는 있지만 '부모는 같은 프로젝트' 는 없다. 서버가 막을 수 있나 | **막는다 — 부모는 반드시 같은 프로젝트다.** 두 겹으로 건다. ① 서비스에서 보고 400 으로 돌려준다 — `TASK_PARENT_OTHER_PROJECT` · `THREAD_PARENT_OTHER_PROJECT`(`message` 는 한국어 한 줄) ② DB 로도 못 박는다 — `task(id, project_id)` 에 UNIQUE 를 두고 `FOREIGN KEY (parent_id, project_id) REFERENCES task(id, project_id)` 복합 FK 를 건다. `thread` 도 같다. 이러면 서비스를 건너뛴 시드 · 마이그레이션 · 훗날의 버그로도 경계를 못 넘는다. 작업 · 안건을 다른 프로젝트로 옮기는 기능은 지금 화면에 없다 — 생기면 **자손까지 통째로** 옮기는 것으로 계약을 다시 연다(부모만 옮기면 복합 FK 가 막는다). 링크 테이블 둘은 이 답의 범위 밖이다 — Q13 이다. **따라간 것** — `server/PLAN.md` 1-2 에 '부모는 같은 프로젝트' 를 고리 금지 옆에 더했다 | 닫힘 |
-| Q17 | 서버 | 빈 값을 `null` 이 아니라 `''` · `[]` 로 낸다고 확정할 수 있나. `domain.ts` 에서 null 을 허용하는 건 `ownerId` · `parentThreadId` · `parentId` · `meetingId` · `start` · `due` · `promotedThreadId` 뿐이다. `Entry.note`(`string`) · `Entry.detail`(`string[]`) · `Meeting.memos` · `Meeting.attendeeIds` · `Task.body` 는 빈 문자열 · 빈 배열이어야 한다 — Pydantic 기본값이나 DB 의 nullable 이 `None` 으로 새면 화면이 `.length` 에서 터진다 | **확정한다. 그 일곱 이름 말고는 `null` 이 나가지 않는다.** 보장은 **세 겹**이고, '응답 직전 변환' 은 쓰지 않는다 — 그 변환은 모델이 틀린 것을 덮어서 다음에 또 샌다. ① **DB** — `entry.note TEXT NOT NULL DEFAULT ''`. 배열이 되는 것(`entry_detail` · `meeting_memo` · `meeting_attendee` · `task_line`)은 전부 자식 테이블이라 행이 없으면 자연히 빈 배열이고 `None` 이 될 길이 없다 ② **ORM** — `Mapped[str]` 로 두고 Optional 을 안 쓴다. `Mapped[str \| None]` 은 위 일곱 자리에만 쓴다. mypy 가 어긋난 대입을 잡는다 ③ **응답 스키마** — Pydantic 필드를 `note: str = ''` · `detail: list[str] = Field(default_factory=list)` 로 둔다. 타입이 `str` · `list[str]` 이라 `None` 이 들어오면 **응답 직렬화에서 터진다**(조용히 새는 대신 500 이 뜨고 로그에 남는다). 덧붙임 — `Task.start` · `due` 는 한쪽만 채워도 받지만(기간 미정과 구분이 안 되는 건 화면 규칙이다) 그 둘은 `null` 을 내는 일곱 안에 있다. **따라간 것** — 계약 본문에 '빈 값은 `null` 이 아니다' 절을 더했다 | 닫힘 |
-| Q18 | 사용자 | 프로젝트가 하나도 없을 때 무슨 화면인가. `stores/data.ts` 가 `allProjects.value[0].id` 로 시작해서 `GET /api/projects` 가 빈 배열이면 앱이 뜨다가 터진다. 프로젝트 목록 · 등록 화면(`memo.md` 화면 1)은 아직 코드에 없다 — 첫 진입을 프로젝트 등록으로 보낼지, 시드가 항상 하나를 보장하는 것으로 하고 빈 상태는 나중에 볼지 | **프로젝트 등록 화면으로 보낸다.** 빈 배열은 에러가 아니라 정상 상태다 — 서버가 시드로 프로젝트 하나를 억지로 보장하지 않는다. `GET /api/projects` 가 `[]` 면 프론트가 첫 진입을 프로젝트 등록으로 돌린다. **따라올 것** — ① 프로젝트 목록 · 등록 화면(`memo.md` 화면 1)이 아직 코드에 없다. 계약이 닫힌 뒤 frontend 가 세운다 ② `stores/data.ts` 의 `currentProjectId` 초기값(`allProjects.value[0].id`)이 빈 배열에서 터지므로 같이 고친다 ③ `POST /api/projects` 가 `server/PLAN.md` 3단계에 잡혀 있는데, 빈 상태에서 앱을 여는 **유일한 길**이라 2단계로 당길지는 서버가 판단한다. **서버 답 ③:** 당긴다 — `POST /api/projects` 만 2단계로 올리고 나머지 쓰기는 3단계 그대로다. 이게 없으면 2단계의 '끝난 것으로 보는 기준'(빈 DB 에 붙여 화면이 목업처럼 도는지)을 시드 없이는 확인할 수 없고, 시드로 가리면 빈 상태가 처음 도는 곳이 사내 배포가 된다. **서버 답(접두사):** 등록 요청의 `taskKeyPrefix` 는 **필수**다 — 선택으로 두면 접두사 없는 프로젝트에서 작업을 만드는 순간 키를 못 만들고, 나중에 메우면 이미 나간 키를 전부 다시 써야 한다. **등록 화면에 입력칸이 하나 는다.** 계약은 `## 요청 스키마 — ProjectInput` 절에 있다 | 닫힘 |
-| Q19 | 사용자 | `task.key` 의 **번호**를 어떻게 매기나 (Q9 에서 뗐다). ① 번호를 프로젝트별로 세나 — 프로젝트 A 의 `HW-1` 과 B 의 `SL-1` 이 따로 도는가 ② 지운 작업의 번호를 다시 쓰나. 지금 목업은 '프로젝트 작업 수 + 1' 이라 3번을 지우면 다음 작업이 3번을 다시 받는다. 보통은 안 되돌린다(시퀀스로 발번하고 구멍을 둔다). **서버 의견:** ① **프로젝트별로 센다** — 접두사가 프로젝트마다 다른데 번호를 전역으로 세면 `HW-1` 다음이 `HW-7` 이 되어 사람이 읽는 값이라는 뜻이 사라진다 ② **지운 번호를 다시 쓰지 않는다** — 회의록 · 대화에 적힌 `HW-3` 이 나중에 다른 작업을 가리키게 되면 기록이 거짓말을 한다. 지금 목업의 '작업 수 + 1' 은 3번을 지우면 다음 작업이 3번을 다시 받는다. 구현은 `project` 에 '다음 번호' 열을 두고 작업을 만들 때 그 행을 잠가 올린다(Postgres 시퀀스는 프로젝트마다 객체를 하나씩 만들어야 해서 안 쓴다). 번호에 구멍이 생기는 건 받아들인다 | **① 번호는 프로젝트별로 센다. ② 지운 번호는 다시 쓰지 않는다.** `HW-1` 과 `SL-1` 이 따로 돌고, 3번 작업을 지워도 다음 작업은 4번을 받는다 — 번호에 구멍이 생기는 건 받아들인다. 서버 의견과 같은 결론이다. **구현** — `project` 에 '다음 번호' 열을 두고 작업을 만들 때 그 행을 잠가 올린다. `MAX(번호)+1` 은 동시 등록에서 겹치므로 쓰지 않는다. **서버 구현(확정):** `project.next_task_no` 를 `UPDATE project SET next_task_no = next_task_no + 1 WHERE id = :id RETURNING next_task_no - 1` 한 문장으로 올린다 — 그 `UPDATE` 가 행 잠금을 잡아 같은 프로젝트의 동시 등록을 줄 세우고, 트랜잭션이 되돌아가면 번호도 같이 돌아온다(프로젝트마다 진짜 시퀀스를 만드는 쪽은 등록마다 DDL 이 돌고 롤백에도 번호가 안 돌아와 구멍이 더 난다). 안전망으로 `task(project_id, key)` 에 UNIQUE. `key` 는 `{taskKeyPrefix}-{번호}` 다. **따라간 것** — `server/PLAN.md` 1-1 의 `project` 에 `next_task_no`, `task` 에 그 UNIQUE 를 더하고 1-2 에 발번 규칙을 적었다 | 닫힘 |
-| Q20 | 사용자 | `taskKeyPrefix`(작업 키 접두사)의 **값을 누가 정하나**. ① 프로젝트를 만들 때 사람이 넣나 — 프로젝트 등록 화면은 아직 코드에 없다(`web/PLAN.md` 5단계) ② 이름에서 자동으로 뽑나 — 이름이 한글이라('한화손보 차세대' → `HW`) 자동은 규칙을 세우기 어렵다 ③ 두 프로젝트가 같은 접두사를 써도 되나(`key` 가 전사에서 유일해야 하는지). **서버 의견:** 등록할 때 사람이 넣고(기본값 없이 필수), 프로젝트 사이에 겹치지 않게 유니크를 건다 — 그래야 `HW-4` 한 마디로 회의에서 가리킬 수 있다. **Q18 이 닫히면서 범위가 줄었다** — 서버는 `POST /api/projects` 에서 `taskKeyPrefix` 를 **필수**로 잡았다(①은 '사람이 넣는다'). 남은 것은 ③(프로젝트끼리 겹쳐도 되나 — 안 되면 409 `PROJECT_PREFIX_TAKEN` 이 선다), 글자 모양을 `^[A-Z][A-Z0-9]{0,7}$` 로 제한할지, 등록 화면이 이름에서 기본값을 제안할지다 | **프로젝트를 만들 때 프로젝트 단위로 하나 생긴다 — 사용자가 넣으면 그 값을 쓰고, 안 넣으면 서버가 임의로 만든다.** 등록 화면의 입력칸은 **선택**이다(필수가 아니다). 이름이 한글이라 자동 추출 규칙은 세우지 않는다 — 안 넣었을 때 서버가 만드는 값은 이름에서 뽑는 것이 아니라 겹치지 않는 임의 문자열이면 된다. **접두사는 프로젝트 사이에 유니크하다** — 그래야 `HW-4` 한 마디로 회의에서 가리킬 수 있고, '임의 생성' 도 겹치지 않아야 뜻이 선다. **서버가 정할 것** — ① 임의 생성 규칙(길이 · 글자 종류) ② 사용자가 넣은 값이 이미 쓰이고 있으면 400 으로 돌려준다고 보는데, 그 `code` 와 문구 ③ 형식 제약(대문자 · 길이 상한 · 한글 허용 여부). 이 셋은 계약을 막지 않으니 구현하며 정하고 결정 로그에 남겨라 | 닫힘 |
-| Q21 | 서버 | **`ProjectInput.taskKeyPrefix` 가 필수인가 선택인가 — 계약 안에서 두 절이 어긋난다.** `## 요청 스키마 — ProjectInput` 은 "**`taskKeyPrefix` 는 필수다**(Q18 ②) … 빈 문자열을 받지 않는다 — 422" 로 적혀 있는데, 뒤에 닫힌 **Q20(사용자)** 은 "등록 화면의 입력칸은 **선택**이다(필수가 아니다). 안 넣으면 서버가 겹치지 않는 임의 문자열을 만든다" 로 닫았다. 사용자 답이 나중이고 제품 결정이라 **프론트는 선택으로 세웠다** — `web/src/components/app/ProjectCreateDialog.vue` 의 입력칸이 '선택' 이고, 비우면 목업이 `PJ1` 같은 겹치지 않는 값을 붙인다(`web/src/lib/project.ts` 의 `makeTaskKeyPrefix`). 서버가 `ProjectInput` 절을 Q20 에 맞춰 고쳐 달라 — `taskKeyPrefix` 를 선택으로 두고, 빈 값이면 서버가 만들고, 422 는 '적었는데 형식이 틀렸을 때' 만. 겸해서 ① 서버가 만드는 값의 규칙(길이 · 글자 종류) ② 프론트가 그 값을 **미리 보여 줄 수 있나** — 지금 등록 폼은 비워 두면 붙을 값을 미리 찍어 준다. 서버가 다른 값을 만든다면 응답의 `Project.taskKeyPrefix` 로만 알 수 있으니 미리보기를 '저장하면 자동으로 붙습니다' 로 바꾸겠다 | **계약 절은 이미 Q20 에 맞춰져 있다 — `## 요청 스키마 — ProjectInput` 을 보면 `taskKeyPrefix?: string` 이고 '선택이다' 로 적혀 있다.** 프론트가 본 것은 그 앞 판이다(라운드 3 에서 고쳤다). 서버 구현도 그쪽으로 세웠다 — `ProjectCreate.task_key_prefix` 는 `str \| None = None` 이고, 적었는데 형식이 틀렸을 때만 422 다. ① **서버가 만드는 값** — 헷갈리는 글자(`I` · `O` · `0` · `1`)를 뺀 대문자 · 숫자에서 **네 글자**를 뽑고, 이미 쓰는 값이면 다시 뽑는다. 이름에서 뽑지 않는다(한글이라 규칙이 안 선다) ② **미리보기는 '저장하면 자동으로 붙습니다' 로 바꾸는 것이 맞다** — 서버가 만드는 값은 임의라 화면이 미리 맞힐 수 없다. 저장한 뒤 응답의 `Project.taskKeyPrefix` 를 그대로 보여 주면 된다(등록 직후 목록으로 돌아가면 거기에도 실려 있다). 프론트의 `makeTaskKeyPrefix` 는 목업용으로만 남기고 서버가 붙은 뒤에는 안 쓴다 | 닫힘 |
-| Q22 | 서버 | **main 의 서버 구현과 `Project` 계약이 어긋난다.** 두 갈래로 따로 만들어져 계약을 안 거친 쪽이 생겼다. ① **필드가 안 나간다** — `server/app/schemas/project.py` 의 `ProjectOut` 이 `id` · `name` 둘뿐이고 "key_prefix 는 내보내지 않는다 — 화면의 Project 는 id · name 둘뿐이다" 라고 적혀 있다. 그런데 `domain.ts` 의 `Project` 는 `taskKeyPrefix` 를 들고 있고 프로젝트 목록 화면이 그 값을 찍는다 ② **이름이 다르다** — 서버는 `key_prefix`(→ `keyPrefix`), 계약은 `taskKeyPrefix`(Q9 에서 정했다) ③ **필수/선택이 다르다** — `ProjectCreate` 가 `key_prefix` 를 필수로 받는데, **Q20 은 선택으로 닫혔다**(안 넣으면 서버가 임의 생성). 서버 주석이 "화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다" 라고 적고 있는데, 이제 있다(`web/src/views/ProjectsView.vue` · `ProjectCreateDialog.vue`). **계약(Q9 · Q20)이 정본이다 — 서버를 그쪽에 맞춰라** | **셋 다 계약에 맞췄다.** ① `ProjectOut` 에 `task_key_prefix` 를 더해 `taskKeyPrefix` 로 나간다 — `GET /api/projects` · `POST /api/projects` · **스냅샷의 `project`** 가 전부 같은 모양(`id` · `name` · `taskKeyPrefix`)이다 ② 이름을 바꿨다 — DB 열까지 `key_prefix` → `task_key_prefix`(리비전 `0003_contract_gaps`). 안에서 한 이름, 밖으로 한 이름만 쓴다 ③ `ProjectCreate.task_key_prefix` 를 **선택**으로 바꾸고, 없으면 서버가 만든다. 겹치면 **409 `PROJECT_PREFIX_TAKEN`**, 형식이 틀리면 422 다. 접두사에는 DB 유니크를 걸었다. **겸해서 스냅샷에 빠져 있던 `project` 키도 채웠다**(Q7 이 닫아 둔 일곱 번째 키인데 구현에 없었다). 깨진 main 테스트 넷은 계약대로 고쳤다 — `keyPrefix` → `taskKeyPrefix`, `{id, name}` → 셋, 스냅샷 키 일곱, 시나리오의 접두사는 시드(`HW`)와 겹치지 않게 `HWN` 으로 | 닫힘 |
-
-### 남은 어긋남 (2026-09-28)
-
-| # | 누가 답하나 | 질문 | 답 | 상태 |
-| --- | --- | --- | --- | --- |
-| Q23 | 프론트 | **`createdAt` 이 계약과 다르게 나간다.** 공통 규칙과 Q3 은 'ISO 8601 UTC · 항상 `Z` 접미' 인데, 서버는 `app/schemas/base.py` 의 `DayStamp` 가 **KST 기준 날짜로 잘라서**(`2026-09-10`) 내보낸다. 그렇게 만든 이유는 프론트의 옛 `monthDay` 가 `split('-')` 로 읽어 시각을 실으면 '9월 NaN일' 이 찍혔기 때문인데, **Q3 이 닫히면서 프론트가 `lib/date.ts` 를 고쳤다**(`localDay` 가 `Z` 를 KST 로 옮기고 날짜뿐 문자열도 그대로 통과시킨다). 그래서 지금은 화면이 깨지지는 않지만 **같은 날 여러 줄의 시각이 사라진다** — 정렬은 `seq` 가 잡아 주므로 당장 틀어지는 화면은 없다. 서버를 계약대로(`Z`) 되돌려도 되나? **서버 의견:** 되돌리는 것이 맞다. 다만 `tests/test_contract.py` 의 다섯 검사('날짜로 자른다' · 'KST 로 자른다')가 그 동작을 못 박고 있어 같이 고쳐야 하고, 저장값(`at_day_start` 로 KST 0시에 앉히는 것)도 같이 볼 자리다. 프론트가 `Z` 를 받을 준비가 됐는지(이미 됐다고 본다) 확인해 주면 다음 턴에 옮긴다 | **되돌려라 — 프론트는 `Z` 를 받을 준비가 돼 있다. 확인했다.** `web/src/lib/date.ts` 의 `localDay` 가 `Z` 로 끝나는 값을 KST 로 옮겨 `YYYY-MM-DD` 로 자르고, 날짜뿐 문자열은 그대로 통과시킨다. `monthDay` · `slashDay` 는 `split('-')` **앞에** `localDay` 를 태우고, `dayTime` 도 `Z` 를 KST 로 옮긴 뒤 시각을 자른다. `createdAt` 을 읽는 자리는 여섯뿐이고 다섯은 전부 `monthDay`/`localDay` 를 거친다 — `stores/thread.ts:89`(이력의 `at`) · `:119`(하위 안건 '분리' 라벨) · `TaskDetailDialog.vue:444`(만든 날짜) · `NewMeetingView.vue:119`(안건 후보의 '등록' 라벨) · `lib/date.test.ts`. **시각을 그대로 찍는 화면은 하나도 없다**(`dayTime` 은 지금 아무 데서도 안 쓴다). 날것으로 쓰는 자리는 `stores/thread.ts:34` 의 `b.createdAt.localeCompare(a.createdAt)` 하나인데, 같은 형식끼리면 사전순이 곧 시간순이라 `Z` 로 통일되면 오히려 맞아진다. 그 정렬이 먹이는 곳도 `deferCount` · `entryCount`(순서 무관)뿐이다 — `lastMeetingLabel` 은 라운드 3 에서 `meeting.date` 기준으로 고쳤고, 이력 순서는 `at` + 배열 인덱스(= 서버의 `seq`)가 잡는다. **되돌리면 지금 있는 '형식 두 벌' 이 사라진다** — 서버는 날짜뿐(`2026-09-10`)을 주는데 화면이 만든 줄은 `nowIso()`(`…Z`)라 한 배열(`allEntries`)에 두 모양이 섞여 있고, 같은 날이면 날짜뿐인 쪽이 늘 '더 오래된 것' 으로 밀린다. 이게 되돌림의 가장 큰 이득이다. **다만 `DayStamp` 를 지우는 것만으로는 안 된다 — 셋을 같이 해야 한다**(pydantic 2.13.5 로 직접 찍어 본 값이다). ① **UTC 로 옮겨서 `Z` 로 낸다.** 저장값이 `datetime.now(KST)` 라(`services/thread.py:70` · `:103`, `services/task.py:137`) annotation 만 떼면 `"2026-09-10T08:30:00+09:00"` 이 나간다 — 계약이 금지한 오프셋이고, `localDay` 는 `endsWith('Z')` 가 아니면 `split('T')[0]` 으로 물러선다. 마침 KST 오프셋이라 날짜는 우연히 맞지만 다른 오프셋이 한 번이라도 섞이면 조용히 틀린다. `PlainSerializer` 를 '`astimezone(UTC)` 한 뒤 `Z`' 로 바꿔라 ② **naive 를 내보내지 마라.** tzinfo 가 없으면 pydantic 이 `"2026-09-09T15:00:00"` 을 내고, `localDay` 는 `2026-09-09` 로 읽는데 한국 시간으로는 9월 10일이다 — **하루가 밀린다.** `app/time.py` 의 `day_of` 주석대로 sqlite 검사가 오프셋을 버리므로 이 구멍에 테스트가 먼저 빠진다 ③ **초까지만.** 프론트 `nowIso()` 가 밀리초를 떼고 내므로 같은 모양이 좋다. 마이크로초 여섯 자리도 `Date.parse` 는 읽지만 ES 명세의 날짜 형식은 소수 세 자리까지라 굳이 밖으로 나갈 이유가 없다. `tests/test_contract.py` 의 다섯 중 '날짜로 자른다' 를 못 박는 셋(`test_created_at_is_cut_to_a_day` · `test_cut_happens_in_kst_not_utc` · `test_json_dump_cuts_too`)은 **정반대로 뒤집어라** — `Z` 로 끝나는지, KST 입력이 UTC 로 옮겨지는지, naive 가 안 새는지. camelCase 를 보는 둘은 그대로다. **저장값도 같이 옮겨라(서버가 짚은 자리).** `services/meeting.py:112` 가 `at_day_start(payload.date)` 로 회의에서 생긴 안건과 줄을 **그 회의 날짜 0시**에 앉힌다. 주석은 "`stores/meeting.ts` 와 같다" 고 적혀 있는데 **그건 옛 프론트다** — Q3 을 닫으면서 `saveMeeting` 을 `nowIso()`(적은 시각)로 바꿨다. `created_at` 은 '그 줄을 적은 시각' 이다. 지금 구현은 지난 회의를 나중에 입력하면 과거로 적히고 한 회의의 모든 줄이 같은 0시를 갖는다. KST 0시라 날짜 표시는 우연히 맞아서 **되돌려도 화면은 안 깨지지만** 값이 거짓이다. `datetime.now(UTC)` 로 옮겨라 — 이력 순서는 어차피 `seq` 가 잡으므로(`services/snapshot.py` 가 `order_by(Entry.seq)` 다) 이 변경이 순서를 건드리지 않는다. **프론트가 고칠 것 — 되돌림 자체에는 없다.** 화면 · 스토어 · 픽스처가 이미 `Z` 다. 아래는 해 두면 좋은 것이고 Q24 답에 따라 필수가 된다 — `lib/date.ts` 의 `localDay` · `dayTime` 이 `Z` 가 아닌 값(오프셋 · naive)을 만나면 `split('T')[0]` 으로 물러서므로, 서버가 위 ①②를 보장하면 그대로 두고 못 한다면 `Date.parse` 결과로 판단하게 바꾸고 `date.test.ts` 에 그 두 모양을 넣는다 | 닫힘 |
-| Q24 | 서버 | **`POST /api/projects` 에 `taskKeyPrefix` 를 빈 문자열로 보내면 422 다 — Q21 답과 갈린다.** `app/schemas/project.py` 의 `ProjectCreate.task_key_prefix` 가 `Field(default=None, pattern=r"^[A-Z][A-Z0-9]{0,7}$")` 라 `""` 는 패턴에 걸린다. 그런데 Q21 답은 "**빈 값이면 서버가 만들고**, 적었는데 형식이 틀렸을 때만 422" 로 닫혔다 — '빈 값' 에 `""` 가 들어가는지가 안 갈렸다. 등록 폼(`web/src/components/app/ProjectCreateDialog.vue`)은 **입력칸을 비워 두는 것이 정상 경로**라 `src/api/` 를 세울 때 키를 아예 빼고 보낼지(`undefined`) 빈 문자열을 보낼지 지금 못박아야 한다. **프론트 선호: 빈 문자열도 안 넣은 것과 같이 본다**(서버가 `""` 를 `None` 으로 접는다) — 폼 값을 그대로 실어 보내는 자리라 '빈 값이면 키째로 빼기' 는 매번 잊기 쉽고, 잊으면 사용자에게 '형식이 틀렸습니다' 가 뜬다. 어느 쪽이든 고른 쪽을 `## 요청 스키마 — ProjectInput` 에 한 줄로 적어 달라 | **프론트 선호대로 간다 — 빈 문자열은 '안 넣은 것' 과 같이 본다.** 서버가 `""` 를 `None` 으로 접고 접두사를 만들어 준다. 이유는 셋이다. ① Q21 이 말한 '빈 값' 은 **값이 없다** 는 뜻이지 값을 어떻게 적었는지가 아니다. 키를 빼는 것과 빈 문자열을 보내는 것을 서버가 다르게 대하면, 같은 화면 동작(입력칸을 비워 둠)이 보내는 쪽 구현에 따라 201 도 되고 422 도 된다 ② 그 422 는 **사용자가 고칠 수 없는 오류**다 — 아무것도 안 적었는데 '형식이 올바르지 않습니다' 가 뜬다. 오류 메시지는 사용자가 다음에 할 일을 알려 줘야 한다 ③ 폼 값을 그대로 싣는 것이 정상 경로라 '빈 값이면 키째로 빼기' 는 `src/api/` 가 매번 기억해야 하는 규칙이 된다 — 서버가 한 번 접는 편이 싸다. **덧붙여 앞뒤 공백을 뗀다** — `" POR "` 는 `POR` 로 받고, `"   "` 는 빈 값으로 본다. 접두사에 공백이 들어갈 자리는 없고 이건 값을 바꾸는 게 아니라 손가락 자국을 지우는 것이다. 값 안에 공백이 있으면(`"PO R"`) 그대로 422 다. **프론트가 할 일은 없다** — 폼 값을 그대로 보내면 된다. 구현은 `ProjectCreate.task_key_prefix` 의 `BeforeValidator`(`_blank_is_none`)이고, `tests/test_project_api.py` 의 `test_blank_prefix_counts_as_not_given` · `test_prefix_keeps_its_shape_when_given` 이 `""` · `"   "` · `" POR "` · `"PO R"` 넷을 못 박는다 | 닫힘 |
-
-### AI 챗봇 (2026-10-11)
-
-| # | 누가 답하나 | 질문 | 답 | 상태 |
-| --- | --- | --- | --- | --- |
-| Q25 | 사용자 | 챗봇 모델을 무엇으로 하나. **Claude Opus 5.5**(`claude-opus-5-5` · 정확도 우선)와 **Claude Sonnet 5.5**(`claude-sonnet-5-5` · 비용 절반) 중. 정하기 전까지는 Opus 5.5 · effort `low` 로 두고 `config.py` 의 설정 하나로 바꿀 수 있게 만든다 | **Claude Sonnet 5.5(`claude-sonnet-5-5`) 로 시작한다.** 찾아서 요약하는 일이라 Sonnet 으로 충분하고 비용이 Opus 의 절반이다. effort 는 `low` 부터 — Sonnet 5.5 는 기본값이 `high` 라 **명시해야 한다**. 7-3 평가셋에서 놓치는 게 많으면 effort 를 올리거나 Opus 로 바꾼다 — `config.py` 의 `chat_model` · `chat_effort` 만 바뀌고 계약은 그대로다 | 닫힘 |
-| Q26 | 사용자 | 대화를 서버에 남길지. 초안은 **안 남긴다** — 화면이 지난 질문 · 답을 `messages` 로 같이 보낸다. 로그인이 없어 남겨도 누구 것인지 못 가린다. 새로고침해도 남아야 하면 `chat_session` · `chat_message` 테이블과 엔드포인트가 늘어난다 | **서버에 안 남긴다. 화면에서도 챗봇 창을 닫으면 대화가 끝난다.** 창을 닫으면 받는 중인 요청을 끊고 메시지를 비운다 — 다시 열면 빈 대화다. 새로고침 · 프로젝트 전환도 같다. 초안 그대로라 `ChatInput` 은 안 바뀌고 `POST .../chat` 은 `합의` 그대로다 | 닫힘 |
-| Q27 | 서버 | 검색 테스트를 어디서 돌리나. 지금 테스트는 메모리 sqlite 라 `pg_trgm` 이 없다. ① 검색 테스트만 Postgres 컨테이너에서 돌린다(없으면 건너뜀) ② sqlite 에서는 `LIKE` 로 대신하는 갈래를 서비스에 둔다. ②는 운영과 다른 코드가 테스트되는 것이라 ①로 기운다 | **① 로 간다 — 검색 테스트만 진짜 Postgres 에서 돌리고, 닿지 않으면 건너뛴다.** 서비스에 sqlite 갈래(`LIKE`)를 두지 않는다 — 그러면 검사가 통과해도 운영 코드(`word_similarity` · `<%` · 문턱 설정)는 한 줄도 안 돈 것이다. 나눈 기준은 'trigram 을 타는가' 다. `tests/test_search.py` 에서 404 · 422 · `get_thread` · `get_task` · 발췌는 메모리 sqlite 로 늘 돌고, 실제로 찾는 열한 개만 `pg_session` · `pg_client` 를 쓴다(`tests/conftest.py`). 접속은 `TEST_DATABASE_URL`, 없으면 `innoflow-db` 컨테이너의 **`innoflow_pytest`** DB 다 — 개발 DB(`innoflow`)와 갈라 둔 것은 테스트가 스키마를 통째로 지우고 시드를 다시 넣기 때문이다. DB 가 없으면 만들고, 서버에 2초 안에 닿지 않으면 `pytest.skip` 이다. 그래서 **검사 넷은 DB 없이도 통과한다**(컨테이너 없이 116 통과 · 11 건너뜀, 있으면 127 통과). 테이블은 리비전이 아니라 모델로 세운다 — 인덱스까지 모델에 있고, 리비전과 모델의 일치는 `test_schema` 가 본다 | 닫힘 |
-| Q28 | 프론트 | 오른쪽 아래 자리가 겹친다. `App.vue` 의 `<Toaster position="bottom-right" />` 와 챗봇 버튼이 같은 자리다. 토스트를 `top-right` 로 옮길지, 위젯 높이만큼 띄울지 | **`top-right` 로 옮긴다.** 열린 패널(약 400×600)이 오른쪽 아래를 통째로 덮어서 위젯 높이만큼 띄우려면 열림 · 닫힘에 따라 `offset` 을 바꿔야 하고 낮은 화면에서는 띄울 자리도 없다 — 토스트는 쓰기 실패 알림(`lib/notify.ts`)뿐이라 위로 가도 잃는 것이 없고, 챗봇 오류는 토스트가 아니라 패널 안의 그 답 줄에 단다. 고치는 일은 `web/PLAN.md` 7-1 | 닫힘 |
-
-## 결정 로그
-
-| 날짜 | 무엇을 | 왜 |
-| --- | --- | --- |
-| 2026-10-11 | 챗봇 `text` 상한을 역할별로 나눴다 — 질문 2,000자 · 답 20,000자. 화면 입력칸에도 2,000자를 건다 | 답은 `max_tokens` 8000 이라 2,000자를 넘을 수 있고, 화면이 지난 답을 그대로 돌려보내므로 한 번 긴 답이 나오면 창을 닫을 때까지 다음 질문이 전부 422 였다 |
-| 2026-10-11 | **`POST /api/projects/{projectId}/chat` 을 `구현` 으로 올렸다.** 스트림 중 오류 코드에 `CHAT_REFUSED`(AI 거절) · `INTERNAL_ERROR`(공통 코드)를 더했다. 스트림 전 확인 순서는 프로젝트 → 키 → IP 당 횟수(분당 10회) | 거절은 키 없음 · 횟수 초과와 원인이 달라 화면이 다르게 말할 수 있어야 한다. 화면은 `code` 로 가르고 `message` 를 그대로 띄우므로 새 코드가 화면을 깨지 않는다 |
-| 2026-10-12 | **챗봇 작업 초안 계약을 `합의` 로 올렸다** — `propose_tasks` · `list_members` 도구, 스트림 `proposal` 이벤트, `ChatMessage.proposal`, `POST .../tasks/batch` | 사용자 결정 — 챗봇은 초안만 내고 사람이 [등록] 을 눌러야 저장된다. AI 가 잘못 알아들어도 DB 에 남지 않는다. 묶음은 한 트랜잭션이어야 상위만 남는 일이 없다 |
-| 2026-10-12 | Q12 를 고쳤다 — "나"(`currentMemberId`)는 상수가 아니라 화면 헤더에서 고르고 브라우저에 기억한다. `lib/session.ts` 를 지웠다 | 댓글은 누가 썼는지가 곧 내용이다. 모두가 `u3` 로 적히면 쓸모가 없다. 로그인 전까지 사람이 고르는 것이 가장 싼 길이고, 인증이 붙으면 이 값만 서버에서 받으면 된다 |
-| 2026-10-12 | **작업 댓글을 더했다** — `GET` · `POST /api/tasks/{taskId}/comments`, `PATCH` · `DELETE /api/comments/{commentId}`, 테이블 `task_comment`(리비전 `0007_task_comment`, 작업을 지우면 같이 지워진다). `Task` 에 `commentCount` 가 늘었다 — 스냅샷 · 작업 쓰기 응답 · 검색의 작업 모두에 실린다. 댓글 본문은 스냅샷에 안 싣는다. 오류 코드 `COMMENT_NOT_FOUND`(404) · `COMMENT_AUTHOR_NOT_FOUND`(400). **작성자 일치는 서버가 검사하지 않는다** | 사용자가 프론트와 맞춘 계약 그대로다. 목록 · 칸반은 개수만 찍고 본문은 상세에서만 읽어 스냅샷을 무겁게 하지 않는다. 로그인이 없어 요청이 누구 것인지 가릴 수 없다 — 인증이 붙으면(`server/PLAN.md` 6단계) 서버가 막는다 |
-| 2026-10-11 | **`GET /api/projects/{projectId}/search` 를 `구현` 으로 올렸다**(채팅은 `합의` 그대로). 리비전 `0006_search_trgm` — `pg_trgm` + GIN 인덱스 여덟. 점수는 `word_similarity`, 검색어가 그대로 들어 있으면 0.9, 0.5 미만은 버린다. 빈 `q` 는 422 · `limit` 1 ~ 50 · 한 레코드는 한 번만 — '검색' 절에 적었다. Q27 닫힘 — 검색 테스트는 Postgres 가 있을 때만 돈다 | 기본 전문검색은 한국어를 못 쪼개고, `similarity()` 는 짧은 검색어를 긴 글에서 묻는다('OS' ↔ '서버 OS 결정' 0.33 → `word_similarity` 1.0). 한국어 조사('미룸이다') 때문에 그대로 들어 있는 경우를 따로 올린다. sqlite 대역 갈래를 두면 운영 코드가 검사되지 않는다 |
-| 2026-10-11 | 챗봇 모델은 **Claude Sonnet 5.5 · effort `low`** 로 시작한다 (Q25). 대화는 **서버에 안 남기고 창을 닫으면 끝난다** (Q26) | 찾아서 요약하는 일이라 Sonnet 으로 충분하다. 모델은 설정 하나로 바꾼다. 로그인이 없어 대화를 남겨도 누구 것인지 못 가린다 — 계약은 그대로다 |
-| 2026-10-11 | **AI 챗봇 계약을 `합의` 로 올렸다** — `GET .../search` · `POST .../chat` 둘 다. 프론트 검토는 '## AI 챗봇' 의 '프론트 검토 (2026-10-11)'. Q28 닫힘 — 토스트를 `top-right` 로 옮긴다 | 타입이 `domain.ts` 와 어긋나지 않고, 스트림 전 · 중 오류가 둘 다 `ApiError` 한 모양으로 모이며, 칩에 필요한 것은 스냅샷에 다 있다. Q26 이 '남긴다' 로 닫히면 `POST .../chat` 은 다시 `초안` 이다 |
-| 2026-10-11 | **AI 챗봇 계약 초안**을 올렸다 — `POST .../chat`(SSE) · `GET .../search` · 근거 표시 `[[kind:id]]` · 오류 코드 둘. 열린 질문 Q25 ~ Q28 | 계획은 `server/PLAN.md` 7단계 · `web/PLAN.md` 7단계. 계약을 먼저 세우고 양쪽이 동시에 만든다 |
-| 2026-10-11 | 작업 본문을 `PATCH /api/tasks/{taskId}` 의 `body` 로 통째로 바꾼다. 줄 id 는 보내면 유지한다. 화면을 목업에서 실제 API 로 연결한다 — 개발 기본은 서버, `VITE_USE_MOCK=true` 면 목업, Vite 가 `/api` 를 `localhost:8000` 으로 넘긴다 | 화면에서 고친 게 새로고침하면 사라졌다(목업 메모리). 본문 편집만 짝이 되는 API 가 없었다. 줄 id 가 저장할 때마다 바뀌면 줄마다 편집하는 중에 포커스가 튄다 |
-| 2026-10-11 | **회의(Meeting)를 걷어냈다.** 테이블 넷(`meeting` · `meeting_attendee` · `meeting_memo` · `meeting_task_link`)과 `entry.meeting_id`, 회의 API 셋, 스냅샷의 `meetings` · `meetingTaskLinks`, `Entry.meetingId` 가 빠졌다. 이력은 `POST /api/threads/{threadId}/entries` 로만 남고, 이력의 날짜는 `createdAt` 의 KST 날짜다. 안건 수정 `PATCH /api/threads/{threadId}` 를 더했다 | 사용자 결정 — 회의를 관리하는 건 '일을 위한 일' 이다. 이 제품의 목적은 결정이 미뤄지는 걸 막고 기록을 잘 남기는 것이고, 그건 안건과 그 이력이 맡는다. 회의와 안건이 비슷한 개념으로 겹쳐 무엇을 어디에 적을지 헷갈렸다. 아래 Q 들에 남은 회의 이야기는 그때의 기록이다 |
-| 2026-10-10 | `Thread` 에 **`description`(배경) · `options`(후보) · `dueDate`(결정 기한)** 를 더했다. 등록에서 셋 다 선택, 회의 중 새로 만든 안건은 `''` · `[]` · `null`. 후보는 자식 테이블 `thread_option` 으로 펴고 응답에서 접는다. '기한 지남'(`dueDate < 오늘(KST)` 이고 결정 전)은 프론트가 계산한다 | 제목만으로는 안건을 어떻게 써야 할지 어렵다는 사용자 테스트 의견. 안건은 '정해야 할 것 하나' 라 회의에서 바로 결정할 수 있게 하는 정보만 받는다 — 칸이 많아지면 안건 대신 메신저로 정하게 되니 제목만 필수로 둔다. 기한은 '미루는 걸 막는다' 는 제품의 이유와 바로 닿는다 |
-| 2026-09-29 | `createdAt` 을 계약대로 되돌렸다 — **ISO 8601 UTC · `Z` · 초까지**. 저장도 UTC 로 통일하고(회의에서 생긴 줄까지) naive 는 UTC 로 보고 Z 를 붙인다 (Q23) | 날짜로 자르던 이유(프론트의 옛 `monthDay`)가 Q3 에서 사라졌다. 잘라 내보내면 같은 날 여러 줄의 시각이 없어지고, 화면이 만든 줄(`nowIso()`)과 형식이 두 벌이 된다. 오프셋을 그대로 내보내는 것도 답이 아니다 — `localDay` 가 `Z` 가 아니면 문자열을 잘라 읽어서 KST 일 때만 우연히 맞는다 |
-| 2026-09-29 | 회의에서 생긴 안건 · 줄의 `created_at` 을 **회의 날짜 0시가 아니라 적은 시각**으로 바꿨다 (Q23) | `created_at` 은 그 줄을 적은 시각이다. 그날을 가리키는 것은 `meeting.date` 고, 이력 순서는 `seq` 가 잡는다. 지난 회의를 나중에 입력하면 옛 구현은 과거로 적혔다 |
-| 2026-09-29 | 등록 요청의 `taskKeyPrefix` 는 **빈 문자열도 '안 넣은 것'** 으로 접는다. 앞뒤 공백도 뗀다 (Q24) | 같은 화면 동작(입력칸을 비워 둠)이 보내는 쪽 구현에 따라 201 과 422 로 갈리면 안 된다. 그 422 는 사용자가 고칠 수도 없다 |
-| 2026-09-28 | 오류 본문을 계약대로 `{ code, message, detail? }` 로 통일했다 — 핸들러 넷(`ApiError` · 검증 · `HTTPException` · 못 잡은 예외), 쓰기 API 의 `code` 도 표로 못 박았다 (Q14) | 프론트가 `code` 로 갈라 본다. FastAPI 기본 `{"detail": ...}` 로는 '프로젝트가 없다' 와 '작업이 없다' 를 화면이 구분하지 못한다 |
-| 2026-09-28 | 링크 둘에 `project_id` 를 두고 복합 FK 로 묶었다. 부모(`task.parent_id` · `thread.parent_thread_id`)도 복합 FK 다 (Q13 · Q16) | 서비스만 막으면 시드 · 마이그레이션 · 훗날의 버그가 넘어간다. 넘어가면 화면에 에러가 안 뜨고 계층과 맵핑이 조용히 틀어진다 |
-| 2026-09-28 | `Project` 를 계약 모양으로 되돌렸다 — `taskKeyPrefix` 를 내보내고, 등록에서는 선택으로 받고, 스냅샷에 `project` 키를 채웠다 (Q9 · Q20 · Q22 · Q7) | 계약을 안 거치고 만들어진 쪽이 '화면의 Project 는 id · name 둘뿐' 이라고 추측했다. 프로젝트 목록 화면은 접두사를 찍고 있었다 |
-| 2026-09-28 | 서버 구현이 두 갈래로 갈려 `Project` 계약이 어긋난 것을 발견했다 (Q22) | 한쪽이 계약 문서를 안 거치고 만들어졌다. 서버 코드 주석이 "화면에 프로젝트 등록이 아직 없어 계약이 없는 자리다" 라고 적고 있는 것이 증거다 — 계약이 없으면 추측으로 메우게 된다 |
-| 2026-09-28 | 멤버는 **전사 공통**. 스냅샷에 싣지 않고 `GET /api/members` 로 따로 받는다 (Q6 · Q5 확정) | 프로젝트를 바꿔도 안 바뀌는 값이라 스냅샷에 실으면 매번 다시 받는다. 프로젝트별로 갈라야 하면 그때 `project_member` 를 더한다 |
-| 2026-09-28 | 회의에 **녹음을 두지 않는다** (Q11) | 타입에도 테이블에도 없고 주석에만 살아 있던 유령이다. 파일 업로드 · 스토리지가 같이 따라오는 일이라 필요해질 때 제대로 연다. `stores/meeting.ts` 주석에서 걷어낸다 |
-| 2026-09-28 | 링크는 **같은 프로젝트 안에서만** 선다. 400 + 링크 테이블 복합 FK (Q13) | 지금 스토어는 상대를 못 찾으면 조용히 버려서, 넘어간 링크가 화면에서 사라지고도 DB 에 영영 남는다. 고칠 화면이 없는 데이터는 안 만드는 게 낫다 |
-| 2026-09-28 | `taskKeyPrefix` 는 **등록할 때 선택 입력, 없으면 서버가 임의 생성**. 프로젝트 사이에 유니크 (Q20) | 이름이 한글이라 자동 추출 규칙이 안 선다. 필수로 하면 등록이 막히고, 유니크가 아니면 `HW-4` 가 둘이 되어 회의에서 한 마디로 못 가리킨다 |
-| 2026-09-28 | 프로젝트가 0개면 **프로젝트 등록 화면**으로 보낸다. 빈 배열은 정상 상태다 (Q18) | 시드로 프로젝트 하나를 보장하면 '비어 있는 조직' 이라는 진짜 상태를 영영 못 만난다. 첫 화면이 등록이면 빈 상태가 곧 온보딩이다 |
-| 2026-09-28 | `task.key` 번호는 **프로젝트별로 세고 지운 번호를 다시 쓰지 않는다** (Q19) | 접두사가 프로젝트마다 다른데 전역으로 세면 `HW-1` 다음이 `HW-7` 이 되어 사람이 읽는 값이라는 뜻이 사라진다. 회의록에 적힌 `HW-3` 이 나중에 다른 작업을 가리키면 기록이 거짓말을 한다 |
-| 2026-09-28 | 이 문서를 계약의 자리로 둔다 | 두 에이전트가 직접 말하지 못하고 에이전트 컨텍스트는 세션과 함께 사라진다. 남는 자리가 필요하다 |
-| 2026-09-28 | `createdAt` 은 **ISO 8601 UTC(`Z`)** 로 낸다. 날짜뿐으로 맞추지 않고 프론트가 `lib/date.ts` 를 고친다 (Q3) | 한 회의에서 여러 줄이 같은 날 들어온다. 날짜뿐이면 같은 날 안의 순서를 잃는데, 그 순서가 곧 안건 이력의 순서다. 사람이 고른 날짜(`Meeting.date` · `Task.start` · `Task.due`)는 그대로 `YYYY-MM-DD` — 시간대가 없는 값이다 |
-| 2026-09-28 | `entries` 는 **배열 순서 = 등록 순서**가 계약이다. 정렬 키가 아니라 순서 자체를 약속한다 (Q4) | 한 회의 · 한 안건에 남긴 줄들은 `at` 도 `createdAt` 도 같아 시간으로 못 가르고, UUID 는 사전순이 등록순과 무관하다. 화면이 기대는 건 적은 순서뿐이다 |
-| 2026-09-28 | 스냅샷에 `project` 는 싣고 `members` 는 안 싣는다 (Q5 · Q7) | 프로젝트는 스냅샷과 수명이 같아 딥링크 한 방으로 끝나고 늦게 온 응답도 가릴 수 있다. 멤버는 프로젝트가 바뀌어도 안 바뀌어서 같이 실으면 매번 다시 받는다 |
-| 2026-09-28 | 에러는 HTTP 상태 + `{ code, message, detail? }` 로 통일한다. 없는 프로젝트는 **404** (Q14) | 빈 배열 여섯은 '레코드가 없는 프로젝트' 와 구분이 안 돼 오타 난 주소를 정상인 척 그린다 |
-| 2026-09-28 | 첫 읽기 API 를 **프로젝트 스냅샷 한 방**(`ProjectSnapshot`)으로 올린다. 원본 여섯 배열만 주고 집계는 프론트가 계속 계산한다 | 지금 스토어가 "레코드를 다 들고 화면에서 계산"하는 구조다(`stores/data.ts`). 같은 모양으로 주면 스토어의 목업 배열만 갈아끼우면 되고, 계산과 그 테스트를 두 벌 갖지 않는다 (`server/PLAN.md` 2단계) |
-| 2026-09-28 | 안건 상태는 **셋**(`queued` · `open` · `decided`). '미룸' 은 상태가 아니라 Entry 다 (Q1) | 같은 안건이 여러 번 미뤄진다 — 상태로 두면 덮어써져 횟수가 사라진다. `memo.md` 의 넷은 옛 표기라 그쪽을 고친다 |
-| 2026-09-28 | 작업 상태는 **넷** — 해야 할 일 · 진행 중 · **막힘** · 완료 (Q2) | '막힘' 은 걸어 둔 안건이 안 정해져 멈춘 상태다. 이 제품에서 작업이 멈추는 가장 흔한 이유라 칸반의 칸으로 세울 값어치가 있다 |
-| 2026-09-28 | `entry` 에 **단조 증가 열 `seq`** 를 두고 `entries` 를 `seq ASC` 하나로 낸다. JSON 에는 안 나간다 (Q15) | 계약이 '등록 순서' 라 순서를 직접 들고 있는 열이 필요하다. 한 트랜잭션에 들어간 줄은 `created_at` 이 같고, 시계에 기대면 NTP 되감김 · 여러 인스턴스에서 뒤집힌다 |
-| 2026-09-28 | 부모(`task.parentId` · `thread.parentThreadId`)는 **같은 프로젝트만**. 서비스 검사 + 복합 FK 로 DB 까지 막는다 (Q16) | 넘으면 화면에 에러가 안 뜨고 계층만 조용히 틀린다 — `pathLabel` 이 '최상위 작업' 으로 잘못 찍히고 `subThreads` 가 통째로 빠진다 |
-| 2026-09-28 | 빈 값은 `null` 이 아니라 `''` · `[]`. DB · ORM · 응답 스키마 **세 겹**으로 막고 응답 직전 변환은 두지 않는다 (Q17) | 한 겹이라도 새면 화면이 `.length` 에서 터진다. 직전 변환은 모델이 틀린 것을 덮어 다음에 또 샌다 |
-| 2026-09-28 | `taskKeyPrefix` 규칙 셋을 서버가 정했다 (Q20 이 넘긴 자리) — ① 형식은 `^[A-Z][A-Z0-9]{0,7}$` ② 안 넣으면 헷갈리는 글자(I·O·0·1)를 뺀 **네 글자**를 뽑고 겹치면 다시 뽑는다 ③ 이미 쓰는 값이면 **409 `PROJECT_PREFIX_TAKEN`** | 회의에서 소리 내어 가리키는 값이라 한글 · 공백 · 소문자는 쓸모가 준다. 이름에서 뽑는 건 한글이라 규칙이 안 선다. 네 글자면 32^4 라 부딪힐 일이 사실상 없다. 형식 오류(422)와 자원 충돌(409)은 화면이 다르게 다뤄야 해서 갈랐다 |
-| 2026-09-28 | 프로젝트가 없으면 `GET /api/projects` 가 **빈 배열**을 낸다(에러 아님). 시드로 하나를 억지로 보장하지 않고, **`POST /api/projects` 만 2단계로 끌어올린다**. 등록 요청의 `taskKeyPrefix` 는 필수 (Q18) | 빈 상태에서 앱을 여는 유일한 길이라 이게 없으면 2단계를 시드 없이 확인할 수 없다. 시드로 가리면 빈 상태가 처음 도는 곳이 사내 배포가 된다. 접두사를 선택으로 두면 거기서 작업을 만드는 순간 키를 못 만든다 |
-| 2026-09-28 | `task.key` 번호는 **프로젝트별**이고 지운 번호를 다시 쓰지 않는다. `project.next_task_no` 를 `UPDATE ... RETURNING` 으로 잠가 올린다 (Q19) | `MAX(번호)+1` 은 동시 등록에서 두 트랜잭션이 같은 값을 읽어 겹친다. 프로젝트마다 진짜 시퀀스를 만들면 등록마다 DDL 이 돌아 마이그레이션 · 백업이 무거워지고 롤백에도 번호가 안 돌아온다. 행 하나를 잠그는 비용은 사람 손 속도의 작업 등록에서 문제가 되지 않는다 |
-| 2026-09-28 | `Project` 에 작업 키 접두사 필드를 더하고 **서버가 `task.key` 를 발번한다** (Q9) | 접두사를 꺼낼 자리가 없어 목업이 전 프로젝트에 `HW-` 를 붙이고 있었다. 번호를 세는 건 동시성 문제라 프론트가 가질 일이 아니다. 번호 규칙은 Q19 |

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
 from app.models import (
-    Member,
     Project,
     Task,
     TaskComment,
@@ -33,6 +32,7 @@ from app.schemas.task import (
     TaskPatch,
     TaskThreadLinkOut,
 )
+from app.services import access
 from app.services import project as project_service
 from app.time import now
 
@@ -172,9 +172,12 @@ async def _insert_task(session: AsyncSession, project: Project, payload: TaskCre
     return task
 
 
-async def _guard_owner(session: AsyncSession, owner_id: str | None) -> None:
-    """없는 멤버를 담당자로 두려 하면 400. FK 에 맡기면 500 이다 — 일괄 등록은 `missing_owners`."""
-    if owner_id is not None and await session.get(Member, owner_id) is None:
+async def _guard_owner(session: AsyncSession, project_id: str, owner_id: str | None) -> None:
+    """새로 지정하는 담당자는 그 프로젝트의 활성 멤버여야 한다 (docs/api/auth.md).
+
+    없는 멤버면 FK 가 500 을 내므로 400 으로 먼저 거른다 — 일괄 등록은 `missing_owners`.
+    """
+    if owner_id is not None and not await access.is_assignable(session, project_id, owner_id):
         raise ApiError(
             400,
             "TASK_OWNER_NOT_FOUND",
@@ -185,7 +188,7 @@ async def _guard_owner(session: AsyncSession, owner_id: str | None) -> None:
 
 async def create_task(session: AsyncSession, project_id: str, payload: TaskCreate) -> TaskOut:
     project = await project_service.load_project(session, project_id)
-    await _guard_owner(session, payload.owner_id)
+    await _guard_owner(session, project.id, payload.owner_id)
     task = await _insert_task(session, project, payload)
     await session.commit()
     # 방금 만든 작업이라 댓글이 있을 수 없다
@@ -221,12 +224,14 @@ def proposal_problems(tasks: Sequence[ProposedTask]) -> dict[str, str]:
     return problems
 
 
-async def missing_owners(session: AsyncSession, tasks: Sequence[ProposedTask]) -> dict[str, str]:
-    """없는 멤버를 가리키는 자리. FK 에 맡기면 500 이라 먼저 거른다."""
+async def missing_owners(
+    session: AsyncSession, project_id: str, tasks: Sequence[ProposedTask]
+) -> dict[str, str]:
+    """그 프로젝트의 활성 멤버가 아닌 담당자를 가리키는 자리. 없는 멤버도 여기 걸린다."""
     wanted = {item.owner_id for item in tasks if item.owner_id is not None}
     if not wanted:
         return {}
-    found = set((await session.scalars(select(Member.id).where(Member.id.in_(wanted)))).all())
+    found = await access.active_project_members(session, project_id, wanted)
     return {
         f"tasks.{index}.ownerId": "담당자를 찾을 수 없습니다."
         for index, item in enumerate(tasks)
@@ -242,7 +247,7 @@ async def create_tasks(
     problems = proposal_problems(payload.tasks)
     if problems:
         raise ApiError(422, "VALIDATION_ERROR", "요청 값이 올바르지 않습니다.", problems)
-    missing = await missing_owners(session, payload.tasks)
+    missing = await missing_owners(session, project.id, payload.tasks)
     if missing:
         raise ApiError(400, "TASK_OWNER_NOT_FOUND", "담당자를 찾을 수 없습니다.", missing)
 
@@ -286,8 +291,9 @@ async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) ->
         _replace_body(task, payload.body)
     if "parent_id" in changes:
         await _guard_parent(session, task.project_id, task.id, changes["parent_id"])
-    if "owner_id" in changes:
-        await _guard_owner(session, changes["owner_id"])
+    # 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다 — 프로젝트에서 빠진 사람이어도
+    if "owner_id" in changes and changes["owner_id"] != task.owner_id:
+        await _guard_owner(session, task.project_id, changes["owner_id"])
     for field, value in changes.items():
         setattr(task, field, value)
     await session.commit()

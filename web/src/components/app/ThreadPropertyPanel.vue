@@ -75,7 +75,7 @@ const ghost =
             </SelectTrigger>
             <SelectContent>
               <SelectItem :value="NONE">미정 (담당자 없음)</SelectItem>
-              <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">
+              <SelectItem v-for="m in data.assignable" :key="m.id" :value="m.id">
                 {{ m.name }}
               </SelectItem>
             </SelectContent>

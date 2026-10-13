@@ -381,7 +381,7 @@ function bulkOwner(value: string) {
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
                 <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
-                  m.name
+                  data.memberName(m.id)
                 }}</SelectItem>
                 <SelectItem value="none">미정</SelectItem>
               </SelectContent>
@@ -546,7 +546,7 @@ function bulkOwner(value: string) {
                 <span>담당자 바꾸기</span>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
+                <SelectItem v-for="m in data.assignable" :key="m.id" :value="m.id">{{
                   m.name
                 }}</SelectItem>
                 <SelectItem value="none">미정</SelectItem>

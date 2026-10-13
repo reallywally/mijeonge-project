@@ -1,13 +1,28 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
+  ChevronDown,
   ChevronRight,
   FolderClosed,
+  KeyRound,
   ListTree,
   Loader2,
+  LogOut,
   SquareKanban,
-  UserRound,
+  UserCog,
+  Users,
 } from 'lucide-vue-next'
+import PasswordChangeDialog from '@/components/app/PasswordChangeDialog.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
@@ -15,20 +30,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { canManageAccounts, canManageProject, GRADE_LABEL, gradeOf } from '@/lib/access'
+import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 
-/* 대메뉴는 작업 · 안건 둘이다. 위에서 프로젝트를 고르면 두 화면 모두 그 프로젝트 안에서만 돈다. */
+/* 대메뉴는 작업 · 안건 둘이다. 위에서 프로젝트를 고르면 두 화면 모두 그 프로젝트 안에서만 돈다.
+   관리 메뉴는 권한이 있는 사람에게만 보인다 — 숨기는 것은 편의이고 막는 것은 서버다. */
 const data = useDataStore()
+const auth = useAuthStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
+const router = useRouter()
 
-/* '나' — 로그인이 없어 여기서 고른다. 댓글을 누가 남기는지가 이 값이다 */
-const NO_MEMBER = 'none'
-function pickMe(value: unknown) {
-  const id = String(value)
-  data.setCurrentMember(id === NO_MEMBER ? null : id)
+const manageProject = computed(
+  () => data.currentProjectId !== '' && canManageProject(auth.me, data.currentProjectId),
+)
+const manageAccounts = computed(() => canManageAccounts(auth.me))
+const gradeLabel = computed(() => {
+  const grade = gradeOf(auth.me, data.currentProjectId)
+  return grade ? GRADE_LABEL[grade] : ''
+})
+
+const passwordOpen = ref(false)
+
+async function logout() {
+  await auth.logout()
+  await router.replace('/login')
 }
 </script>
 
@@ -54,25 +83,33 @@ function pickMe(value: unknown) {
       </div>
       <div class="grow" />
       <slot name="actions" />
-      <Select :model-value="data.currentMemberId ?? NO_MEMBER" @update:model-value="pickMe">
-        <SelectTrigger class="h-9 w-auto gap-2 border-transparent shadow-none" aria-label="나">
-          <span class="text-xs text-muted-foreground">나</span>
-          <PersonChip
-            v-if="data.currentMemberId"
-            :name="data.memberName(data.currentMemberId) ?? ''"
-          />
-          <span v-else class="flex items-center gap-1 text-xs text-muted-foreground">
-            <UserRound class="size-3.5" />
-            고르기
-          </span>
-        </SelectTrigger>
-        <SelectContent align="end">
-          <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">
-            {{ m.name }}
-          </SelectItem>
-          <SelectItem :value="NO_MEMBER">고르지 않음</SelectItem>
-        </SelectContent>
-      </Select>
+      <DropdownMenu v-if="auth.me">
+        <DropdownMenuTrigger
+          class="flex h-9 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          aria-label="내 메뉴"
+        >
+          <PersonChip :name="auth.me.name" />
+          <ChevronDown class="size-3.5 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-56">
+          <DropdownMenuLabel class="flex flex-col gap-0.5">
+            <span>{{ auth.me.name }}</span>
+            <span class="truncate text-xs font-normal text-muted-foreground">
+              {{ auth.me.email }}
+            </span>
+            <span class="text-xs font-normal text-muted-foreground">{{ gradeLabel }}</span>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem @select="passwordOpen = true">
+            <KeyRound />
+            비밀번호 바꾸기
+          </DropdownMenuItem>
+          <DropdownMenuItem @select="logout">
+            <LogOut />
+            로그아웃
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
 
     <div class="flex min-h-0 grow">
@@ -108,7 +145,7 @@ function pickMe(value: unknown) {
             v-else
             class="rounded-md border border-dashed border-border px-3 py-2.5 text-xs leading-relaxed text-muted-foreground"
           >
-            등록된 프로젝트가 없습니다.
+            {{ auth.systemAdmin ? '등록된 프로젝트가 없습니다.' : '부여받은 프로젝트가 없습니다.' }}
           </p>
         </label>
 
@@ -133,6 +170,28 @@ function pickMe(value: unknown) {
           </RouterLink>
         </nav>
 
+        <nav v-if="manageProject || manageAccounts" class="flex flex-col gap-[3px]">
+          <span class="px-1 pb-1 text-xs font-medium text-muted-foreground">관리</span>
+          <RouterLink
+            v-if="manageProject"
+            :to="`/projects/${data.currentProjectId}/members`"
+            class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+            active-class="bg-accent font-medium text-accent-foreground"
+          >
+            <Users class="size-4 shrink-0" />
+            프로젝트 멤버
+          </RouterLink>
+          <RouterLink
+            v-if="manageAccounts"
+            to="/admin/members"
+            class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+            active-class="bg-accent font-medium text-accent-foreground"
+          >
+            <UserCog class="size-4 shrink-0" />
+            사용자 관리
+          </RouterLink>
+        </nav>
+
         <slot name="aside" />
       </aside>
 
@@ -140,5 +199,7 @@ function pickMe(value: unknown) {
         <slot />
       </main>
     </div>
+
+    <PasswordChangeDialog v-model:open="passwordOpen" />
   </div>
 </template>

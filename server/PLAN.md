@@ -19,7 +19,7 @@
 | JSON 키 | **camelCase** (파이썬 안은 snake_case) | 위와 같은 이유. 경계에서 Pydantic alias 로 바꾼다 |
 | 첫 읽기 API | **프로젝트 스냅샷 한 방** | 지금 스토어가 "레코드를 다 들고 화면에서 계산"하는 구조다. 그 모양대로 주는 것이 제일 적게 고친다. 목록 페이징 · 필터를 서버로 옮기는 건 5단계 |
 | 쓰기 API | 처음부터 **도메인별로 쪼갠다** | 읽기와 달리 쓰기는 나중에 합칠 일이 없다 |
-| 인증 | **안 만든다** | 지금 화면에 로그인이 없다. `currentMemberId` 가 고정값이다. 6단계에서 다시 본다 |
+| 인증 | ~~안 만든다~~ → **8단계에서 세웠다** — 서버 세션 쿠키 · 권한 셋 (`../docs/api/auth.md`) | 처음에는 화면에 로그인이 없어 미뤘다. 2026-10-13 사용자가 정했다 |
 | 집계(`ThreadRow` · `TaskDetail` …) | **당분간 프론트가 계산한다** | 스토어에 테스트까지 붙어 있다. 서버가 같은 계산을 두 벌 갖지 않는다 |
 
 ## 지금 서 있는 자리 (2026-09-28)
@@ -223,7 +223,7 @@
 - [ ] 테스트 DB 는 트랜잭션 롤백으로 격리. httpx `ASGITransport` 로 앱에 직접 붙는다
 - [ ] 구조적 로깅 + 요청 id
 - [ ] 삭제 정책 — 지금 화면에 삭제가 없다. 생기면 soft delete 로 갈지 먼저 정한다
-- [ ] 인증 — 사내 계정을 어디에 기댈지 정해진 다음
+- [x] 인증 — **8단계로 옮겼다** (이메일 + 비밀번호, 나중에 SSO 를 더할 자리를 둔다)
 - [ ] 배포 — Dockerfile, 마이그레이션을 배포에서 언제 돌릴지
 
 ## 7단계 · AI 챗봇 — 저장된 안건 · 작업을 찾아 답한다
@@ -330,6 +330,54 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 
 **커밋** — ① 검색 ② 채팅 ③ 평가셋
 
+## 8단계 · 인증과 권한 — 누가 부르는지 서버가 안다
+
+계약은 `../docs/api/auth.md`, 화면은 `../web/PLAN.md` 8단계가 맡는다. 관리자가 DB 에 손으로 등록하는
+이메일 + 비밀번호 로그인이고(스스로 가입 없음), 자격 증명을 `auth_identity` 로 떼어 둬서 SSO(OIDC)는
+줄 하나로 더한다. 권한은 시스템 관리자 · 프로젝트 관리자 · 일반 사용자 셋.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 세션 | 서버 세션 + HttpOnly 쿠키 `innoflow_session`(`Path=/api` · `SameSite=Lax` · 운영은 `Secure`). DB 에는 토큰의 sha256 만 | 비활성화 · 비밀번호 변경 · 로그아웃이 그 순간 먹어야 한다. DB 가 새도 세션을 못 훔친다 |
+| 수명 | 마지막 요청에서 14일(`session_days`). `last_seen_at` · `expires_at` 은 **한 시간에 한 번만** 밀고, 그때 쿠키도 다시 굽는다 | 읽기 요청이 전부 쓰기가 되지 않게 |
+| 비밀번호 | `argon2-cffi` 의 `PasswordHasher` 기본값. 해시 · 검증은 `asyncio.to_thread` 로 | 일부러 느린 계산이라 이벤트 루프를 붙잡지 않게. 없는 이메일도 가짜 해시로 같은 만큼 계산한다(응답 시간으로 계정을 못 가리게) |
+| 프로젝트 경계 | **라우터 단위 의존성 하나** — `app/api/deps.py` 의 `require_scope` 를 `main.py` 가 프로젝트 라우터 여섯에 건다. 경로에 `project_id` · `task_id` · `thread_id` · `comment_id` 가 있으면 그 레코드의 프로젝트를 찾아 본다(`app/services/access.py`) | 엔드포인트마다 검사를 적으면 하나는 빠진다. 새 라우트는 경로 이름만 맞추면 따라 걸린다 |
+| 404 와 403 | 부여받지 않은 프로젝트(의 레코드)는 원래 없을 때와 같은 404, 부여는 받았는데 모자라면 403 `FORBIDDEN` | 403 은 그런 것이 있다는 것을 알려 준다 |
+| 로그인 제한 | 챗봇의 `RateLimiter` 를 `app/services/ratelimit.py` 로 옮겨 같이 쓴다. 인스턴스는 따로(로그인 IP 당 분당 10회 · `login_rate_per_minute`) | 새 장치를 만들지 않는다. 로그인 시도가 질문 횟수를 먹지 않게 |
+| JSON 만 | 앱 전체 의존성 `require_json` — 쓰기 메서드에 `Content-Type` 이 있으면 `application/json` 이어야 하고, 본문이 있는데 `Content-Type` 이 없어도 막는다. 어기면 415 `UNSUPPORTED_MEDIA_TYPE` (`API.md` Q29) | 계약의 CSRF 줄 |
+| 본문 없는 쓰기 | **`Content-Type` 도 본문도 없으면 통과** — 링크 PUT · DELETE, 프로젝트 멤버 DELETE, 로그아웃 POST | 폼 전송은 본문이 비어도 `Content-Type` 을 싣고 오니 여전히 막힌다. PUT · PATCH · DELETE 는 메서드만으로 교차 출처 사전 요청(preflight)이 걸려 남의 사이트가 못 보낸다. 본문 없는 POST 로 효과가 나는 것은 로그아웃뿐이고(남이 나를 로그아웃시키는 정도), 그마저 `SameSite=Lax` 가 교차 사이트 요청에 쿠키를 안 붙인다. 화면의 `request()` 는 본문이 없으면 `Content-Type` 을 안 싣는다 — 막으면 프론트를 같이 고쳐야 한다 |
+| 담당자 | 새로 지정하는 담당자는 **그 프로젝트의 활성 멤버**(`project_member` 줄 + `member.active`). 이미 걸린 담당자를 그대로 두는 수정 · 안건 담당자를 그대로 적는 이력 줄은 막지 않는다 | 계약. 빠진 사람의 옛 기록을 고칠 때마다 담당자를 지우게 하지 않는다 |
+
+### 할 일
+
+- [x] 리비전 `20261013_0008_auth.py` — `member` 에 `email`(유니크 · 소문자) · `system_role` · `active` · `created_at`,
+      `auth_identity` · `auth_session` · `project_member`. 기존 멤버는 `user` · 활성 · 이메일 없음, 프로젝트마다 활성 멤버 전부를 `user` 로 부여
+- [x] `app/services/auth.py` — 해시 · 세션 시작/이어가기/끝내기 · 로그인 · `Me` · 내 비밀번호 바꾸기(다른 세션 끊기)
+- [x] `app/services/access.py` · `app/api/deps.py` — `current_actor`(401) · `require_scope`(404) · `require_project_admin` · `require_system_admin`(403) · `require_json`(415)
+- [x] `app/services/member.py` — 사용자 관리(목록 · 등록 · 수정 · 비밀번호 걸기, 마지막 시스템 관리자 409 — 관리자 행을 `FOR UPDATE` 로 잠근다) · 프로젝트 멤버(목록 · 부여 · 빼기)
+- [x] 라우트 — `/api/auth/*` · `/api/admin/members*` · `/api/projects/{id}/members*` · `PATCH /api/projects/{id}`
+- [x] 이미 있는 API — 프로젝트 목록 거르기 · 등록은 시스템 관리자만 · 담당자 검증(작업 · 안건 · 이력 · 일괄) · 댓글 작성자는 로그인한 사람 · 수정은 작성자만 · 삭제는 작성자/프로젝트 관리자/시스템 관리자 · 챗봇 `list_members` · `propose_tasks` 는 그 프로젝트의 활성 멤버만 · `Member.active`
+- [x] `scripts/create_admin.py` — `--email` · `--name`, 비밀번호는 프롬프트. 그 이메일의 멤버가 있으면 관리자로 올리고 비밀번호를 새로 건다
+- [x] 시드 — `admin@innoflow.local` 시스템 관리자 + u1 ~ u4 에 `u1@innoflow.local` … 이메일, 비밀번호는 다섯 다 `innoflow-admin`.
+      부여는 리비전과 같고, **u1 만 p1 관리자**로 둔다(프로젝트 관리자 화면을 개발에서 열어 보려고 — 계약 밖의 개발 편의)
+- [x] 테스트 — conftest 의 `client` 가 시스템 관리자로 로그인해 있다(세션을 DB 에 바로 만든다 — 검사마다 argon2 를 돌리지 않게).
+      `as_member("u2")` · `anon`. 새 검사 `test_auth_api.py` · `test_admin_members_api.py` · `test_permissions.py`
+- [x] Postgres 에서 `upgrade head`(백필 확인) → `alembic check` → `downgrade -1` → `upgrade head` → 시드 · `create_admin` · 로그인까지 — 따로 만든 DB 에서 하고 지웠다
+
+### 남은 것 · 알고 둔 것
+
+- **본문이 가리키는 다른 프로젝트 레코드** — 작업의 `parentId` · `threadIds` 가 내가 못 보는 프로젝트의 것이면 지금처럼
+  400 `*_OTHER_PROJECT` 다. 그런 id 가 있다는 것은 드러난다(id 는 uuid 라 추측은 어렵다). 숨길지는 `API.md` Q31
+- **스트림 응답(채팅)에는 다시 구운 쿠키가 안 실린다** — 다음 요청이 민다. 한 시간에 한 번이라 쿠키 수명이 그만큼 늦게 밀릴 수 있다
+- 챗봇의 질문 제한은 아직 IP 기준이다. 사람 기준으로 바꿀지는 쓰면서 본다
+- 인증 전에 쓴 댓글 중 작성자가 비어 있는 것은 아무도 못 고친다(지우기는 관리자가 한다)
+- 만료된 세션 행은 그 쿠키가 다시 올 때만 지운다. 쌓이면 주기적으로 지우는 일을 6단계(운영)에 더한다
+- SSO(OIDC) — `provider='oidc:<이름>'` 줄을 더하고 처음 들어온 사람은 `email` 로 기존 멤버에 잇는다(없으면 거절)
+
+**커밋** — ① 리비전 · 모델 ② 세션 · 로그인 ③ 권한 의존성 · 이미 있는 API ④ 관리 API ⑤ 시드 · 명령
+
 ---
 
 ## 진행 상황
@@ -347,6 +395,7 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 | 5 집계를 서버로 | 시작 전 |
 | 6 품질과 운영 | 시작 전 |
 | 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `API.md` '## AI 챗봇' · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). **7-2 채팅 끝남** (2026-10-11) — `POST .../chat` SSE · 도구 루프 · 제한 · 가짜 클라이언트 검사 33개. **작업 초안 끝남** (2026-10-12) — `list_members` · `propose_tasks` 도구 · `proposal` 이벤트 · `ChatMessage.proposal` · `POST .../tasks/batch`(한 트랜잭션). 다음은 7-3 평가셋 |
+| 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. 열린 질문 Q29 ~ Q31 |
 
 ## 아직 안 정한 것
 

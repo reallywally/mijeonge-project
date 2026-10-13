@@ -114,8 +114,7 @@ class TaskThreadLink(Base):
 class TaskComment(Base):
     """작업에 붙는 댓글. 작업을 지우면 같이 지워진다.
 
-    로그인이 없어 작성자 일치를 서버가 따지지 않는다 —
-    자기 댓글에만 수정 · 삭제를 여는 건 화면 몫이다.
+    작성자는 로그인한 사람이다. 인증 전에 남은 댓글은 작성자가 비어 있을 수 있다.
     """
 
     __tablename__ = "task_comment"

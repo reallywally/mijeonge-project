@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.errors import not_found
+from app.errors import ApiError, not_found
 from app.models import Entry, EntryDetail, Thread, ThreadOption, new_id
 from app.schemas.thread import (
     EntryAdded,
@@ -19,6 +19,7 @@ from app.schemas.thread import (
     ThreadOut,
     ThreadPatch,
 )
+from app.services import access
 from app.services import project as project_service
 from app.time import now
 
@@ -64,6 +65,19 @@ async def load_thread(session: AsyncSession, thread_id: str) -> Thread:
     return thread
 
 
+async def _guard_owner(
+    session: AsyncSession, project_id: str, owner_id: str | None, code: str
+) -> None:
+    """새로 지정하는 담당자는 그 프로젝트의 활성 멤버여야 한다 (docs/api/auth.md).
+
+    없는 멤버를 FK 에 맡기면 500 이다 — 화면이 고칠 수 있는 400 으로 먼저 거른다.
+    """
+    if owner_id is not None and not await access.is_assignable(session, project_id, owner_id):
+        raise ApiError(
+            400, code, "담당자를 찾을 수 없습니다.", {"ownerId": "담당자를 찾을 수 없습니다."}
+        )
+
+
 def apply_entry_to_thread(thread: Thread, kind: str, owner_id: str | None) -> None:
     """줄 하나가 안건에 남기는 흔적.
 
@@ -81,6 +95,7 @@ def apply_entry_to_thread(thread: Thread, kind: str, owner_id: str | None) -> No
 
 async def create_thread(session: AsyncSession, project_id: str, payload: ThreadCreate) -> ThreadOut:
     await project_service.load_project(session, project_id)
+    await _guard_owner(session, project_id, payload.owner_id, "THREAD_OWNER_NOT_FOUND")
     thread = Thread(
         id=new_id(),
         project_id=project_id,
@@ -109,6 +124,11 @@ async def patch_thread(session: AsyncSession, thread_id: str, payload: ThreadPat
     if "title" in sent and payload.title is not None:
         thread.title = payload.title
     if "owner_id" in sent:
+        # 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다
+        if payload.owner_id != thread.owner_id:
+            await _guard_owner(
+                session, thread.project_id, payload.owner_id, "THREAD_OWNER_NOT_FOUND"
+            )
         thread.owner_id = payload.owner_id
     if "description" in sent and payload.description is not None:
         thread.description = payload.description
@@ -143,6 +163,9 @@ def build_entry(payload: EntryCreate, thread_id: str, created_at: datetime) -> E
 
 async def add_entry(session: AsyncSession, thread_id: str, payload: EntryCreate) -> EntryAdded:
     thread = await load_thread(session, thread_id)
+    # 안건 담당자를 그대로 적는 줄은 새로 지정하는 것이 아니다
+    if payload.owner_id != thread.owner_id:
+        await _guard_owner(session, thread.project_id, payload.owner_id, "ENTRY_OWNER_NOT_FOUND")
     entry = build_entry(payload, thread_id, now())
     session.add(entry)
     apply_entry_to_thread(thread, payload.kind, payload.owner_id)

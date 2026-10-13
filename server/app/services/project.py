@@ -6,19 +6,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, not_found
 from app.models import Member, Project, new_id
 from app.schemas.project import MemberOut, ProjectCreate, ProjectOut
+from app.services import access
+from app.services.auth import Actor
 
 _PREFIX_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 _PREFIX_LENGTH = 4
 _PREFIX_TRIES = 20
 
 
-async def list_projects(session: AsyncSession) -> list[ProjectOut]:
-    rows = (await session.execute(select(Project).order_by(Project.id))).scalars().all()
+async def list_projects(session: AsyncSession, actor: Actor) -> list[ProjectOut]:
+    stmt = select(Project).order_by(Project.id)
+    visible = await access.visible_project_ids(session, actor)
+    if visible is not None:
+        stmt = stmt.where(Project.id.in_(visible))
+    rows = (await session.execute(stmt)).scalars().all()
     return [ProjectOut.model_validate(row) for row in rows]
 
 
-async def list_members(session: AsyncSession) -> list[MemberOut]:
-    rows = (await session.execute(select(Member).order_by(Member.id))).scalars().all()
+async def list_members(session: AsyncSession, assignable_in: str | None = None) -> list[MemberOut]:
+    """전사 멤버 — 비활성까지. `assignable_in` 을 주면 그 프로젝트의 활성 멤버(담당자 후보)만."""
+    stmt = select(Member).order_by(Member.id)
+    if assignable_in is not None:
+        stmt = stmt.where(
+            Member.id.in_(await access.active_project_members(session, assignable_in))
+        )
+    rows = (await session.execute(stmt)).scalars().all()
     return [MemberOut.model_validate(row) for row in rows]
 
 
@@ -28,6 +40,13 @@ async def load_project(session: AsyncSession, project_id: str) -> Project:
     if project is None:
         raise not_found("PROJECT_NOT_FOUND", "프로젝트를 찾을 수 없습니다.")
     return project
+
+
+async def rename_project(session: AsyncSession, project_id: str, name: str) -> ProjectOut:
+    project = await load_project(session, project_id)
+    project.name = name
+    await session.commit()
+    return ProjectOut.model_validate(project)
 
 
 async def create_project(session: AsyncSession, payload: ProjectCreate) -> ProjectOut:

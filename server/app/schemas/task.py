@@ -138,8 +138,7 @@ class TaskCommentOut(Schema):
 
 
 class TaskCommentCreate(Schema):
-    # 로그인이 없어 화면이 자기 멤버 id 를 실어 보낸다 — 서버는 있는 멤버인지만 본다
-    author_id: str | None = None
+    # 작성자는 로그인한 사람이다 — authorId 를 실어 와도 받지 않는다(모르는 키는 버린다)
     body: CommentBody
 
 

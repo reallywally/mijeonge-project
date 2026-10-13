@@ -24,5 +24,12 @@ class Settings(BaseSettings):
     # IP 하나가 1분에 보낼 수 있는 질문 수
     chat_rate_per_minute: int = 10
 
+    # 운영(HTTPS)에서는 켠다. 개발 Vite 는 http 라 꺼 둔다
+    cookie_secure: bool = False
+    # 마지막 요청에서 이만큼 지나면 세션이 끝난다 (docs/api/auth.md '테이블')
+    session_days: int = 14
+    # IP 하나가 1분에 시도할 수 있는 로그인 수
+    login_rate_per_minute: int = 10
+
 
 settings = Settings()

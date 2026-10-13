@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import BeforeValidator, Field
+from pydantic import BeforeValidator, Field, StringConstraints
 
 from app.schemas.base import Schema
 
@@ -32,6 +32,8 @@ class ProjectOut(Schema):
 class MemberOut(Schema):
     id: str
     name: str
+    # 고르는 자리에서 비활성 멤버를 빼고, 이름 옆에 '(비활성)' 을 찍는다
+    active: bool
 
 
 class ProjectCreate(Schema):
@@ -43,3 +45,7 @@ class ProjectCreate(Schema):
 
     name: str = Field(min_length=1, max_length=200)
     task_key_prefix: TaskKeyPrefixIn = Field(default=None, pattern=TASK_KEY_PREFIX_PATTERN)
+
+
+class ProjectPatch(Schema):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]

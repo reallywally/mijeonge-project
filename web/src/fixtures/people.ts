@@ -8,10 +8,14 @@ import type { Member, Project } from '@/types/domain'
  */
 
 export const members: Member[] = [
-  { id: 'u1', name: '김서연' },
-  { id: 'u2', name: '박지훈' },
-  { id: 'u3', name: '이도현' },
-  { id: 'u4', name: '정하늘' },
+  { id: 'u1', name: '김서연', active: true },
+  { id: 'u2', name: '박지훈', active: true },
+  { id: 'u3', name: '이도현', active: true },
+  { id: 'u4', name: '정하늘', active: true },
+  /* 사용자를 관리하는 사람 — 어느 프로젝트에도 부여되지 않았지만 다 본다 */
+  { id: 'u0', name: '관리자', active: true },
+  /* 떠난 사람 — 지우지 않고 끈다. 로그인할 수 없고 담당자로 고를 수 없다 */
+  { id: 'u5', name: '한예린', active: false },
 ]
 
 /**

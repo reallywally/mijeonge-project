@@ -334,6 +334,45 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 
 **커밋** — ① 껍데기(목업 스트림) ② 서버 붙이기 ③ 근거 칩
 
+## 8단계 · 로그인과 관리 화면
+
+관리자가 등록하는 이메일 + 비밀번호 로그인(가입 화면 없음), 권한은 시스템 관리자 · 프로젝트 관리자 · 일반 사용자 셋.
+관리 범위는 **사용자 관리 + 프로젝트별 사용자 부여** 둘뿐이다 — 상세 기능은 나중에 더한다.
+계약은 `../docs/api/auth.md`, 서버 쪽은 `../server/PLAN.md` 8단계다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| '나' | `GET /api/auth/me` 의 `id` — 머리글의 나 고르기 · localStorage 기억을 걷어냈다 | 서버가 세션으로 안다. 화면이 고르면 거짓말을 할 수 있다 |
+| 권한 판단 | `lib/access.ts` 의 순수 함수 하나 — 메뉴 숨기기 · 라우터 가드 · 목업 서버가 같이 쓴다 | 판단이 갈리면 메뉴는 보이는데 들어가면 튕기는 화면이 생긴다. 막는 것은 서버다 |
+| 401 | `api/client.ts` 의 `errorOf` 한 자리에서 알리고, 라우터가 스토어를 비우고 `/login?next=` 로 보낸다 | 요청이 지나는 길이 여럿(request · 챗봇 스트림 · 목업)이다 |
+| 로그아웃 | `stores/session.ts` 의 `clearSession` 이 스토어를 다 비운다(챗봇 대화까지) | 다른 사람이 같은 브라우저로 들어올 수 있다 |
+| 목업 세션 | `api/mockAuth.ts` — 계정 · 부여 · 세션을 들고 서버처럼 권한 · 오류 코드를 낸다. 세션은 sessionStorage | 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다 |
+| 쿠키 | fetch 기본값(`same-origin`)으로 실린다 — Vite 프록시라 같은 출처다. 본문 없는 쓰기는 Content-Type 도 없이 (Q29) | |
+
+### 체크리스트
+
+- [x] `types/domain.ts` — `SystemRole` · `ProjectRole` · `Me` · `MemberAccount` · `ProjectMember` · `Member.active`,
+      `TaskCommentInput` 에서 `authorId` 를 뺐다. 요청 모양 `LoginInput` · `PasswordChangeInput` · `MemberAccountInput` · `MemberAccountPatch` · `ProjectPatch`
+- [x] `src/api/` — `auth.ts`(login · logout · me · changePassword) · `admin.ts`(목록 · 등록 · 수정 · 비밀번호 걸기) ·
+      `projects.ts` 에 프로젝트 멤버(GET · PUT · DELETE) · 이름 수정(PATCH). 목업 갈래는 `mockAuth.ts` 를 같이 쓴다
+- [x] 목업 계정 — `fixtures/accounts.ts` (시스템 관리자 하나 · p1 프로젝트 관리자 하나 · 일반 사용자들 · 이메일 없는 사람 · 비활성 한 명)
+- [x] 부팅 — `auth/me` 가 맨 앞, 401 이면 `anonymous` → 가드가 `/login`. 그다음 프로젝트 · 멤버, 스냅샷 + 그 프로젝트의 멤버
+- [x] 머리글 내 이름 메뉴(이메일 · 이 프로젝트에서의 권한 · 비밀번호 바꾸기 · 로그아웃). `ui/dropdown-menu` 를 레지스트리에서 받았다(애니메이션은 걷어냄)
+- [x] 라우트 — `/login` · `/admin/members`(시스템 관리자) · `/projects/:projectId/members`(그 프로젝트 관리자 · 시스템 관리자) · `/projects/new`(시스템 관리자)
+- [x] 빈 프로젝트 목록 — 시스템 관리자만 `/projects/new`, 그 밖은 '부여받은 프로젝트가 없습니다 — 관리자에게 요청하세요'. 등록 버튼도 시스템 관리자만
+- [x] 담당자 고르는 자리(작업 · 안건 속성 · 결정의 처리한 사람 · 일괄 바꾸기)는 그 프로젝트의 활성 멤버만. 이름 찍는 자리는 '(비활성)' 을 붙인다
+- [x] 목업 갈래도 담당자를 서버처럼 거른다 — `TASK_OWNER_NOT_FOUND` · `THREAD_OWNER_NOT_FOUND` · `ENTRY_OWNER_NOT_FOUND` (Q30)
+- [x] 댓글 — 고치기는 작성자만, 지우기는 작성자 · 프로젝트 관리자 · 시스템 관리자
+- [x] 사용자 관리 화면 — 표 · 등록 · 수정(이름 · 이메일 · 역할 · 활성) · 비밀번호 새로 걸기. 오류는 서버 message 토스트
+- [x] 프로젝트 멤버 화면 — 부여된 사람 · 역할 셀렉트 · 빼기(한 번 더 묻기) · 사람 더하기 · 프로젝트 이름 수정. 나를 빼면 그 프로젝트가 목록에서 사라진다
+- [x] 테스트 — `lib/access.test.ts` · `api/admin.test.ts`(목업 서버) · `stores/auth.test.ts` · `router/index.test.ts`(가드 · 401) ·
+      `views/LoginView.test.ts` · `views/AdminViews.test.ts`
+- [ ] 챗봇 초안 카드에는 담당자를 고르는 칸이 없다 — 서버(`propose_tasks`)가 활성 멤버만 후보로 보고, 등록 때 서버가 다시 거른다
+- [ ] 로그인 시도 제한(429 `TOO_MANY_ATTEMPTS`)은 목업에 없다 — 화면은 서버 message 를 그대로 띄우므로 따로 다룰 것이 없다
+- [ ] 사용자 관리 표에 검색 · 페이징은 아직 없다. 사람이 늘면 안건 목록의 조회 조건 모양을 따른다
+
 ---
 
 ## 진행 상황
@@ -348,6 +387,7 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 | 5 프로젝트 | 시작 전 |
 | 6 품질 | 시작 전 |
 | 7 AI 챗봇 | 계약 **합의** (2026-10-11) · **7-1 껍데기(목업) 끝남** · **7-2 서버 붙이기 끝남** (2026-10-11) · **7-4 작업 초안 끝남** (2026-10-12) — `API.md` '## AI 챗봇' · Q25 · Q26 · Q28 닫힘 · Q27 열림 |
+| 8 로그인 · 관리 | **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-10-13) — 로그인 · 내 메뉴 · 사용자 관리 · 프로젝트 멤버 · 권한 가드. Q29 · Q30 닫음 |
 
 ## 아직 안 정한 것
 

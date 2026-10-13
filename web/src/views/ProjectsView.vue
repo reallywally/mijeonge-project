@@ -14,11 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { canCreateProject } from '@/lib/access'
+import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 
 /* 프로젝트 목록 · 등록 — memo 화면 1. 여기서 고른 프로젝트 안에서만 나머지 화면이 돈다.
    조회 조건 · 표 · 페이징은 안건 목록과 같은 자리, 같은 모양이다. */
 const data = useDataStore()
+const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -26,6 +29,9 @@ const nameDraft = ref('')
 const query = ref('')
 const page = ref(1)
 const perPage = 8
+
+/* 프로젝트 등록은 시스템 관리자만 — 라우터도 같은 함수로 /projects/new 를 막는다 */
+const canCreate = computed(() => canCreateProject(auth.me))
 
 const rows = computed(() =>
   data.allProjects.map((project) => ({
@@ -106,7 +112,7 @@ function onCreated() {
               만듭니다. 여기서 고른 프로젝트 안에서만 작업 · 안건이 돕니다.
             </p>
           </div>
-          <Button class="shrink-0" @click="openCreate">
+          <Button v-if="canCreate" class="shrink-0" @click="openCreate">
             <Plus class="size-4" />
             프로젝트 추가
           </Button>
@@ -185,9 +191,11 @@ function onCreated() {
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
                 <TableCell colspan="4" class="h-[110px] text-center text-sm text-muted-foreground">
                   {{
-                    data.allProjects.length === 0
-                      ? '등록된 프로젝트가 없습니다. 프로젝트를 먼저 만들어 주세요.'
-                      : '조회 조건에 맞는 프로젝트가 없습니다.'
+                    data.allProjects.length > 0
+                      ? '조회 조건에 맞는 프로젝트가 없습니다.'
+                      : canCreate
+                        ? '등록된 프로젝트가 없습니다. 프로젝트를 먼저 만들어 주세요.'
+                        : '부여받은 프로젝트가 없습니다 — 관리자에게 요청하세요'
                   }}
                 </TableCell>
               </TableRow>
@@ -228,6 +236,6 @@ function onCreated() {
       </div>
     </div>
 
-    <ProjectCreateDialog v-model:open="createOpen" @created="onCreated" />
+    <ProjectCreateDialog v-if="canCreate" v-model:open="createOpen" @created="onCreated" />
   </AppShell>
 </template>

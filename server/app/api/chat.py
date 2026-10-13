@@ -12,6 +12,7 @@ from app.errors import ApiError
 from app.schemas.chat import ChatEvent, ChatInput
 from app.services import chat as chat_service
 from app.services import project as project_service
+from app.services.ratelimit import RateLimiter
 
 router = APIRouter(tags=["chat"])
 
@@ -19,7 +20,7 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 
 _client: AsyncAnthropic | None = None
 _client_built = False
-_limiter = chat_service.RateLimiter(settings.chat_rate_per_minute)
+_limiter = RateLimiter(settings.chat_rate_per_minute)
 
 
 def get_chat_client() -> AsyncAnthropic | None:
@@ -31,7 +32,7 @@ def get_chat_client() -> AsyncAnthropic | None:
     return _client
 
 
-def get_rate_limiter() -> chat_service.RateLimiter:
+def get_rate_limiter() -> RateLimiter:
     return _limiter
 
 
@@ -51,7 +52,7 @@ async def chat(
     request: Request,
     session: Session,
     client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
-    limiter: Annotated[chat_service.RateLimiter, Depends(get_rate_limiter)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
     """저장된 안건 · 작업을 근거로 답한다. 스트림 전 실패는 JSON, 뒤 실패는 error 이벤트다."""
     project = await project_service.load_project(session, project_id)

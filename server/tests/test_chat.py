@@ -23,6 +23,7 @@ from app.api import chat as chat_api
 from app.config import Settings, settings
 from app.main import app
 from app.services import chat as chat_service
+from app.services.ratelimit import RateLimiter
 from app.time import today_kst
 from scripts.seed import seed
 from tests.test_contract_types import FIELDS
@@ -432,7 +433,7 @@ async def test_leading_assistant_is_dropped(session: AsyncSession) -> None:
 
 async def test_rate_limit_per_ip_is_429(client: httpx.AsyncClient) -> None:
     use(FakeClient(Turn(texts=["답"])))
-    limiter = chat_service.RateLimiter(1)
+    limiter = RateLimiter(1)
     app.dependency_overrides[chat_api.get_rate_limiter] = lambda: limiter
 
     assert (await client.post(URL, json=ASK)).status_code == 200
@@ -442,7 +443,7 @@ async def test_rate_limit_per_ip_is_429(client: httpx.AsyncClient) -> None:
 
 
 def test_rate_limiter_window_slides() -> None:
-    limiter = chat_service.RateLimiter(2)
+    limiter = RateLimiter(2)
     assert limiter.allow("a", now=0) and limiter.allow("a", now=1)
     assert not limiter.allow("a", now=59)
     assert limiter.allow("b", now=59)
@@ -599,11 +600,11 @@ async def test_bad_draft_goes_back_as_tool_error(session: AsyncSession) -> None:
 async def test_unknown_owner_goes_back_as_tool_error(session: AsyncSession) -> None:
     await seed(session)
     bad = {"tasks": [DRAFT["tasks"][0] | {"owner_id": "없음"}]}
-    content, is_error, proposal = await chat_service.check_proposal(session, bad)
+    content, is_error, proposal = await chat_service.check_proposal(session, "p3", bad)
     assert is_error and proposal is None
     assert json.loads(content)["problems"] == {"tasks.0.ownerId": "담당자를 찾을 수 없습니다."}
 
-    content, is_error, proposal = await chat_service.check_proposal(session, {"tasks": "x"})
+    content, is_error, proposal = await chat_service.check_proposal(session, "p3", {"tasks": "x"})
     assert is_error and proposal is None and "입력이 올바르지 않다" in content
 
 

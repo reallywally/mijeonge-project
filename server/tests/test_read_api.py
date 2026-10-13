@@ -58,7 +58,9 @@ async def test_projects(client: httpx.AsyncClient) -> None:
 
 async def test_members(client: httpx.AsyncClient) -> None:
     res = await client.get("/api/members")
-    assert [m["name"] for m in res.json()] == ["김서연", "박지훈", "이도현", "정하늘"]
+    # 시드의 시스템 관리자도 멤버다 — 프로젝트에 부여되지 않았을 뿐이다
+    assert [m["name"] for m in res.json()] == ["관리자", "김서연", "박지훈", "이도현", "정하늘"]
+    assert all(m["active"] is True for m in res.json())
 
 
 async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> None:

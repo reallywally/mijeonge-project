@@ -21,6 +21,70 @@ export type EntryKind =
 export interface Member {
   id: string
   name: string
+  /** 비활성 멤버는 담당자로 못 고르고, 이름 옆에 '(비활성)' 이 붙는다. 기록이 가리키므로 지우지 않는다 */
+  active: boolean
+}
+
+/* 로그인 · 권한 — docs/api/auth.md 의 모양 그대로. 권한 셋은 시스템 역할 × 프로젝트 역할의 조합이다 */
+
+export type SystemRole = 'admin' | 'user'
+export type ProjectRole = 'admin' | 'user'
+
+/** GET /api/auth/me · POST /api/auth/login */
+export interface Me {
+  id: string
+  name: string
+  email: string
+  systemRole: SystemRole
+  /** 내가 부여받은 프로젝트와 역할. 시스템 관리자도 부여받은 것만 실린다 */
+  projectRoles: Record<string, ProjectRole>
+}
+
+/** 관리 화면용 — GET /api/admin/members */
+export interface MemberAccount {
+  id: string
+  name: string
+  email: string | null
+  systemRole: SystemRole
+  active: boolean
+  /** 비밀번호가 걸려 있는지 — 없으면 로그인할 수 없다 */
+  hasPassword: boolean
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+/** POST /api/auth/login */
+export interface LoginInput {
+  email: string
+  password: string
+}
+
+/** POST /api/auth/password — 내 비밀번호 바꾸기 */
+export interface PasswordChangeInput {
+  currentPassword: string
+  newPassword: string
+}
+
+/** POST /api/admin/members */
+export interface MemberAccountInput {
+  name: string
+  email: string
+  password: string
+  systemRole: SystemRole
+}
+
+/** PATCH /api/admin/members/{memberId} — 보낸 필드만 바뀐다 */
+export interface MemberAccountPatch {
+  name?: string
+  email?: string
+  systemRole?: SystemRole
+  active?: boolean
+}
+
+/** GET /api/projects/{projectId}/members */
+export interface ProjectMember {
+  memberId: string
+  role: ProjectRole
 }
 
 export interface Project {
@@ -191,9 +255,8 @@ export interface TaskComment {
   editedAt: string | null
 }
 
-/** POST /api/tasks/{taskId}/comments — 서버가 body 를 trim 하고 빈 값은 거절한다 */
+/** POST /api/tasks/{taskId}/comments — 서버가 body 를 trim 하고 빈 값은 거절한다. 작성자는 로그인한 사람이다 */
 export interface TaskCommentInput {
-  authorId: string | null
   body: string
 }
 
@@ -277,6 +340,11 @@ export interface TaskPatch {
   due?: string | null
   priority?: TaskPriority
   body?: TaskLine[]
+}
+
+/** PATCH /api/projects/{projectId} — 프로젝트 관리자 · 시스템 관리자 */
+export interface ProjectPatch {
+  name: string
 }
 
 /** 프로젝트를 등록할 때 넘기는 것. 접두사를 비우면 서버가 만들어 준다 (API.md Q20 · Q24) */

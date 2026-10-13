@@ -1,6 +1,9 @@
 import { ApiError, id, request } from '@/api/client'
+import { forbidden, requireMe } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
+import { tasks } from '@/fixtures'
 import { taskComments } from '@/fixtures/comments'
+import { canDeleteComment, canEditComment } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import type { TaskComment, TaskCommentInput, TaskCommentPatch } from '@/types/domain'
 
@@ -34,13 +37,15 @@ function mockFind(commentId: string) {
 const mock = {
   list: (taskId: string) => structuredClone(mockRows.filter((c) => c.taskId === taskId)),
   create(taskId: string, input: TaskCommentInput) {
+    /* 작성자는 로그인한 사람이다 — 요청에 실린 것을 믿지 않는다 */
+    const me = requireMe()
     const body = input.body.trim()
     if (!body) throw emptyBody()
     mockSeq += 1
     const row: TaskComment = {
       id: `mc${mockSeq}`,
       taskId,
-      authorId: input.authorId,
+      authorId: me.id,
       body,
       createdAt: nowIso(),
       editedAt: null,
@@ -49,15 +54,21 @@ const mock = {
     return structuredClone(row)
   },
   patch(commentId: string, patch: TaskCommentPatch) {
+    const me = requireMe()
     const body = patch.body.trim()
     if (!body) throw emptyBody()
     const row = mockFind(commentId)
+    if (!canEditComment(me, row)) throw forbidden()
     row.body = body
     row.editedAt = nowIso()
     return structuredClone(row)
   },
   remove(commentId: string) {
-    mockFind(commentId)
+    const me = requireMe()
+    const row = mockFind(commentId)
+    /* 화면에서 만든 목업 작업은 픽스처에 없어 프로젝트를 모른다 — 그때는 작성자 · 시스템 관리자만 */
+    const projectId = tasks.find((t) => t.id === row.taskId)?.projectId ?? ''
+    if (!canDeleteComment(me, row, projectId)) throw forbidden()
     mockRows = mockRows.filter((c) => c.id !== commentId)
   },
 }
