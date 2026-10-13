@@ -10,7 +10,7 @@ import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
 
 /* 작업 댓글 — 작업 상세의 맨 아래. 본문은 스냅샷에 없어 열 때 받는다.
-   남기는 사람은 머리글에서 고른 '나'다. 자기 댓글만 고치고 지운다. */
+   남기는 사람은 로그인한 사람이다. 고치기는 작성자만, 지우기는 작성자 · 프로젝트 관리자 · 시스템 관리자. */
 const props = defineProps<{ taskId: string }>()
 
 const data = useDataStore()
@@ -162,7 +162,9 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
             >(수정됨)</span
           >
           <span class="grow" />
-          <template v-if="commentStore.isMine(c) && editingId !== c.id">
+          <template
+            v-if="(commentStore.canEdit(c) || commentStore.canRemove(c)) && editingId !== c.id"
+          >
             <template v-if="confirmingId === c.id">
               <span class="text-xs text-muted-foreground">지울까요?</span>
               <Button
@@ -177,6 +179,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
             </template>
             <template v-else>
               <button
+                v-if="commentStore.canEdit(c)"
                 type="button"
                 class="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
                 aria-label="댓글 고치기"
@@ -186,6 +189,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
                 <Pencil class="size-3.5" />
               </button>
               <button
+                v-if="commentStore.canRemove(c)"
                 type="button"
                 class="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
                 aria-label="댓글 지우기"
@@ -225,7 +229,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
         rows="2"
         aria-label="댓글"
         :disabled="!me"
-        :placeholder="me ? '댓글을 남기세요' : '댓글을 남기려면 머리글에서 나를 먼저 고르세요'"
+        :placeholder="me ? '댓글을 남기세요' : '로그인해야 댓글을 남길 수 있습니다'"
         class="min-h-16 resize-y text-sm"
         @keydown="onDraftKeydown"
       />
@@ -233,9 +237,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
         <span v-if="me" class="grow text-xs text-muted-foreground">
           {{ data.memberName(me) }} 이름으로 남깁니다 · ⌘/Ctrl+Enter
         </span>
-        <span v-else class="grow text-xs text-muted-foreground">
-          로그인이 없어 오른쪽 위 '나'에서 누구인지 고릅니다.
-        </span>
+        <span v-else class="grow" />
         <Button type="submit" size="sm" :disabled="!me || !draft.trim() || sending">
           <Loader2 v-if="sending" class="animate-spin" />
           댓글 남기기

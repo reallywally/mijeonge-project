@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task, TaskComment
 from scripts.seed import seed
+from tests.conftest import AsMember
 from tests.test_contract_types import FIELDS
 
 
@@ -42,10 +43,11 @@ async def test_list_on_unknown_task_is_404(client: httpx.AsyncClient) -> None:
     assert res.json()["code"] == "TASK_NOT_FOUND"
 
 
-async def test_add_trims_and_goes_to_the_end(client: httpx.AsyncClient) -> None:
-    res = await client.post(
-        "/api/tasks/k4/comments", json={"authorId": "u2", "body": "  계정 받았습니다.\n  "}
-    )
+async def test_add_trims_and_goes_to_the_end(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    u2 = await as_member("u2")
+    res = await u2.post("/api/tasks/k4/comments", json={"body": "  계정 받았습니다.\n  "})
     assert res.status_code == 201
     comment = res.json()
     assert set(comment) == set(FIELDS["TaskComment"])
@@ -59,33 +61,30 @@ async def test_add_trims_and_goes_to_the_end(client: httpx.AsyncClient) -> None:
     assert [row["id"] for row in listed] == ["cm1", "cm2", comment["id"]]
 
 
-async def test_add_without_author(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/tasks/k1/comments", json={"authorId": None, "body": "메모"})
-    assert res.status_code == 201
-    assert res.json()["authorId"] is None
+async def test_author_is_the_logged_in_member(client: httpx.AsyncClient) -> None:
+    """authorId 는 받지 않는다 — 남의 이름으로도, 없는 멤버로도, 비워서도 못 쓴다."""
+    for sent in ("u4", "u99", None):
+        res = await client.post("/api/tasks/k1/comments", json={"authorId": sent, "body": "메모"})
+        assert res.status_code == 201
+        assert res.json()["authorId"] == "admin"
 
 
 async def test_blank_body_is_422(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/tasks/k4/comments", json={"authorId": "u3", "body": "  \n "})
+    res = await client.post("/api/tasks/k4/comments", json={"body": "  \n "})
     assert res.status_code == 422
     assert res.json()["code"] == "VALIDATION_ERROR"
     assert "body" in res.json()["detail"]
 
 
-async def test_unknown_author_is_400(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/tasks/k4/comments", json={"authorId": "u99", "body": "안녕"})
-    assert res.status_code == 400
-    assert res.json()["code"] == "COMMENT_AUTHOR_NOT_FOUND"
-
-
 async def test_add_on_unknown_task_is_404(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/tasks/nope/comments", json={"authorId": "u3", "body": "안녕"})
+    res = await client.post("/api/tasks/nope/comments", json={"body": "안녕"})
     assert res.status_code == 404
     assert res.json()["code"] == "TASK_NOT_FOUND"
 
 
-async def test_edit_sets_edited_at(client: httpx.AsyncClient) -> None:
-    res = await client.patch("/api/comments/cm1", json={"body": " 신청서 올렸습니다. "})
+async def test_edit_sets_edited_at(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    author = await as_member("u1")  # cm1 을 쓴 사람 — 고치기는 작성자만 한다
+    res = await author.patch("/api/comments/cm1", json={"body": " 신청서 올렸습니다. "})
     assert res.status_code == 200
     comment = res.json()
     assert comment["body"] == "신청서 올렸습니다."
@@ -138,7 +137,7 @@ async def test_comment_count_in_snapshot(client: httpx.AsyncClient) -> None:
 
 
 async def test_comment_count_follows_writes(client: httpx.AsyncClient) -> None:
-    await client.post("/api/tasks/k4/comments", json={"authorId": "u3", "body": "하나 더"})
+    await client.post("/api/tasks/k4/comments", json={"body": "하나 더"})
     assert (await _task(client, "k4"))["commentCount"] == 3
 
     await client.delete("/api/comments/cm1")

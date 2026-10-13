@@ -82,8 +82,41 @@ def test_null_only_where_domain_ts_allows(name: str, pick: Pick, snapshot: dict[
                 assert nullable[field], f"{name}.{field} 가 null 로 나갔다"
 
 
-def test_member_matches_domain_ts() -> None:
-    assert set(FIELDS["Member"]) == {"id", "name"}
+# 인증이 늘린 모양 — docs/api/auth.md '새 응답 · 요청 모양'. 프론트가 domain.ts 에 더하는 중이라
+# 아직 없는 필드가 있을 수 있다. 어긋나면 이 계약 쪽이 기준이다
+AUTH_SHAPES: dict[str, set[str]] = {
+    "Member": {"id", "name", "active"},
+    "Me": {"id", "name", "email", "systemRole", "projectRoles"},
+    "MemberAccount": {
+        "id",
+        "name",
+        "email",
+        "systemRole",
+        "active",
+        "hasPassword",
+        "createdAt",
+        "lastLoginAt",
+    },
+    "ProjectMember": {"memberId", "role"},
+}
+
+
+def contract_keys(name: str) -> set[str]:
+    """서버 응답이 맞춰야 할 키. domain.ts 가 계약에 없는 필드를 들고 있으면 여기서 깨진다."""
+    declared = set(FIELDS.get(name, {}))
+    assert declared <= AUTH_SHAPES[name], f"domain.ts 의 {name} 이 docs/api/auth.md 와 다르다"
+    return AUTH_SHAPES[name]
+
+
+@pytest.mark.parametrize("name", sorted(AUTH_SHAPES))
+def test_auth_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    contract_keys(name)
+
+
+async def test_member_matches_contract(client: AsyncClient) -> None:
+    rows = (await client.get("/api/members")).json()
+    assert rows
+    assert all(set(row) == contract_keys("Member") for row in rows)
 
 
 async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:

@@ -1,14 +1,33 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
-import type { ApiError } from '@/api'
-import { entries, members, projects, tasks, taskThreadLinks, threads } from '@/fixtures'
+import { ApiError } from '@/api'
+import {
+  entries,
+  members,
+  projectGrants,
+  projects,
+  tasks,
+  taskThreadLinks,
+  threads,
+} from '@/fixtures'
+import { canCreateProject, canManageProject, canSeeProject } from '@/lib/access'
+import { assignableMembers, memberLabel } from '@/lib/member'
 import { toastError } from '@/lib/notify'
 import { makeTaskKeyPrefix } from '@/lib/project'
-import type { Entry, Member, Project, Task, TaskThreadLink, Thread } from '@/types/domain'
+import { useAuthStore } from '@/stores/auth'
+import type {
+  Entry,
+  Member,
+  Project,
+  ProjectMember,
+  ProjectRole,
+  Task,
+  TaskThreadLink,
+  Thread,
+} from '@/types/domain'
 
 const REMEMBERED_PROJECT = 'innoflow.projectId'
-const REMEMBERED_MEMBER = 'innoflow.memberId'
 
 function recall(key: string): string | null {
   try {
@@ -33,8 +52,19 @@ function remember(key: string, value: string | null) {
  * 서버 모드에서는 고른 프로젝트 하나치(스냅샷)만 들고, 목업 모드에서는 픽스처 전부를 들고 거른다.
  * 레코드를 한곳에 모아 두면 도메인 스토어끼리 서로의 레코드를 부르며 고리를 만들 일이 없다.
  */
+/** 목업의 프로젝트별 부여 — 부팅 없이 마운트하는 화면 테스트도 담당자 후보를 갖게 */
+function grantsOfFixtures(): Record<string, ProjectMember[]> {
+  const byProject: Record<string, ProjectMember[]> = {}
+  for (const g of projectGrants)
+    (byProject[g.projectId] ??= []).push({ memberId: g.memberId, role: g.role })
+  return byProject
+}
+
+const forbidden = () => new ApiError(403, { code: 'FORBIDDEN', message: '권한이 없습니다.' })
+
 export const useDataStore = defineStore('data', () => {
   const mock = api.isMockMode()
+  const auth = useAuthStore()
 
   /* 목업을 그대로 쓰면 스토어가 모듈 배열을 고치게 된다 — 테스트가 서로 물들고,
      프로젝트를 바꿔 돌아와도 앞의 수정이 남는다. 복사해서 시작한다. */
@@ -44,9 +74,14 @@ export const useDataStore = defineStore('data', () => {
   const allEntries = ref<Entry[]>(mock ? structuredClone(entries) : [])
   const allTasks = ref<Task[]>(mock ? structuredClone(tasks) : [])
   const taskThreads = ref<TaskThreadLink[]>(mock ? structuredClone(taskThreadLinks) : [])
+  /** 프로젝트마다 부여된 사람 — 담당자를 고르는 자리가 이것으로 거른다 */
+  const projectMembers = ref<Record<string, ProjectMember[]>>(mock ? grantsOfFixtures() : {})
 
-  /** 앱이 뜰 수 있는가 — 목업은 처음부터 다 있다 */
-  const status = ref<'loading' | 'ready' | 'error'>(mock ? 'ready' : 'loading')
+  /**
+   * 앱이 뜰 수 있는가. anonymous 는 로그인 전 — 라우터가 /login 으로 보낸다.
+   * 목업은 처음부터 다 있다(화면 테스트가 부팅 없이 마운트한다). 부팅하면 로그인부터 다시 본다
+   */
+  const status = ref<'loading' | 'ready' | 'error' | 'anonymous'>(mock ? 'ready' : 'loading')
   const bootError = ref<ApiError | null>(null)
   /** 프로젝트를 바꾸고 스냅샷을 기다리는 중 */
   const syncing = ref(false)
@@ -79,11 +114,15 @@ export const useDataStore = defineStore('data', () => {
     snapshotRevision.value += 1
   }
 
-  /** 스냅샷을 받아 갈아끼운다. 그사이 프로젝트를 또 바꿨으면 늦게 온 옛 응답은 버린다 (API.md Q7) */
+  /** 스냅샷과 그 프로젝트의 멤버를 받아 갈아끼운다. 그사이 프로젝트를 또 바꿨으면 늦게 온 옛 응답은 버린다 (API.md Q7) */
   async function loadSnapshot(projectId: string) {
-    const records = await api.fetchSnapshot(projectId)
+    const [records, granted] = await Promise.all([
+      api.fetchSnapshot(projectId),
+      api.fetchProjectMembers(projectId),
+    ])
     if (records.project.id !== currentProjectId.value) return
     applySnapshot(records)
+    projectMembers.value[projectId] = granted
   }
 
   /** 쓰기가 실패하면 서버 상태로 되돌린다 */
@@ -98,23 +137,46 @@ export const useDataStore = defineStore('data', () => {
 
   let booting: Promise<void> | null = null
 
+  /** 목업 — 픽스처를 새로 들이고 서버처럼 내가 볼 수 있는 프로젝트만 남긴다 */
+  async function bootMock() {
+    const me = auth.me
+    allProjects.value = structuredClone(projects).filter((p) => canSeeProject(me, p.id))
+    allThreads.value = structuredClone(threads)
+    allEntries.value = structuredClone(entries)
+    allTasks.value = structuredClone(tasks)
+    taskThreads.value = structuredClone(taskThreadLinks)
+    allMembers.value = await api.fetchMembers()
+    const granted = await Promise.all(allProjects.value.map((p) => api.fetchProjectMembers(p.id)))
+    projectMembers.value = Object.fromEntries(allProjects.value.map((p, i) => [p.id, granted[i]]))
+    const wanted = recall(REMEMBERED_PROJECT)
+    const picked = allProjects.value.find((p) => p.id === wanted) ?? allProjects.value[0]
+    currentProjectId.value = picked?.id ?? ''
+  }
+
   /** 프로젝트 · 멤버를 같이 받고, 프로젝트를 고른 뒤 스냅샷을 받는다 (API.md Q5 · Q7) */
+  async function bootServer() {
+    const [projectList, memberList] = await Promise.all([api.fetchProjects(), api.fetchMembers()])
+    allProjects.value = projectList
+    allMembers.value = memberList
+    const wanted = recall(REMEMBERED_PROJECT)
+    const picked = projectList.find((p) => p.id === wanted) ?? projectList[0]
+    currentProjectId.value = picked?.id ?? ''
+    if (picked) await loadSnapshot(picked.id)
+  }
+
+  /** 로그인한 사람(GET /api/auth/me)이 맨 앞이다. 로그인 전이면 anonymous 로 서고 나머지는 안 받는다 */
   function boot(): Promise<void> {
-    if (mock) return Promise.resolve()
     booting ??= (async () => {
       status.value = 'loading'
       bootError.value = null
       try {
-        const [projectList, memberList] = await Promise.all([
-          api.fetchProjects(),
-          api.fetchMembers(),
-        ])
-        allProjects.value = projectList
-        allMembers.value = memberList
-        const wanted = recall(REMEMBERED_PROJECT)
-        const picked = projectList.find((p) => p.id === wanted) ?? projectList[0]
-        currentProjectId.value = picked?.id ?? ''
-        if (picked) await loadSnapshot(picked.id)
+        const me = auth.me ?? (await auth.loadMe())
+        if (!me) {
+          status.value = 'anonymous'
+          return
+        }
+        if (mock) await bootMock()
+        else await bootServer()
         status.value = 'ready'
       } catch (e) {
         bootError.value = e as ApiError
@@ -178,10 +240,16 @@ export const useDataStore = defineStore('data', () => {
    */
   async function addProject(name: string, taskKeyPrefix: string): Promise<string | null> {
     if (mock) {
+      /* 목업도 서버처럼 시스템 관리자만 — 메뉴를 숨긴 것은 편의다 */
+      if (!canCreateProject(auth.me)) {
+        toastError(forbidden())
+        return null
+      }
       const id = nextId('np')
       const wanted = taskKeyPrefix.trim().toUpperCase()
       const prefix = wanted || makeTaskKeyPrefix(allProjects.value.map((p) => p.taskKeyPrefix))
       allProjects.value.push({ id, name, taskKeyPrefix: prefix })
+      projectMembers.value[id] = []
       nextTaskNo.value[id] = 1
       currentProjectId.value = id
       return id
@@ -192,6 +260,7 @@ export const useDataStore = defineStore('data', () => {
         taskKeyPrefix: taskKeyPrefix.trim().toUpperCase(),
       })
       allProjects.value.push(project)
+      projectMembers.value[project.id] = []
       setProject(project.id)
       return project.id
     } catch (e) {
@@ -226,20 +295,134 @@ export const useDataStore = defineStore('data', () => {
     }
   }
 
-  /* '나' — 로그인이 없어 머리글에서 사람이 고르고 이 브라우저에 기억한다 (API.md Q12 는 프론트가 든다고 닫았다).
-     기억한 id 가 멤버 목록에 없으면(지워졌거나 서버를 바꿨으면) 고르지 않은 것으로 본다 */
-  const pickedMemberId = ref<string | null>(recall(REMEMBERED_MEMBER))
-  const currentMemberId = computed<string | null>(() =>
-    allMembers.value.some((m) => m.id === pickedMemberId.value) ? pickedMemberId.value : null,
+  /** 이름 고치기 — 프로젝트 관리자 · 시스템 관리자. 실패하면 알리고 false */
+  async function renameProject(projectId: string, name: string): Promise<boolean> {
+    const at = allProjects.value.findIndex((p) => p.id === projectId)
+    const trimmed = name.trim()
+    if (at < 0 || !trimmed) return false
+    if (mock) {
+      if (!canManageProject(auth.me, projectId)) {
+        toastError(forbidden())
+        return false
+      }
+      allProjects.value[at] = { ...allProjects.value[at], name: trimmed }
+      return true
+    }
+    try {
+      const project = await api.patchProject(projectId, { name: trimmed })
+      const now = allProjects.value.findIndex((p) => p.id === projectId)
+      if (now >= 0) allProjects.value[now] = project
+      return true
+    } catch (e) {
+      toastError(e)
+      return false
+    }
+  }
+
+  /** 프로젝트에 사람을 부여하거나 역할을 바꾼다 (멱등) */
+  async function grantMember(projectId: string, memberId: string, role: ProjectRole) {
+    try {
+      const granted = await api.putProjectMember(projectId, memberId, role)
+      const list = (projectMembers.value[projectId] ??= [])
+      const at = list.findIndex((p) => p.memberId === memberId)
+      if (at >= 0) list[at] = granted
+      else list.push(granted)
+      if (memberId === auth.me?.id) auth.setProjectRole(projectId, granted.role)
+      return true
+    } catch (e) {
+      toastError(e)
+      return false
+    }
+  }
+
+  /** 프로젝트에서 뺀다. 담당하던 작업 · 안건은 그대로 남는다 — 기록이다 */
+  async function revokeMember(projectId: string, memberId: string) {
+    try {
+      await api.deleteProjectMember(projectId, memberId)
+      projectMembers.value[projectId] = (projectMembers.value[projectId] ?? []).filter(
+        (p) => p.memberId !== memberId,
+      )
+      if (memberId === auth.me?.id) {
+        auth.setProjectRole(projectId, null)
+        /* 나를 뺐으면 이제 그 프로젝트는 없는 것이다(시스템 관리자가 아니면) — 목록에서 걷고 다른 곳으로 옮긴다 */
+        if (!canSeeProject(auth.me, projectId)) forgetProject(projectId)
+      }
+      return true
+    } catch (e) {
+      toastError(e)
+      return false
+    }
+  }
+
+  function forgetProject(projectId: string) {
+    allProjects.value = allProjects.value.filter((p) => p.id !== projectId)
+    delete projectMembers.value[projectId]
+    if (currentProjectId.value !== projectId) return
+    const next = allProjects.value[0]
+    if (next) setProject(next.id)
+    else currentProjectId.value = ''
+  }
+
+  /** '나' 는 로그인한 사람이다 — 서버가 세션으로 정한다 (docs/api/auth.md) */
+  const currentMemberId = computed<string | null>(() => auth.me?.id ?? null)
+
+  /** 이름을 찍는 자리 — 비활성 멤버는 '(비활성)' 이 붙는다 */
+  const memberName = (id: string | null) => {
+    const member = id ? allMembers.value.find((m) => m.id === id) : undefined
+    return member ? memberLabel(member) : null
+  }
+
+  /** 담당자로 고를 수 있는 사람 — 고른 프로젝트의 활성 멤버만 */
+  const assignable = computed(() =>
+    assignableMembers(allMembers.value, projectMembers.value[currentProjectId.value] ?? []),
   )
 
-  function setCurrentMember(id: string | null) {
-    if (id !== null && !allMembers.value.some((m) => m.id === id)) return
-    pickedMemberId.value = id
-    remember(REMEMBERED_MEMBER, id)
+  /**
+   * 목업 갈래가 서버처럼 담당자를 거른다 — 새로 지정하는 담당자는 고른 프로젝트의 활성 멤버여야 한다.
+   * 이미 걸려 있던 담당자(kept)를 그대로 두는 것은 막지 않는다 (docs/api/auth.md, API.md Q30).
+   * 거절했으면 서버와 같은 코드로 알리고 true
+   */
+  function rejectOwner(
+    ownerId: string | null | undefined,
+    code: string,
+    kept: string | null = null,
+  ) {
+    if (!mock || !ownerId || ownerId === kept) return false
+    if (assignable.value.some((m) => m.id === ownerId)) return false
+    toastError(
+      new ApiError(400, {
+        code,
+        message: '담당자를 찾을 수 없습니다.',
+        detail: { ownerId: '담당자를 찾을 수 없습니다.' },
+      }),
+    )
+    return true
   }
-  const memberName = (id: string | null) =>
-    id ? (allMembers.value.find((m) => m.id === id)?.name ?? null) : null
+
+  /** 사용자 관리에서 등록 · 수정한 것을 멤버 목록에 맞춘다 */
+  function upsertMember(member: Member) {
+    const at = allMembers.value.findIndex((m) => m.id === member.id)
+    if (at >= 0) allMembers.value[at] = member
+    else allMembers.value.push(member)
+  }
+
+  /** 로그아웃 — 다른 사람이 같은 브라우저로 들어올 수 있어 들고 있던 것을 다 버린다 */
+  function clear() {
+    allProjects.value = []
+    allMembers.value = []
+    allThreads.value = []
+    allEntries.value = []
+    allTasks.value = []
+    taskThreads.value = []
+    projectMembers.value = {}
+    loadedProjectId.value = null
+    currentProjectId.value = ''
+    syncing.value = false
+    bootError.value = null
+    latest.clear()
+    booting = null
+    status.value = 'anonymous'
+  }
 
   let seq = 0
   function nextId(prefix: string) {
@@ -255,6 +438,8 @@ export const useDataStore = defineStore('data', () => {
     allEntries,
     allTasks,
     taskThreads,
+    projectMembers,
+    assignable,
     status,
     bootError,
     syncing,
@@ -273,8 +458,13 @@ export const useDataStore = defineStore('data', () => {
     takeTaskKey,
     save,
     currentMemberId,
-    setCurrentMember,
     memberName,
+    upsertMember,
+    rejectOwner,
+    renameProject,
+    grantMember,
+    revokeMember,
+    clear,
     nextId,
   }
 })

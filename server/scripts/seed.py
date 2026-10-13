@@ -11,17 +11,22 @@ id 도 픽스처의 값(`p1` · `u3` · `k4` …)을 그대로 쓴다 — 목업
 
 import asyncio
 from datetime import date
+from functools import cache
 from typing import Protocol
 
+from argon2 import PasswordHasher
 from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import engine, session_factory
 from app.models import (
+    AuthIdentity,
+    AuthSession,
     Entry,
     EntryDetail,
     Member,
     Project,
+    ProjectMember,
     Task,
     TaskComment,
     TaskLine,
@@ -29,6 +34,7 @@ from app.models import (
     Thread,
     ThreadOption,
 )
+from app.services.auth import PASSWORD
 from app.time import at
 
 # createdAt 은 픽스처의 값을 그대로 쓴다 — 계약대로 ISO 8601 UTC(`…Z`) 다.
@@ -47,12 +53,53 @@ def projects() -> list[Project]:
     ]
 
 
+# 개발용 계정 (docs/api/auth.md '테이블'). 운영 DB 에 시드를 돌리지 않는다
+DEV_ADMIN_EMAIL = "admin@innoflow.local"
+DEV_PASSWORD = "innoflow-admin"
+
+
 def members() -> list[Member]:
     return [
-        Member(id="u1", name="김서연"),
-        Member(id="u2", name="박지훈"),
-        Member(id="u3", name="이도현"),
-        Member(id="u4", name="정하늘"),
+        Member(id="admin", name="관리자", email=DEV_ADMIN_EMAIL, system_role="admin"),
+        Member(id="u1", name="김서연", email="u1@innoflow.local"),
+        Member(id="u2", name="박지훈", email="u2@innoflow.local"),
+        Member(id="u3", name="이도현", email="u3@innoflow.local"),
+        Member(id="u4", name="정하늘", email="u4@innoflow.local"),
+    ]
+
+
+@cache
+def _dev_password_hash() -> str:
+    # argon2 는 일부러 느리다 — 시드를 여러 번 돌리는 테스트가 매번 다시 계산하지 않게 한 번만
+    return PasswordHasher().hash(DEV_PASSWORD)
+
+
+def identities() -> list[AuthIdentity]:
+    return [
+        AuthIdentity(
+            member_id=member.id,
+            provider=PASSWORD,
+            subject=member.email,
+            password_hash=_dev_password_hash(),
+        )
+        for member in members()
+        if member.email is not None
+    ]
+
+
+def grants() -> list[ProjectMember]:
+    """리비전 0008 과 같다 — 프로젝트마다 u1 ~ u4 를 user 로. 관리자는 부여 없이 다 본다.
+
+    u1 만 p1 의 관리자다 — 프로젝트 관리자 화면을 개발에서 열어 볼 수 있게.
+    """
+    return [
+        ProjectMember(
+            project_id=project.id,
+            member_id=member_id,
+            role="admin" if (project.id, member_id) == ("p1", "u1") else "user",
+        )
+        for project in projects()
+        for member_id in ("u1", "u2", "u3", "u4")
     ]
 
 
@@ -441,6 +488,9 @@ async def clear(session: AsyncSession) -> None:
         Entry,
         ThreadOption,
         Thread,
+        AuthSession,
+        AuthIdentity,
+        ProjectMember,
         Member,
         Project,
     ):
@@ -487,6 +537,8 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(projects())
     session.add_all(members())
     await session.flush()
+    session.add_all(identities())
+    session.add_all(grants())
     session.add_all(in_order(threads()))
     await session.flush()
     session.add_all(in_order(entries()))
@@ -508,6 +560,7 @@ async def run() -> None:
     counts = {
         "project": len(projects()),
         "member": len(members()),
+        "grant": len(grants()),
         "thread": len(threads()),
         "entry": len(entries()),
         "task": len(tasks()),
@@ -515,6 +568,7 @@ async def run() -> None:
         "link": len(TASK_THREAD_LINKS),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
+    print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")
     await engine.dispose()
 
 

@@ -1,26 +1,19 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { deleteTaskComment, resetMockComments } from '@/api/comments'
+import { resetMockAuth } from '@/api/mockAuth'
+import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
+import { useAuthStore } from '@/stores/auth'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
 
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
-/** 이 브라우저의 기억 — node 에는 localStorage 가 없다 */
-function fakeStorage() {
-  const map = new Map<string, string>()
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-  }
-}
-
 beforeEach(() => {
   resetMockComments()
+  resetMockAuth()
   vi.mocked(toastError).mockClear()
-  vi.stubGlobal('localStorage', fakeStorage())
   setActivePinia(createPinia())
 })
 
@@ -28,47 +21,28 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+/** 목업 계정으로 로그인한다 — 작성자 · 권한은 로그인한 사람으로 정해진다 */
+const signIn = (email: string) =>
+  useAuthStore().login(email, email.startsWith('admin@') ? MOCK_ADMIN_PASSWORD : MOCK_PASSWORD)
+
 const countOf = (taskId: string) =>
   useDataStore().allTasks.find((t) => t.id === taskId)!.commentCount
 
 describe("'나'", () => {
-  it('처음에는 고르지 않았고, 고르면 기억해 다음에 열어도 그대로다', () => {
+  it('로그인한 사람이 나다 — 머리글에서 고르지 않는다', async () => {
     const data = useDataStore()
     expect(data.currentMemberId).toBeNull()
-    data.setCurrentMember('u2')
+    await signIn('u2@innoflow.local')
     expect(data.currentMemberId).toBe('u2')
-
-    setActivePinia(createPinia())
-    expect(useDataStore().currentMemberId).toBe('u2')
   })
 
-  it('멤버가 아닌 id 는 받지 않고, 기억한 id 가 멤버에서 빠졌으면 고르지 않은 것이다', () => {
-    const data = useDataStore()
-    data.setCurrentMember('nobody')
-    expect(data.currentMemberId).toBeNull()
-
-    data.setCurrentMember('u4')
-    data.allMembers = data.allMembers.filter((m) => m.id !== 'u4')
-    expect(data.currentMemberId).toBeNull()
-  })
-
-  it('localStorage 가 막혀 있어도 돈다', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: () => {
-        throw new Error('blocked')
-      },
-      setItem: () => {
-        throw new Error('blocked')
-      },
-      removeItem: () => {
-        throw new Error('blocked')
-      },
-    })
-    setActivePinia(createPinia())
-    const data = useDataStore()
-    expect(data.currentMemberId).toBeNull()
-    data.setCurrentMember('u1')
-    expect(data.currentMemberId).toBe('u1')
+  it('로그아웃하면 나도 댓글도 비운다', async () => {
+    await signIn('u3@innoflow.local')
+    const comments = useCommentStore()
+    await comments.load('k4')
+    await useAuthStore().logout()
+    expect(useDataStore().currentMemberId).toBeNull()
+    expect(comments.commentsOf('k4')).toEqual([])
   })
 })
 
@@ -87,12 +61,12 @@ describe('작업 댓글', () => {
     expect(countOf('k4')).toBe(2)
   })
 
-  it("'나'를 안 골랐거나 빈 글이면 남기지 않는다", async () => {
+  it('로그인 전이거나 빈 글이면 남기지 않는다', async () => {
     const comments = useCommentStore()
     await comments.load('k1')
     expect(await comments.add('k1', '글')).toBe(false)
 
-    useDataStore().setCurrentMember('u1')
+    await signIn('u1@innoflow.local')
     expect(await comments.add('k1', '   ')).toBe(false)
     expect(comments.commentsOf('k1')).toEqual([])
     expect(countOf('k1')).toBe(0)
@@ -100,7 +74,7 @@ describe('작업 댓글', () => {
 
   it("남기면 '나'가 작성자로 맨 뒤에 붙고 commentCount 가 하나 는다", async () => {
     const comments = useCommentStore()
-    useDataStore().setCurrentMember('u3')
+    await signIn('u3@innoflow.local')
     await comments.load('k4')
 
     expect(await comments.add('k4', '  계정 다 만들었습니다\n확인 부탁드립니다 ')).toBe(true)
@@ -109,14 +83,15 @@ describe('작업 댓글', () => {
     expect(countOf('k4')).toBe(3)
   })
 
-  it('자기 댓글만 고치고 지운다. 지우면 commentCount 가 하나 준다', async () => {
+  it('일반 사용자는 자기 댓글만 고치고 지운다. 지우면 commentCount 가 하나 준다', async () => {
     const comments = useCommentStore()
-    useDataStore().setCurrentMember('u3')
+    await signIn('u3@innoflow.local')
     await comments.load('k4')
     const [theirs, mine] = comments.commentsOf('k4')
 
-    expect(comments.isMine(theirs)).toBe(false)
-    expect(comments.isMine(mine)).toBe(true)
+    expect(comments.canEdit(theirs)).toBe(false)
+    expect(comments.canRemove(theirs)).toBe(false)
+    expect(comments.canEdit(mine)).toBe(true)
     expect(await comments.edit(theirs.id, '남의 글')).toBe(false)
     expect(await comments.remove(theirs.id)).toBe(false)
 
@@ -129,9 +104,28 @@ describe('작업 댓글', () => {
     expect(countOf('k4')).toBe(1)
   })
 
+  it('프로젝트 관리자 · 시스템 관리자는 남의 댓글을 지울 수 있지만 고칠 수는 없다', async () => {
+    const comments = useCommentStore()
+    /* 김서연은 한화손보 차세대(p1)의 프로젝트 관리자다. cm2 는 이도현의 글 */
+    await signIn('u1@innoflow.local')
+    await comments.load('k4')
+    const theirs = comments.commentsOf('k4')[1]
+    expect(comments.canEdit(theirs)).toBe(false)
+    expect(comments.canRemove(theirs)).toBe(true)
+    expect(await comments.edit(theirs.id, '남의 글')).toBe(false)
+    expect(await comments.remove(theirs.id)).toBe(true)
+
+    await useAuthStore().logout()
+    await signIn('admin@innoflow.local')
+    await comments.load('k4')
+    const first = comments.commentsOf('k4')[0]
+    expect(comments.canEdit(first)).toBe(false)
+    expect(comments.canRemove(first)).toBe(true)
+  })
+
   it('쓰기가 실패하면 알리고 목록을 다시 받는다', async () => {
     const comments = useCommentStore()
-    useDataStore().setCurrentMember('u3')
+    await signIn('u3@innoflow.local')
     await comments.load('k4')
     /* 그사이 다른 곳에서 지워진 것처럼 — 목업 저장소에서만 지운다 */
     await deleteTaskComment('cm2')

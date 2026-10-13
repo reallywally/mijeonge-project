@@ -314,7 +314,7 @@ function onKeydown(e: KeyboardEvent) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem :value="NONE">선택 안 함</SelectItem>
-            <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">
+            <SelectItem v-for="m in data.assignable" :key="m.id" :value="m.id">
               {{ m.name }}
             </SelectItem>
           </SelectContent>

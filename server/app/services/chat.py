@@ -1,8 +1,6 @@
 import json
 import logging
 import re
-import time
-from collections import deque
 from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from contextlib import aclosing
 from typing import Any, cast
@@ -185,7 +183,10 @@ TOOLS: list[BetaToolParam] = [
     },
     {
         "name": "list_members",
-        "description": "멤버 목록(id · name)을 준다. 담당자 이름을 owner_id 로 바꿀 때 쓴다.",
+        "description": (
+            "이 프로젝트의 담당자 후보(활성 멤버) 목록(id · name)을 준다. "
+            "담당자 이름을 owner_id 로 바꿀 때 쓴다. 여기 없는 사람은 담당자로 둘 수 없다."
+        ),
         "input_schema": {"type": "object", "properties": {}},
     },
     {
@@ -240,32 +241,6 @@ TOOLS: list[BetaToolParam] = [
 ]
 
 _TOOL_NAMES: frozenset[str] = frozenset(tool["name"] for tool in TOOLS)
-
-
-class RateLimiter:
-    """IP 당 분당 횟수. 메모리 카운터라 프로세스마다 따로 센다.
-
-    인증이 생기면 사람 기준으로 바꾼다.
-    """
-
-    def __init__(self, per_minute: int, window: float = 60.0) -> None:
-        self.per_minute = per_minute
-        self.window = window
-        self._hits: dict[str, deque[float]] = {}
-
-    def allow(self, key: str, now: float | None = None) -> bool:
-        # await 가 없어 이벤트 루프 안에서는 끼어들 틈이 없다
-        at = time.monotonic() if now is None else now
-        hits = self._hits.setdefault(key, deque())
-        while hits and at - hits[0] >= self.window:
-            hits.popleft()
-        if len(hits) >= self.per_minute:
-            return False
-        hits.append(at)
-        return True
-
-    def reset(self) -> None:
-        self._hits.clear()
 
 
 def make_client(settings: Settings) -> AsyncAnthropic | None:
@@ -328,8 +303,12 @@ async def run_tool(
                 task = await search_service.get_task(session, project_id, d.task_id)
                 return task.model_dump_json(by_alias=True), False
             case "list_members":
-                # 멤버는 전사 공통이라 프로젝트로 거르지 않는다 (GET /api/members 와 같다)
-                return _dump_list(await project_service.list_members(session)), False
+                # 담당자 후보는 그 프로젝트의 활성 멤버뿐이다 (docs/api/auth.md)
+                members = await project_service.list_members(session, assignable_in=project_id)
+                # 다 활성이라 active 는 싣지 않는다 — 도구 설명대로 id · name 만
+                return json.dumps(
+                    [{"id": m.id, "name": m.name} for m in members], ensure_ascii=False
+                ), False
             case _:
                 return _tool_error(f"없는 도구다: {name}"), True
     except ApiError as exc:
@@ -344,14 +323,14 @@ async def run_tool(
 
 
 async def check_proposal(
-    session: AsyncSession, raw: object
+    session: AsyncSession, project_id: str, raw: object
 ) -> tuple[str, bool, TaskProposal | None]:
     """propose_tasks. DB 에 쓰지 않는다 — 일괄 등록과 같은 검사로 보고, 맞으면 초안을 돌려준다."""
     try:
         proposal = TaskProposal.model_validate(raw)
         problems = task_service.proposal_problems(proposal.tasks)
         if not problems:
-            problems = await task_service.missing_owners(session, proposal.tasks)
+            problems = await task_service.missing_owners(session, project_id, proposal.tasks)
         if problems:
             return (
                 json.dumps(
@@ -554,7 +533,7 @@ async def _loop(
                 name = cast(ToolName, call.name)
                 yield ToolEvent(name=name, label=tool_label(name, call.input))
             if call.name == "propose_tasks":
-                content, is_error, proposal = await check_proposal(session, call.input)
+                content, is_error, proposal = await check_proposal(session, project_id, call.input)
                 if proposal is not None:
                     yield ProposalEvent(proposal=proposal)
             else:

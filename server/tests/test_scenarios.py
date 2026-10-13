@@ -14,10 +14,16 @@ import httpx
 
 
 async def start(client: httpx.AsyncClient, name: str, prefix: str) -> str:
-    """1. 최상위 프로젝트 등록."""
+    """1. 최상위 프로젝트 등록 — 그리고 사람들을 부여한다. 부여받은 사람만 담당자가 된다."""
     res = await client.post("/api/projects", json={"name": name, "taskKeyPrefix": prefix})
     assert res.status_code == 201
-    return str(res.json()["id"])
+    project_id = str(res.json()["id"])
+    for member_id in ("u1", "u2", "u3", "u4"):
+        granted = await client.put(
+            f"/api/projects/{project_id}/members/{member_id}", json={"role": "user"}
+        )
+        assert granted.status_code == 200
+    return project_id
 
 
 async def snapshot(client: httpx.AsyncClient, project_id: str) -> dict[str, list[dict]]:

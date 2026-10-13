@@ -2,7 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import * as api from '@/api'
 import { messageOf } from '@/api'
+import { canDeleteComment, canEditComment } from '@/lib/access'
 import { toastError } from '@/lib/notify'
+import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import type { TaskComment } from '@/types/domain'
 
@@ -14,6 +16,7 @@ export type CommentLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
  */
 export const useCommentStore = defineStore('comment', () => {
   const data = useDataStore()
+  const auth = useAuthStore()
 
   const byTask = ref<Record<string, TaskComment[]>>({})
   const status = ref<Record<string, CommentLoadStatus>>({})
@@ -23,9 +26,15 @@ export const useCommentStore = defineStore('comment', () => {
   const statusOf = (taskId: string): CommentLoadStatus => status.value[taskId] ?? 'idle'
   const errorOf = (taskId: string) => loadError.value[taskId] ?? ''
 
-  /** 자기 댓글만 고치고 지운다. '나'를 안 골랐으면 아무것도 못 고친다 */
-  const isMine = (comment: TaskComment) =>
-    data.currentMemberId !== null && comment.authorId === data.currentMemberId
+  /** 고치기는 작성자만 */
+  const canEdit = (comment: TaskComment) => canEditComment(auth.me, comment)
+
+  /** 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자 */
+  const canRemove = (comment: TaskComment) => {
+    const projectId =
+      data.allTasks.find((t) => t.id === comment.taskId)?.projectId ?? data.currentProjectId
+    return canDeleteComment(auth.me, comment, projectId)
+  }
 
   function setCount(taskId: string, count: number) {
     const task = data.allTasks.find((t) => t.id === taskId)
@@ -56,13 +65,12 @@ export const useCommentStore = defineStore('comment', () => {
     }
   }
 
-  /** 댓글을 남긴다. '나'를 안 골랐거나 빈 글이면 안 보낸다. 실패하면 알리고 false — 적던 글은 화면이 지킨다 */
+  /** 댓글을 남긴다 — 작성자는 로그인한 사람이다. 빈 글이면 안 보낸다. 실패하면 알리고 false — 적던 글은 화면이 지킨다 */
   async function add(taskId: string, body: string): Promise<boolean> {
-    const authorId = data.currentMemberId
     const text = body.trim()
-    if (!authorId || !text) return false
+    if (!auth.me || !text) return false
     try {
-      const comment = await api.createTaskComment(taskId, { authorId, body: text })
+      const comment = await api.createTaskComment(taskId, { body: text })
       ;(byTask.value[taskId] ??= []).push(comment)
       const task = data.allTasks.find((t) => t.id === taskId)
       setCount(taskId, (task?.commentCount ?? 0) + 1)
@@ -84,7 +92,7 @@ export const useCommentStore = defineStore('comment', () => {
   async function edit(commentId: string, body: string): Promise<boolean> {
     const found = locate(commentId)
     const text = body.trim()
-    if (!found || !text || !isMine(found.rows[found.at])) return false
+    if (!found || !text || !canEdit(found.rows[found.at])) return false
     try {
       const next = await api.patchTaskComment(commentId, { body: text })
       const now = locate(commentId)
@@ -100,7 +108,7 @@ export const useCommentStore = defineStore('comment', () => {
 
   async function remove(commentId: string): Promise<boolean> {
     const found = locate(commentId)
-    if (!found || !isMine(found.rows[found.at])) return false
+    if (!found || !canRemove(found.rows[found.at])) return false
     try {
       await api.deleteTaskComment(commentId)
       const now = locate(commentId)
@@ -117,16 +125,15 @@ export const useCommentStore = defineStore('comment', () => {
     }
   }
 
-  /* 다른 프로젝트의 댓글을 들고 있을 까닭이 없다 */
-  watch(
-    () => data.currentProjectId,
-    () => {
-      byTask.value = {}
-      status.value = {}
-      loadError.value = {}
-      latestLoad.clear()
-    },
-  )
+  function clear() {
+    byTask.value = {}
+    status.value = {}
+    loadError.value = {}
+    latestLoad.clear()
+  }
 
-  return { commentsOf, statusOf, errorOf, isMine, load, add, edit, remove }
+  /* 다른 프로젝트의 댓글을 들고 있을 까닭이 없다 */
+  watch(() => data.currentProjectId, clear)
+
+  return { commentsOf, statusOf, errorOf, canEdit, canRemove, load, add, edit, remove, clear }
 })

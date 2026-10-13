@@ -175,6 +175,7 @@ export const useTaskStore = defineStore('task', () => {
   function setOwner(taskId: string, ownerId: string | null) {
     const task = findTask(taskId)
     if (!task) return
+    if (data.rejectOwner(ownerId, 'TASK_OWNER_NOT_FOUND', task.ownerId)) return
     task.ownerId = ownerId
     patch(taskId, { ownerId })
   }
@@ -302,6 +303,7 @@ export const useTaskStore = defineStore('task', () => {
         return null
       }
     }
+    if (data.rejectOwner(input.ownerId, 'TASK_OWNER_NOT_FOUND')) return null
     const id = data.nextId('nk')
     data.allTasks.push({
       id,

@@ -14,7 +14,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 - `design/*.dc.html` — 화면 시안. 코드로 옮길 때의 기준이다. 캔버스 메모에 "왜 이렇게 그렸는지"가 적혀 있다
 - `web/README.md` — 구조표와 shadcn-vue 컴포넌트 받는 법
 - `web/PLAN.md` — 무엇을 어떤 순서로 만드는지. **일을 받으면 몇 단계의 일인지 여기서 찾는다**
-- `API.md` — **서버와 맺은 계약**. 엔드포인트 표 · 열린 질문 · 결정 로그
+- `API.md` — **서버와 맺은 계약**의 목차 — 공통 규칙 · 엔드포인트 표 · 열린 질문. 도메인별 모양은 `docs/api/*.md`, 닫힌 질문(Qn) · 결정 로그는 `docs/api/decisions.md`. **일에 걸린 파일만 읽는다**
 
 시안과 코드가 어긋나면 임의로 고르지 말고 무엇이 다른지 말하고 확인을 받는다.
 
@@ -81,7 +81,7 @@ Vue 3 + TypeScript + Vite + Tailwind v4 + shadcn-vue(new-york · neutral) + Pini
 
 ## AI 챗봇 팝업에서 지킬 것
 
-계약은 `API.md` 의 '## AI 챗봇', 순서는 `web/PLAN.md` 7단계다.
+계약은 `docs/api/chat.md`, 순서는 `web/PLAN.md` 7단계다.
 
 - 위젯(`components/app/ChatWidget.vue`)은 `App.vue` 에 **한 번만** 둔다. 화면마다 넣지 않는다
 - 스트림은 `src/api/chat.ts` 하나가 읽는다. `EventSource` 는 GET 만 돼서 못 쓴다 — `fetch` + `ReadableStream`

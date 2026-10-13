@@ -1,6 +1,7 @@
 import { ApiError, id, request } from '@/api/client'
 import { isMockMode } from '@/api/mode'
-import { members, projects, tasks } from '@/fixtures'
+import { mockDb } from '@/api/mockAuth'
+import { projects, tasks } from '@/fixtures'
 import { nowIso } from '@/lib/date'
 import type {
   Task,
@@ -74,7 +75,12 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       message: '입력값이 올바르지 않습니다.',
       detail,
     })
-  if (input.tasks.some((t) => t.ownerId !== null && !members.some((m) => m.id === t.ownerId)))
+  /* 새로 지정하는 담당자는 그 프로젝트의 활성 멤버여야 한다 (docs/api/auth.md) */
+  const db = mockDb()
+  const assignable = (ownerId: string) =>
+    db.members.some((m) => m.id === ownerId && m.active) &&
+    db.grants.some((g) => g.projectId === projectId && g.memberId === ownerId)
+  if (input.tasks.some((t) => t.ownerId !== null && !assignable(t.ownerId)))
     throw new ApiError(400, {
       code: 'TASK_OWNER_NOT_FOUND',
       message: '담당자를 찾을 수 없습니다.',

@@ -15,7 +15,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 - `web/src/stores/*.ts` — 지금 목업이 무엇을 계산해 화면에 주는지. 서버가 넘겨받을 후보가 여기 있다
 - `server/PLAN.md` — 서버를 무엇을 어떤 순서로 만드는지. **일을 받으면 몇 단계의 일인지 여기서 찾는다**
 - `web/PLAN.md` — 프론트가 정해 둔 것과 남은 것
-- `API.md` — **프론트와 맺은 계약**. 엔드포인트 표 · 열린 질문 · 결정 로그
+- `API.md` — **프론트와 맺은 계약**의 목차 — 공통 규칙 · 엔드포인트 표 · 열린 질문. 도메인별 모양은 `docs/api/*.md`, 닫힌 질문(Qn) · 결정 로그는 `docs/api/decisions.md`. **일에 걸린 파일만 읽는다**
 
 프론트가 이미 정해 놓은 이름·모양을 서버가 바꾸지 않는다. 바꿔야 할 이유가 있으면
 임의로 고르지 말고 무엇이 왜 어긋나는지 말하고 확인을 받는다.
@@ -61,7 +61,7 @@ Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0(async) + asyncpg + Alembic 
 
 ### AI 챗봇 — Claude 를 부를 때
 
-계약은 `API.md` 의 '## AI 챗봇', 순서는 `server/PLAN.md` 7단계다.
+계약은 `docs/api/chat.md`, 순서는 `server/PLAN.md` 7단계다.
 
 - `anthropic` SDK 의 **async 클라이언트**(`AsyncAnthropic`)만 쓴다. `requests` · `httpx` 로 API 를 직접 부르지 않는다.
   SDK 사용법은 기억으로 쓰지 말고 `claude-api` 스킬을 먼저 불러 확인한다 — 모델 id · 파라미터가 자주 바뀐다

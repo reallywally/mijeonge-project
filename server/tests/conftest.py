@@ -1,4 +1,8 @@
-"""테스트용 DB.
+"""테스트용 DB · 로그인한 클라이언트.
+
+`client` 는 **시스템 관리자(`admin`)로 로그인한** 클라이언트다 — 인증 전부터 있던 검사가 권한에
+막히지 않고 그대로 돈다. 다른 사람으로 부르려면 `as_member("u2")`, 로그인 없이는 `anon`.
+세션은 로그인 API 를 거치지 않고 DB 에 바로 만든다 — argon2 를 검사마다 돌리지 않게.
 
 기본은 메모리 sqlite 다 — 모델 메타데이터로 테이블을 세운다. 검사 넷은 DB 없이 돈다.
 Postgres 고유 동작이 필요한 검사(지금은 `pg_trgm` 검색 · API.md Q27)만 `pg_session` · `pg_client` 를
@@ -6,7 +10,8 @@ Postgres 고유 동작이 필요한 검사(지금은 `pg_trgm` 검색 · API.md 
 """
 
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import AsyncExitStack
 from typing import Any
 
 import httpx
@@ -18,10 +23,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_login_limiter
 from app.db import get_session
 from app.main import app
 from app.models import Base, Entry, Task, TaskComment, Thread
+from app.services import auth as auth_service
+from app.services.auth import COOKIE
 from scripts.seed import seed
+
+# 시드의 시스템 관리자. `client` 가 이 사람으로 부른다
+ADMIN = "admin"
+
+AsMember = Callable[[str], Awaitable[httpx.AsyncClient]]
 
 # 등록 순서 열을 가진 넷. Postgres 에서는 Identity 가 채운다
 SEQ_MODELS = (Thread, Entry, Task, TaskComment)
@@ -75,23 +88,64 @@ async def session() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 
-async def _app_on(session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
+@pytest.fixture(autouse=True)
+def _fresh_login_limiter() -> None:
+    # 로그인 횟수 제한은 프로세스 하나에 하나다 — 앞 검사의 시도가 뒤로 넘어오지 않게
+    get_login_limiter().reset()
+
+
+def _new_client(cookie: str | None = None) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        cookies={COOKIE: cookie} if cookie else None,
+    )
+
+
+async def logged_in(session: AsyncSession, member_id: str) -> httpx.AsyncClient:
+    """그 사람의 세션 쿠키를 든 클라이언트. 닫는 것은 부른 쪽이다."""
+    return _new_client(await auth_service.start_session(session, member_id))
+
+
+async def _app_on(
+    session: AsyncSession, member_id: str | None = ADMIN
+) -> AsyncGenerator[httpx.AsyncClient, None]:
     async def use_test_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
     app.dependency_overrides[get_session] = use_test_session
-    transport = ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+    c = await logged_in(session, member_id) if member_id else _new_client()
+    async with c:
         yield c
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
 async def client(session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
-    """시드가 들어간 DB 를 물린 앱. 서버를 띄우지 않고 ASGI 에 직접 붙는다."""
+    """시드가 들어간 DB 를 물린 앱 — 시스템 관리자로 로그인해 있다. ASGI 에 직접 붙는다."""
     await seed(session)
     async for c in _app_on(session):
         yield c
+
+
+@pytest.fixture
+async def anon(client: httpx.AsyncClient) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """같은 앱 · 같은 DB, 쿠키 없이."""
+    async with _new_client() as c:
+        yield c
+
+
+@pytest.fixture
+async def as_member(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> AsyncGenerator[AsMember, None]:
+    """`await as_member("u2")` — 같은 앱 · 같은 DB 에 그 사람으로 로그인한 클라이언트."""
+    async with AsyncExitStack() as stack:
+
+        async def make(member_id: str) -> httpx.AsyncClient:
+            return await stack.enter_async_context(await logged_in(session, member_id))
+
+        yield make
 
 
 # 개발 DB(innoflow)와 따로 둔다 — 테스트가 스키마를 통째로 지우고 다시 세운다

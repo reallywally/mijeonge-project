@@ -236,7 +236,7 @@ function onCreated(id: string) {
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
                 <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
-                  m.name
+                  data.memberName(m.id)
                 }}</SelectItem>
                 <SelectItem value="none">미정</SelectItem>
               </SelectContent>

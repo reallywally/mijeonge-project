@@ -161,6 +161,7 @@ export const useThreadStore = defineStore('thread', () => {
         return null
       }
     }
+    if (data.rejectOwner(clean.ownerId, 'THREAD_OWNER_NOT_FOUND')) return null
     const id = data.nextId('nt')
     data.allThreads.unshift({
       id,
@@ -182,6 +183,7 @@ export const useThreadStore = defineStore('thread', () => {
     const thread = data.allThreads.find((t) => t.id === threadId)
     if (!thread) return false
     if (patch.title !== undefined && !patch.title.trim()) return false
+    if (data.rejectOwner(patch.ownerId, 'THREAD_OWNER_NOT_FOUND', thread.ownerId)) return false
     const clean: ThreadPatch = {}
     if (patch.title !== undefined) clean.title = thread.title = patch.title.trim()
     if (patch.description !== undefined)
@@ -220,6 +222,8 @@ export const useThreadStore = defineStore('thread', () => {
       }
     }
 
+    const current = data.allThreads.find((t) => t.id === threadId)?.ownerId ?? null
+    if (data.rejectOwner(ownerId, 'ENTRY_OWNER_NOT_FOUND', current)) return false
     data.allEntries.push({
       id: data.nextId('ne'),
       threadId,

@@ -1,12 +1,20 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isUnreachable } from '@/api'
-import { entries, members, projects, tasks, taskThreadLinks, threads } from '@/fixtures'
+import {
+  entries,
+  members,
+  projectGrants,
+  projects,
+  tasks,
+  taskThreadLinks,
+  threads,
+} from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
-import type { ProjectSnapshot, Task } from '@/types/domain'
+import type { Me, ProjectSnapshot, Task } from '@/types/domain'
 
 /* 서버 모드 — fetch 를 가짜로 바꿔 부팅 순서 · 늦게 온 응답 · 실패 되돌리기를 본다.
    계산은 목업 모드 테스트(task · thread)가 보니 여기서는 오가는 것만 본다. */
@@ -42,6 +50,20 @@ const snapshotOf = (projectId: string): ProjectSnapshot => ({
   ),
 })
 
+/** 시스템 관리자로 들어와 있다 — 프로젝트 셋을 다 본다 */
+const me: Me = {
+  id: 'u0',
+  name: '관리자',
+  email: 'admin@innoflow.local',
+  systemRole: 'admin',
+  projectRoles: {},
+}
+
+const membersOf = (projectId: string) =>
+  projectGrants
+    .filter((g) => g.projectId === projectId)
+    .map(({ memberId, role }) => ({ memberId, role }))
+
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
 async function booted() {
@@ -66,9 +88,13 @@ beforeEach(() => {
       return reply(body)
     }),
   )
+  on('GET /api/auth/me', () => json(me))
   on('GET /api/projects', () => json(projects))
   on('GET /api/members', () => json(members))
-  for (const p of projects) on(`GET /api/projects/${p.id}/snapshot`, () => json(snapshotOf(p.id)))
+  for (const p of projects) {
+    on(`GET /api/projects/${p.id}/snapshot`, () => json(snapshotOf(p.id)))
+    on(`GET /api/projects/${p.id}/members`, () => json(membersOf(p.id)))
+  }
   setActivePinia(createPinia())
 })
 
@@ -79,7 +105,7 @@ afterEach(() => {
 })
 
 describe('부팅', () => {
-  it('프로젝트 · 멤버를 같이 받고, 고른 프로젝트의 스냅샷을 받는다', async () => {
+  it('나를 먼저 받고, 프로젝트 · 멤버를 같이 받고, 고른 프로젝트의 스냅샷 · 멤버를 받는다', async () => {
     const data = useDataStore()
     expect(data.status).toBe('loading')
     expect(data.allTasks).toEqual([])
@@ -87,15 +113,30 @@ describe('부팅', () => {
     await data.boot()
 
     expect(calls.map((c) => c.route)).toEqual([
+      'GET /api/auth/me',
       'GET /api/projects',
       'GET /api/members',
       'GET /api/projects/p1/snapshot',
+      'GET /api/projects/p1/members',
     ])
     expect(data.status).toBe('ready')
+    expect(data.currentMemberId).toBe('u0')
+    expect(data.projectMembers.p1).toEqual(membersOf('p1'))
     expect(data.currentProjectId).toBe('p1')
     expect(data.allMembers).toHaveLength(members.length)
     expect(data.allTasks).toHaveLength(snapshotOf('p1').tasks.length)
     expect(data.taskThreads).toHaveLength(snapshotOf('p1').taskThreadLinks.length)
+  })
+
+  it('로그인 전이면(401) 나머지는 받지 않고 anonymous 로 선다', async () => {
+    on('GET /api/auth/me', () =>
+      json({ code: 'UNAUTHENTICATED', message: '로그인이 필요합니다.' }, 401),
+    )
+    const data = await booted()
+
+    expect(data.status).toBe('anonymous')
+    expect(data.bootError).toBeNull()
+    expect(calls.map((c) => c.route)).toEqual(['GET /api/auth/me'])
   })
 
   it('프로젝트가 하나도 없으면 스냅샷 없이 뜬다 — 등록 화면으로 갈 자리다', async () => {
@@ -175,7 +216,10 @@ describe('바로 저장하는 수정', () => {
 
     expect(toastError).toHaveBeenCalledOnce()
     expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'TASK_PARENT_DESCENDANT' })
-    expect(calls.at(-1)!.route).toBe('GET /api/projects/p1/snapshot')
+    expect(calls.slice(-2).map((c) => c.route)).toEqual([
+      'GET /api/projects/p1/snapshot',
+      'GET /api/projects/p1/members',
+    ])
     expect(data.allTasks.find((t) => t.id === 'k4')!.status).toBe(before)
   })
 
@@ -319,6 +363,7 @@ describe('만드는 것', () => {
     on('GET /api/projects/p9/snapshot', () =>
       json({ project: made, threads: [], entries: [], tasks: [], taskThreadLinks: [] }),
     )
+    on('GET /api/projects/p9/members', () => json([]))
 
     expect(await data.addProject('새 프로젝트', '')).toBe('p9')
     expect(calls.find((c) => c.route === 'POST /api/projects')!.body).toEqual({

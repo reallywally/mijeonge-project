@@ -3,15 +3,19 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetMockComments } from '@/api/comments'
+import { resetMockAuth } from '@/api/mockAuth'
+import { MOCK_PASSWORD } from '@/fixtures'
+import { useAuthStore } from '@/stores/auth'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
 import TaskComments from './TaskComments.vue'
 
-/* 작업 상세의 댓글 칸 — 목록 · 남기기 키 · 자기 댓글만 고치기가 화면에서 스토어까지 닿는지 본다 */
+/* 작업 상세의 댓글 칸 — 목록 · 남기기 키 · 고치기는 작성자만 · 지우기는 관리자도가 화면에서 스토어까지 닿는지 본다 */
 enableAutoUnmount(afterEach)
 
 beforeEach(() => {
   resetMockComments()
+  resetMockAuth()
   localStorage.clear()
   setActivePinia(createPinia())
 })
@@ -21,6 +25,8 @@ async function mounted(taskId = 'k4') {
   await flushPromises()
   return w
 }
+
+const signIn = (email: string) => useAuthStore().login(email, MOCK_PASSWORD)
 
 const draftOf = (w: Awaited<ReturnType<typeof mounted>>) => w.get('textarea[aria-label="댓글"]')
 
@@ -36,15 +42,32 @@ describe('작업 댓글 칸', () => {
     expect(items[0].text()).not.toContain('(수정됨)')
   })
 
-  it("'나'를 안 골랐으면 입력칸이 잠기고 먼저 고르라고 알린다", async () => {
+  it('로그인 전이면 입력칸이 잠기고 고치기 · 지우기가 없다', async () => {
     const w = await mounted()
     expect(draftOf(w).attributes('disabled')).toBeDefined()
-    expect(draftOf(w).attributes('placeholder')).toContain('나를 먼저 고르세요')
+    expect(draftOf(w).attributes('placeholder')).toContain('로그인')
     expect(w.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
+    expect(w.find('button[aria-label="댓글 지우기"]').exists()).toBe(false)
+  })
+
+  it('프로젝트 관리자는 남의 댓글에 지우기만 서고 고치기는 없다', async () => {
+    /* 김서연은 p1 의 프로젝트 관리자, cm2 는 이도현의 글 */
+    await signIn('u1@innoflow.local')
+    const w = await mounted()
+    const theirs = w.findAll('li[data-comment-id]')[1]
+    expect(theirs.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
+    expect(theirs.find('button[aria-label="댓글 지우기"]').exists()).toBe(true)
+  })
+
+  it('일반 사용자에게는 남의 댓글에 아무 메뉴도 없다', async () => {
+    await signIn('u2@innoflow.local')
+    const w = await mounted()
+    expect(w.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
+    expect(w.find('button[aria-label="댓글 지우기"]').exists()).toBe(false)
   })
 
   it('⌘/Ctrl+Enter 로 남기고, 그냥 Enter 와 한글 조합 중에는 남기지 않는다', async () => {
-    useDataStore().setCurrentMember('u2')
+    await signIn('u2@innoflow.local')
     const w = await mounted('k1')
     await draftOf(w).setValue('첫 댓글')
 
@@ -65,8 +88,8 @@ describe('작업 댓글 칸', () => {
     expect(useDataStore().allTasks.find((t) => t.id === 'k1')!.commentCount).toBe(1)
   })
 
-  it('자기 댓글에만 고치기 · 지우기가 서고, 고치면 수정됨이 붙는다', async () => {
-    useDataStore().setCurrentMember('u1')
+  it('자기 댓글에 고치기가 서고, 고치면 수정됨이 붙는다', async () => {
+    await signIn('u1@innoflow.local')
     const w = await mounted()
     const [mine, theirs] = w.findAll('li[data-comment-id]')
     expect(theirs.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
@@ -83,7 +106,7 @@ describe('작업 댓글 칸', () => {
   })
 
   it('지우기는 한 번 더 묻고 지운다', async () => {
-    useDataStore().setCurrentMember('u1')
+    await signIn('u1@innoflow.local')
     const w = await mounted()
     await w.get('button[aria-label="댓글 지우기"]').trigger('click')
     expect(w.text()).toContain('지울까요?')

@@ -5,7 +5,7 @@ import { isUnreachable } from '@/api'
 import { Button } from '@/components/ui/button'
 import { useDataStore } from '@/stores/data'
 
-/* 앱이 처음 뜰 때 — 프로젝트 · 멤버 · 첫 스냅샷을 받는 동안과 그게 실패했을 때 화면 전체를 덮는다 */
+/* 앱이 처음 뜰 때 — 나 · 프로젝트 · 멤버 · 첫 스냅샷을 받는 동안과 그게 실패했을 때 화면 전체를 덮는다 */
 const emit = defineEmits<{ (e: 'retry'): void }>()
 
 const data = useDataStore()
@@ -15,7 +15,8 @@ const unreachable = computed(() => isUnreachable(data.bootError))
 
 <template>
   <div class="flex h-screen flex-col items-center justify-center gap-4 bg-background px-6">
-    <template v-if="data.status === 'loading'">
+    <!-- 로그인 전(anonymous)은 로그인 화면으로 가는 사이에 잠깐 거친다 -->
+    <template v-if="data.status !== 'error'">
       <Loader2 class="size-5 animate-spin text-muted-foreground" />
       <p class="text-sm text-muted-foreground">불러오는 중…</p>
     </template>
