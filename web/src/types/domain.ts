@@ -503,6 +503,8 @@ export type ChatEvent =
         | 'get_thread'
         | 'search_tasks'
         | 'get_task'
+        | 'list_tasks'
+        | 'find_similar_tasks'
         | 'list_members'
         | 'propose_tasks'
       label: string
