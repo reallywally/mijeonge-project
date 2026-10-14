@@ -33,6 +33,8 @@ class Thread(Base):
         ForeignKeyConstraint(
             ["parent_thread_id", "project_id"], ["thread.id", "thread.project_id"]
         ),
+        # 파트도 같은 프로젝트의 것만 단다 (docs/api/part.md)
+        ForeignKeyConstraint(["part_id", "project_id"], ["part.id", "part.project_id"]),
         trgm_index("thread", "title"),
         trgm_index("thread", "description"),
     )
@@ -48,6 +50,8 @@ class Thread(Base):
     due_date: Mapped[date | None] = mapped_column(Date)
     # 다른 안건에서 떼어낸 것이면 그 안건. FK 는 위의 복합 FK 하나뿐이다
     parent_thread_id: Mapped[str | None] = mapped_column(String(36))
+    # null 이면 프로젝트 공통
+    part_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다

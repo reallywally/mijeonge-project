@@ -1,10 +1,11 @@
 import { id, mockError, request } from '@/api/client'
-import { forbidden, later, memberOf, mockDb, requireMe, requireProject } from '@/api/mockAuth'
+import { later, memberOf, mockDb, requireManager, requireMe, requireProject } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
-import { canManageProject } from '@/lib/access'
 import type {
   Entry,
   Member,
+  Part,
+  PartMember,
   Project,
   ProjectInput,
   ProjectMember,
@@ -36,6 +37,8 @@ export interface SnapshotRecords {
   allEntries: Entry[]
   allTasks: Task[]
   taskThreads: TaskThreadLink[]
+  parts: Part[]
+  partMembers: PartMember[]
 }
 
 export function toRecords(snapshot: ProjectSnapshot): SnapshotRecords {
@@ -45,6 +48,8 @@ export function toRecords(snapshot: ProjectSnapshot): SnapshotRecords {
     allEntries: snapshot.entries,
     allTasks: snapshot.tasks,
     taskThreads: snapshot.taskThreadLinks,
+    parts: snapshot.parts,
+    partMembers: snapshot.partMembers,
   }
 }
 
@@ -53,13 +58,6 @@ export const fetchSnapshot = async (projectId: string) =>
 
 /* 프로젝트 멤버 — 읽기는 그 프로젝트의 누구나, 쓰기는 그 프로젝트 관리자 · 시스템 관리자 (docs/api/auth.md).
    목업 갈래는 화면에서 만든 목업 프로젝트를 알 수 없어 있는지는 따지지 않고 권한만 본다 */
-
-function requireManager(projectId: string) {
-  const me = requireMe()
-  requireProject(me, projectId)
-  if (!canManageProject(me, projectId)) throw forbidden()
-  return me
-}
 
 const mockProjectMembers = {
   list(projectId: string): ProjectMember[] {
@@ -84,6 +82,11 @@ const mockProjectMembers = {
     requireManager(projectId)
     const db = mockDb()
     db.grants = db.grants.filter((g) => !(g.projectId === projectId && g.memberId === memberId))
+    /* 그 프로젝트 파트들에서도 같이 빠진다 (docs/api/part.md) */
+    const ownParts = new Set(db.parts.filter((p) => p.projectId === projectId).map((p) => p.id))
+    db.partMembers = db.partMembers.filter(
+      (pm) => !(pm.memberId === memberId && ownParts.has(pm.partId)),
+    )
   },
 }
 
@@ -100,7 +103,7 @@ export const putProjectMember = (projectId: string, memberId: string, role: Proj
         role,
       })
 
-/** 빼기 (멱등). 그 사람이 담당하던 작업 · 안건은 그대로 남는다 */
+/** 빼기 (멱등). 그 사람이 담당하던 작업 · 안건은 그대로 남고, 그 프로젝트 파트 소속은 같이 빠진다 */
 export const deleteProjectMember = (projectId: string, memberId: string) =>
   isMockMode()
     ? later(() => mockProjectMembers.remove(projectId, memberId))

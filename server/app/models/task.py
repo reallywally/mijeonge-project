@@ -38,6 +38,8 @@ class Task(Base):
         # 넘어가면 화면에 에러가 안 뜨고 계층만 조용히 틀어진다
         UniqueConstraint("id", "project_id"),
         ForeignKeyConstraint(["parent_id", "project_id"], ["task.id", "task.project_id"]),
+        # 파트도 같은 프로젝트의 것만 단다 (docs/api/part.md)
+        ForeignKeyConstraint(["part_id", "project_id"], ["part.id", "part.project_id"]),
         Index("ix_task_project_id_status", "project_id", "status"),
         Index("ix_task_parent_id", "parent_id"),
         trgm_index("task", "title"),
@@ -55,6 +57,8 @@ class Task(Base):
     start: Mapped[date | None] = mapped_column(Date)
     due: Mapped[date | None] = mapped_column(Date)
     priority: Mapped[str] = mapped_column(String(16), default="normal")
+    # null 이면 프로젝트 공통. 계층과 떼어 둔다 — 상위의 파트를 바꿔도 하위는 그대로다
+    part_id: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다

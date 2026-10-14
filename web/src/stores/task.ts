@@ -3,7 +3,9 @@ import { computed } from 'vue'
 import * as api from '@/api'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { toastError } from '@/lib/notify'
+import { inheritedPartId } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useThreadStore } from '@/stores/thread'
 import type {
   ProposedTask,
@@ -30,6 +32,7 @@ import type {
 export const useTaskStore = defineStore('task', () => {
   const data = useDataStore()
   const threadStore = useThreadStore()
+  const partStore = usePartStore()
 
   const tasks = computed<Task[]>(() =>
     data.allTasks.filter((t) => t.projectId === data.currentProjectId),
@@ -97,17 +100,26 @@ export const useTaskStore = defineStore('task', () => {
 
   const rows = computed<TaskRow[]>(() => tasks.value.map(toRow))
 
+  /** [내 파트 | 전체] 로 거른 행 — 목록 · 칸반 · 간트가 이것을 쓴다. 상세는 거르지 않는다 */
+  const visibleRows = computed<TaskRow[]>(() =>
+    partStore.visible ? rows.value.filter((r) => partStore.showsTask(r.task.id)) : rows.value,
+  )
+
+  /* 아래 수는 보이는 것만 센다 — 화면에 없는 작업을 '몇 건' 이라 적으면 찾을 수 없다 */
+
   /** 기간이 안 잡혀 간트에 막대가 없는 작업 */
-  const undatedCount = computed(() => rows.value.filter((r) => r.undated).length)
+  const undatedCount = computed(() => visibleRows.value.filter((r) => r.undated).length)
   /** 걸어 둔 안건이 안 정해져 멈춘 작업 */
-  const blockedCount = computed(() => rows.value.filter((r) => r.task.status === 'blocked').length)
+  const blockedCount = computed(
+    () => visibleRows.value.filter((r) => r.task.status === 'blocked').length,
+  )
 
   const statusCounts = computed<Record<TaskStatus | 'all', number>>(() => ({
-    all: rows.value.length,
-    todo: rows.value.filter((r) => r.task.status === 'todo').length,
-    doing: rows.value.filter((r) => r.task.status === 'doing').length,
+    all: visibleRows.value.length,
+    todo: visibleRows.value.filter((r) => r.task.status === 'todo').length,
+    doing: visibleRows.value.filter((r) => r.task.status === 'doing').length,
     blocked: blockedCount.value,
-    done: rows.value.filter((r) => r.task.status === 'done').length,
+    done: visibleRows.value.filter((r) => r.task.status === 'done').length,
   }))
 
   /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
@@ -229,6 +241,15 @@ export const useTaskStore = defineStore('task', () => {
     patch(taskId, { parentId })
   }
 
+  /** 파트를 바꾼다(null 은 공통). 하위 작업은 따라 바뀌지 않는다 — 계약이 그렇다 */
+  function setPart(taskId: string, partId: string | null) {
+    const task = findTask(taskId)
+    if (!task || task.partId === partId) return
+    if (data.rejectPart(partId, task.partId)) return
+    task.partId = partId
+    patch(taskId, { partId })
+  }
+
   function setPriority(taskId: string, priority: TaskPriority) {
     const task = findTask(taskId)
     if (!task) return
@@ -304,6 +325,11 @@ export const useTaskStore = defineStore('task', () => {
       }
     }
     if (data.rejectOwner(input.ownerId, 'TASK_OWNER_NOT_FOUND')) return null
+    /* partId 를 안 보냈으면 상위 작업의 것을 따른다. 따라온 것도 새로 다는 것으로 보고 검사한다 —
+       서버가 그렇게 한다 (API.md Q32) */
+    const parentTask = input.parentId ? findTask(input.parentId) : null
+    const partId = inheritedPartId(input.partId, parentTask)
+    if (data.rejectPart(partId)) return null
     const id = data.nextId('nk')
     data.allTasks.push({
       id,
@@ -318,6 +344,7 @@ export const useTaskStore = defineStore('task', () => {
       start: input.start,
       due: input.due,
       priority: input.priority,
+      partId,
       createdAt: nowIso(),
       commentCount: 0,
     })
@@ -381,6 +408,7 @@ export const useTaskStore = defineStore('task', () => {
   return {
     tasks,
     rows,
+    visibleRows,
     undatedCount,
     blockedCount,
     statusCounts,
@@ -400,6 +428,7 @@ export const useTaskStore = defineStore('task', () => {
     setTitle,
     setParent,
     setPriority,
+    setPart,
     setBody,
     addTask,
     addTaskBatch,

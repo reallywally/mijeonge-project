@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.schemas.task import (
     PROPOSAL_MAX,
+    BatchTaskIn,
     ProposedTask,
     TaskBatchInput,
     TaskBatchResult,
@@ -33,6 +34,7 @@ from app.schemas.task import (
     TaskThreadLinkOut,
 )
 from app.services import access
+from app.services import part as part_service
 from app.services import project as project_service
 from app.time import now
 
@@ -51,6 +53,7 @@ def to_task(row: Task, comment_count: int) -> TaskOut:
         start=row.start,
         due=row.due,
         priority=row.priority,
+        part_id=row.part_id,
         created_at=row.created_at,
         comment_count=comment_count,
     )
@@ -138,6 +141,7 @@ async def _guard_parent(
 async def _insert_task(session: AsyncSession, project: Project, payload: TaskCreate) -> Task:
     """작업 하나를 넣는다. 커밋하지 않는다 — 일괄 등록이 여럿을 한 트랜잭션에 묶는다."""
     await _guard_parent(session, project.id, None, payload.parent_id)
+    part_id = await _part_for_new_task(session, project.id, payload)
 
     task = Task(
         id=new_id(),
@@ -150,6 +154,7 @@ async def _insert_task(session: AsyncSession, project: Project, payload: TaskCre
         start=payload.start,
         due=payload.due,
         priority=payload.priority,
+        part_id=part_id,
         created_at=now(),
         # 화면이 보낸 줄 id 는 화면 안에서만 쓰던 값이다 — 서버가 새로 붙인다
         lines=[
@@ -170,6 +175,21 @@ async def _insert_task(session: AsyncSession, project: Project, payload: TaskCre
     for thread_id in dict.fromkeys(payload.thread_ids):
         await _attach_thread(session, task, thread_id)
     return task
+
+
+async def _part_for_new_task(
+    session: AsyncSession, project_id: str, payload: TaskCreate
+) -> str | None:
+    """새 작업의 파트. **키를 안 보냈으면 상위 작업의 파트를 따른다**(최상위면 null) —
+    null 을 보낸 것(공통)과 가른다. 따라온 파트도 새로 다는 것이라 보관이면 400 이다."""
+    if "part_id" in payload.model_fields_set:
+        part_id = payload.part_id
+    elif payload.parent_id is not None:
+        part_id = await session.scalar(select(Task.part_id).where(Task.id == payload.parent_id))
+    else:
+        part_id = None
+    await part_service.guard_part(session, project_id, part_id)
+    return part_id
 
 
 async def _guard_owner(session: AsyncSession, project_id: str, owner_id: str | None) -> None:
@@ -250,26 +270,27 @@ async def create_tasks(
     missing = await missing_owners(session, project.id, payload.tasks)
     if missing:
         raise ApiError(400, "TASK_OWNER_NOT_FOUND", "담당자를 찾을 수 없습니다.", missing)
+    await _guard_batch_parts(session, project.id, payload.tasks)
 
     id_by_temp: dict[str, str] = {}
     created: list[Task] = []
     try:
         # 배열 순서대로 넣는다 — 번호가 그 순서로 나가고, 상위가 늘 먼저 들어가 있다
         for item in payload.tasks:
-            task = await _insert_task(
-                session,
-                project,
-                TaskCreate(
-                    title=item.title.strip(),
-                    parent_id=(
-                        id_by_temp[item.parent_temp_id] if item.parent_temp_id is not None else None
-                    ),
-                    owner_id=item.owner_id,
-                    start=item.start,
-                    due=item.due,
-                    priority=item.priority,
+            fields = {
+                "title": item.title.strip(),
+                "parent_id": (
+                    id_by_temp[item.parent_temp_id] if item.parent_temp_id is not None else None
                 ),
-            )
+                "owner_id": item.owner_id,
+                "start": item.start,
+                "due": item.due,
+                "priority": item.priority,
+            }
+            # 보낸 줄만 partId 를 넘긴다 — 안 보낸 줄은 앞의 상위를 따른다
+            if "part_id" in item.model_fields_set:
+                fields["part_id"] = item.part_id
+            task = await _insert_task(session, project, TaskCreate.model_validate(fields))
             id_by_temp[item.temp_id] = task.id
             created.append(task)
         await session.commit()
@@ -283,6 +304,20 @@ async def create_tasks(
     )
 
 
+async def _guard_batch_parts(
+    session: AsyncSession, project_id: str, tasks: Sequence[BatchTaskIn]
+) -> None:
+    """일괄 등록이 보낸 `partId` 를 넣기 전에 다 본다 — 몇 번째 줄인지 `tasks.1.partId` 로 짚는다.
+
+    안 보낸 줄은 앞의 줄(또는 공통)을 따르니 따로 볼 것이 없다.
+    """
+    for index, item in enumerate(tasks):
+        if "part_id" in item.model_fields_set:
+            await part_service.guard_part(
+                session, project_id, item.part_id, field=f"tasks.{index}.partId"
+            )
+
+
 async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) -> TaskOut:
     task = await load_task(session, task_id)
     # exclude_unset — 안 보낸 것과 null 로 보낸 것을 가른다. ownerId: null 은 담당자 지우기다
@@ -294,6 +329,9 @@ async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) ->
     # 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다 — 프로젝트에서 빠진 사람이어도
     if "owner_id" in changes and changes["owner_id"] != task.owner_id:
         await _guard_owner(session, task.project_id, changes["owner_id"])
+    # 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다. 하위 작업은 따라 바뀌지 않는다
+    if "part_id" in changes and changes["part_id"] != task.part_id:
+        await part_service.guard_part(session, task.project_id, changes["part_id"])
     for field, value in changes.items():
         setattr(task, field, value)
     await session.commit()

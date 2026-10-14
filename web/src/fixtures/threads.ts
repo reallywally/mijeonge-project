@@ -18,6 +18,7 @@ export const threads: Thread[] = [
     state: 'decided',
     ownerId: 'u3',
     parentThreadId: null,
+    partId: 'pt1',
     createdAt: '2026-09-08T00:30:00Z',
   },
   {
@@ -30,6 +31,7 @@ export const threads: Thread[] = [
     state: 'decided',
     ownerId: 'u3',
     parentThreadId: null,
+    partId: 'pt1',
     createdAt: '2026-09-08T00:35:00Z',
   },
   {
@@ -43,6 +45,7 @@ export const threads: Thread[] = [
     state: 'open',
     ownerId: 'u1',
     parentThreadId: null,
+    partId: 'pt2',
     createdAt: '2026-09-09T02:10:00Z',
   },
   {
@@ -55,6 +58,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: null,
     parentThreadId: null,
+    partId: 'pt1',
     createdAt: '2026-09-10T06:20:00Z',
   },
   // 시나리오 2 — 두 번 미뤄진 안건
@@ -69,6 +73,7 @@ export const threads: Thread[] = [
     state: 'open',
     ownerId: 'u4',
     parentThreadId: null,
+    partId: 'pt3',
     createdAt: '2026-09-07T00:10:00Z',
   },
   // 시나리오 3 — 한 번에 정해진 안건
@@ -82,6 +87,7 @@ export const threads: Thread[] = [
     state: 'decided',
     ownerId: 'u1',
     parentThreadId: null,
+    partId: null,
     createdAt: '2026-09-14T01:00:00Z',
   },
   {
@@ -94,6 +100,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u4',
     parentThreadId: null,
+    partId: 'pt2',
     createdAt: '2026-09-12T05:40:00Z',
   },
   {
@@ -106,6 +113,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u1',
     parentThreadId: null,
+    partId: 'pt2',
     createdAt: '2026-09-12T05:45:00Z',
   },
   {
@@ -118,6 +126,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u2',
     parentThreadId: null,
+    partId: null,
     createdAt: '2026-09-15T00:20:00Z',
   },
   // 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
@@ -131,6 +140,7 @@ export const threads: Thread[] = [
     state: 'queued',
     ownerId: 'u2',
     parentThreadId: null,
+    partId: null,
     createdAt: '2026-09-16T01:05:00Z',
   },
 ]

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Check } from 'lucide-vue-next'
+import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -30,6 +31,7 @@ const start = defineModel<string>('start', { required: true })
 const due = defineModel<string>('due', { required: true })
 const priority = defineModel<TaskPriority>('priority', { required: true })
 const parentId = defineModel<string | null>('parentId', { required: true })
+const partId = defineModel<string | null>('partId', { required: true })
 
 const data = useDataStore()
 const NONE = 'none'
@@ -106,6 +108,8 @@ const ghost =
           </Select>
         </dd>
       </div>
+
+      <PartField v-model="partId" :trigger-class="ghost" />
 
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">시작 날짜</dt>

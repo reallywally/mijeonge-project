@@ -36,6 +36,8 @@ const snapshot = (projectId: string): ProjectSnapshot => ({
   entries: [],
   tasks: [],
   taskThreadLinks: [],
+  parts: [],
+  partMembers: [],
 })
 
 let me: Me | null = user

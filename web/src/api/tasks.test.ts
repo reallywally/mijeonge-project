@@ -130,6 +130,7 @@ describe('한 번에 등록 — 서버 갈래', () => {
       start: null,
       due: null,
       priority: 'normal',
+      partId: null,
       createdAt: '2026-10-12T01:00:00Z',
       commentCount: 0,
     }

@@ -4,6 +4,7 @@ import * as api from '@/api'
 import { kstToday, localDay, monthDay, nowIso } from '@/lib/date'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import type {
   Entry,
   EntryKind,
@@ -29,6 +30,7 @@ export function isOverdue(thread: Thread, today: string) {
  */
 export const useThreadStore = defineStore('thread', () => {
   const data = useDataStore()
+  const partStore = usePartStore()
 
   /** 고른 프로젝트의 안건만 */
   const threads = computed<Thread[]>(() =>
@@ -58,12 +60,23 @@ export const useThreadStore = defineStore('thread', () => {
     })
   })
 
+  /** [내 파트 | 전체] 로 거른 행 — 안건 목록이 쓴다. 상세는 거르지 않는다 */
+  const visibleRows = computed<ThreadRow[]>(() =>
+    partStore.visible ? rows.value.filter((r) => partStore.showsThread(r.thread.id)) : rows.value,
+  )
+
+  /* 아래 수는 보이는 것만 센다 */
+
   /** 아직 아무 기록이 없는 안건 */
-  const queuedCount = computed(() => rows.value.filter((r) => r.thread.state === 'queued').length)
+  const queuedCount = computed(
+    () => visibleRows.value.filter((r) => r.thread.state === 'queued').length,
+  )
   /** 기록은 있지만 아직 못 정한 안건 */
-  const openCount = computed(() => rows.value.filter((r) => r.thread.state === 'open').length)
+  const openCount = computed(
+    () => visibleRows.value.filter((r) => r.thread.state === 'open').length,
+  )
   /** 결정 기한을 넘긴 안건 */
-  const overdueCount = computed(() => rows.value.filter((r) => r.overdue).length)
+  const overdueCount = computed(() => visibleRows.value.filter((r) => r.overdue).length)
 
   function settledLabel(decision: ThreadEvent, lastRefine: ThreadEvent | null) {
     const when = `${monthDay(decision.at)}에 정해`
@@ -150,6 +163,8 @@ export const useThreadStore = defineStore('thread', () => {
       options: cleanOptions(input.options ?? []),
       dueDate: input.dueDate || null,
       ownerId: input.ownerId ?? null,
+      /* 안 보내면 공통 — 작업과 달리 따를 상위가 없다 */
+      partId: input.partId ?? null,
     }
     if (!data.mock) {
       try {
@@ -162,6 +177,7 @@ export const useThreadStore = defineStore('thread', () => {
       }
     }
     if (data.rejectOwner(clean.ownerId, 'THREAD_OWNER_NOT_FOUND')) return null
+    if (data.rejectPart(clean.partId)) return null
     const id = data.nextId('nt')
     data.allThreads.unshift({
       id,
@@ -184,6 +200,7 @@ export const useThreadStore = defineStore('thread', () => {
     if (!thread) return false
     if (patch.title !== undefined && !patch.title.trim()) return false
     if (data.rejectOwner(patch.ownerId, 'THREAD_OWNER_NOT_FOUND', thread.ownerId)) return false
+    if (data.rejectPart(patch.partId, thread.partId)) return false
     const clean: ThreadPatch = {}
     if (patch.title !== undefined) clean.title = thread.title = patch.title.trim()
     if (patch.description !== undefined)
@@ -191,6 +208,7 @@ export const useThreadStore = defineStore('thread', () => {
     if (patch.options !== undefined) clean.options = thread.options = cleanOptions(patch.options)
     if (patch.dueDate !== undefined) clean.dueDate = thread.dueDate = patch.dueDate || null
     if (patch.ownerId !== undefined) clean.ownerId = thread.ownerId = patch.ownerId
+    if (patch.partId !== undefined) clean.partId = thread.partId = patch.partId
     if (!data.mock) {
       void data.save(`thread:${threadId}`, () => api.patchThread(threadId, clean), replaceThread)
     }
@@ -249,6 +267,7 @@ export const useThreadStore = defineStore('thread', () => {
   return {
     threads,
     rows,
+    visibleRows,
     queuedCount,
     openCount,
     overdueCount,

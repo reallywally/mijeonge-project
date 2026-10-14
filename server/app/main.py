@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, chat, comment, health, project, search, task, thread
+from app.api import admin, auth, chat, comment, health, part, project, search, task, thread
 from app.api.deps import require_json, require_scope
 from app.config import settings
 from app.errors import install_error_handlers
@@ -29,6 +29,7 @@ app.include_router(admin.router, prefix="/api")
 # 여기 한 곳에서 본다. 새 라우터를 붙일 때도 이 목록에 넣는다
 for scoped in (
     project.router,
+    part.router,
     task.router,
     comment.router,
     thread.router,

@@ -23,6 +23,8 @@ export interface GanttItem {
   /** 자식이 있는 묶음 작업 — 막대가 자식들의 기간이 되고 끌 수 없다 */
   type?: 'project'
   open: boolean
+  /** '내 파트' 에서 보이는 작업의 조상이라 선 것 — 흐리게 그린다 */
+  context?: boolean
 }
 
 /** 간트의 끝 날짜는 열린 구간이다 — 9/15 까지 하는 일은 9/16 에서 끝난다 */
@@ -31,7 +33,17 @@ export const dueToEnd = (due: string) => shiftDays(dayToDate(due), 1)
 /** 막대를 놓은 자리를 다시 우리 날짜로 — 끝에서 하루를 뺀다 */
 export const endToDue = (end: Date) => isoDay(shiftDays(end, -1))
 
-export function toGanttItems(rows: TaskRow[], statusLabel: (s: TaskStatus) => string): GanttItem[] {
+/**
+ * 묶음인지 · 부모가 누구인지는 **건네받은 행 안에서** 본다 — '내 파트' 로 거르면 자식이 다 빠진 묶음이
+ * 생기는데, 그것을 묶음으로 두면 자식 없는 project 막대가 기간 없이 선다. 부모가 빠졌으면 최상위로 올린다.
+ */
+export function toGanttItems(
+  rows: TaskRow[],
+  statusLabel: (s: TaskStatus) => string,
+  isContext: (taskId: string) => boolean = () => false,
+): GanttItem[] {
+  const ids = new Set(rows.map((r) => r.task.id))
+  const parents = new Set(rows.map((r) => r.task.parentId).filter((id) => id !== null))
   return rows.map((row) => {
     const task = row.task
     const scheduled = task.start !== null && task.due !== null
@@ -39,12 +51,13 @@ export function toGanttItems(rows: TaskRow[], statusLabel: (s: TaskStatus) => st
       id: task.id,
       text: task.title,
       key: task.key,
-      parent: task.parentId ?? '0',
+      parent: task.parentId !== null && ids.has(task.parentId) ? task.parentId : '0',
       status: task.status,
       statusLabel: statusLabel(task.status),
       ownerName: row.ownerName,
       open: true,
-      ...(row.childCount > 0 ? { type: 'project' as const } : {}),
+      ...(isContext(task.id) ? { context: true } : {}),
+      ...(parents.has(task.id) ? { type: 'project' as const } : {}),
       ...(scheduled
         ? { start_date: dayToDate(task.start!), end_date: dueToEnd(task.due!) }
         : { unscheduled: true }),

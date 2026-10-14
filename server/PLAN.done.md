@@ -235,6 +235,34 @@
 
 **커밋** — ① 리비전 · 모델 ② 세션 · 로그인 ③ 권한 의존성 · 이미 있는 API ④ 관리 API ⑤ 시드 · 명령
 
+## 9단계 · 파트 — 보기 범위(권한 아님)
+
+계약은 `../docs/api/part.md`, 화면은 `../web/PLAN.md` 9단계가 맡는다. **파트는 보기 범위지 권한이 아니다** —
+서버는 스냅샷에 프로젝트 전부를 지금처럼 싣고, 거르는 것은 화면이다.
+
+### 할 일
+
+- [x] 리비전 `20261014_0009_part.py` — `part`(유니크 `(project_id, name)` · `(id, project_id)`) · `part_member`(pk `(part_id, member_id)` · `member_id` 인덱스),
+      `task.part_id` · `thread.part_id` 는 복합 FK `(part_id, project_id)` → `part(id, project_id)`. sqlite(`test_schema`)에서도 돌게 batch 로 건다
+- [x] `app/services/part.py` — 만들기 · 이름(409 `PART_NAME_TAKEN`, 보관 포함) · 보관/되살리기 · 넣기(400 `MEMBER_NOT_IN_PROJECT`) · 빼기(멱등),
+      본문 `partId` 검사 `guard_part`(400 `PART_NOT_FOUND` · `PART_ARCHIVED`) — **새로 달 때만** 부른다
+- [x] `access.py` 의 `SCOPED_PARAMS` 에 `part_id` — 부여 안 된 프로젝트의 파트는 404 `PART_NOT_FOUND`(없는 것과 같은 응답)
+- [x] 이미 있는 API — 작업 등록(키를 안 보내면 상위의 파트, `model_fields_set` 으로 가른다) · 일괄 등록(배열 순서대로 같은 규칙, 틀린 줄은 `tasks.N.partId`) ·
+      작업 수정(하위는 안 따라감) · 안건 등록(안 보내면 null) · 수정, 프로젝트에서 빼면 그 프로젝트 파트들의 소속도 지움, 스냅샷 `parts`(이름 순) · `partMembers`
+- [x] 시드 pt1 · pt2 · pt3 — 계약 '시드 · 목업' 표 그대로(프론트 `fixtures/parts.ts` 와 같은 값)
+- [x] `docs/api/snapshot.md` 의 '빈 값은 null 이 아니다' 에 `partId`, 스냅샷 모양에 키 둘. 계약 대조 검사는 domain.ts 에 `partId` 가 아직 없어도 돌고, 있으면 `string | null` 인지 본다
+- [x] 테스트 `test_part_api.py`(43개) · `test_schema.py` 에 파트 복합 FK 둘
+- [x] 따로 만든 Postgres DB 에서 `upgrade head` → `alembic check` → 시드 → `downgrade -1` → `upgrade head` → `alembic check`, 다른 프로젝트 파트를 다는 UPDATE 가 FK 로 막히는 것까지 보고 지웠다. 개발 DB 는 `0008_auth` 그대로다
+
+### 알게 된 것
+
+- **일괄 등록의 `partId` 는 등록 요청의 줄(`BatchTaskIn`)에만 둔다** — 초안 `ProposedTask` 에 더하면 챗봇의 `proposal` 이벤트 모양까지 바뀐다
+- **상위를 따라온 파트가 보관이면 400 `PART_ARCHIVED`** 다 — 계약의 '새로 다는 파트' 를 글자대로 읽었다. 공통으로 떨어뜨릴지는 `API.md` Q32 로 열어 뒀다
+- `MEMBER_NOT_IN_PROJECT` 는 부여만 본다 — 역할 · 활성은 따지지 않는다(계약에 없다). 없는 멤버도 같은 400 이다
+- 파트를 지우는 길은 없다. 프로젝트가 지워지면 cascade 로 같이 간다
+
+**커밋** — ① 리비전 · 모델 ② 파트 API · 경계 ③ 이미 있는 API · 스냅샷 ④ 시드 · 문서
+
 ## 7단계 · AI 챗봇 — 저장된 안건 · 작업을 찾아 답한다 — 끝난 부분
 
 ### 7-1 검색 (Claude 없이)

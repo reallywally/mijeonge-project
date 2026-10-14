@@ -18,6 +18,7 @@
 | `docs/api/snapshot.md` | `ProjectSnapshot` 응답 · `ProjectInput` 요청 · `task.key` 발번 |
 | `docs/api/chat.md` | AI 챗봇 — 요청 · SSE 스트림 · 근거 표시 · 검색 · 작업 초안 · 한 번에 등록 |
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
+| `docs/api/part.md` | 파트 — 보기 범위(권한 아님) · 파트 관리 · 작업 · 안건의 `partId` |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
 - 새 도메인의 계약이 길어지면(표 한 줄로 안 끝나면) `docs/api/<도메인>.md` 를 새로 세우고 위 표에 줄을 더한다
@@ -142,10 +143,19 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | PUT · DELETE | `/api/projects/{projectId}/members/{memberId}` | 부여 · 역할 변경 · 빼기 (프로젝트 관리자 · 시스템 관리자) | `ProjectMember` · 204 | 구현 |
 | PATCH | `/api/projects/{projectId}` | 프로젝트 이름 수정 (프로젝트 관리자 · 시스템 관리자) | `Project` | 구현 |
 
+파트(`server/PLAN.md` 9단계 · `web/PLAN.md` 9단계). **보기 범위지 권한이 아니다** — 거르는 것은 화면이다. 모양은 `docs/api/part.md`.
+**이미 있는 API 도 바뀐다** — 작업 · 안건 등록 · 수정의 `partId`, 스냅샷의 `parts` · `partMembers`.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| POST | `/api/projects/{projectId}/parts` | 파트 만들기 (프로젝트 관리자 · 시스템 관리자) | `Part` · 201 | 구현 |
+| PATCH | `/api/parts/{partId}` | 이름 · 보관 · 되살리기 | `Part` | 구현 |
+| PUT · DELETE | `/api/parts/{partId}/members/{memberId}` | 파트에 넣기 · 빼기 (멱등) | `PartMember` · 204 | 구현 |
+
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q32).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q33).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

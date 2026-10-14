@@ -94,14 +94,26 @@ describe('스냅샷', () => {
     entries: [],
     tasks: [],
     taskThreadLinks: [{ taskId: 'k1', threadId: 't1' }],
+    parts: [{ id: 'pt1', projectId: 'p1', name: '인프라', active: true }],
+    partMembers: [{ partId: 'pt1', memberId: 'u3' }],
   }
 
   it('JSON 키를 data 스토어 이름으로 옮긴다', () => {
     const records = toRecords(snapshot)
     expect(Object.keys(records).sort()).toEqual(
-      ['allEntries', 'allTasks', 'allThreads', 'project', 'taskThreads'].sort(),
+      [
+        'allEntries',
+        'allTasks',
+        'allThreads',
+        'partMembers',
+        'parts',
+        'project',
+        'taskThreads',
+      ].sort(),
     )
     expect(records.taskThreads).toBe(snapshot.taskThreadLinks)
+    expect(records.parts).toBe(snapshot.parts)
+    expect(records.partMembers).toBe(snapshot.partMembers)
   })
 
   it('프로젝트 id 를 경로에 싣는다', async () => {

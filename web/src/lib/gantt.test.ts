@@ -43,6 +43,24 @@ describe('스토어를 간트가 먹는 모양으로', () => {
     expect(item('HW-5').ownerName).toBeNull()
   })
 
+  it('거른 행만 받으면 그 안에서 묶음 · 부모를 본다 — 자식이 다 빠진 묶음은 막대가 된다', () => {
+    const rows = useTaskStore().rows.filter((r) => ['k5', 'k6', 'k14', 'k15'].includes(r.task.id))
+    const got = toGanttItems(rows, taskStatusLabel, (id) => id === 'k6' || id === 'k14')
+    const by = (id: string) => got.find((i) => i.id === id)!
+    expect(by('k14').type).toBe('project')
+    expect(by('k15').type).toBeUndefined()
+    expect(by('k6').context).toBe(true)
+    expect(by('k15').context).toBeUndefined()
+
+    /* k7 묶음의 자식이 하나도 안 들어오면 묶음이 아니다. 부모가 빠졌으면 최상위로 */
+    const lone = toGanttItems(
+      useTaskStore().rows.filter((r) => r.task.id === 'k7'),
+      taskStatusLabel,
+    )
+    expect(lone[0].type).toBeUndefined()
+    expect(lone[0].parent).toBe('0')
+  })
+
   it('끌어 놓은 끝 날짜는 다시 하루를 빼서 돌아온다', () => {
     expect(endToDue(dueToEnd('2026-09-15'))).toBe('2026-09-15')
     expect(endToDue(new Date(2026, 9, 1))).toBe('2026-09-30')

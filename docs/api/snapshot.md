@@ -12,7 +12,7 @@
 
 ```ts
 import type {
-  Entry, Project, Task, TaskThreadLink, Thread,
+  Entry, Part, PartMember, Project, Task, TaskThreadLink, Thread,
 } from '@/types/domain'
 
 /** GET /api/projects/{projectId}/snapshot */
@@ -24,8 +24,15 @@ export interface ProjectSnapshot {
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
+  /** 파트 — 이름 순 · 보관 포함 (docs/api/part.md) */
+  parts: Part[]
+  /** (partId, memberId) 순 */
+  partMembers: PartMember[]
 }
 ```
+
+`parts` · `partMembers` 는 2026-10-14 에 더했다(`part.md`). **파트는 권한이 아니라 보기 범위라**
+서버는 거르지 않고 프로젝트의 것을 전부 싣는다 — '내 파트' 로 거르는 것은 화면이다.
 
 `project` 를 뺀 네 배열이 `data.ts` 의 `allThreads` · `allEntries` · `allTasks` · `taskThreads` 로
 들어간다. **JSON 키와 스토어 이름은 넷 다 다르다** —
@@ -68,6 +75,8 @@ export interface Project {
 | `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
 | `tasks` | `task.projectId === projectId` |
 | `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지) |
+| `parts` | `part.projectId === projectId` — 보관(`active=false`)도 싣는다 |
+| `partMembers` | `partId` 가 위 `parts` 안에 있는 것 |
 
 페이징 · 필터 · 정렬 파라미터는 없다. 프로젝트 하나치를 통째로 준다 (Q8 닫힘).
 
@@ -92,18 +101,20 @@ export interface Project {
 | `threads` | `created_at ASC, id ASC` | 아니다. 화면이 다시 정렬한다 |
 | `tasks` | `created_at ASC, id ASC` | 아니다 |
 | 링크 둘 | 두 id 오름차순 | 아니다 |
+| `parts` | `name ASC, id ASC` | 아니다 — 고르는 자리가 이 순서로 그린다 |
+| `partMembers` | `partId ASC, memberId ASC` | 아니다 |
 
 기대하지 않는 넷도 **같은 데이터면 늘 같은 순서**로 낸다. 응답이 요청마다 흔들리면 눈으로 비교할 수 없다.
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 여섯 이름뿐**이다. 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 일곱 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
-| `Thread` | `ownerId` · `parentThreadId` · `dueDate` |
+| `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` |
 | `Entry` | `ownerId` |
-| `Task` | `parentId` · `ownerId` · `start` · `due` |
+| `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
 
 그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Entry.detail` · `Task.body` 는
@@ -112,7 +123,7 @@ export interface Project {
 | 겹 | 어떻게 |
 | --- | --- |
 | DB | `entry.note TEXT NOT NULL DEFAULT ''`. 배열이 되는 것은 전부 자식 테이블이라 행이 없으면 자연히 빈 배열이다 |
-| ORM | `Mapped[str]` — Optional 을 쓰지 않는다. `null` 을 내는 위 일곱 자리만 `Mapped[str \| None]` |
+| ORM | `Mapped[str]` — Optional 을 쓰지 않는다. `null` 을 내는 위 표의 자리만 `Mapped[str \| None]` |
 | 응답 스키마 | Pydantic 필드를 `note: str = ''` · `detail: list[str] = Field(default_factory=list)` 로 둔다. 타입이 `str` · `list[str]` 이라 **`None` 이 오면 응답 직렬화에서 터진다** — 조용히 새지 않는다 |
 
 응답 직전에 `None` 을 `''` 로 바꾸는 변환은 두지 않는다. 그 변환은 모델이 틀린 것을 덮는다.

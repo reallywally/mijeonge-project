@@ -3,6 +3,7 @@ import { isMockMode } from '@/api/mode'
 import { mockDb } from '@/api/mockAuth'
 import { projects, tasks } from '@/fixtures'
 import { nowIso } from '@/lib/date'
+import { inheritedPartId } from '@/lib/part'
 import type {
   Task,
   TaskBatchInput,
@@ -87,11 +88,13 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
     })
 
   const taskIdByTempId: Record<string, string> = {}
+  const madeByTempId: Record<string, Task> = {}
   const made = input.tasks.map((t): Task => {
     mockSeq += 1
     const taskId = `bt${mockSeq}`
     taskIdByTempId[t.tempId] = taskId
-    return {
+    const parent = t.parentTempId === null ? null : madeByTempId[t.parentTempId]
+    const task: Task = {
       id: taskId,
       projectId,
       key: takeMockKey(projectId),
@@ -103,9 +106,13 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       start: t.start,
       due: t.due,
       priority: t.priority,
+      /* 초안은 partId 를 싣지 않는다 — 부모를 따른다 (docs/api/part.md) */
+      partId: inheritedPartId(undefined, parent),
       createdAt: nowIso(),
       commentCount: 0,
     }
+    madeByTempId[t.tempId] = task
+    return task
   })
   return { tasks: made, taskIdByTempId }
 }

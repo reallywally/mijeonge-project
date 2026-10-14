@@ -18,6 +18,7 @@ THREAD_KEYS = {
     "ownerId",
     "parentThreadId",
     "createdAt",
+    "partId",
 }
 ENTRY_KEYS = {
     "id",
@@ -43,6 +44,7 @@ TASK_KEYS = {
     "priority",
     "createdAt",
     "commentCount",
+    "partId",
 }
 
 
@@ -73,6 +75,9 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
         "entries",
         "tasks",
         "taskThreadLinks",
+        # 파트 — 보관 포함 전부. 거르는 것은 화면이다 (docs/api/part.md)
+        "parts",
+        "partMembers",
     }
     assert set(snap["project"]) == {"id", "name", "taskKeyPrefix"}
     assert set(snap["threads"][0]) == THREAD_KEYS

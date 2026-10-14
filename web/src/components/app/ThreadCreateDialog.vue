@@ -24,6 +24,7 @@ const description = ref('')
 const options = ref('')
 const dueDate = ref('')
 const ownerId = ref<string | null>(null)
+const partId = ref<string | null>(null)
 const keepOpen = ref(false)
 const saving = ref(false)
 
@@ -36,6 +37,7 @@ function resetForm() {
   options.value = ''
   dueDate.value = ''
   ownerId.value = null
+  partId.value = null
 }
 
 watch(
@@ -59,6 +61,7 @@ async function submit() {
     options: options.value.split('\n'),
     dueDate: dueDate.value || null,
     ownerId: ownerId.value,
+    partId: partId.value,
   })
   saving.value = false
   /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
@@ -114,7 +117,11 @@ function onKeydown(e: KeyboardEvent) {
           </ThreadFields>
         </div>
 
-        <ThreadPropertyPanel v-model:due-date="dueDate" v-model:owner-id="ownerId">
+        <ThreadPropertyPanel
+          v-model:due-date="dueDate"
+          v-model:owner-id="ownerId"
+          v-model:part-id="partId"
+        >
           <template #top>
             <div class="flex items-center gap-2">
               <ThreadStateBadge state="queued" />

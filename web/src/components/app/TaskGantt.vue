@@ -7,6 +7,7 @@ import { isoDay } from '@/lib/date'
 import { endToDue, rangeLabel, toGanttItems, weekLabel } from '@/lib/gantt'
 import type { GanttItem } from '@/lib/gantt'
 import { taskStatusLabel } from '@/lib/task'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 
 /* 간트차트 — 목록이 평평한 게시판인 자리에서 이쪽은 계층 트리다.
@@ -18,11 +19,15 @@ const emit = defineEmits<{
 }>()
 
 const taskStore = useTaskStore()
+const partStore = usePartStore()
 const host = ref<HTMLElement | null>(null)
 const scale = ref<'week' | 'month'>('week')
 
-const items = computed(() => toGanttItems(taskStore.rows, taskStatusLabel))
-const period = computed(() => rangeLabel(taskStore.rows))
+/* [내 파트 | 전체] 로 거른 것. '내 파트' 여도 보이는 작업의 조상은 서 있어 트리가 끊기지 않는다 */
+const items = computed(() =>
+  toGanttItems(taskStore.visibleRows, taskStatusLabel, partStore.isContextTask),
+)
+const period = computed(() => rangeLabel(taskStore.visibleRows))
 
 /* 그리드 칸은 dhtmlx 가 innerHTML 로 그린다 — Vue 컴포넌트를 넣을 수 없어 글자로 짠다.
    우리 것임을 알아보게 tg- 를 붙이고 색은 아래 <style> 에서 토큰으로만 준다 */
@@ -113,7 +118,10 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.templates.task_text = () => ''
   g.templates.timeline_cell_class = (_task: GanttTask, date: Date) => cellClass(date)
   g.templates.grid_row_class = (_s: Date, _e: Date, task: GanttTask) =>
-    asItem(task).unscheduled ? 'tg-row-unscheduled' : ''
+    [
+      asItem(task).unscheduled ? 'tg-row-unscheduled' : '',
+      asItem(task).context ? 'tg-row-context' : '',
+    ].join(' ')
 
   g.attachEvent('onBeforeLightbox', () => false)
   g.attachEvent('onTaskClick', (id: string | number, e: Event) => {
@@ -381,5 +389,10 @@ function showToday() {
 
 .tg-root .gantt_grid_data .gantt_row.tg-row-unscheduled .tg-title {
   color: var(--muted-foreground);
+}
+
+/* '내 파트' 에서 길을 잇느라 선 조상 — 내 일이 아니라 흐리게 */
+.tg-root .gantt_grid_data .gantt_row.tg-row-context {
+  opacity: 0.55;
 }
 </style>

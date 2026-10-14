@@ -21,6 +21,8 @@ class ThreadOut(Schema):
     # thread_option 행을 문자열 배열로 편다 — 화면이 string[] 로 들고 있다
     options: list[str] = Field(default_factory=list)
     due_date: date | None = None
+    # null 이면 프로젝트 공통 (docs/api/part.md)
+    part_id: str | None = None
 
 
 class EntryOut(Schema):
@@ -46,6 +48,8 @@ class ThreadCreate(Schema):
     # 받은 순서대로 저장한다. 빈 줄 거르기는 화면 몫이다
     options: list[str] = []
     due_date: date | None = None
+    # 안 보내면 공통(null)이다 — 작업과 달리 따를 상위가 없다
+    part_id: str | None = None
 
 
 class EntryCreate(Schema):
@@ -73,6 +77,8 @@ class ThreadPatch(Schema):
     options: list[str] | None = None
     # null 로 보내면 비운다
     due_date: date | None = None
+    # null 로 보내면 공통
+    part_id: str | None = None
 
     @field_validator("title", "description", "options")
     @classmethod
