@@ -12,19 +12,33 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    true,
     union_all,
 )
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute, aliased
 
 from app.errors import ApiError, not_found
-from app.models import Entry, EntryDetail, Task, TaskLine, TaskThreadLink, Thread, ThreadOption
+from app.models import (
+    Entry,
+    EntryDetail,
+    Member,
+    Task,
+    TaskLine,
+    TaskThreadLink,
+    Thread,
+    ThreadOption,
+)
 from app.schemas.search import (
     LinkedTask,
     LinkedThread,
     SearchResult,
+    SimilarPair,
+    TaskBrief,
     TaskDoc,
     TaskHit,
+    TaskList,
     TaskPlace,
     ThreadDoc,
     ThreadHit,
@@ -45,6 +59,12 @@ THRESHOLD = 0.5
 CONTAINS_SCORE = 0.9
 SNIPPET_WIDTH = 80
 QUERY_MAX = 200
+
+# 챗봇의 작업 전체 목록 상한. 넘으면 번호 순으로 앞에서 자르고 truncated 로 알린다
+TASK_LIST_MAX = 300
+# 비슷한 작업 쌍 — 이보다 낮으면 안 낸다. 0.3 이면 '설계' ↔ '데이터 설계'(0.43),
+# '초기 스키마 DDL 작성' ↔ '초기 스키마 반영 및 검증'(0.32)까지 걸린다
+SIMILAR_THRESHOLD = 0.3
 
 # 같은 점수면 이 순서로 고른다 (API.md '검색')
 _THREAD_PLACES: tuple[ThreadPlace, ...] = ("title", "description", "option", "entry")
@@ -336,3 +356,124 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
             LinkedThread(id=id_, title=title, state=state) for id_, title, state in threads.all()
         ],
     )
+
+
+def _brief(task: Task, key_of: dict[str, str], name_of: dict[str, str]) -> TaskBrief:
+    return TaskBrief(
+        id=task.id,
+        key=task.key,
+        title=task.title,
+        status=task.status,
+        parent_key=key_of.get(task.parent_id) if task.parent_id else None,
+        owner=name_of.get(task.owner_id) if task.owner_id else None,
+    )
+
+
+async def _owner_names(session: AsyncSession, tasks: Sequence[Task]) -> dict[str, str]:
+    owners = {t.owner_id for t in tasks if t.owner_id is not None}
+    if not owners:
+        return {}
+    rows = await session.execute(select(Member.id, Member.name).where(Member.id.in_(owners)))
+    return {id_: name for id_, name in rows.tuples().all()}
+
+
+async def list_tasks(
+    session: AsyncSession, project_id: str, status: TaskStatus | None = None
+) -> TaskList:
+    """프로젝트 작업 전체 — 번호 순. 본문은 싣지 않는다(필요하면 get_task)."""
+    tasks = (
+        (
+            await session.execute(
+                select(Task).where(Task.project_id == project_id).order_by(Task.seq)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # 상위 키는 거르기 전 전체에서 찾는다 — 상위가 다른 상태여도 이름이 보이게
+    key_of = {t.id: t.key for t in tasks}
+    picked = [t for t in tasks if status is None or t.status == status][: TASK_LIST_MAX + 1]
+    name_of = await _owner_names(session, picked)
+    total = sum(1 for t in tasks if status is None or t.status == status)
+    return TaskList(
+        total=total,
+        truncated=total > TASK_LIST_MAX,
+        tasks=[_brief(t, key_of, name_of) for t in picked[:TASK_LIST_MAX]],
+    )
+
+
+async def similar_tasks(
+    session: AsyncSession, project_id: str, task_id: str | None = None, limit: int = 20
+) -> list[SimilarPair]:
+    """제목끼리 · (제목 + 본문)끼리 trigram 유사도가 높은 작업 쌍. Postgres(pg_trgm) 전용.
+
+    task_id(id 또는 키)를 주면 그 작업이 낀 쌍만. 모든 쌍을 견주므로 작업 수의 제곱으로 는다 —
+    수백 개까지를 생각한 것이다.
+    """
+    target: str | None = None
+    if task_id is not None:
+        target = (await get_task(session, project_id, task_id)).task.id
+
+    body = (
+        select(
+            TaskLine.task_id.label("task_id"),
+            func.string_agg(
+                TaskLine.text, aggregate_order_by(literal(" "), TaskLine.sort_order)
+            ).label("body"),
+        )
+        .group_by(TaskLine.task_id)
+        .subquery()
+    )
+    docs = (
+        select(
+            Task.id.label("id"),
+            Task.title.label("title"),
+            (Task.title + " " + func.coalesce(body.c.body, "")).label("doc"),
+        )
+        .outerjoin(body, body.c.task_id == Task.id)
+        .where(Task.project_id == project_id)
+        .cte("docs")
+    )
+    a, b = aliased(docs), aliased(docs)
+    title_score = cast(func.similarity(a.c.title, b.c.title), Float)
+    doc_score = cast(func.similarity(a.c.doc, b.c.doc), Float)
+    best = func.greatest(title_score, doc_score)
+    rows = (
+        await session.execute(
+            select(a.c.id, b.c.id, title_score, doc_score)
+            .where(
+                a.c.id < b.c.id,
+                best >= SIMILAR_THRESHOLD,
+                or_(a.c.id == target, b.c.id == target) if target is not None else true(),
+            )
+            .order_by(best.desc(), a.c.id, b.c.id)
+            .limit(limit)
+        )
+    ).all()
+    if not rows:
+        return []
+
+    tasks = (
+        (await session.execute(select(Task).where(Task.project_id == project_id))).scalars().all()
+    )
+    by_id = {t.id: t for t in tasks}
+    key_of = {t.id: t.key for t in tasks}
+    name_of = await _owner_names(session, [by_id[i] for row in rows for i in row[:2]])
+    pairs: list[SimilarPair] = []
+    for a_id, b_id, t_score, d_score in rows:
+        x, y = by_id[a_id], by_id[b_id]
+        relation: Literal["parent_child", "siblings"] | None = None
+        if x.parent_id == y.id or y.parent_id == x.id:
+            relation = "parent_child"
+        elif x.parent_id is not None and x.parent_id == y.parent_id:
+            relation = "siblings"
+        pairs.append(
+            SimilarPair(
+                a=_brief(x, key_of, name_of),
+                b=_brief(y, key_of, name_of),
+                score=round(max(t_score, d_score), 2),
+                matched="title" if t_score >= d_score else "body",
+                relation=relation,
+            )
+        )
+    return pairs

@@ -198,6 +198,8 @@ async def test_request_follows_the_settings(session: AsyncSession) -> None:
         "get_thread",
         "search_tasks",
         "get_task",
+        "list_tasks",
+        "find_similar_tasks",
         "list_members",
         "propose_tasks",
     }
@@ -819,3 +821,73 @@ def test_proposal_note_carries_parent_id() -> None:
         {"tasks": [{"tempId": "t1", "parentId": "k1", "title": "화면 설계"}], "status": "pending"}
     )
     assert '"parent_id": "k1"' in chat_service.proposal_note(proposal)
+
+
+# --- 작업 전체 목록 · 비슷한 작업 쌍 ------------------------------------------
+
+
+async def test_list_tasks_gives_every_task_in_order(session: AsyncSession) -> None:
+    await seed(session)
+    content, is_error = await chat_service.run_tool(session, "p1", "list_tasks", {})
+    assert not is_error
+    listed = json.loads(content)
+    keys = [t["key"] for t in listed["tasks"]]
+    assert listed["total"] == len(keys) and listed["truncated"] is False
+    assert keys[:3] == ["HW-1", "HW-2", "HW-3"]
+    assert not any(k.startswith("PAS-") for k in keys)  # 이 프로젝트만
+    by_key = {t["key"]: t for t in listed["tasks"]}
+    assert by_key["HW-2"]["parentKey"] == "HW-1" and by_key["HW-1"]["parentKey"] is None
+    assert set(by_key["HW-1"]) == {"id", "key", "title", "status", "parentKey", "owner"}
+    assert any(t["owner"] == "김서연" for t in listed["tasks"])
+
+
+async def test_list_tasks_by_status_keeps_parent_keys(session: AsyncSession) -> None:
+    await seed(session)
+    content, _ = await chat_service.run_tool(session, "p1", "list_tasks", {"status": "todo"})
+    tasks = json.loads(content)["tasks"]
+    assert tasks and all(t["status"] == "todo" for t in tasks)
+    # 상위가 todo 가 아니어도 상위 키는 보인다
+    assert any(t["parentKey"] is not None for t in tasks)
+
+
+async def test_list_tasks_is_capped(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    await seed(session)
+    monkeypatch.setattr(chat_service.search_service, "TASK_LIST_MAX", 2)
+    listed = json.loads((await chat_service.run_tool(session, "p1", "list_tasks", {}))[0])
+    assert len(listed["tasks"]) == 2 and listed["truncated"] is True and listed["total"] > 2
+
+
+def test_new_tools_have_labels() -> None:
+    assert chat_service.tool_label("list_tasks", {}) == "작업 목록 보는 중"
+    assert chat_service.tool_label("find_similar_tasks", {}) == "비슷한 작업 찾는 중"
+
+
+async def test_similar_tasks_pairs_and_relations(pg_session: AsyncSession) -> None:
+    """Postgres 에서만 — HW-1 '설계' 와 HW-2 '데이터 설계' 는 상위 ↔ 하위, HW-2 · HW-3 은 형제다."""
+    content, is_error = await chat_service.run_tool(pg_session, "p1", "find_similar_tasks", {})
+    assert not is_error, content
+    pairs = json.loads(content)
+    assert pairs
+    scores = [p["score"] for p in pairs]
+    assert scores == sorted(scores, reverse=True)
+    assert all(p["score"] >= 0.3 for p in pairs)
+    by_keys = {frozenset((p["a"]["key"], p["b"]["key"])): p for p in pairs}
+    assert by_keys[frozenset(("HW-1", "HW-2"))]["relation"] == "parent_child"
+    assert by_keys[frozenset(("HW-1", "HW-2"))]["matched"] in ("title", "body")
+    assert all(not k.startswith("PAS-") for p in pairs for k in (p["a"]["key"], p["b"]["key"]))
+
+
+async def test_similar_tasks_around_one_task(pg_session: AsyncSession) -> None:
+    content, is_error = await chat_service.run_tool(
+        pg_session, "p1", "find_similar_tasks", {"task_id": "hw-1", "limit": 5}
+    )
+    assert not is_error
+    pairs = json.loads(content)
+    assert pairs and len(pairs) <= 5
+    assert all("HW-1" in (p["a"]["key"], p["b"]["key"]) for p in pairs)
+
+    # 다른 프로젝트의 작업은 없는 것처럼
+    content, is_error = await chat_service.run_tool(
+        pg_session, "p1", "find_similar_tasks", {"task_id": "PAS-1"}
+    )
+    assert is_error and json.loads(content) == {"error": "작업을 찾을 수 없습니다."}

@@ -14,7 +14,14 @@ TEXT_MAX = 2000
 ANSWER_MAX = 20000
 
 ToolName = Literal[
-    "search_threads", "get_thread", "search_tasks", "get_task", "list_members", "propose_tasks"
+    "search_threads",
+    "get_thread",
+    "search_tasks",
+    "get_task",
+    "list_tasks",
+    "find_similar_tasks",
+    "list_members",
+    "propose_tasks",
 ]
 
 
@@ -135,3 +142,13 @@ class GetThreadInput(Schema):
 
 class GetTaskInput(Schema):
     task_id: str
+
+
+class ListTasksInput(Schema):
+    status: Literal["todo", "doing", "blocked", "done"] | None = None
+
+
+class FindSimilarTasksInput(Schema):
+    # id 나 작업 키. 없으면 프로젝트 전체에서 쌍을 찾는다
+    task_id: str | None = None
+    limit: int = Field(default=20, ge=1, le=30)

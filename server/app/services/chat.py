@@ -33,8 +33,10 @@ from app.schemas.chat import (
     DeltaEvent,
     DoneEvent,
     ErrorEvent,
+    FindSimilarTasksInput,
     GetTaskInput,
     GetThreadInput,
+    ListTasksInput,
     ProposalEvent,
     SearchTasksInput,
     SearchThreadsInput,
@@ -73,6 +75,21 @@ SYSTEM_PROMPT = """\
 - 검색은 글자 일부가 맞는 것을 찾는다. 처음에 안 나오면 표현을 바꿔 다시 찾는다
   (예: 'OS' ↔ '운영체제' ↔ '우분투', 'DB' ↔ '데이터베이스')
 - 안건을 찾았으면 get_thread 로 이력을 읽고 답한다. 검색 결과의 한 줄만 보고 단정하지 않는다
+- 도구 고르기: 특정 낱말 · 주제의 작업은 search_tasks, 작업 전체를 훑어야 하면(전체 현황 · 빠진 것)
+  list_tasks, 중복 · 겹치는 작업은 find_similar_tasks 다. 하나를 자세히 보려면 get_task
+
+## 중복 · 비슷한 작업
+1. find_similar_tasks 로 글자가 비슷한 후보 쌍을 받는다. 작업 하나를 콕 집었으면 task_id 를 넣는다
+2. 글자는 달라도 뜻이 같은 것(예: '계정 발급' ↔ '계정 배포')은 못 잡는다 —
+   프로젝트 전체를 물었으면 list_tasks 로 제목을 훑어 보탠다
+3. 후보는 get_task 로 본문을 읽고 판단한다. 다 못 읽으면 점수 높은 것부터 읽고,
+   읽지 못한 것은 "제목만 봤다" 고 밝힌다
+4. relation 이 parent_child(상위 ↔ 하위)인 쌍은 원래 범위가 겹친다 — 중복으로 치지 않는다.
+   siblings 는 같은 상위 밑이라 겹칠 가능성이 크다.
+   상위 본문의 체크리스트와 하위 작업이 겹치는 것은 말해도 된다
+5. "중복 가능성 높음" · "확인 필요" 로 나눠 말하고,
+   왜 그렇게 봤는지(제목 · 본문 · 담당자 · 기간)를 짧게 붙인다.
+   합치거나 지우는 것은 화면에서 사람이 한다 — 너는 바꾸지 못한다
 
 ## 답하는 규칙
 1. 결정이 바뀐 안건은 이력의 **마지막 decide · change 줄이 지금의 결정**이다.
@@ -92,8 +109,12 @@ SYSTEM_PROMPT = """\
 - 답에 쓴 안건 · 작업마다 본문 안에 [[thread:ID]] · [[task:ID]] 를 붙인다.
   ID 는 도구 결과의 id 그대로다
 - 도구 결과에 없던 ID 는 절대 쓰지 않는다
-- 답은 한국어로, 짧고 분명하게 쓴다.
+- ID 는 [[…]] 안에만 쓴다. 본문에는 키(HW-4) · 제목 · 이름으로 말하고 ID 를 따로 늘어놓지 않는다.
+  담당자는 ID(ownerId) 가 아니라 이름으로 말한다 — 이름이 없으면 list_members 로 바꾼다
+- 답은 한국어 존댓말(~습니다 · ~요)로, 짧고 분명하게 쓴다. 영어 문장을 섞지 않는다.
   이력의 kind 이름(decide 등)을 그대로 쓰지 말고 우리말로 풀어 쓴다
+- "찾아보겠습니다" 처럼 도구를 부르는 과정을 글로 중계하지 않는다 — 화면이 따로 보여 준다.
+  글은 찾은 뒤의 답만 쓴다
 
 ## 작업 초안
 너는 작업을 저장하지 못한다. 초안을 내면 화면이 카드로 보여 주고, 사용자가 [등록] 을 눌러야
@@ -177,7 +198,7 @@ TOOLS: list[BetaToolParam] = [
     {
         "name": "search_tasks",
         "description": (
-            "이 프로젝트의 작업을 글자로 찾는다. 제목과 본문 줄을 본다. "
+            "이 프로젝트의 작업을 낱말 · 주제로 찾는다. 제목과 본문 줄을 본다. "
             "status: todo 해야 할 일 / doing 진행 중 / blocked 막힘 / done 완료."
         ),
         "input_schema": {
@@ -200,6 +221,39 @@ TOOLS: list[BetaToolParam] = [
             "type": "object",
             "properties": {"task_id": {"type": "string"}},
             "required": ["task_id"],
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": (
+            "이 프로젝트의 작업 전체를 한 줄씩 "
+            "(id · key · title · status · parentKey · owner 이름) 준다. "
+            "번호 순, 본문 없음. 작업 전체를 훑어야 할 때(전체 현황 · 중복 · 빠진 것) 쓴다. "
+            "특정 낱말로 찾을 때는 search_tasks, 본문은 get_task 를 쓴다. "
+            "truncated 가 true 면 앞에서 잘린 것이다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["todo", "doing", "blocked", "done"]},
+            },
+        },
+    },
+    {
+        "name": "find_similar_tasks",
+        "description": (
+            "제목 · 본문 글자가 비슷한 작업 쌍을 유사도(score 0 ~ 1) 순으로 준다. "
+            "중복 · 겹치는 작업을 찾을 때 먼저 쓴다. "
+            "task_id(id 나 작업 키)를 주면 그 작업이 낀 쌍만 준다. "
+            "글자가 다르고 뜻만 같은 것은 못 찾는다. "
+            "relation: parent_child 는 상위 ↔ 하위, siblings 는 같은 상위 밑, null 은 관계 없음."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 30},
+            },
         },
     },
     {
@@ -300,6 +354,10 @@ def tool_label(name: ToolName, raw: object) -> str:
             return "안건 이력 읽는 중"
         case "get_task":
             return "작업 읽는 중"
+        case "list_tasks":
+            return "작업 목록 보는 중"
+        case "find_similar_tasks":
+            return "비슷한 작업 찾는 중"
         case "list_members":
             return "멤버 확인 중"
         case "propose_tasks":
@@ -332,6 +390,16 @@ async def run_tool(
                 d = GetTaskInput.model_validate(raw)
                 task = await search_service.get_task(session, project_id, d.task_id)
                 return task.model_dump_json(by_alias=True), False
+            case "list_tasks":
+                e = ListTasksInput.model_validate(raw)
+                listed = await search_service.list_tasks(session, project_id, status=e.status)
+                return listed.model_dump_json(by_alias=True), False
+            case "find_similar_tasks":
+                f = FindSimilarTasksInput.model_validate(raw)
+                pairs = await search_service.similar_tasks(
+                    session, project_id, task_id=f.task_id, limit=f.limit
+                )
+                return _dump_list(pairs), False
             case "list_members":
                 # 담당자 후보는 그 프로젝트의 활성 멤버뿐이다 (docs/api/auth.md)
                 members = await project_service.list_members(session, assignable_in=project_id)
