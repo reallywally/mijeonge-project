@@ -15,7 +15,8 @@ vi.mock('@/views/ThreadListView.vue', () => ({ default: { template: '<div />' } 
 vi.mock('@/views/ProjectsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/LoginView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/AdminMembersView.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('@/views/ProjectMembersView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/ProjectSettingsView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/ProjectPartsView.vue', () => ({ default: { template: '<div />' } }))
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -114,22 +115,39 @@ describe('쓰다가 세션이 끝나면', () => {
 })
 
 describe('권한 가드', () => {
-  it('일반 사용자는 사용자 관리 · 프로젝트 등록 · 프로젝트 멤버에 못 들어간다', async () => {
+  it('일반 사용자는 사용자 관리 · 프로젝트 등록 · 프로젝트 관리 · 파트 관리에 못 들어간다', async () => {
     await router.push('/admin/members')
     expect(path()).toBe('/tasks')
     await router.push('/projects/new')
     expect(path()).toBe('/projects')
+    await router.push('/projects/p1/settings')
+    expect(path()).toBe('/tasks')
+    await router.push('/projects/p1/parts?part=pt1')
+    expect(path()).toBe('/tasks')
+    /* 옛 주소도 넘긴 뒤 같은 가드에 걸린다 */
     await router.push('/projects/p1/members')
     expect(path()).toBe('/tasks')
   })
 
-  it('프로젝트 관리자는 그 프로젝트의 멤버 화면만 연다', async () => {
+  it('프로젝트 관리자는 그 프로젝트의 관리 화면 둘만 연다', async () => {
+    me = { ...user, projectRoles: { p1: 'admin', p2: 'user' } }
+    setActivePinia(createPinia())
+    await router.push('/projects/p1/settings')
+    expect(path()).toBe('/projects/p1/settings')
+    await router.push('/projects/p1/parts?part=pt1')
+    expect(path()).toBe('/projects/p1/parts?part=pt1')
+    await router.push('/projects/p2/settings')
+    expect(path()).toBe('/tasks')
+    await router.push('/projects/p2/parts')
+    expect(path()).toBe('/tasks')
+  })
+
+  it('옛 멤버 주소(/projects/:id/members)는 프로젝트 관리로 넘긴다', async () => {
     me = { ...user, projectRoles: { p1: 'admin', p2: 'user' } }
     setActivePinia(createPinia())
     await router.push('/projects/p1/members')
-    expect(path()).toBe('/projects/p1/members')
-    await router.push('/projects/p2/members')
-    expect(path()).toBe('/tasks')
+    expect(path()).toBe('/projects/p1/settings')
+    expect(router.currentRoute.value.name).toBe('project-settings')
   })
 
   it('시스템 관리자는 다 연다', async () => {
@@ -137,8 +155,10 @@ describe('권한 가드', () => {
     setActivePinia(createPinia())
     await router.push('/admin/members')
     expect(path()).toBe('/admin/members')
-    await router.push('/projects/p2/members')
-    expect(path()).toBe('/projects/p2/members')
+    await router.push('/projects/p2/settings')
+    expect(path()).toBe('/projects/p2/settings')
+    await router.push('/projects/p2/parts')
+    expect(path()).toBe('/projects/p2/parts')
   })
 
   it('부여받은 프로젝트가 없으면 일반 사용자는 프로젝트 목록(안내)으로, 시스템 관리자는 등록으로', async () => {

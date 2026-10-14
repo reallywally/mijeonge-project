@@ -90,6 +90,16 @@ export function partChoices(parts: Part[], current: string | null): Part[] {
   return sortParts(parts.filter((p) => p.active || p.id === current))
 }
 
+/** 목록 화면의 파트 거르기 — 'all' · 'common' · 파트 id. 주소(?part=)로 들어온 값이 이 프로젝트의 파트가 아니면 전체 */
+export type PartFilter = 'all' | 'common' | string
+
+export function partFilterOf(raw: unknown, parts: Pick<Part, 'id'>[]): PartFilter {
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value === 'common') return 'common'
+  if (typeof value === 'string' && parts.some((p) => p.id === value)) return value
+  return 'all'
+}
+
 /** 파트 이름은 앞뒤 공백을 떼고 1 ~ 50자 (docs/api/part.md) */
 export const PART_NAME_MAX = 50
 

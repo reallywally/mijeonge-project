@@ -10,12 +10,11 @@ import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
-import { usePartStore } from '@/stores/part'
-import ProjectMembersView from './ProjectMembersView.vue'
 import TasksView from './TasksView.vue'
 import ThreadListView from './ThreadListView.vue'
 
-/* 파트가 화면까지 닿는지 — [내 파트 | 전체] · 파트 칩 · 파트 거르기 · 고르기 · 멤버 화면의 파트 칸.
+/* 파트가 화면까지 닿는지 — [내 파트 | 전체] · 파트 칩 · 파트 거르기(?part= 포함) · 고르기.
+   파트 관리 화면은 ProjectAdminViews.test 가 본다.
    간트는 이 파일에서 띄우지 않는다(TasksView.test 가 스텁으로 본다) */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 vi.mock('dhtmlx-gantt', () => ({
@@ -34,17 +33,12 @@ async function mountAt(path: string) {
       { path: '/tasks/:id', component: TasksView },
       { path: '/threads', component: ThreadListView },
       { path: '/threads/:id', component: ThreadListView },
-      { path: '/projects/:projectId/members', component: ProjectMembersView },
       { path: '/:rest(.*)', component: Blank },
     ],
   })
   router.push(path)
   await router.isReady()
-  const view = path.startsWith('/threads')
-    ? ThreadListView
-    : path.startsWith('/projects')
-      ? ProjectMembersView
-      : TasksView
+  const view = path.startsWith('/threads') ? ThreadListView : TasksView
   const w = mount(view, { global: { plugins: [router] }, attachTo: document.body })
   await flushPromises()
   return w
@@ -114,6 +108,15 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
     expect(w.text()).toContain('총 5건')
   })
 
+  it('?part= 로 들어오면 그 파트로 걸러진 채 열린다. 이 프로젝트에 없는 파트면 거르지 않는다', async () => {
+    await signedIn('u1@innoflow.local')
+    const w = await mountAt('/tasks?part=pt1')
+    expect(w.text()).toContain('총 4건')
+
+    const other = await mountAt('/tasks?part=pt9')
+    expect(other.text()).toContain('총 21건')
+  })
+
   it('시스템 관리자는 속한 파트가 없어 전환이 없다', async () => {
     await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
     const w = await mountAt('/tasks')
@@ -156,56 +159,14 @@ describe('안건 목록의 [내 파트 | 전체]', () => {
     const row = w.findAll('tbody tr').find((r) => r.text().includes('서버 OS 결정'))!
     expect(row.find('[data-part-chip]').text()).toBe('인프라')
   })
-})
 
-describe('프로젝트 멤버 화면의 파트 칸', () => {
-  it('파트를 만들고, 사람을 넣고 빼고, 보관한다', async () => {
+  it('?part= 로 들어오면 그 파트로 걸러진 채 열리고, 초기화하면 풀린다', async () => {
     await signedIn('u1@innoflow.local')
-    const w = await mountAt('/projects/p1/members')
+    const w = await mountAt('/threads?part=pt1')
+    expect(w.text()).toContain('총 3건')
+    expect(w.text()).toContain('서버 OS 결정')
 
-    await w.get('input[aria-label="새 파트 이름"]').setValue('디자인')
-    await click(bodyButton('파트 만들기'))
-    const part = usePartStore()
-    const design = part.parts.find((p) => p.name === '디자인')!
-    expect(design).toBeTruthy()
-    expect(w.find(`li[data-part-id="${design.id}"]`).exists()).toBe(true)
-
-    const pill = () =>
-      w
-        .get('tr[data-member-id="u2"]')
-        .find<HTMLButtonElement>('button[aria-label="박지훈 · 디자인"]')
-    expect(pill().attributes('aria-pressed')).toBe('false')
-    await click(pill().element)
-    expect(pill().attributes('aria-pressed')).toBe('true')
-    expect(part.membersOf(design.id)).toEqual(['u2'])
-    await click(pill().element)
-    expect(part.membersOf(design.id)).toEqual([])
-
-    await click(w.get('button[aria-label="인프라 보관"]').element)
-    expect(part.parts.find((p) => p.id === 'pt1')!.active).toBe(false)
-    expect(w.text()).toContain('보관한 파트 1개')
-    /* 이도현은 보관된 인프라에 여전히 속해 있다 — 빼기만 된다 */
-    expect(w.get('tr[data-member-id="u3"]').text()).toContain('인프라 (보관)')
-
-    await click(bodyButton('보관한 파트 1개 보기'))
-    await click(w.get('button[aria-label="인프라 되살리기"]').element)
-    expect(part.parts.find((p) => p.id === 'pt1')!.active).toBe(true)
-  })
-
-  it('이름 칸을 고치고 벗어나면 이름이 바뀐다. 겹치면 알리고 되돌린다', async () => {
-    await signedIn('u1@innoflow.local')
-    const w = await mountAt('/projects/p1/members')
-    const field = w.get('li[data-part-id="pt1"] input')
-
-    await field.setValue('인프라 · 보안')
-    await field.trigger('blur')
-    await flushPromises()
-    expect(usePartStore().partName('pt1')).toBe('인프라 · 보안')
-
-    await field.setValue('AI')
-    await field.trigger('blur')
-    await flushPromises()
-    expect(vi.mocked(toastError).mock.calls.at(-1)![0]).toMatchObject({ code: 'PART_NAME_TAKEN' })
-    expect((field.element as HTMLInputElement).value).toBe('인프라 · 보안')
+    await click(bodyButton('초기화'))
+    expect(w.text()).toContain('총 9건')
   })
 })

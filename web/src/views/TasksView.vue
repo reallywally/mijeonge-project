@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { partFilterOf } from '@/lib/part'
 import { TASK_STATUS_OPTIONS } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
@@ -128,6 +129,17 @@ function resetPage() {
 }
 /* 보기 범위를 바꾸면 줄 수가 달라진다 — 없는 쪽에 머물지 않게 첫 쪽으로 */
 watch(() => partStore.scope, resetPage)
+
+/* 파트 관리의 '작업 N건 보기' 로 오면 그 파트로 걸러진 채 연다(?part=). 파트를 받기 전이면 받은 뒤에 맞춘다 */
+watch(
+  () => [route.query.part, partStore.parts.length] as const,
+  ([raw]) => {
+    if (raw === undefined) return
+    partFilter.value = partFilterOf(raw, partStore.parts)
+    resetPage()
+  },
+  { immediate: true },
+)
 
 function search() {
   query.value = titleDraft.value.trim()
