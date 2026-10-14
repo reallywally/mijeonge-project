@@ -281,3 +281,46 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 - [x] `stores/chat.ts` — 초안은 **done 에서** 답 줄에 붙는다(실패 · 멈춘 답은 다음 질문에 안 실리므로). 새 초안이 오면 앞의 대기 중은 `cancelled`.
       `register` → `task.addTaskBatch` → `registered` · `keyByTempId`. 실패면 알림 · 대기 중 유지. 등록하는 동안은 새 질문을 막는다
 - [x] `components/app/ChatProposalCard.vue` — 계층 들여쓰기 · 담당자 · 기간 · 우선순위(보통이 아닐 때) · [취소] [등록], 등록 뒤 작업 칩(`/tasks/:id`), 취소 뒤 한 줄로 접힘
+
+## 9단계 · 파트
+
+프로젝트 안을 파트(AI · 인프라 · 기간계 연동 …)로 나눈다. **보기 범위지 권한이 아니다** — 목적은 노이즈 줄이기다.
+디자이너가 평소에 "서버 OS 결정" 을 안 봐도 되지만, 자기 작업이 그 결정에 걸리면 바로 보여야 한다.
+계약은 `../docs/api/part.md`, 서버 쪽은 `../server/PLAN.md` 9단계다. 목업으로 먼저 돌게 만들고 서버 갈래는 계약대로 붙였다(2026-10-14).
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 거르는 자리 | 서버는 다 싣고 **화면이 거른다** — 규칙은 `lib/part.ts` 의 `visibleInMyParts` 하나. 목록 · 칸반 · 간트 · 안건 목록 · 메뉴의 수가 같이 쓴다 | 판단이 갈리면 목록에는 있는데 간트에는 없는 작업이 생긴다 |
+| 원본과 보이는 것 | 스토어의 `rows` 는 그대로 두고 `visibleRows` 를 더했다. 상태 칩 · '눈여겨볼 것' 의 수는 `visibleRows` 로 센다. 상세 · 챗봇 · 상위 작업 고르기 · 안건 걸기 후보는 거르지 않는다 | 상세는 주소로 열면 '내 파트' 여도 연다(계약). 화면에 없는 것을 '몇 건' 이라 적으면 찾을 수 없다 |
+| 조상 | '내 파트' 에서 조상으로만 선 작업은 간트 그리드에서 흐리게, 목록에서 제목을 회색으로. 조상에 걸린 안건도 보인다(규칙 3 을 글자 그대로) | 경로 · 간트 트리가 끊기지 않게. 상위 작업을 막은 안건은 내 작업도 막는다 |
+| 간트 묶음 | 묶음인지 · 부모가 누구인지를 **건네받은 행 안에서** 본다(`toGanttItems`) | 걸러서 자식이 다 빠진 묶음을 project 로 두면 기간 없는 막대가 선다 |
+| 전환 기억 | localStorage `innoflow.partScope.<memberId>.<projectId>` | 프로젝트마다 기억(계약). 같은 브라우저를 다른 사람이 쓸 수 있어 사람도 키에 넣었다 |
+| 하위 작업의 파트 | 작업 추가 팝업 · 상세의 하위 작업 추가 둘 다 **늘 `partId` 를 실어 보낸다** — 상위의 파트, 보관이면 공통 | 상속에 기대면 상위가 보관 파트일 때 서버가 400 `PART_ARCHIVED` 를 낸다 (Q32) |
+| 레코드 자리 | `data` 스토어가 `parts` · `partMembers` 를 들고, `stores/part.ts` 가 고른 프로젝트의 파트 · 나의 소속 · 전환 · 파트 관리를 맡는다 | '레코드는 data, 계산은 도메인 스토어' 를 그대로 |
+
+### 체크리스트
+
+- [x] `types/domain.ts` — `Part` · `PartMember` · `PartInput` · `PartPatch`, `Task.partId` · `Thread.partId`, `ProjectSnapshot.parts` · `partMembers`,
+      `TaskInput.partId?`(안 보내면 상위를 따른다 — 키째로 빠진다) · `TaskPatch` · `ThreadInput` · `ThreadPatch` 의 `partId`
+- [x] 픽스처 — `fixtures/parts.ts`(pt1 인프라 · pt2 AI · pt3 기간계 연동, 소속), 작업 · 안건의 `partId` 를 계약 '시드 · 목업' 표 그대로
+- [x] `src/api/parts.ts` — 만들기 · 이름/보관(PATCH) · 넣기 · 빼기. 목업 갈래는 `mockAuth` 의 db 에 `parts` · `partMembers` 를 두고
+      `PART_NOT_FOUND`(404 · 남의 프로젝트도) · `PART_NAME_TAKEN`(보관 포함) · `MEMBER_NOT_IN_PROJECT` · `FORBIDDEN` · 이름 1 ~ 50자를 본다.
+      프로젝트에서 사람을 빼면 목업 db 의 파트 소속도 지운다. 스냅샷 → 스토어(`toRecords`)에 두 키
+- [x] 목업 갈래의 작업 · 안건 쓰기가 `PART_NOT_FOUND`(400) · `PART_ARCHIVED` 를 낸다(`data.rejectPart`). 이미 달린 보관 파트는 그대로 둔다.
+      작업 등록은 상속(`lib/part.ts` 의 `inheritedPartId`)하고 따라온 파트도 검사한다. 일괄 등록(챗봇 초안)도 상속
+- [x] `lib/part.ts` — `visibleInMyParts` · `defaultPartScope` · `partChoices` · `partNameProblem` · `inheritedPartId` + `lib/part.test.ts`(시드로 사람마다 · 규칙 하나씩)
+- [x] [내 파트 | 전체] — `PartScopeToggle.vue`, 작업 탭 줄 · 안건 목록 머리 줄. 기본은 일반 사용자 = 내 파트, 관리자 = 전체. 속한 파트가 없으면 숨고 전체
+- [x] 파트 고르기 — `PartField.vue` 를 작업 · 안건 속성 칸에(공통 + 활성 파트 + 이미 달린 보관 파트 '(보관)'). 파트가 없는 프로젝트에서는 줄째로 숨는다
+- [x] 파트 칩 — `PartChip.vue`, 작업 목록 행 · 칸반 카드 · 안건 목록 행. 공통이면 안 그린다
+- [x] 작업 목록 조회 조건에 파트(전체 · 공통 · 파트마다, 보관 포함). [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다
+- [x] 프로젝트 멤버 화면 — 파트 칸(만들기 · 이름은 칸에서 고치고 Enter/벗어나면 · Esc 되돌리기 · 보관 · '보관한 파트 N개' 접기 · 되살리기),
+      표에 파트 열(사람마다 활성 파트 알약 토글, 이미 속한 보관 파트는 빼기만). 사람을 빼면 스토어의 파트 소속도 같이 걷는다
+- [x] 테스트 — `lib/part.test.ts` · `stores/part.test.ts`(목업 서버) · `stores/server.test.ts` '파트 (서버 갈래)' · `views/PartViews.test.ts` · `lib/gantt.test.ts`
+
+남겨 둔 것
+
+- [ ] 서버 9단계가 `구현` 으로 오르면 서버 모드로 한 번 돌려 본다 — 지금은 `fetch` 를 가짜로 바꾼 테스트로만 계약 경로를 봤다
+- [ ] Q32(상위가 보관 파트일 때의 상속) — 사용자 답에 따라 목업 갈래의 `addTask` 한 줄을 맞춘다
+- [ ] 챗봇 답은 파트를 모른다 — '내 파트' 로 보고 있어도 챗봇은 프로젝트 전체를 찾는다(계약). 칩을 누르면 상세가 열리므로 막히지는 않는다

@@ -8,6 +8,16 @@ import type { Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
  * 간트차트에는 막대가 없어 목록에서 챙겨야 한다.
  */
 
+/** 파트 소속 — docs/api/part.md '시드 · 목업'. 여기 없는 작업은 공통(null)이다 */
+const PART_OF: Record<string, string> = {
+  k4: 'pt1',
+  k19: 'pt1',
+  k20: 'pt1',
+  k21: 'pt1',
+  ...Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`k${i + 6}`, 'pt2'])),
+  k18: 'pt3',
+}
+
 function mk(
   id: string,
   key: string,
@@ -31,6 +41,7 @@ function mk(
     start,
     due,
     priority: 'normal',
+    partId: PART_OF[id] ?? null,
     createdAt: '2026-09-04T00:20:00Z',
     commentCount: taskComments.filter((c) => c.taskId === id).length,
   }

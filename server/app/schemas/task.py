@@ -32,6 +32,8 @@ class TaskOut(Schema):
     start: date | None
     due: date | None
     priority: str
+    # null 이면 프로젝트 공통 (docs/api/part.md)
+    part_id: str | None
     created_at: Utc
     # 댓글 본문은 안 싣는다 — 목록 · 칸반이 개수만 찍고, 본문은 상세가 따로 받는다
     comment_count: int
@@ -66,6 +68,9 @@ class TaskCreate(Schema):
     due: date | None = None
     priority: TaskPriorityIn = "normal"
     thread_ids: list[str] = []
+    # **키를 안 보내면 상위 작업의 파트를 따른다**(최상위면 null). null 을 보내면 공통 —
+    # 둘을 가르려고 서비스가 `model_fields_set` 으로 읽는다 (docs/api/part.md)
+    part_id: str | None = None
 
 
 class TaskPatch(Schema):
@@ -80,6 +85,8 @@ class TaskPatch(Schema):
     start: date | None = None
     due: date | None = None
     priority: TaskPriorityIn | None = None
+    # null 로 보내면 공통. 하위 작업은 따라 바뀌지 않는다
+    part_id: str | None = None
     # 보내면 본문을 통째로 갈아끼운다. 기본값은 '안 보냄' 표시일 뿐이고(exclude_unset 으로 가른다),
     # 본문의 빈 값은 [] 라 null 은 타입에서 422 로 걸린다 (API.md '빈 값은 null 이 아니다')
     body: list[TaskLinePatchIn] = []
@@ -104,8 +111,15 @@ class ProposedTask(Schema):
     priority: TaskPriorityIn = "normal"
 
 
+class BatchTaskIn(ProposedTask):
+    """일괄 등록의 한 줄 — 초안에 `partId` 를 더한 것. 초안(`ProposedTask`) 자체에는 두지 않는다 —
+    챗봇이 내는 모양(`proposal` 이벤트)이 그대로 남게. 안 보내면 상위(앞의 줄)의 파트를 따른다."""
+
+    part_id: str | None = None
+
+
 class TaskBatchInput(Schema):
-    tasks: list[ProposedTask]
+    tasks: list[BatchTaskIn]
 
 
 class TaskBatchResult(Schema):

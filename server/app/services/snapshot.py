@@ -17,11 +17,13 @@ from collections.abc import Sequence
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Entry, Task, TaskThreadLink, Thread
+from app.models import Entry, Part, PartMember, Task, TaskThreadLink, Thread
+from app.schemas.part import PartMemberOut
 from app.schemas.project import ProjectOut
 from app.schemas.snapshot import SnapshotOut
 from app.schemas.task import TaskThreadLinkOut
 from app.services import project as project_service
+from app.services.part import to_part
 from app.services.task import comment_counts, to_task
 from app.services.thread import to_entry, to_thread
 
@@ -55,6 +57,17 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
         .where(TaskThreadLink.project_id == project_id)
         .order_by(TaskThreadLink.task_id, TaskThreadLink.thread_id),
     )
+    parts = await _all(
+        session,
+        select(Part).where(Part.project_id == project_id).order_by(Part.name, Part.id),
+    )
+    part_members = await _all(
+        session,
+        select(PartMember)
+        .join(Part, Part.id == PartMember.part_id)
+        .where(Part.project_id == project_id)
+        .order_by(PartMember.part_id, PartMember.member_id),
+    )
 
     return SnapshotOut(
         project=ProjectOut.model_validate(project),
@@ -62,4 +75,6 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
         entries=[to_entry(row) for row in entries],
         tasks=[to_task(row, counts.get(row.id, 0)) for row in tasks],
         task_thread_links=[TaskThreadLinkOut.model_validate(row) for row in task_threads],
+        parts=[to_part(row) for row in parts],
+        part_members=[PartMemberOut.model_validate(row) for row in part_members],
     )

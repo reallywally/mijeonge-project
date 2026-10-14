@@ -25,6 +25,8 @@ from app.models import (
     Entry,
     EntryDetail,
     Member,
+    Part,
+    PartMember,
     Project,
     ProjectMember,
     Task,
@@ -103,6 +105,30 @@ def grants() -> list[ProjectMember]:
     ]
 
 
+# 파트 — docs/api/part.md '시드 · 목업' 표 그대로. 프론트 목업이 같은 id 와 소속을 쓴다.
+# 표에 없는 작업 · 안건은 공통(null)이다. p2 · p3 에는 파트가 없다(전환이 숨는 경우)
+PARTS = [("pt1", "인프라"), ("pt2", "AI"), ("pt3", "기간계 연동")]
+PART_MEMBERS = [("pt1", "u3"), ("pt2", "u1"), ("pt2", "u4"), ("pt3", "u2")]
+TASK_PARTS = {
+    **dict.fromkeys(("k4", "k19", "k20", "k21"), "pt1"),
+    **dict.fromkeys((f"k{n}" for n in range(6, 17)), "pt2"),
+    "k18": "pt3",
+}
+THREAD_PARTS = {
+    **dict.fromkeys(("t1", "t2", "t4"), "pt1"),
+    **dict.fromkeys(("t3", "t7", "t8"), "pt2"),
+    "t5": "pt3",
+}
+
+
+def parts() -> list[Part]:
+    return [Part(id=id_, project_id="p1", name=name) for id_, name in PARTS]
+
+
+def part_members() -> list[PartMember]:
+    return [PartMember(part_id=part_id, member_id=member_id) for part_id, member_id in PART_MEMBERS]
+
+
 def thread(
     id_: str,
     title: str,
@@ -123,6 +149,7 @@ def thread(
         owner_id=owner,
         due_date=d(due),
         parent_thread_id=None,
+        part_id=THREAD_PARTS.get(id_),
         created_at=at(created),
         options=[
             ThreadOption(id=f"{id_}o{i + 1}", thread_id=id_, text=text, sort_order=i)
@@ -336,6 +363,7 @@ def task(
         start=d(start),
         due=d(due),
         priority="normal",
+        part_id=TASK_PARTS.get(id_),
         created_at=at("2026-09-04T00:20:00Z"),
         lines=[
             TaskLine(
@@ -488,6 +516,8 @@ async def clear(session: AsyncSession) -> None:
         Entry,
         ThreadOption,
         Thread,
+        PartMember,
+        Part,
         AuthSession,
         AuthIdentity,
         ProjectMember,
@@ -539,6 +569,9 @@ async def seed(session: AsyncSession) -> None:
     await session.flush()
     session.add_all(identities())
     session.add_all(grants())
+    session.add_all(parts())
+    await session.flush()
+    session.add_all(part_members())
     session.add_all(in_order(threads()))
     await session.flush()
     session.add_all(in_order(entries()))
@@ -561,6 +594,7 @@ async def run() -> None:
         "project": len(projects()),
         "member": len(members()),
         "grant": len(grants()),
+        "part": len(PARTS),
         "thread": len(threads()),
         "entry": len(entries()),
         "task": len(tasks()),

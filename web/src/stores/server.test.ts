@@ -4,6 +4,8 @@ import { isUnreachable } from '@/api'
 import {
   entries,
   members,
+  partMembers,
+  parts,
   projectGrants,
   projects,
   tasks,
@@ -12,6 +14,7 @@ import {
 } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 import type { Me, ProjectSnapshot, Task } from '@/types/domain'
@@ -47,6 +50,10 @@ const snapshotOf = (projectId: string): ProjectSnapshot => ({
   tasks: tasks.filter((t) => t.projectId === projectId),
   taskThreadLinks: taskThreadLinks.filter((l) =>
     tasks.some((t) => t.id === l.taskId && t.projectId === projectId),
+  ),
+  parts: parts.filter((p) => p.projectId === projectId),
+  partMembers: partMembers.filter((pm) =>
+    parts.some((p) => p.id === pm.partId && p.projectId === projectId),
   ),
 })
 
@@ -361,7 +368,15 @@ describe('만드는 것', () => {
     const made = { id: 'p9', name: '새 프로젝트', taskKeyPrefix: 'K7QX' }
     on('POST /api/projects', () => json(made, 201))
     on('GET /api/projects/p9/snapshot', () =>
-      json({ project: made, threads: [], entries: [], tasks: [], taskThreadLinks: [] }),
+      json({
+        project: made,
+        threads: [],
+        entries: [],
+        tasks: [],
+        taskThreadLinks: [],
+        parts: [],
+        partMembers: [],
+      }),
     )
     on('GET /api/projects/p9/members', () => json([]))
 
@@ -374,5 +389,89 @@ describe('만드는 것', () => {
     expect(data.currentProjectId).toBe('p9')
     expect(data.loadedProjectId).toBe('p9')
     expect(data.allTasks).toEqual([])
+  })
+})
+
+describe('파트 (서버 갈래)', () => {
+  it('스냅샷의 parts · partMembers 를 그대로 든다', async () => {
+    const data = await booted()
+    expect(data.parts).toEqual(snapshotOf('p1').parts)
+    expect(data.partMembers).toEqual(snapshotOf('p1').partMembers)
+  })
+
+  it('만들기 · 이름 · 보관 · 넣기 · 빼기는 계약의 경로로 가고 응답으로 갈아끼운다', async () => {
+    await booted()
+    const part = usePartStore()
+    const data = useDataStore()
+    const made = { id: 'srv-pt', projectId: 'p1', name: '디자인', active: true }
+    on('POST /api/projects/p1/parts', () => json(made, 201))
+    on('PATCH /api/parts/srv-pt', (body) => json({ ...made, ...(body as object) }))
+    on('PUT /api/parts/srv-pt/members/u2', () => json({ partId: 'srv-pt', memberId: 'u2' }))
+    on('DELETE /api/parts/srv-pt/members/u2', () => new Response(null, { status: 204 }))
+
+    expect(await part.createPart(' 디자인 ')).toBe(true)
+    expect(calls.at(-1)).toEqual({ route: 'POST /api/projects/p1/parts', body: { name: '디자인' } })
+    expect(part.partName('srv-pt')).toBe('디자인')
+
+    await part.setPartActive('srv-pt', false)
+    expect(calls.at(-1)!.body).toEqual({ active: false })
+    expect(data.parts.find((p) => p.id === 'srv-pt')!.active).toBe(false)
+
+    await part.joinPart('srv-pt', 'u2')
+    /* 본문 없는 쓰기 — Content-Type 도 싣지 않는다 (Q29) */
+    expect(calls.at(-1)).toEqual({ route: 'PUT /api/parts/srv-pt/members/u2', body: undefined })
+    expect(part.membersOf('srv-pt')).toEqual(['u2'])
+    await part.leavePart('srv-pt', 'u2')
+    expect(part.membersOf('srv-pt')).toEqual([])
+  })
+
+  it('서버가 거절하면(PART_NAME_TAKEN) 알리고 아무것도 넣지 않는다', async () => {
+    const data = await booted()
+    on('POST /api/projects/p1/parts', () =>
+      json({ code: 'PART_NAME_TAKEN', message: '같은 이름의 파트가 이미 있습니다.' }, 409),
+    )
+    const before = data.parts.length
+    expect(await usePartStore().createPart('인프라')).toBe(false)
+    expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'PART_NAME_TAKEN' })
+    expect(data.parts).toHaveLength(before)
+  })
+
+  it('작업 등록은 partId 를 고른 그대로 싣고, 안 고르면 키째로 빼서 상위를 따르게 한다', async () => {
+    const data = await booted()
+    const task = useTaskStore()
+    const made: Task = { ...data.allTasks[0], id: 'srv-k', key: 'HW-99', partId: 'pt2' }
+    on('POST /api/projects/p1/tasks', () => json(made, 201))
+    const input = {
+      title: '하위',
+      parentId: 'k7',
+      body: [],
+      status: 'todo' as const,
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal' as const,
+      threadIds: [],
+    }
+
+    await task.addTask(input)
+    expect(calls.at(-1)!.body).not.toHaveProperty('partId')
+    await task.addTask({ ...input, partId: null })
+    expect(calls.at(-1)!.body).toMatchObject({ partId: null })
+  })
+
+  it('파트를 바꾸면 그 필드만 PATCH 한다', async () => {
+    const data = await booted()
+    const k4 = data.allTasks.find((t) => t.id === 'k4')!
+    on('PATCH /api/tasks/k4', (body) => json({ ...k4, ...(body as object) }))
+    useTaskStore().setPart('k4', null)
+    expect(calls.at(-1)).toEqual({ route: 'PATCH /api/tasks/k4', body: { partId: null } })
+  })
+
+  it('프로젝트에서 사람을 빼면 그 사람의 파트 소속도 스토어에서 걷는다', async () => {
+    const data = await booted()
+    on('DELETE /api/projects/p1/members/u4', () => new Response(null, { status: 204 }))
+    expect(await data.revokeMember('p1', 'u4')).toBe(true)
+    expect(data.partMembers.some((pm) => pm.memberId === 'u4')).toBe(false)
+    expect(data.partMembers.some((pm) => pm.memberId === 'u1')).toBe(true)
   })
 })

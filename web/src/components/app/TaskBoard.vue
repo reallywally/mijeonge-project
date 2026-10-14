@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ListTree, MessageSquare, Plus } from 'lucide-vue-next'
+import PartChip from '@/components/app/PartChip.vue'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -33,7 +34,7 @@ const dotClass: Record<TaskStatus, string> = {
 }
 
 const columns = computed(() => {
-  const leaves = taskStore.rows.filter((r) => r.childCount === 0)
+  const leaves = taskStore.visibleRows.filter((r) => r.childCount === 0)
   return TASK_STATUS_OPTIONS.map((o) => ({
     ...o,
     dot: dotClass[o.value],
@@ -90,6 +91,7 @@ const threadTitles = (taskId: string) =>
           >
             <div class="flex items-center gap-2">
               <span class="text-xs text-muted-foreground">{{ row.task.key }}</span>
+              <PartChip :part-id="row.task.partId" />
               <div class="grow" />
               <span
                 v-if="row.task.commentCount > 0"

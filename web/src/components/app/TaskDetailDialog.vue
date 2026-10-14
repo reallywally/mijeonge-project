@@ -18,6 +18,7 @@ import { monthDay } from '@/lib/date'
 import { periodProblem, TASK_STATUS_OPTIONS } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 import type { TaskLine, TaskStatus } from '@/types/domain'
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 
 const data = useDataStore()
 const taskStore = useTaskStore()
+const partStore = usePartStore()
 const threadStore = useThreadStore()
 
 const detail = computed(() => (props.taskId ? taskStore.taskDetail(props.taskId) : null))
@@ -87,7 +89,7 @@ function commitPeriod() {
 const parentChoices = computed(() => (props.taskId ? taskStore.parentOptionsFor(props.taskId) : []))
 
 /* 하위 작업 추가 — 팝업을 띄우지 않고 제목만 받아 바로 만든다.
-   나머지는 작업 추가의 기본값(해야 할 일 · 보통 · 담당자 · 기간 미정)으로 선다.
+   나머지는 작업 추가의 기본값(해야 할 일 · 보통 · 담당자 · 기간 미정)으로 서고, 파트는 상위의 것이다.
    Enter 로 만들고 칸은 남겨 두어 이어서 적는다. Esc 나 빈 칸으로 벗어나면 닫는다. */
 const subOpen = ref(false)
 const subTitle = ref('')
@@ -122,6 +124,7 @@ async function addSubtask(e: KeyboardEvent) {
     due: null,
     priority: 'normal',
     threadIds: [],
+    partId: partStore.partForChildOf(props.taskId),
   })
   subSaving.value = false
   if (id) subTitle.value = ''
@@ -308,12 +311,14 @@ const threadChoices = computed(() => {
           :owner-id="detail.task.ownerId"
           :priority="detail.task.priority"
           :parent-id="detail.task.parentId"
+          :part-id="detail.task.partId"
           :parent-choices="parentChoices"
           show-done
           @update:status="(v) => taskStore.setStatus(detail!.task.id, v)"
           @update:owner-id="(v) => taskStore.setOwner(detail!.task.id, v)"
           @update:priority="(v) => taskStore.setPriority(detail!.task.id, v)"
           @update:parent-id="(v) => taskStore.setParent(detail!.task.id, v)"
+          @update:part-id="(v) => taskStore.setPart(detail!.task.id, v)"
           @update:start="commitPeriod"
           @update:due="commitPeriod"
         >

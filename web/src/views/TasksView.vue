@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronLeft,
@@ -13,6 +13,8 @@ import {
   SquareKanban,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import PartChip from '@/components/app/PartChip.vue'
+import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TaskBoard from '@/components/app/TaskBoard.vue'
 import TaskCreateDialog from '@/components/app/TaskCreateDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
@@ -37,6 +39,7 @@ import {
 } from '@/components/ui/table'
 import { TASK_STATUS_OPTIONS } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import type { TaskRow, TaskStatus } from '@/types/domain'
 
@@ -44,6 +47,7 @@ import type { TaskRow, TaskStatus } from '@/types/domain'
    어디에 속했는지는 제목 아래 경로로 적는다. 계층째로 보는 건 간트차트가 맡는다. */
 const data = useDataStore()
 const taskStore = useTaskStore()
+const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -57,11 +61,13 @@ const view = computed<TaskView>(() => {
 })
 const viewQuery = computed(() => (view.value === 'list' ? {} : { view: view.value }))
 
-/* 조회 조건 — 제목 · 담당자. 안건 목록과 같은 자리, 같은 순서다. 목록 탭의 것이다 */
+/* 조회 조건 — 제목 · 파트 · 담당자. 안건 목록과 같은 자리, 같은 순서다. 목록 탭의 것이다.
+   파트 거르기는 [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다 */
 const titleDraft = ref('')
 const query = ref('')
 const statusFilter = ref<'all' | TaskStatus | 'undated'>('all')
 const ownerFilter = ref<string>('all')
+const partFilter = ref<string>('all')
 const page = ref(1)
 const perPage = 8
 
@@ -94,9 +100,16 @@ function matchesOwner(row: TaskRow) {
   return row.task.ownerId === ownerFilter.value
 }
 
+function matchesPart(row: TaskRow) {
+  if (partFilter.value === 'all') return true
+  if (partFilter.value === 'common') return row.task.partId === null
+  return row.task.partId === partFilter.value
+}
+
 const filtered = computed(() =>
-  taskStore.rows.filter(
-    (r) => r.task.title.includes(query.value) && matchesStatus(r) && matchesOwner(r),
+  taskStore.visibleRows.filter(
+    (r) =>
+      r.task.title.includes(query.value) && matchesStatus(r) && matchesOwner(r) && matchesPart(r),
   ),
 )
 
@@ -113,6 +126,9 @@ const rangeLabel = computed(() =>
 function resetPage() {
   page.value = 1
 }
+/* 보기 범위를 바꾸면 줄 수가 달라진다 — 없는 쪽에 머물지 않게 첫 쪽으로 */
+watch(() => partStore.scope, resetPage)
+
 function search() {
   query.value = titleDraft.value.trim()
   resetPage()
@@ -122,6 +138,7 @@ function resetAll() {
   query.value = ''
   statusFilter.value = 'all'
   ownerFilter.value = 'all'
+  partFilter.value = 'all'
   resetPage()
 }
 function pickStatus(key: (typeof statusChips.value)[number]['key']) {
@@ -319,6 +336,7 @@ function bulkOwner(value: string) {
         칸반보드
       </RouterLink>
       <div class="grow" />
+      <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>
         <span v-if="view === 'gantt'" class="text-xs text-muted-foreground">{{ doneLabel }}</span>
@@ -373,6 +391,21 @@ function bulkOwner(value: string) {
               class="grow bg-background"
               @keyup.enter="search"
             />
+            <template v-if="partStore.parts.length > 0">
+              <span class="shrink-0 text-sm text-muted-foreground">파트</span>
+              <Select v-model="partFilter" @update:model-value="resetPage">
+                <SelectTrigger class="w-[132px] shrink-0 bg-background" aria-label="파트 거르기">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem value="common">공통</SelectItem>
+                  <SelectItem v-for="p in partStore.parts" :key="p.id" :value="p.id">{{
+                    p.active ? p.name : `${p.name} (보관)`
+                  }}</SelectItem>
+                </SelectContent>
+              </Select>
+            </template>
             <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
             <Select v-model="ownerFilter" @update:model-value="resetPage">
               <SelectTrigger class="w-[132px] shrink-0 bg-background">
@@ -480,9 +513,14 @@ function bulkOwner(value: string) {
                       <span class="flex min-w-0 items-center gap-2">
                         <span
                           class="truncate text-sm underline-offset-4 group-hover:underline"
-                          :class="row.task.status === 'done' ? 'text-muted-foreground' : ''"
+                          :class="
+                            row.task.status === 'done' || partStore.isContextTask(row.task.id)
+                              ? 'text-muted-foreground'
+                              : ''
+                          "
                           >{{ row.task.title }}</span
                         >
+                        <PartChip :part-id="row.task.partId" />
                         <span
                           v-if="row.task.commentCount > 0"
                           class="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"

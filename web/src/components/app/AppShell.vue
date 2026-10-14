@@ -157,7 +157,7 @@ async function logout() {
           >
             <SquareKanban class="size-4 shrink-0" />
             <span class="grow">작업</span>
-            <span class="text-xs text-muted-foreground">{{ taskStore.rows.length }}</span>
+            <span class="text-xs text-muted-foreground">{{ taskStore.visibleRows.length }}</span>
           </RouterLink>
           <RouterLink
             to="/threads"
@@ -166,7 +166,7 @@ async function logout() {
           >
             <ListTree class="size-4 shrink-0" />
             <span class="grow">안건</span>
-            <span class="text-xs text-muted-foreground">{{ threadStore.rows.length }}</span>
+            <span class="text-xs text-muted-foreground">{{ threadStore.visibleRows.length }}</span>
           </RouterLink>
         </nav>
 

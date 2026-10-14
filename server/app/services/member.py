@@ -15,6 +15,7 @@ from app.schemas.auth import (
     ProjectMemberOut,
 )
 from app.services import auth as auth_service
+from app.services import part as part_service
 from app.services.auth import PASSWORD
 from app.time import now
 
@@ -201,10 +202,14 @@ async def grant(
 
 
 async def revoke(session: AsyncSession, project_id: str, member_id: str) -> None:
-    """빼기 (멱등). 그 사람이 담당하던 작업 · 안건은 그대로 둔다 — 기록이다."""
+    """빼기 (멱등). 그 사람이 담당하던 작업 · 안건은 그대로 둔다 — 기록이다.
+
+    그 프로젝트 파트들의 소속은 같이 지운다 — 파트에는 부여된 사람만 있다 (docs/api/part.md).
+    """
     await session.execute(
         delete(ProjectMember).where(
             ProjectMember.project_id == project_id, ProjectMember.member_id == member_id
         )
     )
+    await part_service.leave_project_parts(session, project_id, member_id)
     await session.commit()

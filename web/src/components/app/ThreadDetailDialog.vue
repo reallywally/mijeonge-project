@@ -70,6 +70,11 @@ function setOwner(value: string | null) {
   const t = detail.value?.thread
   if (t && value !== t.ownerId) threadStore.updateThread(t.id, { ownerId: value })
 }
+
+function setPart(value: string | null) {
+  const t = detail.value?.thread
+  if (t && value !== t.partId) threadStore.updateThread(t.id, { partId: value })
+}
 </script>
 
 <template>
@@ -169,9 +174,11 @@ function setOwner(value: string | null) {
         <ThreadPropertyPanel
           :due-date="detail.thread.dueDate ?? ''"
           :owner-id="detail.thread.ownerId"
+          :part-id="detail.thread.partId"
           :overdue="detail.overdue"
           @update:due-date="setDueDate"
           @update:owner-id="setOwner"
+          @update:part-id="setPart"
         >
           <template #top>
             <div class="flex items-center gap-2">

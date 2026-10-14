@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Loader2, Plus, UserMinus } from 'lucide-vue-next'
+import { Archive, ArchiveRestore, Loader2, Plus, UserMinus } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
 import { Badge } from '@/components/ui/badge'
@@ -24,14 +24,17 @@ import {
 } from '@/components/ui/table'
 import { canManageProject } from '@/lib/access'
 import { PROJECT_ROLE_OPTIONS } from '@/lib/member'
+import { partNameProblem } from '@/lib/part'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
-import type { ProjectRole } from '@/types/domain'
+import { usePartStore } from '@/stores/part'
+import type { Part, ProjectRole } from '@/types/domain'
 
 /* 프로젝트 멤버 — 그 프로젝트의 관리자 · 시스템 관리자. 부여된 사람만 담당자로 고를 수 있다.
    주소의 프로젝트가 곧 고른 프로젝트다 — 옆의 프로젝트 선택을 바꾸면 그 프로젝트의 멤버 화면으로 옮긴다 */
 const data = useDataStore()
 const auth = useAuthStore()
+const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -138,6 +141,77 @@ async function remove(memberId: string) {
   busyId.value = null
   confirmingId.value = null
 }
+
+/* 파트 — 보기 범위지 권한이 아니다 (docs/api/part.md). 지우지 않고 보관한다:
+   지난 작업 · 안건이 그 파트를 가리킨다. 이 화면은 주소의 프로젝트 = 고른 프로젝트라 part 스토어를 그대로 쓴다 */
+const activeParts = computed(() => partStore.parts.filter((p) => p.active))
+const archivedParts = computed(() => partStore.parts.filter((p) => !p.active))
+const showArchived = ref(false)
+
+const newPartName = ref('')
+const creatingPart = ref(false)
+const newPartProblem = computed(() =>
+  newPartName.value.trim() ? partNameProblem(newPartName.value) : null,
+)
+async function addPart() {
+  if (!newPartName.value.trim() || newPartProblem.value || creatingPart.value) return
+  creatingPart.value = true
+  const ok = await partStore.createPart(newPartName.value)
+  creatingPart.value = false
+  if (ok) newPartName.value = ''
+}
+
+/* 이름은 칸에서 고치고 Enter · 벗어나면 들어간다. Esc 는 되돌린다 */
+const partDrafts = ref<Record<string, string>>({})
+watch(
+  () => partStore.parts.map((p) => `${p.id}:${p.name}`).join('|'),
+  () => {
+    partDrafts.value = Object.fromEntries(partStore.parts.map((p) => [p.id, p.name]))
+  },
+  { immediate: true },
+)
+const busyPartId = ref<string | null>(null)
+
+async function commitPartName(part: Part) {
+  const draft = partDrafts.value[part.id] ?? part.name
+  if (draft.trim() === part.name || partNameProblem(draft)) {
+    partDrafts.value[part.id] = part.name
+    return
+  }
+  busyPartId.value = part.id
+  const ok = await partStore.renamePart(part.id, draft)
+  busyPartId.value = null
+  if (!ok) partDrafts.value[part.id] = part.name
+}
+
+function revertPartName(part: Part, e: KeyboardEvent) {
+  partDrafts.value[part.id] = part.name
+  ;(e.target as HTMLInputElement).blur()
+}
+
+async function setPartActive(part: Part, active: boolean) {
+  busyPartId.value = part.id
+  await partStore.setPartActive(part.id, active)
+  busyPartId.value = null
+}
+
+/** 그 사람이 속한 파트 — 활성 파트 전부 + 이미 속한 보관 파트(빼기만 된다) */
+function partPillsOf(memberId: string) {
+  const mine = partStore.partIdsOf(memberId)
+  return partStore.parts
+    .filter((p) => p.active || mine.has(p.id))
+    .map((p) => ({ part: p, on: mine.has(p.id) }))
+}
+
+const partMemberBusy = ref<string | null>(null)
+async function togglePartMember(partId: string, memberId: string, on: boolean) {
+  const key = `${partId}:${memberId}`
+  if (partMemberBusy.value === key) return
+  partMemberBusy.value = key
+  if (on) await partStore.leavePart(partId, memberId)
+  else await partStore.joinPart(partId, memberId)
+  partMemberBusy.value = null
+}
 </script>
 
 <template>
@@ -156,7 +230,7 @@ async function remove(memberId: string) {
           <h1 class="text-2xl font-semibold tracking-tight">{{ project.name }} · 멤버</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             부여된 사람만 이 프로젝트를 보고, 작업 · 안건의 담당자로 고를 수 있습니다. 빼도 그
-            사람이 맡았던 작업 · 안건은 그대로 남습니다.
+            사람이 맡았던 작업 · 안건은 그대로 남고, 속했던 파트에서는 같이 빠집니다.
           </p>
         </header>
 
@@ -174,6 +248,108 @@ async function remove(memberId: string) {
             <Loader2 v-if="renaming" class="animate-spin" />
             이름 바꾸기
           </Button>
+        </section>
+
+        <section
+          class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+          aria-label="파트"
+        >
+          <div class="flex items-center gap-2.5">
+            <span class="w-[72px] shrink-0 text-sm text-muted-foreground">파트</span>
+            <Input
+              v-model="newPartName"
+              aria-label="새 파트 이름"
+              placeholder="새 파트 이름 — 예) 인프라"
+              class="grow bg-background"
+              @keyup.enter="addPart"
+            />
+            <Button
+              class="shrink-0"
+              variant="outline"
+              :disabled="!newPartName.trim() || !!newPartProblem || creatingPart"
+              @click="addPart"
+            >
+              <Loader2 v-if="creatingPart" class="animate-spin" />
+              <Plus v-else class="size-4" />
+              파트 만들기
+            </Button>
+          </div>
+          <p v-if="newPartProblem" class="pl-[82px] text-xs text-destructive">
+            {{ newPartProblem }}
+          </p>
+          <p class="pl-[82px] text-xs leading-relaxed text-muted-foreground text-pretty">
+            파트는 보기 범위이지 권한이 아닙니다. '내 파트' 로 보면 공통 · 자기 파트 · 자기가 맡은
+            것과 그 작업에 걸린 안건이 보입니다. 지우지 않고 보관합니다 — 지난 작업 · 안건이
+            가리킵니다.
+          </p>
+
+          <ul v-if="activeParts.length" class="flex flex-col gap-1.5 pl-[82px]">
+            <li
+              v-for="p in activeParts"
+              :key="p.id"
+              :data-part-id="p.id"
+              class="flex items-center gap-2"
+            >
+              <Input
+                v-model="partDrafts[p.id]"
+                :aria-label="`${p.name} 파트 이름`"
+                class="h-8 grow bg-background text-sm"
+                :disabled="busyPartId === p.id"
+                @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+                @keydown.esc.stop.prevent="revertPartName(p, $event)"
+                @blur="commitPartName(p)"
+              />
+              <span class="w-12 shrink-0 text-right text-xs text-muted-foreground">
+                {{ partStore.membersOf(p.id).length }}명
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="shrink-0"
+                :disabled="busyPartId === p.id"
+                :aria-label="`${p.name} 보관`"
+                @click="setPartActive(p, false)"
+              >
+                <Archive class="size-3.5" />
+                보관
+              </Button>
+            </li>
+          </ul>
+          <p v-else class="pl-[82px] text-xs text-muted-foreground">
+            아직 파트가 없습니다. 파트가 없으면 모두가 프로젝트 전체를 봅니다.
+          </p>
+
+          <div v-if="archivedParts.length" class="flex flex-col gap-1.5 pl-[82px]">
+            <button
+              type="button"
+              class="self-start text-xs text-muted-foreground underline-offset-4 hover:underline"
+              :aria-expanded="showArchived"
+              @click="showArchived = !showArchived"
+            >
+              보관한 파트 {{ archivedParts.length }}개 {{ showArchived ? '접기' : '보기' }}
+            </button>
+            <ul v-if="showArchived" class="flex flex-col gap-1.5">
+              <li
+                v-for="p in archivedParts"
+                :key="p.id"
+                :data-part-id="p.id"
+                class="flex items-center gap-2"
+              >
+                <span class="grow truncate text-sm text-muted-foreground">{{ p.name }}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="shrink-0"
+                  :disabled="busyPartId === p.id"
+                  :aria-label="`${p.name} 되살리기`"
+                  @click="setPartActive(p, true)"
+                >
+                  <ArchiveRestore class="size-3.5" />
+                  되살리기
+                </Button>
+              </li>
+            </ul>
+          </div>
         </section>
 
         <section
@@ -219,6 +395,11 @@ async function remove(memberId: string) {
                 <TableHead class="h-10 w-[200px] text-xs font-medium text-muted-foreground"
                   >역할</TableHead
                 >
+                <TableHead
+                  v-if="partStore.parts.length"
+                  class="h-10 text-xs font-medium text-muted-foreground"
+                  >파트</TableHead
+                >
                 <TableHead class="h-10 w-[180px]" />
               </TableRow>
             </TableHeader>
@@ -254,6 +435,30 @@ async function remove(memberId: string) {
                     </SelectContent>
                   </Select>
                 </TableCell>
+                <TableCell v-if="partStore.parts.length">
+                  <span class="flex flex-wrap gap-1">
+                    <button
+                      v-for="pill in partPillsOf(r.memberId)"
+                      :key="pill.part.id"
+                      type="button"
+                      class="inline-flex h-6 items-center rounded-full border px-2.5 text-xs transition-colors disabled:opacity-50"
+                      :class="
+                        pill.on
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      "
+                      :aria-pressed="pill.on"
+                      :aria-label="`${r.member?.name ?? ''} · ${pill.part.name}`"
+                      :disabled="
+                        partMemberBusy === `${pill.part.id}:${r.memberId}` ||
+                        (!pill.on && !pill.part.active)
+                      "
+                      @click="togglePartMember(pill.part.id, r.memberId, pill.on)"
+                    >
+                      {{ pill.part.active ? pill.part.name : `${pill.part.name} (보관)` }}
+                    </button>
+                  </span>
+                </TableCell>
                 <TableCell class="text-right">
                   <span
                     v-if="confirmingId === r.memberId"
@@ -283,7 +488,10 @@ async function remove(memberId: string) {
                 </TableCell>
               </TableRow>
               <TableRow v-if="rows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="3" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell
+                  :colspan="partStore.parts.length ? 4 : 3"
+                  class="h-[110px] text-center text-sm text-muted-foreground"
+                >
                   <span v-if="loading" class="inline-flex items-center gap-1.5">
                     <Loader2 class="size-3.5 animate-spin" />
                     불러오는 중…

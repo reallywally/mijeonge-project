@@ -5,6 +5,8 @@ import { ApiError } from '@/api'
 import {
   entries,
   members,
+  partMembers as partMemberFixtures,
+  parts as partFixtures,
   projectGrants,
   projects,
   tasks,
@@ -15,10 +17,13 @@ import { canCreateProject, canManageProject, canSeeProject } from '@/lib/access'
 import { assignableMembers, memberLabel } from '@/lib/member'
 import { toastError } from '@/lib/notify'
 import { makeTaskKeyPrefix } from '@/lib/project'
+import { recall, remember } from '@/lib/storage'
 import { useAuthStore } from '@/stores/auth'
 import type {
   Entry,
   Member,
+  Part,
+  PartMember,
   Project,
   ProjectMember,
   ProjectRole,
@@ -28,23 +33,6 @@ import type {
 } from '@/types/domain'
 
 const REMEMBERED_PROJECT = 'innoflow.projectId'
-
-function recall(key: string): string | null {
-  try {
-    return localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function remember(key: string, value: string | null) {
-  try {
-    if (value === null) localStorage.removeItem(key)
-    else localStorage.setItem(key, value)
-  } catch {
-    /* 사생활 보호 모드 등에서 막혀 있어도 앱은 돈다 */
-  }
-}
 
 /**
  * 레코드가 사는 곳. 화면이 쓰는 계산은 thread · task 스토어가 맡는다.
@@ -74,6 +62,9 @@ export const useDataStore = defineStore('data', () => {
   const allEntries = ref<Entry[]>(mock ? structuredClone(entries) : [])
   const allTasks = ref<Task[]>(mock ? structuredClone(tasks) : [])
   const taskThreads = ref<TaskThreadLink[]>(mock ? structuredClone(taskThreadLinks) : [])
+  /** 파트와 소속. 서버 모드는 고른 프로젝트 하나치, 목업은 전부 — 프로젝트로 거르는 것은 part 스토어다 */
+  const parts = ref<Part[]>(mock ? structuredClone(partFixtures) : [])
+  const partMembers = ref<PartMember[]>(mock ? structuredClone(partMemberFixtures) : [])
   /** 프로젝트마다 부여된 사람 — 담당자를 고르는 자리가 이것으로 거른다 */
   const projectMembers = ref<Record<string, ProjectMember[]>>(mock ? grantsOfFixtures() : {})
 
@@ -110,6 +101,8 @@ export const useDataStore = defineStore('data', () => {
     allEntries.value = records.allEntries
     allTasks.value = records.allTasks
     taskThreads.value = records.taskThreads
+    parts.value = records.parts
+    partMembers.value = records.partMembers
     loadedProjectId.value = records.project.id
     snapshotRevision.value += 1
   }
@@ -145,6 +138,8 @@ export const useDataStore = defineStore('data', () => {
     allEntries.value = structuredClone(entries)
     allTasks.value = structuredClone(tasks)
     taskThreads.value = structuredClone(taskThreadLinks)
+    parts.value = structuredClone(partFixtures)
+    partMembers.value = structuredClone(partMemberFixtures)
     allMembers.value = await api.fetchMembers()
     const granted = await Promise.all(allProjects.value.map((p) => api.fetchProjectMembers(p.id)))
     projectMembers.value = Object.fromEntries(allProjects.value.map((p, i) => [p.id, granted[i]]))
@@ -335,12 +330,18 @@ export const useDataStore = defineStore('data', () => {
     }
   }
 
-  /** 프로젝트에서 뺀다. 담당하던 작업 · 안건은 그대로 남는다 — 기록이다 */
+  /** 프로젝트에서 뺀다. 담당하던 작업 · 안건은 그대로 남는다 — 기록이다. 그 프로젝트 파트 소속은 같이 걷는다 */
   async function revokeMember(projectId: string, memberId: string) {
     try {
       await api.deleteProjectMember(projectId, memberId)
       projectMembers.value[projectId] = (projectMembers.value[projectId] ?? []).filter(
         (p) => p.memberId !== memberId,
+      )
+      const ownParts = new Set(
+        parts.value.filter((p) => p.projectId === projectId).map((p) => p.id),
+      )
+      partMembers.value = partMembers.value.filter(
+        (pm) => !(pm.memberId === memberId && ownParts.has(pm.partId)),
       )
       if (memberId === auth.me?.id) {
         auth.setProjectRole(projectId, null)
@@ -399,6 +400,34 @@ export const useDataStore = defineStore('data', () => {
     return true
   }
 
+  /**
+   * 목업 갈래가 서버처럼 파트를 거른다 — 이 프로젝트의 파트가 아니면 PART_NOT_FOUND,
+   * 새로 다는 파트가 보관이면 PART_ARCHIVED. 이미 달린 파트(kept)를 그대로 두는 것은 막지 않는다.
+   * 거절했으면 서버와 같은 코드로 알리고 true
+   */
+  function rejectPart(partId: string | null | undefined, kept: string | null = null) {
+    if (!mock || !partId || partId === kept) return false
+    const part = parts.value.find((p) => p.id === partId && p.projectId === currentProjectId.value)
+    if (part?.active) return false
+    toastError(
+      new ApiError(
+        400,
+        part
+          ? {
+              code: 'PART_ARCHIVED',
+              message: '보관한 파트는 고를 수 없습니다.',
+              detail: { partId: '보관한 파트입니다.' },
+            }
+          : {
+              code: 'PART_NOT_FOUND',
+              message: '파트를 찾을 수 없습니다.',
+              detail: { partId: '파트를 찾을 수 없습니다.' },
+            },
+      ),
+    )
+    return true
+  }
+
   /** 사용자 관리에서 등록 · 수정한 것을 멤버 목록에 맞춘다 */
   function upsertMember(member: Member) {
     const at = allMembers.value.findIndex((m) => m.id === member.id)
@@ -414,6 +443,8 @@ export const useDataStore = defineStore('data', () => {
     allEntries.value = []
     allTasks.value = []
     taskThreads.value = []
+    parts.value = []
+    partMembers.value = []
     projectMembers.value = {}
     loadedProjectId.value = null
     currentProjectId.value = ''
@@ -438,6 +469,8 @@ export const useDataStore = defineStore('data', () => {
     allEntries,
     allTasks,
     taskThreads,
+    parts,
+    partMembers,
     projectMembers,
     assignable,
     status,
@@ -461,6 +494,7 @@ export const useDataStore = defineStore('data', () => {
     memberName,
     upsertMember,
     rejectOwner,
+    rejectPart,
     renameProject,
     grantMember,
     revokeMember,

@@ -20,6 +20,7 @@ from app.schemas.thread import (
     ThreadPatch,
 )
 from app.services import access
+from app.services import part as part_service
 from app.services import project as project_service
 from app.time import now
 
@@ -40,6 +41,7 @@ def to_thread(row: Thread) -> ThreadOut:
         # thread_option 행을 문자열 배열로 편다
         options=[option.text for option in row.options],
         due_date=row.due_date,
+        part_id=row.part_id,
     )
 
 
@@ -96,6 +98,7 @@ def apply_entry_to_thread(thread: Thread, kind: str, owner_id: str | None) -> No
 async def create_thread(session: AsyncSession, project_id: str, payload: ThreadCreate) -> ThreadOut:
     await project_service.load_project(session, project_id)
     await _guard_owner(session, project_id, payload.owner_id, "THREAD_OWNER_NOT_FOUND")
+    await part_service.guard_part(session, project_id, payload.part_id)
     thread = Thread(
         id=new_id(),
         project_id=project_id,
@@ -105,6 +108,7 @@ async def create_thread(session: AsyncSession, project_id: str, payload: ThreadC
         owner_id=payload.owner_id,
         due_date=payload.due_date,
         parent_thread_id=None,
+        part_id=payload.part_id,
         created_at=now(),
         # 후보는 배열 순서가 뜻을 갖는다
         options=[
@@ -134,6 +138,11 @@ async def patch_thread(session: AsyncSession, thread_id: str, payload: ThreadPat
         thread.description = payload.description
     if "due_date" in sent:
         thread.due_date = payload.due_date
+    if "part_id" in sent:
+        # 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다
+        if payload.part_id != thread.part_id:
+            await part_service.guard_part(session, thread.project_id, payload.part_id)
+        thread.part_id = payload.part_id
     if "options" in sent and payload.options is not None:
         # 통째로 갈아끼운다 — delete-orphan 이 옛 줄을 지운다
         thread.options = [

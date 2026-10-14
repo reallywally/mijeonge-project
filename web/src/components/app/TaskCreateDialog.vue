@@ -10,6 +10,7 @@ import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/c
 import { periodProblem } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 import type { TaskLine, TaskPriority, TaskStatus, Thread } from '@/types/domain'
@@ -24,6 +25,7 @@ const emit = defineEmits<{ (e: 'created', id: string): void }>()
 
 const data = useDataStore()
 const taskStore = useTaskStore()
+const partStore = usePartStore()
 const threadStore = useThreadStore()
 
 const title = ref('')
@@ -34,6 +36,9 @@ const start = ref('')
 const due = ref('')
 const priority = ref<TaskPriority>('normal')
 const parent = ref<string | null>(null)
+/* 파트는 상위 작업의 것이 골라진 채 연다. 손으로 고르기 전까지는 상위를 바꾸면 따라 바뀐다 */
+const partId = ref<string | null>(null)
+const partPicked = ref(false)
 const threadIds = ref<string[]>([])
 const keepOpen = ref(false)
 const saving = ref(false)
@@ -57,9 +62,21 @@ function resetForm() {
   due.value = ''
   priority.value = 'normal'
   parent.value = props.parentId
+  partId.value = partStore.partForChildOf(props.parentId)
+  partPicked.value = false
   threadIds.value = []
   bodyKey.value += 1
   void nextTick(fitTitle)
+}
+
+function pickParent(next: string | null) {
+  parent.value = next
+  if (!partPicked.value) partId.value = partStore.partForChildOf(next)
+}
+
+function pickPart(next: string | null) {
+  partId.value = next
+  partPicked.value = true
 }
 
 /* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열린다 */
@@ -112,6 +129,8 @@ async function submit() {
     due: due.value || null,
     priority: priority.value,
     threadIds: [...threadIds.value],
+    /* 늘 보낸다 — 상위를 따르는 것도 화면이 이미 골라 두었다 */
+    partId: partId.value,
   })
   saving.value = false
   /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
@@ -198,8 +217,11 @@ function onKeydown(e: KeyboardEvent) {
           v-model:start="start"
           v-model:due="due"
           v-model:priority="priority"
-          v-model:parent-id="parent"
+          :parent-id="parent"
+          :part-id="partId"
           :parent-choices="taskStore.parentOptions"
+          @update:parent-id="pickParent"
+          @update:part-id="pickPart"
         >
           <p
             v-if="threadIds.length && status !== 'blocked'"

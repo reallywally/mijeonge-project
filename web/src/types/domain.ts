@@ -87,6 +87,32 @@ export interface ProjectMember {
   role: ProjectRole
 }
 
+/* 파트 — docs/api/part.md. 보기 범위지 권한이 아니다: 서버는 다 싣고 화면이 '내 파트' 로 거른다 */
+
+export interface Part {
+  id: string
+  projectId: string
+  name: string
+  /** false 면 보관 — 새 작업 · 안건에 고를 수 없고 관리 화면에서 접힌다 */
+  active: boolean
+}
+
+export interface PartMember {
+  partId: string
+  memberId: string
+}
+
+/** POST /api/projects/{projectId}/parts — 이름은 서버가 앞뒤 공백을 떼고 1 ~ 50자 */
+export interface PartInput {
+  name: string
+}
+
+/** PATCH /api/parts/{partId} — 이름 바꾸기 · 보관 · 되살리기. 보낸 필드만 바뀐다 */
+export interface PartPatch {
+  name?: string
+  active?: boolean
+}
+
 export interface Project {
   id: string
   name: string
@@ -108,6 +134,8 @@ export interface Thread {
   ownerId: string | null
   /** 다른 안건에서 떼어낸 것이면 그 안건 */
   parentThreadId: string | null
+  /** 속한 파트. null 은 프로젝트 공통 */
+  partId: string | null
   createdAt: string
 }
 
@@ -146,6 +174,8 @@ export interface ThreadInput {
   options?: string[]
   dueDate?: string | null
   ownerId?: string | null
+  /** 안 보내면 공통(null) */
+  partId?: string | null
 }
 
 /**
@@ -158,6 +188,8 @@ export interface ThreadPatch {
   description?: string
   options?: string[]
   dueDate?: string | null
+  /** null 로 공통. 보관 파트는 새로 달 수 없다(이미 달린 것을 두는 것은 된다) */
+  partId?: string | null
 }
 
 /** 안건 이력 한 줄 — Entry 에 화면에서 필요한 것만 붙였다 */
@@ -238,6 +270,8 @@ export interface Task {
   start: string | null
   due: string | null
   priority: TaskPriority
+  /** 속한 파트. null 은 프로젝트 공통. 계층과 따로 간다 — 상위를 바꿔도 안 따라 바뀐다 */
+  partId: string | null
   createdAt: string
   /** 댓글 수. 본문은 스냅샷에 없어 상세를 열 때 따로 받는다 */
   commentCount: number
@@ -325,6 +359,8 @@ export interface TaskInput {
   due: string | null
   priority: TaskPriority
   threadIds: string[]
+  /** **안 보내면 상위 작업의 파트를 따른다**(최상위면 공통). null 을 보내면 공통이다 */
+  partId?: string | null
 }
 
 /**
@@ -340,6 +376,8 @@ export interface TaskPatch {
   due?: string | null
   priority?: TaskPriority
   body?: TaskLine[]
+  /** null 로 공통. 하위 작업은 따라 바뀌지 않는다 */
+  partId?: string | null
 }
 
 /** PATCH /api/projects/{projectId} — 프로젝트 관리자 · 시스템 관리자 */
@@ -369,6 +407,10 @@ export interface ProjectSnapshot {
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
+  /** 이름 순 · 보관 포함 */
+  parts: Part[]
+  /** (partId, memberId) 순 */
+  partMembers: PartMember[]
 }
 
 /** 성공이 아닌 응답의 본문 — 전부 이 한 가지 모양이다 (API.md Q14) */

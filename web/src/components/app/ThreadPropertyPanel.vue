@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import PartField from '@/components/app/PartField.vue'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
@@ -11,6 +12,7 @@ import { useDataStore } from '@/stores/data'
 defineProps<{ overdue?: boolean }>()
 const dueDate = defineModel<string>('dueDate', { required: true })
 const ownerId = defineModel<string | null>('ownerId', { required: true })
+const partId = defineModel<string | null>('partId', { required: true })
 
 const data = useDataStore()
 const NONE = 'none'
@@ -82,6 +84,8 @@ const ghost =
           </Select>
         </dd>
       </div>
+
+      <PartField v-model="partId" :trigger-class="ghost" />
     </dl>
 
     <slot />

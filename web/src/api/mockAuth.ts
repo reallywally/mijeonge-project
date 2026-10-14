@@ -1,12 +1,12 @@
 import { mockError } from '@/api/client'
-import { accounts, members, projectGrants } from '@/fixtures'
+import { accounts, members, partMembers, parts, projectGrants } from '@/fixtures'
 import type { MockAccount, MockProjectGrant } from '@/fixtures'
-import { canSeeProject } from '@/lib/access'
-import type { Me, Member, MemberAccount } from '@/types/domain'
+import { canManageProject, canSeeProject } from '@/lib/access'
+import type { Me, Member, MemberAccount, Part, PartMember } from '@/types/domain'
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · comments · tasks 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -15,12 +15,16 @@ interface MockDb {
   members: Member[]
   accounts: MockAccount[]
   grants: MockProjectGrant[]
+  parts: Part[]
+  partMembers: PartMember[]
 }
 
 const fresh = (): MockDb => ({
   members: structuredClone(members),
   accounts: structuredClone(accounts),
   grants: structuredClone(projectGrants),
+  parts: structuredClone(parts),
+  partMembers: structuredClone(partMembers),
 })
 
 let db = fresh()
@@ -95,6 +99,14 @@ export function requireProject(me: Me, projectId: string) {
 }
 
 export const forbidden = () => mockError(403, 'FORBIDDEN', '권한이 없습니다.')
+
+/** 그 프로젝트의 관리자 · 시스템 관리자만 — 프로젝트 멤버 · 파트 쓰기 */
+export function requireManager(projectId: string) {
+  const me = requireMe()
+  requireProject(me, projectId)
+  if (!canManageProject(me, projectId)) throw forbidden()
+  return me
+}
 
 export function toAccount(memberId: string): MemberAccount {
   const member = memberOf(memberId)!

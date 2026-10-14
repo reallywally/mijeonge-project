@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 
 /**
  * 로그아웃 · 세션 끝남 — 들고 있던 것을 전부 비운다. 다른 사람이 같은 브라우저로 들어올 수 있다.
@@ -12,6 +13,7 @@ export function clearSession() {
   useChatStore().reset()
   useCommentStore().clear()
   useAdminStore().clear()
+  usePartStore().clear()
   useDataStore().clear()
   useAuthStore().clear()
 }

@@ -55,6 +55,21 @@ CASES: list[tuple[str, Pick]] = [
 ]
 
 
+# 파트가 늘린 필드 — docs/api/part.md '모양'. 프론트가 domain.ts 에 더하는 중이라 아직 없을 수 있다.
+# 어긋나면 계약 쪽이 기준이다. 둘 다 null 을 낸다(null = 프로젝트 공통)
+PART_ADDED: dict[str, set[str]] = {"Task": {"partId"}, "Thread": {"partId"}}
+
+
+def expected_keys(name: str) -> set[str]:
+    return set(FIELDS[name]) | PART_ADDED.get(name, set())
+
+
+def nullable_keys(name: str) -> set[str]:
+    return {field for field, nullable in FIELDS[name].items() if nullable} | PART_ADDED.get(
+        name, set()
+    )
+
+
 @pytest.fixture
 async def snapshot(client: AsyncClient) -> dict[str, Any]:
     res = await client.get("/api/projects/p1/snapshot")
@@ -67,7 +82,7 @@ async def snapshot(client: AsyncClient) -> dict[str, Any]:
 def test_keys_match_domain_ts(name: str, pick: Pick, snapshot: dict[str, Any]) -> None:
     rows = pick(snapshot)
     assert rows, f"{name} 을 볼 수 있는 줄이 스냅샷에 없다 — 시드를 확인해라"
-    expected = set(FIELDS[name])
+    expected = expected_keys(name)
     for row in rows:
         assert set(row) == expected, f"{name} 의 키가 domain.ts 와 다르다"
 
@@ -75,15 +90,23 @@ def test_keys_match_domain_ts(name: str, pick: Pick, snapshot: dict[str, Any]) -
 @pytest.mark.parametrize(("name", "pick"), CASES, ids=[name for name, _ in CASES])
 def test_null_only_where_domain_ts_allows(name: str, pick: Pick, snapshot: dict[str, Any]) -> None:
     """빈 값은 '' · [] 다 — null 은 domain.ts 가 허락한 자리에서만 나간다 (API.md Q17)."""
-    nullable = FIELDS[name]
+    nullable = nullable_keys(name)
     for row in pick(snapshot):
         for field, value in row.items():
             if value is None:
-                assert nullable[field], f"{name}.{field} 가 null 로 나갔다"
+                assert field in nullable, f"{name}.{field} 가 null 로 나갔다"
 
 
-# 인증이 늘린 모양 — docs/api/auth.md '새 응답 · 요청 모양'. 프론트가 domain.ts 에 더하는 중이라
-# 아직 없는 필드가 있을 수 있다. 어긋나면 이 계약 쪽이 기준이다
+@pytest.mark.parametrize("name", sorted(PART_ADDED))
+def test_part_fields_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 이미 들어왔으면 계약대로 `string | null` 이어야 한다."""
+    for field in PART_ADDED[name]:
+        if field in FIELDS[name]:
+            assert FIELDS[name][field], f"domain.ts 의 {name}.{field} 가 null 을 허용하지 않는다"
+
+
+# 인증 · 파트가 늘린 모양 — docs/api/auth.md '새 응답 · 요청 모양' · docs/api/part.md '모양'.
+# 프론트가 domain.ts 에 더하는 중이라 아직 없는 필드가 있을 수 있다. 어긋나면 이 계약 쪽이 기준이다
 AUTH_SHAPES: dict[str, set[str]] = {
     "Member": {"id", "name", "active"},
     "Me": {"id", "name", "email", "systemRole", "projectRoles"},
@@ -98,13 +121,15 @@ AUTH_SHAPES: dict[str, set[str]] = {
         "lastLoginAt",
     },
     "ProjectMember": {"memberId", "role"},
+    "Part": {"id", "projectId", "name", "active"},
+    "PartMember": {"partId", "memberId"},
 }
 
 
 def contract_keys(name: str) -> set[str]:
     """서버 응답이 맞춰야 할 키. domain.ts 가 계약에 없는 필드를 들고 있으면 여기서 깨진다."""
     declared = set(FIELDS.get(name, {}))
-    assert declared <= AUTH_SHAPES[name], f"domain.ts 의 {name} 이 docs/api/auth.md 와 다르다"
+    assert declared <= AUTH_SHAPES[name], f"domain.ts 의 {name} 이 계약(docs/api/*.md)과 다르다"
     return AUTH_SHAPES[name]
 
 
@@ -119,6 +144,18 @@ async def test_member_matches_contract(client: AsyncClient) -> None:
     assert all(set(row) == contract_keys("Member") for row in rows)
 
 
+@pytest.mark.parametrize(
+    ("name", "key"), [("Part", "parts"), ("PartMember", "partMembers")], ids=["Part", "PartMember"]
+)
+def test_part_rows_match_contract(name: str, key: str, snapshot: dict[str, Any]) -> None:
+    rows = snapshot[key]
+    assert rows, f"{name} 을 볼 수 있는 줄이 스냅샷에 없다 — 시드를 확인해라"
+    for row in rows:
+        assert set(row) == contract_keys(name)
+        # 둘 다 null 을 내는 자리가 없다
+        assert all(value is not None for value in row.values())
+
+
 async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
     """ThreadRow · TaskDetail 같은 계산된 타입은 서버가 주지 않는다."""
     assert set(snapshot) == {
@@ -127,4 +164,6 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
         "entries",
         "tasks",
         "taskThreadLinks",
+        "parts",
+        "partMembers",
     }

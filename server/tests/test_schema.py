@@ -15,7 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Base, Task, TaskThreadLink
+from app.models import Base, Task, TaskThreadLink, Thread
 from scripts.seed import seed
 
 
@@ -59,6 +59,21 @@ async def test_parent_cannot_live_in_another_project(session: AsyncSession) -> N
     other = await session.get(Task, "x2")
     assert other is not None
     other.parent_id = "k1"  # k1 은 p1, x2 는 p2
+    with pytest.raises(IntegrityError):
+        await session.flush()
+    await session.rollback()
+
+
+@pytest.mark.parametrize(("model", "row_id"), [(Task, "x1"), (Thread, "t10")])
+async def test_part_cannot_live_in_another_project(
+    session: AsyncSession, model: type[Task] | type[Thread], row_id: str
+) -> None:
+    """파트도 같은 프로젝트의 것만 단다 — 부모 · 링크와 같은 복합 FK (docs/api/part.md)."""
+    await seed(session)
+
+    row = await session.get(model, row_id)
+    assert row is not None
+    row.part_id = "pt1"  # pt1 은 p1, 이 줄은 p2
     with pytest.raises(IntegrityError):
         await session.flush()
     await session.rollback()

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import PartChip from '@/components/app/PartChip.vue'
+import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
@@ -24,11 +26,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useThreadStore } from '@/stores/thread'
 import type { ThreadRow } from '@/types/domain'
 
 const data = useDataStore()
 const threadStore = useThreadStore()
+const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -41,11 +45,11 @@ const page = ref(1)
 const perPage = 5
 
 const counts = computed(() => ({
-  all: threadStore.rows.length,
-  queued: threadStore.rows.filter((r) => r.thread.state === 'queued').length,
-  open: threadStore.rows.filter((r) => r.thread.state === 'open').length,
-  decided: threadStore.rows.filter((r) => r.thread.state === 'decided').length,
-  stuck: threadStore.rows.filter((r) => r.deferCount >= 3).length,
+  all: threadStore.visibleRows.length,
+  queued: threadStore.visibleRows.filter((r) => r.thread.state === 'queued').length,
+  open: threadStore.visibleRows.filter((r) => r.thread.state === 'open').length,
+  decided: threadStore.visibleRows.filter((r) => r.thread.state === 'decided').length,
+  stuck: threadStore.visibleRows.filter((r) => r.deferCount >= 3).length,
   overdue: threadStore.overdueCount,
 }))
 
@@ -72,7 +76,7 @@ function matchesOwner(row: ThreadRow) {
 }
 
 const filtered = computed(() =>
-  threadStore.rows.filter(
+  threadStore.visibleRows.filter(
     (r) => r.thread.title.includes(query.value) && matchesState(r) && matchesOwner(r),
   ),
 )
@@ -90,6 +94,9 @@ const rangeLabel = computed(() =>
 function resetPage() {
   page.value = 1
 }
+/* 보기 범위를 바꾸면 줄 수가 달라진다 — 없는 쪽에 머물지 않게 첫 쪽으로 */
+watch(() => partStore.scope, resetPage)
+
 function search() {
   query.value = titleDraft.value.trim()
   resetPage()
@@ -199,6 +206,8 @@ function onCreated(id: string) {
     <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
       <span class="text-xs font-medium text-muted-foreground">안건</span>
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
+      <div class="grow" />
+      <PartScopeToggle />
     </div>
 
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
@@ -320,6 +329,7 @@ function onCreated(id: string) {
                     >
                       {{ row.thread.title }}
                     </button>
+                    <PartChip :part-id="row.thread.partId" />
                   </div>
                 </TableCell>
                 <TableCell>
