@@ -150,3 +150,40 @@ async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
     res = await client.post(URL, json={"tasks": tasks[1:]})
     assert res.status_code == 201
     assert len(res.json()["tasks"]) == 20
+
+
+async def test_batch_hangs_under_an_existing_task(client: httpx.AsyncClient) -> None:
+    """parentId 로 이미 있는 작업 밑에 붙는다. 그 밑의 하위는 parentTempId 로 잇는다."""
+    draft = [
+        item("t1", "화면 설계", parentId="k1"),
+        item("t2", "목록 화면", parentTempId="t1"),
+    ]
+    res = await client.post("/api/projects/p1/tasks/batch", json={"tasks": draft})
+    assert res.status_code == 201, res.text
+    tasks = res.json()["tasks"]
+    assert tasks[0]["parentId"] == "k1"
+    assert tasks[1]["parentId"] == tasks[0]["id"]
+
+
+@pytest.mark.parametrize("parent", ["x1", "nope"])
+async def test_batch_parent_from_elsewhere_is_400_and_leaves_nothing(
+    client: httpx.AsyncClient, parent: str
+) -> None:
+    before = await task_count(client, "p1")
+    res = await client.post(
+        "/api/projects/p1/tasks/batch",
+        json={"tasks": [item("t1", "가"), item("t2", "나", parentId=parent)]},
+    )
+    assert res.status_code == 400
+    assert res.json()["code"] == "TASK_PARENT_NOT_FOUND"
+    assert "tasks.1.parentId" in res.json()["detail"]
+    assert await task_count(client, "p1") == before
+
+
+async def test_batch_two_parents_is_422(client: httpx.AsyncClient) -> None:
+    res = await client.post(
+        "/api/projects/p1/tasks/batch",
+        json={"tasks": [item("t1", "가"), item("t2", "나", parentTempId="t1", parentId="k1")]},
+    )
+    assert res.status_code == 422
+    assert "tasks.1.parentId" in res.json()["detail"]

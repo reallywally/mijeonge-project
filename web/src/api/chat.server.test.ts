@@ -140,6 +140,7 @@ describe('작업 초안 이벤트', () => {
   const task: ProposedTask = {
     tempId: 't1',
     parentTempId: null,
+    parentId: null,
     title: '간담회 준비',
     ownerId: 'u1',
     start: '2026-10-13',

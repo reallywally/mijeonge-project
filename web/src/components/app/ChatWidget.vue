@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ArrowUp, Loader2, MessageCircle, RotateCcw, Square, X } from 'lucide-vue-next'
 import ChatProposalCard from '@/components/app/ChatProposalCard.vue'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { insertMention, mentionCandidates, mentionQuery, type MentionQuery } from '@/lib/mention'
+import { taskStatusLabel } from '@/lib/task'
 import { useChatStore } from '@/stores/chat'
 import { useDataStore } from '@/stores/data'
+import { useTaskStore } from '@/stores/task'
 
 /* 오른쪽 아래 챗봇. App.vue 에 한 번만 둔다 — 화면을 옮겨도 대화가 이어진다.
    창을 닫으면 대화가 끝난다 (API.md Q26). 모달이 아니라 열어 둔 채 뒤 화면을 쓸 수 있다. */
 const data = useDataStore()
 const chat = useChatStore()
+const taskStore = useTaskStore()
 
 const EXAMPLES = ['서버 OS 뭐로 정했지?', '아직 안 정해진 안건 뭐 있어?', '막힌 작업 알려줘']
 
@@ -19,7 +23,36 @@ const draft = ref('')
 const input = ref<InstanceType<typeof Textarea> | null>(null)
 const scroller = ref<HTMLElement | null>(null)
 
-const focusInput = () => (input.value?.$el as HTMLTextAreaElement | undefined)?.focus()
+const inputEl = () => input.value?.$el as HTMLTextAreaElement | undefined
+const focusInput = () => inputEl()?.focus()
+
+/* '@' 를 치면 작업을 골라 '@HW-4' 로 넣는다 — 서버가 그 키를 작업으로 찾아 Claude 에게 넘긴다.
+   한글은 조합 중에도 고를 수 있게 v-model 이 아니라 입력칸의 지금 글로 본다 */
+const mention = ref<MentionQuery | null>(null)
+const picked = ref(0)
+const candidates = computed(() =>
+  mention.value ? mentionCandidates(taskStore.tasks, mention.value.query) : [],
+)
+const mentionOpen = computed(() => candidates.value.length > 0)
+
+function trackMention() {
+  const el = inputEl()
+  const next = el ? mentionQuery(el.value, el.selectionStart ?? el.value.length) : null
+  if (next?.query !== mention.value?.query || next?.start !== mention.value?.start) picked.value = 0
+  mention.value = next
+}
+
+async function pickMention(index = picked.value) {
+  const el = inputEl()
+  const task = candidates.value[index]
+  if (!el || !mention.value || !task) return
+  const next = insertMention(el.value, mention.value, task.key)
+  draft.value = next.text
+  mention.value = null
+  await nextTick()
+  el.focus()
+  el.setSelectionRange(next.caret, next.caret)
+}
 
 async function show() {
   open.value = true
@@ -30,21 +63,48 @@ async function show() {
 function close() {
   open.value = false
   draft.value = ''
+  mention.value = null
   chat.reset()
 }
 
 function send(text = draft.value) {
   if (!text.trim() || chat.receiving || chat.registering) return
   draft.value = ''
+  mention.value = null
   void chat.ask(text)
   focusInput()
 }
 
 /* Enter 는 보내기, Shift+Enter 는 줄바꿈. 한글 조합을 끝내는 Enter 는 보내지 않는다 */
 function onInputKeydown(e: KeyboardEvent) {
+  if (mentionOpen.value && !e.isComposing && e.keyCode !== 229) {
+    const n = candidates.value.length
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      picked.value = (picked.value + (e.key === 'ArrowDown' ? 1 : n - 1)) % n
+      return
+    }
+    if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+      e.preventDefault()
+      void pickMention()
+      return
+    }
+    if (e.key === 'Escape') {
+      /* 창까지 닫지 않고 목록만 닫는다 */
+      e.preventDefault()
+      e.stopPropagation()
+      mention.value = null
+      return
+    }
+  }
   if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return
   e.preventDefault()
   send()
+}
+
+/* 좌우 · 처음 · 끝으로 커서만 옮겨도 '@…' 안팎이 바뀐다 */
+function onInputKeyup(e: KeyboardEvent) {
+  if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) trackMention()
 }
 
 function onPanelKeydown(e: KeyboardEvent) {
@@ -174,18 +234,52 @@ watch(
       </div>
 
       <form
-        class="flex shrink-0 items-end gap-2 border-t border-border p-3"
+        class="relative flex shrink-0 items-end gap-2 border-t border-border p-3"
         @submit.prevent="send()"
       >
+        <ul
+          v-if="mentionOpen"
+          id="chat-mentions"
+          role="listbox"
+          aria-label="작업 고르기"
+          class="absolute inset-x-3 bottom-full z-10 mb-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          <li
+            v-for="(t, i) in candidates"
+            :id="`chat-mention-${i}`"
+            :key="t.id"
+            role="option"
+            :aria-selected="i === picked"
+            class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+            :class="i === picked ? 'bg-accent text-accent-foreground' : ''"
+            @mousedown.prevent="pickMention(i)"
+            @mouseenter="picked = i"
+          >
+            <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ t.key }}</span>
+            <span class="min-w-0 grow truncate">{{ t.title }}</span>
+            <span class="shrink-0 text-xs text-muted-foreground">{{
+              taskStatusLabel(t.status)
+            }}</span>
+          </li>
+        </ul>
         <Textarea
           ref="input"
           v-model="draft"
           rows="1"
           maxlength="2000"
           aria-label="질문"
-          placeholder="질문을 입력하세요"
+          placeholder="질문을 입력하세요 · @ 로 작업 언급"
           class="max-h-32 min-h-9 resize-none"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="chat-mentions"
+          :aria-expanded="mentionOpen"
+          :aria-activedescendant="mentionOpen ? `chat-mention-${picked}` : undefined"
           @keydown="onInputKeydown"
+          @input="trackMention"
+          @click="trackMention"
+          @keyup="onInputKeyup"
+          @blur="mention = null"
         />
         <Button
           v-if="chat.receiving"

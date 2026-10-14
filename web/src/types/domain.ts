@@ -460,6 +460,8 @@ export interface ProposedTask {
   tempId: string
   /** 같은 초안 안의 상위 작업 */
   parentTempId: string | null
+  /** 이미 있는 작업 밑에 붙일 때 그 작업의 id. parentTempId 와 같이 쓰지 않는다 */
+  parentId: string | null
   title: string
   ownerId: string | null
   /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */

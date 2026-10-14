@@ -236,6 +236,8 @@ def proposal_problems(tasks: Sequence[ProposedTask]) -> dict[str, str]:
         # 앞에 있는 것만 상위가 될 수 있다 — 자기 자신 · 뒤의 것을 가리키면 고리가 생길 수 있다
         if item.parent_temp_id is not None and item.parent_temp_id not in seen:
             problems[f"{at}.parentTempId"] = "상위 작업은 이 작업보다 앞에 있어야 합니다."
+        if item.parent_temp_id is not None and item.parent_id is not None:
+            problems[f"{at}.parentId"] = "상위는 parentTempId 와 parentId 중 하나만 둡니다."
         if not item.title.strip():
             problems[f"{at}.title"] = "제목을 입력해 주세요."
         if item.start is not None and item.due is not None and item.start > item.due:
@@ -259,6 +261,27 @@ async def missing_owners(
     }
 
 
+async def missing_parents(
+    session: AsyncSession, project_id: str, tasks: Sequence[ProposedTask]
+) -> dict[str, str]:
+    """`parentId` 가 그 프로젝트의 작업이 아닌 자리. 다른 프로젝트의 작업도 '없다' 로 본다."""
+    wanted = {item.parent_id for item in tasks if item.parent_id is not None}
+    if not wanted:
+        return {}
+    found = set(
+        (
+            await session.scalars(
+                select(Task.id).where(Task.project_id == project_id, Task.id.in_(wanted))
+            )
+        ).all()
+    )
+    return {
+        f"tasks.{index}.parentId": "상위 작업을 찾을 수 없습니다."
+        for index, item in enumerate(tasks)
+        if item.parent_id is not None and item.parent_id not in found
+    }
+
+
 async def create_tasks(
     session: AsyncSession, project_id: str, payload: TaskBatchInput
 ) -> TaskBatchResult:
@@ -270,6 +293,9 @@ async def create_tasks(
     missing = await missing_owners(session, project.id, payload.tasks)
     if missing:
         raise ApiError(400, "TASK_OWNER_NOT_FOUND", "담당자를 찾을 수 없습니다.", missing)
+    orphans = await missing_parents(session, project.id, payload.tasks)
+    if orphans:
+        raise ApiError(400, "TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.", orphans)
     await _guard_batch_parts(session, project.id, payload.tasks)
 
     id_by_temp: dict[str, str] = {}
@@ -280,7 +306,9 @@ async def create_tasks(
             fields = {
                 "title": item.title.strip(),
                 "parent_id": (
-                    id_by_temp[item.parent_temp_id] if item.parent_temp_id is not None else None
+                    id_by_temp[item.parent_temp_id]
+                    if item.parent_temp_id is not None
+                    else item.parent_id
                 ),
                 "owner_id": item.owner_id,
                 "start": item.start,

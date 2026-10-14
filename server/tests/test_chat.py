@@ -556,6 +556,7 @@ async def test_propose_tasks_emits_one_proposal_before_done(client: httpx.AsyncC
     assert proposal["tasks"][1] == {
         "tempId": "t2",
         "parentTempId": "t1",
+        "parentId": None,
         "title": "일정 체크",
         "ownerId": "u1",
         "start": None,
@@ -705,3 +706,116 @@ async def test_proposal_on_user_is_422(client: httpx.AsyncClient) -> None:
     assert body["code"] == "VALIDATION_ERROR"
     assert "proposal" in body["detail"]
     assert fake.calls == []
+
+
+# --- @ 로 가리킨 작업 ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "keys"),
+    [
+        ("@HW-1 어디까지 됐어?", ["HW-1"]),
+        ("@hw-2는 누가 해? @HW-1 이랑 @HW-2 도", ["HW-2", "HW-1"]),
+        ("(@PAS-1) 와 @MG-10, 끝", ["PAS-1", "MG-10"]),
+        ("메일 a@HW-1 · 그냥 HW-1 · @HW · @-1 · @HW-1x", []),
+    ],
+)
+def test_mentioned_keys(text: str, keys: list[str]) -> None:
+    assert chat_service.mentioned_keys(text) == keys
+
+
+async def test_mentions_are_resolved_in_this_project_only(client: httpx.AsyncClient) -> None:
+    """@HW-1 은 id 와 함께 질문 뒤에 붙는다. 다른 프로젝트(PAS-1) · 없는 키는 '없다' 로 간다."""
+    fake = FakeClient(Turn(texts=["답"]))
+    use(fake)
+    ask = "@hw-1 이랑 @PAS-1, @HW-999 상태 알려줘"
+    res = await client.post(URL, json={"messages": [{"role": "user", "text": ask}]})
+    assert res.status_code == 200
+
+    content = fake.calls[0]["messages"][0]["content"]
+    assert content.startswith(ask + "\n\n[@ 로 가리킨 작업]")
+    assert '- @HW-1: {"id": "k1", "key": "HW-1", "title": "설계"' in content
+    assert "- @PAS-1: 이 프로젝트에 없다" in content
+    assert "- @HW-999: 이 프로젝트에 없다" in content
+    assert "현행 분석" not in content
+
+
+async def test_no_mention_leaves_the_question_alone(client: httpx.AsyncClient) -> None:
+    fake = FakeClient(Turn(texts=["답"]))
+    use(fake)
+    await client.post(URL, json=ASK)
+    assert fake.calls[0]["messages"][0]["content"] == ASK["messages"][0]["text"]
+
+
+async def test_get_task_takes_a_key(session: AsyncSession) -> None:
+    await seed(session)
+    content, is_error = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "hw-1"})
+    assert not is_error
+    assert json.loads(content)["task"]["id"] == "k1"
+    # 다른 프로젝트의 키로는 못 읽는다
+    _, is_error = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "PAS-1"})
+    assert is_error
+
+
+# --- 이미 있는 작업 밑에 하위 작업 초안 ---------------------------------------
+
+
+async def test_get_task_lists_children(session: AsyncSession) -> None:
+    await seed(session)
+    content, is_error = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "HW-1"})
+    assert not is_error
+    children = json.loads(content)["children"]
+    assert [c["key"] for c in children] == ["HW-2", "HW-3"]
+    assert set(children[0]) == {"id", "key", "title", "status"}
+
+
+async def test_proposal_under_an_existing_task(session: AsyncSession) -> None:
+    await seed(session)
+    draft = {
+        "tasks": [
+            {"temp_id": "t1", "parent_id": "k1", "title": "화면 설계"},
+            {"temp_id": "t2", "parent_temp_id": "t1", "title": "목록 화면"},
+        ]
+    }
+    content, is_error, proposal = await chat_service.check_proposal(session, "p1", draft)
+    assert not is_error, content
+    assert proposal is not None and proposal.tasks[0].parent_id == "k1"
+
+
+@pytest.mark.parametrize(
+    ("item", "where"),
+    [
+        # 다른 프로젝트의 작업 · 없는 작업
+        ({"temp_id": "t1", "parent_id": "x1", "title": "가"}, "tasks.0.parentId"),
+        ({"temp_id": "t1", "parent_id": "nope", "title": "가"}, "tasks.0.parentId"),
+    ],
+)
+async def test_proposal_parent_must_be_in_this_project(
+    session: AsyncSession, item: dict[str, Any], where: str
+) -> None:
+    await seed(session)
+    content, is_error, proposal = await chat_service.check_proposal(
+        session, "p1", {"tasks": [item]}
+    )
+    assert is_error and proposal is None
+    assert where in json.loads(content)["problems"]
+
+
+async def test_proposal_cannot_have_two_parents(session: AsyncSession) -> None:
+    await seed(session)
+    draft = {
+        "tasks": [
+            {"temp_id": "t1", "title": "가"},
+            {"temp_id": "t2", "parent_temp_id": "t1", "parent_id": "k1", "title": "나"},
+        ]
+    }
+    content, is_error, _ = await chat_service.check_proposal(session, "p1", draft)
+    assert is_error
+    assert "tasks.1.parentId" in json.loads(content)["problems"]
+
+
+def test_proposal_note_carries_parent_id() -> None:
+    proposal = chat_service.ChatProposal.model_validate(
+        {"tasks": [{"tempId": "t1", "parentId": "k1", "title": "화면 설계"}], "status": "pending"}
+    )
+    assert '"parent_id": "k1"' in chat_service.proposal_note(proposal)

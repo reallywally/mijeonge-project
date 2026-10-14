@@ -104,6 +104,8 @@ class ProposedTask(Schema):
 
     temp_id: str
     parent_temp_id: str | None = None
+    # 이미 있는 작업 밑에 붙일 때 그 작업의 id. parent_temp_id 와 같이 쓰지 않는다
+    parent_id: str | None = None
     title: str
     owner_id: str | None = None
     start: date | None = None

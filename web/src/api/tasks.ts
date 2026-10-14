@@ -60,6 +60,8 @@ function batchErrors(input: TaskBatchInput): Record<string, string> {
     if (seen.has(t.tempId)) detail[`tasks.${i}.tempId`] = '임시 이름이 겹칩니다.'
     if (t.parentTempId !== null && !seen.has(t.parentTempId))
       detail[`tasks.${i}.parentTempId`] = '상위 작업은 앞에 있는 항목이어야 합니다.'
+    if (t.parentTempId !== null && t.parentId !== null)
+      detail[`tasks.${i}.parentId`] = '상위는 parentTempId 와 parentId 중 하나만 둡니다.'
     if (!t.title.trim()) detail[`tasks.${i}.title`] = '제목을 적어 주세요.'
     if (t.start && t.due && t.start > t.due)
       detail[`tasks.${i}.due`] = '끝나는 날이 시작하는 날보다 앞입니다.'
@@ -87,19 +89,40 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       message: '담당자를 찾을 수 없습니다.',
     })
 
+  /* 이미 있는 상위 — 픽스처에서 찾는다. 다른 프로젝트의 작업이면 서버처럼 거절한다.
+     화면에서 새로 만든 목업 작업은 여기서 알 수 없어 그대로 받는다 */
+  const existing = (parentId: string) => tasks.find((k) => k.id === parentId)
+  const foreign = input.tasks.findIndex(
+    (t) =>
+      t.parentId !== null &&
+      existing(t.parentId)?.projectId !== undefined &&
+      existing(t.parentId)?.projectId !== projectId,
+  )
+  if (foreign >= 0)
+    throw new ApiError(400, {
+      code: 'TASK_PARENT_NOT_FOUND',
+      message: '상위 작업을 찾을 수 없습니다.',
+      detail: { [`tasks.${foreign}.parentId`]: '상위 작업을 찾을 수 없습니다.' },
+    })
+
   const taskIdByTempId: Record<string, string> = {}
   const madeByTempId: Record<string, Task> = {}
   const made = input.tasks.map((t): Task => {
     mockSeq += 1
     const taskId = `bt${mockSeq}`
     taskIdByTempId[t.tempId] = taskId
-    const parent = t.parentTempId === null ? null : madeByTempId[t.parentTempId]
+    const parent =
+      t.parentTempId !== null
+        ? madeByTempId[t.parentTempId]
+        : t.parentId !== null
+          ? (existing(t.parentId) ?? null)
+          : null
     const task: Task = {
       id: taskId,
       projectId,
       key: takeMockKey(projectId),
       title: t.title.trim(),
-      parentId: t.parentTempId === null ? null : taskIdByTempId[t.parentTempId],
+      parentId: t.parentTempId === null ? t.parentId : taskIdByTempId[t.parentTempId],
       body: [],
       status: 'todo',
       ownerId: t.ownerId,

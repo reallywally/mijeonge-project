@@ -24,13 +24,21 @@ const taskStore = useTaskStore()
 /* 깊이는 셋까지만 들인다 — 좁은 창이라 더 들이면 제목이 밀려난다 */
 const INDENT = ['', 'pl-5', 'pl-10', 'pl-15']
 
-/** 상위가 늘 앞에 있으므로 앞에서부터 깊이를 센다 */
+/** 상위가 늘 앞에 있으므로 앞에서부터 깊이를 센다. 이미 있는 작업 밑에 붙는 것은 한 칸 들인다 */
 const depthOf = computed<Record<string, number>>(() => {
   const depth: Record<string, number> = {}
   for (const t of props.proposal.tasks)
-    depth[t.tempId] = t.parentTempId === null ? 0 : (depth[t.parentTempId] ?? -1) + 1
+    depth[t.tempId] =
+      t.parentTempId !== null ? (depth[t.parentTempId] ?? -1) + 1 : t.parentId !== null ? 1 : 0
   return depth
 })
+
+/** 초안이 붙을 이미 있는 작업들 — 처음 나온 순서대로. 지금 레코드에 없으면 id 만 보인다 */
+const anchors = computed(() =>
+  [...new Set(props.proposal.tasks.map((t) => t.parentId).filter((id) => id !== null))].map(
+    (id) => ({ id, task: taskStore.tasks.find((k) => k.id === id) }),
+  ),
+)
 
 const indent = (tempId: string) => INDENT[Math.min(depthOf.value[tempId] ?? 0, INDENT.length - 1)]
 
@@ -88,6 +96,16 @@ const registered = computed(() => {
       <ListPlus class="size-3.5" />
       작업 초안 {{ proposal.tasks.length }}건 · 아직 등록 전
     </p>
+    <p
+      v-for="a in anchors"
+      :key="a.id"
+      class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+      data-proposal-anchor
+    >
+      <span class="font-mono">{{ a.task?.key ?? a.id }}</span>
+      <span class="truncate font-medium text-foreground">{{ a.task?.title }}</span>
+      <span class="shrink-0">밑에 붙습니다</span>
+    </p>
     <ul class="mt-2 flex flex-col gap-2">
       <li
         v-for="t in proposal.tasks"
@@ -96,7 +114,7 @@ const registered = computed(() => {
         data-proposed-task
       >
         <CornerDownRight
-          v-if="t.parentTempId !== null"
+          v-if="t.parentTempId !== null || t.parentId !== null"
           class="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
         />
         <div class="flex min-w-0 flex-col gap-1">

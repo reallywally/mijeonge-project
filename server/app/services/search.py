@@ -10,6 +10,7 @@ from sqlalchemy import (
     cast,
     func,
     literal,
+    or_,
     select,
     union_all,
 )
@@ -289,9 +290,26 @@ async def get_thread(session: AsyncSession, project_id: str, thread_id: str) -> 
     )
 
 
+async def tasks_by_key(
+    session: AsyncSession, project_id: str, keys: Iterable[str]
+) -> dict[str, Task]:
+    """작업 키(HW-4) → 작업. 키는 대문자로 맞춰 찾는다 — 없는 키는 빠진다."""
+    wanted = {key.upper() for key in keys}
+    if not wanted:
+        return {}
+    found = await session.scalars(
+        select(Task).where(Task.project_id == project_id, Task.key.in_(wanted))
+    )
+    return {task.key: task for task in found.all()}
+
+
 async def get_task(session: AsyncSession, project_id: str, task_id: str) -> TaskDoc:
+    """task_id 에 작업 키(HW-4)를 넣어도 찾는다 — 사용자가 키로 가리키면 Claude 가 그대로 넘긴다."""
     found = await session.execute(
-        select(Task).where(Task.id == task_id, Task.project_id == project_id)
+        select(Task).where(
+            Task.project_id == project_id,
+            or_(Task.id == task_id, Task.key == task_id.strip().upper()),
+        )
     )
     task = found.scalar_one_or_none()
     if task is None:
@@ -303,8 +321,17 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
         .where(TaskThreadLink.task_id == task.id, TaskThreadLink.project_id == project_id)
         .order_by(Thread.seq)
     )
+    children = await session.execute(
+        select(Task.id, Task.key, Task.title, Task.status)
+        .where(Task.parent_id == task.id, Task.project_id == project_id)
+        .order_by(Task.seq)
+    )
     return TaskDoc(
         task=to_task(task, await comment_count(session, task.id)),
+        children=[
+            LinkedTask(id=id_, key=key, title=title, status=status)
+            for id_, key, title, status in children.all()
+        ],
         threads=[
             LinkedThread(id=id_, title=title, state=state) for id_, title, state in threads.all()
         ],

@@ -161,12 +161,15 @@ const isDayOrNull = (v: unknown): v is string | null => v === null || typeof v =
 function toProposedTask(v: unknown): ProposedTask | null {
   if (!isRecord(v)) return null
   const { tempId, parentTempId, title, ownerId, start, due, priority } = v
+  /* parentId 는 나중에 늘어난 칸이다 — 없으면 null 로 본다 */
+  const parentId = v.parentId ?? null
   if (typeof tempId !== 'string' || typeof title !== 'string') return null
   if (parentTempId !== null && typeof parentTempId !== 'string') return null
+  if (parentId !== null && typeof parentId !== 'string') return null
   if (ownerId !== null && typeof ownerId !== 'string') return null
   if (!isDayOrNull(start) || !isDayOrNull(due)) return null
   if (priority !== 'low' && priority !== 'normal' && priority !== 'high') return null
-  return { tempId, parentTempId, title, ownerId, start, due, priority }
+  return { tempId, parentTempId, parentId, title, ownerId, start, due, priority }
 }
 
 function toProposal(v: unknown): TaskProposal | null {
