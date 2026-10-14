@@ -47,6 +47,10 @@ export interface MemberAccount {
   email: string | null
   systemRole: SystemRole
   active: boolean
+  /** 경력 · 기술 스펙 · 기타 사항 — 관리자가 적는 자유 글(각 2000자까지). 비어 있으면 null */
+  career: string | null
+  skills: string | null
+  notes: string | null
   /** 비밀번호가 걸려 있는지 — 없으면 로그인할 수 없다 */
   hasPassword: boolean
   createdAt: string
@@ -71,6 +75,9 @@ export interface MemberAccountInput {
   email: string
   password: string
   systemRole: SystemRole
+  career?: string | null
+  skills?: string | null
+  notes?: string | null
 }
 
 /** PATCH /api/admin/members/{memberId} — 보낸 필드만 바뀐다 */
@@ -79,6 +86,10 @@ export interface MemberAccountPatch {
   email?: string
   systemRole?: SystemRole
   active?: boolean
+  /** null 이나 빈 글이면 비운다 */
+  career?: string | null
+  skills?: string | null
+  notes?: string | null
 }
 
 /** GET /api/projects/{projectId}/members */

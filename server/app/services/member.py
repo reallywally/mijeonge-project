@@ -48,6 +48,9 @@ def _account(member: Member, identity: AuthIdentity | None) -> MemberAccountOut:
             "email": member.email,
             "system_role": member.system_role,
             "active": member.active,
+            "career": member.career,
+            "skills": member.skills,
+            "notes": member.notes,
             "has_password": identity is not None and identity.password_hash is not None,
             "created_at": member.created_at,
             "last_login_at": identity.last_login_at if identity else None,
@@ -84,6 +87,9 @@ async def create_account(session: AsyncSession, payload: MemberAccountCreate) ->
         email=payload.email,
         system_role=payload.system_role,
         active=True,
+        career=payload.career,
+        skills=payload.skills,
+        notes=payload.notes,
         created_at=now(),
     )
     identity = AuthIdentity(
@@ -139,6 +145,12 @@ async def patch_account(
         member.active = payload.active
         if not payload.active:
             await auth_service.end_member_sessions(session, member.id)
+    if "career" in sent:
+        member.career = payload.career
+    if "skills" in sent:
+        member.skills = payload.skills
+    if "notes" in sent:
+        member.notes = payload.notes
     await session.commit()
     return _account(member, identity)
 

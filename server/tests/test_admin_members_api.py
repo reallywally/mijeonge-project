@@ -100,6 +100,35 @@ async def test_patch_name_and_email(client: httpx.AsyncClient, anon: httpx.Async
     assert await _login(anon, "jihoon@innoflow.local", DEV_PASSWORD) == 200
 
 
+async def test_profile_create_patch_and_clear(client: httpx.AsyncClient) -> None:
+    made = await client.post(
+        URL, json={**NEW, "career": " 보험 시스템 7년 ", "skills": "Java, Spring", "notes": ""}
+    )
+    assert made.status_code == 201
+    body = made.json()
+    assert body["career"] == "보험 시스템 7년"
+    assert body["skills"] == "Java, Spring"
+    assert body["notes"] is None  # 빈 글은 null 로 둔다
+
+    member_id = body["id"]
+    res = await client.patch(f"{URL}/{member_id}", json={"notes": "10월 말까지 휴가"})
+    assert res.json()["notes"] == "10월 말까지 휴가"
+    assert res.json()["career"] == "보험 시스템 7년"  # 안 보낸 칸은 그대로
+
+    # 소개 칸은 null 이나 공백으로 비운다
+    res = await client.patch(f"{URL}/{member_id}", json={"career": None, "skills": "   "})
+    assert res.status_code == 200
+    assert res.json()["career"] is None
+    assert res.json()["skills"] is None
+    assert res.json()["notes"] == "10월 말까지 휴가"
+
+    too_long = await client.patch(f"{URL}/{member_id}", json={"skills": "가" * 2001})
+    assert too_long.status_code == 422
+
+    listed = {row["id"]: row for row in (await client.get(URL)).json()}
+    assert listed["u1"]["career"] is None
+
+
 async def test_patch_rules(client: httpx.AsyncClient) -> None:
     taken = await client.patch(f"{URL}/u2", json={"email": "u3@innoflow.local"})
     assert taken.status_code == 409
