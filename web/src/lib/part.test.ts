@@ -4,6 +4,7 @@ import {
   defaultPartScope,
   inheritedPartId,
   partChoices,
+  partFilterOf,
   partNameProblem,
   sortParts,
   visibleInMyParts,
@@ -197,5 +198,16 @@ describe('기본 보기 · 고르기 · 상속', () => {
     expect(partNameProblem(' 인프라 ')).toBeNull()
     expect(partNameProblem('가'.repeat(50))).toBeNull()
     expect(partNameProblem('가'.repeat(51))).not.toBeNull()
+  })
+})
+
+describe('partFilterOf — 목록의 ?part=', () => {
+  const parts = [{ id: 'pt1' }, { id: 'pt2' }]
+  it('이 프로젝트의 파트 id · common 만 받고 나머지는 전체', () => {
+    expect(partFilterOf('pt1', parts)).toBe('pt1')
+    expect(partFilterOf('common', parts)).toBe('common')
+    expect(partFilterOf('pt9', parts)).toBe('all')
+    expect(partFilterOf(undefined, parts)).toBe('all')
+    expect(partFilterOf(['pt2', 'pt1'], parts)).toBe('pt2')
   })
 })

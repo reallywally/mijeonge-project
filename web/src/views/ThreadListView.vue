@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { partFilterOf } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useThreadStore } from '@/stores/thread'
@@ -36,11 +37,13 @@ const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
 
-/* 조회 조건 — 제목 · 상태 · 담당자 */
+/* 조회 조건 — 제목 · 파트 · 담당자 · 상태. 작업 목록과 같은 자리, 같은 순서다.
+   파트 거르기는 [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다 */
 const titleDraft = ref('')
 const query = ref('')
 const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'stuck' | 'overdue'>('all')
 const ownerFilter = ref<string>('all')
+const partFilter = ref<string>('all')
 const page = ref(1)
 const perPage = 5
 
@@ -75,9 +78,16 @@ function matchesOwner(row: ThreadRow) {
   return row.thread.ownerId === ownerFilter.value
 }
 
+function matchesPart(row: ThreadRow) {
+  if (partFilter.value === 'all') return true
+  if (partFilter.value === 'common') return row.thread.partId === null
+  return row.thread.partId === partFilter.value
+}
+
 const filtered = computed(() =>
   threadStore.visibleRows.filter(
-    (r) => r.thread.title.includes(query.value) && matchesState(r) && matchesOwner(r),
+    (r) =>
+      r.thread.title.includes(query.value) && matchesState(r) && matchesOwner(r) && matchesPart(r),
   ),
 )
 
@@ -97,6 +107,17 @@ function resetPage() {
 /* 보기 범위를 바꾸면 줄 수가 달라진다 — 없는 쪽에 머물지 않게 첫 쪽으로 */
 watch(() => partStore.scope, resetPage)
 
+/* 파트 관리의 '안건 N건 보기' 로 오면 그 파트로 걸러진 채 연다(?part=). 파트를 받기 전이면 받은 뒤에 맞춘다 */
+watch(
+  () => [route.query.part, partStore.parts.length] as const,
+  ([raw]) => {
+    if (raw === undefined) return
+    partFilter.value = partFilterOf(raw, partStore.parts)
+    resetPage()
+  },
+  { immediate: true },
+)
+
 function search() {
   query.value = titleDraft.value.trim()
   resetPage()
@@ -106,6 +127,7 @@ function resetAll() {
   query.value = ''
   stateFilter.value = 'all'
   ownerFilter.value = 'all'
+  partFilter.value = 'all'
   resetPage()
 }
 function pickState(key: typeof stateFilter.value) {
@@ -237,6 +259,21 @@ function onCreated(id: string) {
               class="grow bg-background"
               @keyup.enter="search"
             />
+            <template v-if="partStore.parts.length > 0">
+              <span class="shrink-0 text-sm text-muted-foreground">파트</span>
+              <Select v-model="partFilter" @update:model-value="resetPage">
+                <SelectTrigger class="w-[132px] shrink-0 bg-background" aria-label="파트 거르기">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem value="common">공통</SelectItem>
+                  <SelectItem v-for="p in partStore.parts" :key="p.id" :value="p.id">{{
+                    p.active ? p.name : `${p.name} (보관)`
+                  }}</SelectItem>
+                </SelectContent>
+              </Select>
+            </template>
             <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
             <Select v-model="ownerFilter" @update:model-value="resetPage">
               <SelectTrigger class="w-[132px] shrink-0 bg-background">

@@ -11,7 +11,7 @@ import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import AdminMembersView from './AdminMembersView.vue'
-import ProjectMembersView from './ProjectMembersView.vue'
+import ProjectSettingsView from './ProjectSettingsView.vue'
 
 /* 관리 화면 둘이 목업 갈래로 떠서 스토어 · 목업 서버까지 닿는지 본다. 팝업은 teleport 로 body 에 나간다 */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
@@ -23,13 +23,13 @@ async function mountAt(path: string) {
     history: createWebHistory(),
     routes: [
       { path: '/admin/members', component: AdminMembersView },
-      { path: '/projects/:projectId/members', component: ProjectMembersView },
+      { path: '/projects/:projectId/settings', component: ProjectSettingsView },
       { path: '/:rest(.*)', component: Blank },
     ],
   })
   router.push(path)
   await router.isReady()
-  const view = path.startsWith('/admin') ? AdminMembersView : ProjectMembersView
+  const view = path.startsWith('/admin') ? AdminMembersView : ProjectSettingsView
   const w = mount(view, { global: { plugins: [router] }, attachTo: document.body })
   await flushPromises()
   return { w, router }
@@ -111,10 +111,10 @@ describe('사용자 관리 화면', () => {
   })
 })
 
-describe('프로젝트 멤버 화면', () => {
+describe('프로젝트 관리 화면', () => {
   it('부여된 사람과 역할이 서고, 프로젝트 관리자가 맨 위다', async () => {
     await signedIn('u1@innoflow.local')
-    const { w } = await mountAt('/projects/p1/members')
+    const { w } = await mountAt('/projects/p1/settings')
 
     const rows = w.findAll('tr[data-member-id]')
     expect(rows.map((r) => r.attributes('data-member-id'))).toEqual(['u1', 'u2', 'u3', 'u4'])
@@ -124,7 +124,7 @@ describe('프로젝트 멤버 화면', () => {
 
   it('역할을 바꾸고, 빼면 한 번 더 묻고 뺀다', async () => {
     await signedIn('u1@innoflow.local')
-    const { w } = await mountAt('/projects/p1/members')
+    const { w } = await mountAt('/projects/p1/settings')
 
     /* reka-ui 셀렉트는 jsdom 에서 열리지 않으므로 고른 값만 흘려 넣는다 */
     const roleOf = (memberId: string) =>
@@ -148,7 +148,7 @@ describe('프로젝트 멤버 화면', () => {
 
   it('활성 멤버 중 아직 없는 사람만 더할 수 있고, 더하면 표에 선다', async () => {
     await signedIn('u1@innoflow.local')
-    const { w } = await mountAt('/projects/p1/members')
+    const { w } = await mountAt('/projects/p1/settings')
 
     const picker = w.findAllComponents(Select)[1]
     picker.vm.$emit('update:modelValue', 'u0')
@@ -159,7 +159,7 @@ describe('프로젝트 멤버 화면', () => {
 
   it('프로젝트 이름을 고친다', async () => {
     await signedIn('u1@innoflow.local')
-    const { w } = await mountAt('/projects/p1/members')
+    const { w } = await mountAt('/projects/p1/settings')
     await w.get('input[aria-label="프로젝트 이름"]').setValue('한화손보 차세대 2기')
     await click(bodyButton('이름 바꾸기'))
     expect(useDataStore().currentProject?.name).toBe('한화손보 차세대 2기')

@@ -9,6 +9,7 @@ import {
   ListTree,
   Loader2,
   LogOut,
+  Settings,
   SquareKanban,
   UserCog,
   Users,
@@ -172,15 +173,24 @@ async function logout() {
 
         <nav v-if="manageProject || manageAccounts" class="flex flex-col gap-[3px]">
           <span class="px-1 pb-1 text-xs font-medium text-muted-foreground">관리</span>
-          <RouterLink
-            v-if="manageProject"
-            :to="`/projects/${data.currentProjectId}/members`"
-            class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
-          >
-            <Users class="size-4 shrink-0" />
-            프로젝트 멤버
-          </RouterLink>
+          <template v-if="manageProject">
+            <RouterLink
+              :to="`/projects/${data.currentProjectId}/settings`"
+              class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              active-class="bg-accent font-medium text-accent-foreground"
+            >
+              <Settings class="size-4 shrink-0" />
+              프로젝트 관리
+            </RouterLink>
+            <RouterLink
+              :to="`/projects/${data.currentProjectId}/parts`"
+              class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              active-class="bg-accent font-medium text-accent-foreground"
+            >
+              <Users class="size-4 shrink-0" />
+              파트 관리
+            </RouterLink>
+          </template>
           <RouterLink
             v-if="manageAccounts"
             to="/admin/members"

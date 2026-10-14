@@ -38,10 +38,21 @@ const router = createRouter({
       meta: { access: 'systemAdmin' },
     },
     {
-      path: '/projects/:projectId/members',
-      name: 'project-members',
-      component: () => import('@/views/ProjectMembersView.vue'),
+      path: '/projects/:projectId/settings',
+      name: 'project-settings',
+      component: () => import('@/views/ProjectSettingsView.vue'),
       meta: { access: 'projectAdmin' },
+    },
+    {
+      path: '/projects/:projectId/parts',
+      name: 'project-parts',
+      component: () => import('@/views/ProjectPartsView.vue'),
+      meta: { access: 'projectAdmin' },
+    },
+    /* 옛 주소 — 멤버는 프로젝트 관리로 옮겼다. 걸어 둔 링크가 살게 넘긴다 */
+    {
+      path: '/projects/:projectId/members',
+      redirect: (to) => ({ path: `/projects/${String(to.params.projectId)}/settings` }),
     },
     {
       path: '/admin/members',

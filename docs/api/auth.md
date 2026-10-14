@@ -177,5 +177,5 @@ export interface ProjectMember {
 - 아무 요청에서나 401 이 오면 `/login?next=<지금 주소>` 로 보낸다
 - 머리글의 "나 고르기" 를 걷어내고 **내 이름 메뉴**(비밀번호 바꾸기 · 로그아웃)로 바꾼다. `currentMemberId` 는 `GET /api/auth/me` 의 `id` 다
 - `/admin/members` — 사용자 관리 (시스템 관리자만 메뉴가 보인다)
-- `/projects/:projectId/members` — 프로젝트 멤버 (그 프로젝트 관리자 · 시스템 관리자만 메뉴가 보인다)
+- `/projects/:projectId/settings` — **프로젝트 관리**: 프로젝트 정보(이름 · 접두사는 읽기 전용) + 프로젝트 멤버. `/projects/:projectId/parts` — **파트 관리**(`docs/api/part.md`). 둘 다 그 프로젝트 관리자 · 시스템 관리자만 메뉴가 보인다. 옛 `/projects/:projectId/members` 는 settings 로 넘긴다
 - 메뉴를 숨기는 것은 편의다. **막는 것은 서버다**
