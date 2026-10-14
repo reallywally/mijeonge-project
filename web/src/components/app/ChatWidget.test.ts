@@ -93,6 +93,55 @@ describe('챗봇 창', () => {
     await vi.runAllTimersAsync()
   })
 
+  it('@ 를 치면 작업 목록이 뜨고, 화살표 · Enter 로 골라 @키 로 넣는다', async () => {
+    const w = await opened()
+    const el = textarea(w).element as HTMLTextAreaElement
+    await textarea(w).setValue('@설계')
+    el.setSelectionRange(3, 3)
+    await textarea(w).trigger('input')
+
+    const options = () => w.findAll('[role="option"]')
+    expect(options().length).toBeGreaterThan(1)
+    expect(options()[0].text()).toContain('HW-1')
+    expect(textarea(w).attributes('aria-expanded')).toBe('true')
+
+    await textarea(w).trigger('keydown', { key: 'ArrowDown' })
+    expect(options()[1].attributes('aria-selected')).toBe('true')
+    await textarea(w).trigger('keydown', { key: 'ArrowUp' })
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await nextTick()
+
+    /* Enter 는 고르기만 하고 보내지 않는다 */
+    expect(el.value).toBe('@HW-1 ')
+    expect(useChatStore().lines).toHaveLength(0)
+    expect(w.find('[role="listbox"]').exists()).toBe(false)
+  })
+
+  it('목록이 떠 있을 때 Esc 는 목록만 닫고 창은 그대로다', async () => {
+    const w = await opened()
+    const el = textarea(w).element as HTMLTextAreaElement
+    await textarea(w).setValue('@')
+    el.setSelectionRange(1, 1)
+    await textarea(w).trigger('input')
+    expect(w.find('[role="listbox"]').exists()).toBe(true)
+
+    await textarea(w).trigger('keydown', { key: 'Escape' })
+    expect(w.find('[role="listbox"]').exists()).toBe(false)
+    expect(w.find('[role="dialog"]').exists()).toBe(true)
+  })
+
+  it('목록을 누르면 그 작업이 들어간다', async () => {
+    const w = await opened()
+    const el = textarea(w).element as HTMLTextAreaElement
+    await textarea(w).setValue('이거 @hw-2 봐줘')
+    el.setSelectionRange(8, 8)
+    await textarea(w).trigger('input')
+
+    await w.findAll('[role="option"]')[0].trigger('mousedown')
+    await nextTick()
+    expect(el.value).toBe('이거 @HW-2 봐줘')
+  })
+
   it('답은 HTML 로 그리지 않는다', async () => {
     const w = await opened()
     const chat = useChatStore()

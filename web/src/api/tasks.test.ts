@@ -12,6 +12,7 @@ afterEach(() => {
 const draft = (tempId: string, over: Partial<ProposedTask> = {}): ProposedTask => ({
   tempId,
   parentTempId: null,
+  parentId: null,
   title: `작업 ${tempId}`,
   ownerId: null,
   start: null,
@@ -26,6 +27,33 @@ const lastHwNo = Math.max(
 
 describe('한 번에 등록 — 목업 갈래', () => {
   beforeEach(resetMockTasks)
+
+  it('parentId 로 이미 있는 작업 밑에 붙고, 그 밑은 parentTempId 로 잇는다', async () => {
+    const res = await createTasksBatch('p1', {
+      tasks: [draft('t1', { parentId: 'k1' }), draft('t2', { parentTempId: 't1' })],
+    })
+    expect(res.tasks[0].parentId).toBe('k1')
+    expect(res.tasks[1].parentId).toBe(res.tasks[0].id)
+  })
+
+  it('다른 프로젝트의 작업 밑에는 못 붙는다 — 400 TASK_PARENT_NOT_FOUND', async () => {
+    const error = await createTasksBatch('p1', {
+      tasks: [draft('t1'), draft('t2', { parentId: 'x1' })],
+    }).catch((e: unknown) => e)
+    expect(error).toMatchObject({
+      status: 400,
+      code: 'TASK_PARENT_NOT_FOUND',
+      detail: { 'tasks.1.parentId': '상위 작업을 찾을 수 없습니다.' },
+    })
+  })
+
+  it('상위를 둘 다 두면 422', async () => {
+    const error = await createTasksBatch('p1', {
+      tasks: [draft('t1'), draft('t2', { parentTempId: 't1', parentId: 'k1' })],
+    }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ status: 422 })
+    expect((error as { detail: Record<string, string> }).detail).toHaveProperty('tasks.1.parentId')
+  })
 
   it('요청 순서대로 todo · 빈 본문으로 만들고, 상위는 임시 이름을 id 로 바꿔 잇는다', async () => {
     const res = await createTasksBatch('p1', {

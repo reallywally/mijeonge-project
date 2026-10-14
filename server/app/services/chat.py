@@ -58,6 +58,9 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 WEEKDAYS = "월화수목금토일"
 
 REF_PATTERN = re.compile(r"\[\[(thread|task):([^\[\]\s]+)\]\]")
+# 질문 속 작업 언급 — 화면의 @ 자동완성이 '@HW-4' 로 넣는다. 접두사 규칙은 프로젝트와 같다
+# 뒤에 조사가 바로 붙어도('@HW-4는') 잡는다. 앞이 영숫자면 이메일 같은 것이라 뺀다
+MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9]{0,7}-\d+)(?![A-Za-z0-9_])")
 
 SYSTEM_PROMPT = """\
 너는 사내 업무 도구 innoFlow 의 도우미다. 지금 프로젝트는 '{project_name}' 이다.
@@ -79,6 +82,12 @@ SYSTEM_PROMPT = """\
 3. 찾지 못하면 지어내지 않고 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
 4. 이 프로젝트 밖은 찾지 않는다. 도구는 이 프로젝트 안만 본다
 
+## @ 로 가리킨 작업
+- 질문 뒤의 [@ 로 가리킨 작업] 은 사용자가 '@HW-4' 처럼 콕 집은 작업이다. 화면이 덧붙인 기록이다
+- 그 작업은 검색하지 말고 get_task 로 바로 읽고 답한다. 질문 속 '@HW-4' 는 그 작업을 뜻한다
+- '이 프로젝트에 없다' 고 적힌 키는 지어내지 말고 그런 작업을 찾지 못했다고 말한다
+- 사용자가 @ 없이 작업 키(HW-4)를 말해도 get_task 의 task_id 에 키를 넣어 읽을 수 있다
+
 ## 근거 표시
 - 답에 쓴 안건 · 작업마다 본문 안에 [[thread:ID]] · [[task:ID]] 를 붙인다.
   ID 는 도구 결과의 id 그대로다
@@ -94,14 +103,22 @@ SYSTEM_PROMPT = """\
    이름이 멤버에 없거나 여럿에 걸리면 **초안을 내지 말고** 누구인지 되묻는다
 3. 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업으로, 할 일을 하위 작업
    (parent_temp_id 가 묶음의 temp_id)으로 둔다. 할 일이 하나면 상위 없이 하나만 낸다
-4. 상위 작업은 같은 초안 안의 앞 항목만 될 수 있다. 이미 있는 작업 밑에는 붙이지 못한다 —
-   그렇게 해 달라면 할 수 없다고 말한다
+4. 상위 작업은 같은 초안 안의 앞 항목(parent_temp_id)이거나, 이미 있는 작업(parent_id)이다.
+   이미 있는 작업 밑에 붙일 때는 get_task 로 그 작업을 먼저 읽고 그 id 를 parent_id 에 넣는다.
+   한 항목에 둘을 같이 쓰지 않는다. 초안 안의 하위의 하위는 parent_temp_id 로 잇는다
 5. 날짜("다음 주 금요일")는 오늘을 기준으로 YYYY-MM-DD 로 바꾼다.
    말하지 않은 기간은 null, 우선순위는 normal 로 둔다. 짐작으로 채우지 않는다
 6. propose_tasks 가 오류를 돌려주면 고쳐서 다시 부른다. 한 답에서 마지막으로 낸 초안만 화면에 보인다
 7. 초안을 낸 뒤의 답은 짧게 — "아래처럼 등록할까요?" 정도. 초안 내용을 본문에 다시 늘어놓지 않고,
    "등록했다" 고 말하지 않는다
-8. 지난 답 뒤의 [작업 초안 …] 은 화면이 덧붙인 기록이다 — 네가 쓰는 형식이 아니다.
+8. "@HW-20 분석해서 필요한 작업 하위에 추가해줘" 처럼 작업을 나눠 달라면:
+   get_task 로 그 작업의 제목 · 본문 · 걸어 둔 안건 · 이미 있는 하위 작업(children)을 읽는다.
+   걸린 안건의 결정이 할 일을 정하면 get_thread 로 읽는다. 그다음 그 작업을 끝내는 데 필요한데
+   **children 에 아직 없는** 할 일만 하위 작업 초안(parent_id = 그 작업의 id)으로 낸다.
+   이미 있는 하위 작업과 겹치는 것은 내지 않는다. 담당자 · 기간은 말하지 않았으면 비워 둔다.
+   답에는 무엇을 근거로 나눴는지 한 줄 말하고,
+   읽은 작업 · 안건의 [[task:ID]] · [[thread:ID]] 를 붙인다
+9. 지난 답 뒤의 [작업 초안 …] 은 화면이 덧붙인 기록이다 — 네가 쓰는 형식이 아니다.
    '대기' · '취소' 인 초안을 고쳐 달라면 고친 새 초안을 낸다.
    '등록됨' 인 작업은 이미 저장됐다 — 채팅으로는 고치지 못하니 화면에서 고치라고 말한다
 """
@@ -115,7 +132,8 @@ TRUNCATED = "\n\n(답이 길어 여기서 끊었습니다.)"
 
 PROPOSED = (
     "초안을 화면에 보였다. 아직 저장되지 않았다 — 사용자가 [등록] 을 눌러야 저장된다. "
-    "답은 '아래처럼 등록할까요?' 정도로 짧게 하라."
+    "답은 '아래처럼 등록할까요?' 정도로 짧게 하라. 이미 있는 작업을 나눈 초안이면 "
+    "무엇을 근거로 나눴는지 한 줄과 근거 표시를 붙인다."
 )
 
 _DATE_OR_NULL = {"type": ["string", "null"], "description": "YYYY-MM-DD. 말하지 않았으면 null"}
@@ -174,7 +192,10 @@ TOOLS: list[BetaToolParam] = [
     },
     {
         "name": "get_task",
-        "description": "작업 하나를 읽는다 — 작업(본문 포함) + 걸어 둔 안건의 제목 · 상태.",
+        "description": (
+            "작업 하나를 읽는다 — 작업(본문 포함) + 걸어 둔 안건의 제목 · 상태. "
+            "task_id 에는 작업 id 나 작업 키(HW-4)를 넣는다."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {"task_id": {"type": "string"}},
@@ -214,6 +235,14 @@ TOOLS: list[BetaToolParam] = [
                                 "type": ["string", "null"],
                                 "description": "상위 작업의 temp_id — 앞 항목만. 없으면 null",
                             },
+                            "parent_id": {
+                                "type": ["string", "null"],
+                                "description": (
+                                    "이미 있는 작업 밑에 붙일 때 그 작업의 id "
+                                    "(get_task 로 읽은 것). parent_temp_id 와 같이 쓰지 않는다. "
+                                    "없으면 null"
+                                ),
+                            },
                             "title": {"type": "string"},
                             "owner_id": {
                                 "type": ["string", "null"],
@@ -226,6 +255,7 @@ TOOLS: list[BetaToolParam] = [
                         "required": [
                             "temp_id",
                             "parent_temp_id",
+                            "parent_id",
                             "title",
                             "owner_id",
                             "start",
@@ -331,6 +361,8 @@ async def check_proposal(
         problems = task_service.proposal_problems(proposal.tasks)
         if not problems:
             problems = await task_service.missing_owners(session, project_id, proposal.tasks)
+        if not problems:
+            problems = await task_service.missing_parents(session, project_id, proposal.tasks)
         if problems:
             return (
                 json.dumps(
@@ -370,6 +402,7 @@ def proposal_note(proposal: ChatProposal) -> str:
         fields = {
             "temp_id": item.temp_id,
             "parent_temp_id": item.parent_temp_id,
+            "parent_id": item.parent_id,
             "title": item.title,
             "owner_id": item.owner_id,
             "start": item.start.isoformat() if item.start else None,
@@ -382,14 +415,58 @@ def proposal_note(proposal: ChatProposal) -> str:
     return "\n".join(lines)
 
 
-def _content(message: ChatMessage) -> str:
-    if message.proposal is None:
+def mentioned_keys(text: str) -> list[str]:
+    """질문에 '@HW-4' 로 나온 작업 키 — 대문자로, 처음 나온 순서대로 한 번씩."""
+    return list(dict.fromkeys(key.upper() for key in MENTION_PATTERN.findall(text)))
+
+
+async def find_mentions(
+    session: AsyncSession, project_id: str, messages: Sequence[ChatMessage]
+) -> dict[str, dict[str, str]]:
+    """질문들이 가리킨 작업을 이 프로젝트 안에서만 찾는다. 다른 프로젝트의 키는 없는 것과 같다.
+
+    값을 바로 떠 둔다 — 아래 rollback 이 ORM 객체를 만료시킨다.
+    """
+    keys = [key for m in messages if m.role == "user" for key in mentioned_keys(m.text)]
+    try:
+        found = await search_service.tasks_by_key(session, project_id, keys)
+        return {
+            key: {"id": task.id, "key": task.key, "title": task.title, "status": task.status}
+            for key, task in found.items()
+        }
+    finally:
+        # 도구처럼 읽기만 한다 — 열린 트랜잭션을 Claude 를 부르는 동안 붙잡지 않는다
+        await session.rollback()
+
+
+def mention_note(keys: Sequence[str], found: dict[str, dict[str, str]]) -> str:
+    """질문이 가리킨 작업을 Claude 가 읽을 글로. id 를 실어 검색 없이 get_task 로 읽게 한다."""
+    lines = ["[@ 로 가리킨 작업]"]
+    for key in keys:
+        task = found.get(key)
+        if task is None:
+            lines.append(f"- @{key}: 이 프로젝트에 없다")
+        else:
+            lines.append(f"- @{key}: " + json.dumps(task, ensure_ascii=False))
+    return "\n".join(lines)
+
+
+def _content(message: ChatMessage, mentions: dict[str, dict[str, str]]) -> str:
+    if message.proposal is not None:
+        return f"{message.text}\n\n{proposal_note(message.proposal)}"
+    keys = mentioned_keys(message.text) if message.role == "user" else []
+    if not keys:
         return message.text
-    return f"{message.text}\n\n{proposal_note(message.proposal)}"
+    return f"{message.text}\n\n{mention_note(keys, mentions)}"
 
 
-def _to_params(messages: Sequence[ChatMessage]) -> list[BetaMessageParam]:
-    params: list[BetaMessageParam] = [{"role": m.role, "content": _content(m)} for m in messages]
+def _to_params(
+    messages: Sequence[ChatMessage], mentions: dict[str, dict[str, str]] | None = None
+) -> list[BetaMessageParam]:
+    found = mentions or {}
+    params: list[BetaMessageParam] = [
+        {"role": m.role, "content": _content(m, found)} for m in messages
+    ]
     # 대화는 질문으로 시작해야 한다 — 화면이 앞을 잘라도 assistant 가 먼저 오면 떼어 낸다
     while params and params[0]["role"] != "user":
         params.pop(0)
@@ -464,7 +541,7 @@ async def _loop(
     project_name: str,
     messages: Sequence[ChatMessage],
 ) -> AsyncGenerator[ChatEvent, None]:
-    history = _to_params(messages)
+    history = _to_params(messages, await find_mentions(session, project_id, messages))
     today = today_kst()
     system = SYSTEM_PROMPT.format(
         project_name=project_name, today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})"

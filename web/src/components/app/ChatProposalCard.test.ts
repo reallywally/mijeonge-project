@@ -16,6 +16,7 @@ beforeEach(() => {
 const draft = (tempId: string, over: Partial<ProposedTask> = {}): ProposedTask => ({
   tempId,
   parentTempId: null,
+  parentId: null,
   title: `작업 ${tempId}`,
   ownerId: null,
   start: null,
@@ -29,6 +30,7 @@ const proposal = (over: Partial<ChatProposal> = {}): ChatProposal => ({
     draft('t1', { title: '간담회 준비' }),
     draft('t2', {
       parentTempId: 't1',
+      parentId: null,
       title: '일정 체크',
       ownerId: 'u1',
       start: '2026-10-13',
@@ -64,6 +66,24 @@ const button = (w: ReturnType<typeof mount>, label: string) =>
   w.findAll('button').find((b) => b.text() === label)
 
 describe('작업 초안 카드', () => {
+  it('이미 있는 작업 밑에 붙는 초안은 그 작업을 위에 밝히고 한 칸 들인다', () => {
+    const { w } = card(
+      proposal({
+        tasks: [
+          draft('t1', { parentId: 'k1', title: '화면 설계' }),
+          draft('t2', { parentTempId: 't1', title: '목록 화면' }),
+        ],
+      }),
+    )
+    const anchor = w.get('[data-proposal-anchor]')
+    expect(anchor.text()).toContain('HW-1')
+    expect(anchor.text()).toContain('설계')
+    expect(anchor.text()).toContain('밑에 붙습니다')
+    const rows = w.findAll('[data-proposed-task]')
+    expect(rows[0].classes()).toContain('pl-5')
+    expect(rows[1].classes()).toContain('pl-10')
+  })
+
   it('대기 중이면 계층대로 들여 그리고, 담당자 · 기간 · 우선순위는 있을 때만 단다', () => {
     const { w } = card(proposal())
     const rows = w.findAll('[data-proposed-task]')

@@ -37,6 +37,7 @@ function plainProposal(p: ChatProposal): ChatProposal {
     tasks: p.tasks.map((t) => ({
       tempId: t.tempId,
       parentTempId: t.parentTempId,
+      parentId: t.parentId,
       title: t.title,
       ownerId: t.ownerId,
       start: t.start,

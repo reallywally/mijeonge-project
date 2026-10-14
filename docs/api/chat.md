@@ -172,8 +172,10 @@ export interface TaskProposal {
 export interface ProposedTask {
   /** 이 초안 안에서만 쓰는 임시 이름 — 't1', 't2' … */
   tempId: string
-  /** 같은 초안 안의 상위 작업. 기존 작업 밑에 붙이는 것은 이번 범위 밖이다 */
+  /** 같은 초안 안의 상위 작업 */
   parentTempId: string | null
+  /** 이미 있는 작업 밑에 붙일 때 그 작업의 id (2026-10-14). parentTempId 와 같이 쓰지 않는다 */
+  parentId: string | null
   title: string
   ownerId: string | null
   /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */
@@ -186,6 +188,8 @@ export interface ProposedTask {
 **검사 규칙**(서버가 `propose_tasks` 에서, 그리고 `tasks/batch` 에서 똑같이 본다)
 - 1 ~ 20개. `tempId` 는 서로 다르다. `parentTempId` 는 **자기보다 앞에 있는** 항목의 `tempId` 다
 - `title` 은 앞뒤 공백을 떼고 비지 않는다. `ownerId` 는 있는 멤버다. `start ≤ due`(둘 다 있을 때)
+- `parentId` 는 **그 프로젝트의** 작업이다(아니면 400 `TASK_PARENT_NOT_FOUND`, `detail` 은 `tasks.N.parentId`).
+  `parentTempId` 와 둘 다 두면 422(`tasks.N.parentId`). 파트는 그 상위 작업을 따른다
 
 ### 스트림에 늘어난 것 — `ChatEvent`
 
@@ -248,3 +252,27 @@ export interface TaskBatchResult {
 - 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업, 할 일을 하위 작업으로 둔다. 할 일이 하나면 상위 없이 하나다
 - 날짜("다음 주 금요일")는 오늘(KST) 기준으로 바꾼다 — 서버가 시스템 프롬프트에 오늘 날짜를 넣는다. 말하지 않은 기간 · 우선순위는 채우지 않는다(null · normal)
 - 경로의 `projectId` 안에만 만든다
+
+## AI 챗봇 — 작업 언급 `@HW-4` (2026-10-14)
+
+질문에서 작업 하나를 콕 집는다. **요청 · 응답 모양은 그대로다** — `ChatMessage.text` 안의 글자로만 오간다.
+
+- **화면** — 입력칸에서 `@` 를 치면 지금 프로젝트의 작업이 뜬다(키가 친 글로 시작하는 것 먼저,
+  그다음 키 · 제목에 든 것, 8개까지). ↑↓ 로 옮기고 Enter · Tab · 누르기로 고르면 `@HW-4 ` 가 들어간다.
+  목록이 떠 있을 때 Enter 는 보내지 않고, Esc 는 목록만 닫는다 (`web/src/lib/mention.ts`)
+- **서버** — 질문(`role: user`)의 `@키` 를 그 프로젝트의 작업으로 찾아 질문 뒤에
+  `[@ 로 가리킨 작업]` 기록(id · 키 · 제목 · 상태)을 붙여 Claude 에게 넘긴다. Claude 는 검색 없이 `get_task` 로 읽는다.
+  다른 프로젝트의 키 · 없는 키는 `이 프로젝트에 없다` 로 넘긴다 — 있는지조차 알려 주지 않는다
+- 키의 모양은 `@` + 접두사(영문으로 시작, 8자까지) + `-` + 번호. 대소문자를 가리지 않는다.
+  앞이 영숫자 · `.` · `@` 면(이메일) 언급이 아니다. 뒤에 조사가 바로 붙어도(`@HW-4는`) 언급이다
+- `get_task` 도구의 `task_id` 는 작업 키도 받는다 — 사용자가 `@` 없이 `HW-4` 라고 말해도 읽는다
+
+## AI 챗봇 — 이미 있는 작업 밑에 하위 작업 초안 (2026-10-14)
+
+"@HW-20 분석해서 필요한 작업 하위에 추가해줘" 를 처리한다. 저장은 여전히 사람이 [등록] 으로 한다.
+
+1. Claude 가 `get_task` 로 그 작업을 읽는다 — 제목 · 본문 · 걸어 둔 안건에 더해 **`children`(바로 아래 하위
+   작업의 id · 키 · 제목 · 상태)** 이 늘었다. 걸린 안건의 결정이 할 일을 정하면 `get_thread` 로 읽는다
+2. 그 작업을 끝내는 데 필요한데 `children` 에 아직 없는 할 일만, `parentId` = 그 작업의 id 로 초안을 낸다.
+   하위의 하위는 `parentTempId` 로 잇는다. 왜 그렇게 나눴는지 한두 줄로 먼저 말한다
+3. 화면의 초안 카드는 위에 "`HW-20 제목` 밑에 붙습니다" 를 밝히고 그 밑으로 한 칸 들여 그린다

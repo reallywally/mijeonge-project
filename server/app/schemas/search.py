@@ -62,3 +62,5 @@ class TaskDoc(Schema):
 
     task: TaskOut
     threads: list[LinkedThread]
+    # 바로 아래 하위 작업 — 챗봇이 하위 작업을 더할 때 이미 있는 것과 겹치지 않게 본다
+    children: list[LinkedTask]

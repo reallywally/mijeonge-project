@@ -17,6 +17,7 @@ const meetupProposal = (packOwnerId: string): TaskProposal => ({
     {
       tempId: 't1',
       parentTempId: null,
+      parentId: null,
       title: '간담회 준비',
       ownerId: null,
       start: null,
@@ -26,6 +27,7 @@ const meetupProposal = (packOwnerId: string): TaskProposal => ({
     {
       tempId: 't2',
       parentTempId: 't1',
+      parentId: null,
       title: '일정 체크',
       ownerId: 'u1',
       start: '2026-10-13',
@@ -35,6 +37,7 @@ const meetupProposal = (packOwnerId: string): TaskProposal => ({
     {
       tempId: 't3',
       parentTempId: 't1',
+      parentId: null,
       title: '준비물 체크',
       ownerId: packOwnerId,
       start: null,
