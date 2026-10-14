@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -20,11 +21,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { looksLikeEmail, normalizeEmail, passwordProblem, SYSTEM_ROLE_OPTIONS } from '@/lib/member'
+import {
+  looksLikeEmail,
+  normalizeEmail,
+  passwordProblem,
+  PROFILE_FIELDS,
+  PROFILE_TEXT_MAX,
+  SYSTEM_ROLE_OPTIONS,
+  type ProfileField,
+} from '@/lib/member'
 import { useAdminStore } from '@/stores/admin'
 import type { MemberAccount, MemberAccountPatch, SystemRole } from '@/types/domain'
 
 /* 사용자 등록 · 수정 — 사용자 관리 표 위 팝업. account 가 없으면 등록이다.
+   경력 · 기술 스펙 · 기타 사항은 자유 글이다 — 비우면 null 로 보낸다.
    등록에는 첫 비밀번호를 같이 받고, 수정에서는 활성을 끄고 켠다(지우지 않는다 — 기록이 가리킨다).
    서버의 거절(EMAIL_TAKEN · LAST_SYSTEM_ADMIN …)은 스토어가 토스트로 띄우고 칸은 그대로 둔다 */
 const props = defineProps<{ account: MemberAccount | null }>()
@@ -37,6 +47,7 @@ const email = ref('')
 const password = ref('')
 const systemRole = ref<SystemRole>('user')
 const active = ref(true)
+const profile = ref<Record<ProfileField, string>>({ career: '', skills: '', notes: '' })
 const saving = ref(false)
 
 watch(open, (isOpen) => {
@@ -46,6 +57,11 @@ watch(open, (isOpen) => {
   password.value = ''
   systemRole.value = props.account?.systemRole ?? 'user'
   active.value = props.account?.active ?? true
+  profile.value = {
+    career: props.account?.career ?? '',
+    skills: props.account?.skills ?? '',
+    notes: props.account?.notes ?? '',
+  }
 })
 
 const creating = computed(() => props.account === null)
@@ -54,6 +70,11 @@ const emailHint = computed(() =>
   email.value.trim() && !looksLikeEmail(email.value) ? '이메일 형식이 아닙니다.' : null,
 )
 const passwordHint = computed(() => (password.value ? passwordProblem(password.value) : null))
+
+const profileText = (field: ProfileField) => profile.value[field].trim() || null
+const profileTooLong = computed(() =>
+  PROFILE_FIELDS.some((f) => profile.value[f.key].trim().length > PROFILE_TEXT_MAX),
+)
 
 /** 바뀐 칸만 보낸다 — 부분 수정이다 */
 const patch = computed<MemberAccountPatch>(() => {
@@ -64,11 +85,14 @@ const patch = computed<MemberAccountPatch>(() => {
   if (normalizeEmail(email.value) !== (a.email ?? '')) out.email = email.value.trim()
   if (systemRole.value !== a.systemRole) out.systemRole = systemRole.value
   if (active.value !== a.active) out.active = active.value
+  for (const { key } of PROFILE_FIELDS) {
+    if (profileText(key) !== a[key]) out[key] = profileText(key)
+  }
   return out
 })
 
 const canSubmit = computed(() => {
-  if (saving.value || !name.value.trim()) return false
+  if (saving.value || !name.value.trim() || profileTooLong.value) return false
   if (creating.value) return looksLikeEmail(email.value) && passwordProblem(password.value) === null
   /* 이메일이 없던 사람은 비워 둔 채로도 이름 · 역할을 고칠 수 있다 */
   if (email.value.trim() && !looksLikeEmail(email.value)) return false
@@ -85,6 +109,9 @@ async function submit() {
         email: email.value.trim(),
         password: password.value,
         systemRole: systemRole.value,
+        career: profileText('career'),
+        skills: profileText('skills'),
+        notes: profileText('notes'),
       })) !== null
   saving.value = false
   if (ok) open.value = false
@@ -93,7 +120,7 @@ async function submit() {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="sm:max-w-[460px]">
+    <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-[520px]">
       <DialogHeader>
         <DialogTitle>{{ creating ? '사용자 등록' : '사용자 수정' }}</DialogTitle>
         <DialogDescription class="text-pretty">
@@ -144,6 +171,28 @@ async function submit() {
               </SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div v-for="f in PROFILE_FIELDS" :key="f.key" class="flex flex-col gap-2">
+          <div class="flex items-baseline justify-between">
+            <Label :for="`account-${f.key}`">{{ f.label }}</Label>
+            <span
+              class="text-xs tabular-nums"
+              :class="
+                profile[f.key].trim().length > PROFILE_TEXT_MAX
+                  ? 'text-destructive'
+                  : 'text-muted-foreground'
+              "
+            >
+              {{ profile[f.key].trim().length }}/{{ PROFILE_TEXT_MAX }}
+            </span>
+          </div>
+          <Textarea
+            :id="`account-${f.key}`"
+            v-model="profile[f.key]"
+            rows="3"
+            class="resize-y"
+            :placeholder="f.placeholder"
+          />
         </div>
         <label v-if="!creating" class="flex items-center gap-2 text-sm">
           <Checkbox

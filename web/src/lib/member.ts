@@ -44,3 +44,14 @@ export const normalizeEmail = (email: string) => email.trim().toLowerCase()
 
 /** 화면에서 먼저 거르는 정도의 모양 검사. 진짜 판정은 서버가 한다 */
 export const looksLikeEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+
+/** 경력 · 기술 스펙 · 기타 사항 — 서버와 같은 길이 (docs/api/auth.md) */
+export const PROFILE_TEXT_MAX = 2000
+
+export const PROFILE_FIELDS = [
+  { key: 'career', label: '경력', placeholder: '예: 보험 차세대 시스템 7년, PL 경험' },
+  { key: 'skills', label: '기술 스펙', placeholder: '예: Java, Spring Boot, Oracle, Vue' },
+  { key: 'notes', label: '기타 사항', placeholder: '예: 10월 말까지 반차 많음' },
+] as const
+
+export type ProfileField = (typeof PROFILE_FIELDS)[number]['key']

@@ -34,7 +34,8 @@
 ## 테이블
 
 ```
-member            id · name · email(unique, 소문자로 저장) · system_role('admin'|'user') · active · created_at
+member            id · name · email(unique, 소문자로 저장) · system_role('admin'|'user') · active
+                  · career · skills · notes(자유 글, 비면 null) · created_at
 auth_identity     id · member_id → member · provider('password' | 훗날 'oidc:<이름>') · subject
                   · password_hash(password 일 때만) · created_at · last_login_at
                   unique(provider, subject)
@@ -88,6 +89,10 @@ export interface MemberAccount {
   email: string | null
   systemRole: SystemRole
   active: boolean
+  /** 경력 · 기술 스펙 · 기타 사항 — 관리자가 적는 자유 글(각 2000자까지). 비어 있으면 null */
+  career: string | null
+  skills: string | null
+  notes: string | null
   /** 비밀번호가 걸려 있는지 — 없으면 로그인할 수 없다 */
   hasPassword: boolean
   createdAt: string
@@ -125,8 +130,8 @@ export interface ProjectMember {
 | 메서드 | 경로 | 하는 일 | 응답 |
 | --- | --- | --- | --- |
 | GET | `/api/admin/members` | 전체 멤버 — 비활성 포함, 이름 순 | `MemberAccount[]` |
-| POST | `/api/admin/members` | `{ name, email, password, systemRole }` 등록. 이메일이 겹치면 409 `EMAIL_TAKEN` | `MemberAccount` · 201 |
-| PATCH | `/api/admin/members/{memberId}` | `{ name?, email?, systemRole?, active? }` 부분 수정. 비활성으로 바꾸면 그 사람의 세션을 모두 끊는다. 마지막 시스템 관리자를 내리거나 끄면 409 `LAST_SYSTEM_ADMIN`. 없는 멤버는 404 `MEMBER_NOT_FOUND` | `MemberAccount` |
+| POST | `/api/admin/members` | `{ name, email, password, systemRole, career?, skills?, notes? }` 등록. 이메일이 겹치면 409 `EMAIL_TAKEN` | `MemberAccount` · 201 |
+| PATCH | `/api/admin/members/{memberId}` | `{ name?, email?, systemRole?, active?, career?, skills?, notes? }` 부분 수정. `career` · `skills` · `notes` 는 `null` 이나 빈 글로 비운다(나머지는 `null` 을 받지 않는다). 비활성으로 바꾸면 그 사람의 세션을 모두 끊는다. 마지막 시스템 관리자를 내리거나 끄면 409 `LAST_SYSTEM_ADMIN`. 없는 멤버는 404 `MEMBER_NOT_FOUND` | `MemberAccount` |
 | PUT | `/api/admin/members/{memberId}/password` | `{ password }` — 비밀번호를 새로 건다(잊었을 때 · 처음 로그인시킬 때). 그 사람의 세션을 모두 끊는다. `email` 이 없으면 400 `MEMBER_EMAIL_REQUIRED` | 204 |
 
 - 자기 자신도 이 API 로 고칠 수 있다 — 다만 위의 '마지막 시스템 관리자' 규칙에 걸린다

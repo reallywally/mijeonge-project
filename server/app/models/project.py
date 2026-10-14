@@ -8,6 +8,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -46,6 +47,10 @@ class Member(Base):
     email: Mapped[str | None] = mapped_column(String(254), unique=True)
     system_role: Mapped[str] = mapped_column(String(16), default="user", server_default="user")
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # 사람 소개 — 관리 화면에서 적는 자유 글. 비어 있으면 null 이다
+    career: Mapped[str | None] = mapped_column(Text)
+    skills: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

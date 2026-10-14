@@ -11,6 +11,9 @@ export interface MockAccount {
   email: string | null
   password: string | null
   systemRole: SystemRole
+  career?: string | null
+  skills?: string | null
+  notes?: string | null
   createdAt: string
   lastLoginAt: string | null
 }

@@ -11,7 +11,7 @@ import {
 } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import { isSystemAdmin } from '@/lib/access'
-import { looksLikeEmail, normalizeEmail, passwordProblem } from '@/lib/member'
+import { looksLikeEmail, normalizeEmail, passwordProblem, PROFILE_TEXT_MAX } from '@/lib/member'
 import { nowIso } from '@/lib/date'
 import type { MemberAccount, MemberAccountInput, MemberAccountPatch } from '@/types/domain'
 
@@ -47,6 +47,14 @@ function isLastSystemAdmin(memberId: string) {
   return admins.length === 1 && admins[0].memberId === memberId
 }
 
+/** 서버처럼 앞뒤 공백을 걷고, 비면 null 로 둔다 */
+function profileText(value: string | null | undefined, field: string): string | null {
+  const text = value?.trim() ?? ''
+  if (text.length > PROFILE_TEXT_MAX)
+    throw invalid({ [field]: `${PROFILE_TEXT_MAX}자까지 적을 수 있습니다.` })
+  return text || null
+}
+
 let mockSeq = 0
 
 const mock = {
@@ -71,6 +79,9 @@ const mock = {
       email,
       password: input.password,
       systemRole: input.systemRole,
+      career: profileText(input.career, 'career'),
+      skills: profileText(input.skills, 'skills'),
+      notes: profileText(input.notes, 'notes'),
       createdAt: nowIso(),
       lastLoginAt: null,
     })
@@ -84,6 +95,9 @@ const mock = {
     if (patch.name !== undefined && !patch.name.trim())
       throw invalid({ name: '이름을 적어 주세요.' })
     const email = patch.email === undefined ? undefined : checkEmail(patch.email, memberId)
+    const profile = (['career', 'skills', 'notes'] as const)
+      .filter((field) => patch[field] !== undefined)
+      .map((field) => [field, profileText(patch[field], field)] as const)
     const demoted = patch.systemRole === 'user' && account.systemRole === 'admin'
     const deactivated = patch.active === false && member.active
     if ((demoted || deactivated) && isLastSystemAdmin(memberId))
@@ -92,6 +106,7 @@ const mock = {
     if (email !== undefined) account.email = email
     if (patch.systemRole !== undefined) account.systemRole = patch.systemRole
     if (patch.active !== undefined) member.active = patch.active
+    for (const [field, text] of profile) account[field] = text
     if (deactivated) endSessionsOf(memberId)
     return toAccount(memberId)
   },

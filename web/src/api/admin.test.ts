@@ -70,9 +70,9 @@ describe('로그인', () => {
     ).toMatchObject({ status: 422, code: 'VALIDATION_ERROR' })
     await changePassword({ currentPassword: MOCK_PASSWORD, newPassword: 'new-password-1' })
     await logout()
-    expect(
-      await login({ email: 'u2@innoflow.local', password: 'new-password-1' }),
-    ).toMatchObject({ id: 'u2' })
+    expect(await login({ email: 'u2@innoflow.local', password: 'new-password-1' })).toMatchObject({
+      id: 'u2',
+    })
   })
 })
 
@@ -118,6 +118,33 @@ describe('사용자 관리', () => {
     ).toMatchObject({
       id: made.id,
       projectRoles: {},
+    })
+  })
+
+  it('경력 · 기술 스펙 · 기타 사항을 적고 고치고 비운다 — 빈 글은 null', async () => {
+    await asAdmin()
+    const made = await createMemberAccount({
+      name: '최유진',
+      email: 'yujin@innoflow.local',
+      password: 'first-password',
+      systemRole: 'user',
+      career: ' 보험 시스템 7년 ',
+      skills: 'Java, Spring',
+      notes: '',
+    })
+    expect(made).toMatchObject({ career: '보험 시스템 7년', skills: 'Java, Spring', notes: null })
+
+    expect(await patchMemberAccount(made.id, { notes: '휴가 중' })).toMatchObject({
+      career: '보험 시스템 7년',
+      notes: '휴가 중',
+    })
+    expect(await patchMemberAccount(made.id, { career: null, skills: '  ' })).toMatchObject({
+      career: null,
+      skills: null,
+      notes: '휴가 중',
+    })
+    expect(await fail(patchMemberAccount(made.id, { skills: '가'.repeat(2001) }))).toMatchObject({
+      status: 422,
     })
   })
 

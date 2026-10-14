@@ -13,6 +13,17 @@ Password = Annotated[str, Field(min_length=10, max_length=200)]
 MemberName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
+def _blank_to_none(value: str | None) -> str | None:
+    return value or None
+
+
+# 경력 · 기술 스펙 · 기타 사항 — 자유 글. 비우면(공백뿐이어도) null 로 둔다
+ProfileText = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None,
+    AfterValidator(_blank_to_none),
+]
+
+
 def _email(value: str) -> str:
     # EmailStr 은 `.local` 같은 사내 도메인을 막는다 — 모양만 본다
     if value.count("@") != 1 or value.startswith("@") or value.endswith("@") or " " in value:
@@ -54,6 +65,9 @@ class MemberAccountOut(Schema):
     email: str | None
     system_role: SystemRole
     active: bool
+    career: str | None
+    skills: str | None
+    notes: str | None
     has_password: bool
     created_at: Utc
     last_login_at: Utc | None
@@ -64,15 +78,22 @@ class MemberAccountCreate(Schema):
     email: Email
     password: Password
     system_role: SystemRole = "user"
+    career: ProfileText = None
+    skills: ProfileText = None
+    notes: ProfileText = None
 
 
 class MemberAccountPatch(Schema):
-    """보낸 것만 바꾼다. null 은 받지 않는다 — 이메일을 지우는 길은 없다."""
+    """보낸 것만 바꾼다. null 은 받지 않는다 — 이메일을 지우는 길은 없다.
+    경력 · 기술 스펙 · 기타 사항만 null(또는 빈 글)로 비울 수 있다."""
 
     name: MemberName | None = None
     email: Email | None = None
     system_role: SystemRole | None = None
     active: bool | None = None
+    career: ProfileText = None
+    skills: ProfileText = None
+    notes: ProfileText = None
 
     @field_validator("name", "email", "system_role", "active")
     @classmethod
