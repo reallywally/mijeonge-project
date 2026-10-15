@@ -2,11 +2,11 @@ import { mockError } from '@/api/client'
 import { accounts, members, partMembers, parts, projectGrants } from '@/fixtures'
 import type { MockAccount, MockProjectGrant } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
-import type { Me, Member, MemberAccount, Part, PartMember } from '@/types/domain'
+import type { Me, Member, MemberAccount, Part, PartMember, RiskSettings } from '@/types/domain'
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · parts · comments · tasks 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks · risk 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -17,6 +17,8 @@ interface MockDb {
   grants: MockProjectGrant[]
   parts: Part[]
   partMembers: PartMember[]
+  /** 프로젝트별 리스크 기준. 없으면 기본값 */
+  riskSettings: Record<string, RiskSettings>
 }
 
 const fresh = (): MockDb => ({
@@ -25,6 +27,7 @@ const fresh = (): MockDb => ({
   grants: structuredClone(projectGrants),
   parts: structuredClone(parts),
   partMembers: structuredClone(partMembers),
+  riskSettings: {},
 })
 
 let db = fresh()

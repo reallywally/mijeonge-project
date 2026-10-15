@@ -54,7 +54,7 @@ describe('[내 파트 | 전체]', () => {
     expect(part.scope).toBe('mine')
     expect(task.visibleRows.map((r) => r.task.key)).not.toContain('HW-7')
     expect(task.visibleRows.map((r) => r.task.key)).toContain('HW-4')
-    expect(task.statusCounts.all).toBe(9)
+    expect(task.statusCounts.all).toBe(10)
     expect(task.undatedCount).toBe(0)
     expect(thread.visibleRows.map((r) => r.thread.id).sort()).toEqual([
       't1',
@@ -64,7 +64,7 @@ describe('[내 파트 | 전체]', () => {
       't9',
     ])
     /* 원본 행은 그대로다 — 상세 · 챗봇은 거르지 않는다 */
-    expect(task.rows).toHaveLength(21)
+    expect(task.rows).toHaveLength(22)
     expect(task.taskDetail('k7')).not.toBeNull()
   })
 
@@ -72,7 +72,7 @@ describe('[내 파트 | 전체]', () => {
     await signedIn('u3@innoflow.local')
     const part = usePartStore()
     part.setScope('all')
-    expect(useTaskStore().visibleRows).toHaveLength(21)
+    expect(useTaskStore().visibleRows).toHaveLength(22)
     expect(localStorage.getItem('innoflow.partScope.u3.p1')).toBe('all')
 
     /* 새로 들어와도(스토어를 새로 세워도) 기억한 값으로 선다 */

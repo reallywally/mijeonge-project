@@ -11,6 +11,7 @@ import {
   LogOut,
   Settings,
   SquareKanban,
+  TriangleAlert,
   UserCog,
   Users,
 } from 'lucide-vue-next'
@@ -37,7 +38,7 @@ import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 
-/* 대메뉴는 작업 · 안건 둘이다. 위에서 프로젝트를 고르면 두 화면 모두 그 프로젝트 안에서만 돈다.
+/* 대메뉴는 작업 · 안건 · 리스크 셋이다. 위에서 프로젝트를 고르면 세 화면 모두 그 프로젝트 안에서만 돈다.
    관리 메뉴는 권한이 있는 사람에게만 보인다 — 숨기는 것은 편의이고 막는 것은 서버다. */
 const data = useDataStore()
 const auth = useAuthStore()
@@ -168,6 +169,14 @@ async function logout() {
             <ListTree class="size-4 shrink-0" />
             <span class="grow">안건</span>
             <span class="text-xs text-muted-foreground">{{ threadStore.visibleRows.length }}</span>
+          </RouterLink>
+          <RouterLink
+            to="/risks"
+            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
+            active-class="bg-accent font-medium text-accent-foreground"
+          >
+            <TriangleAlert class="size-4 shrink-0" />
+            <span class="grow">리스크</span>
           </RouterLink>
         </nav>
 

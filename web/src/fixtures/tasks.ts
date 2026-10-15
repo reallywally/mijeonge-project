@@ -14,6 +14,7 @@ const PART_OF: Record<string, string> = {
   k19: 'pt1',
   k20: 'pt1',
   k21: 'pt1',
+  k22: 'pt1',
   ...Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`k${i + 6}`, 'pt2'])),
   k18: 'pt3',
 }
@@ -94,6 +95,8 @@ export const tasks: Task[] = [
   mk('k19', 'HW-19', '서버 발급받고 접속 확인', 'k4', 'done', 'u3', '2026-09-08', '2026-09-09'),
   mk('k20', 'HW-20', 'DB 설치와 초기 스키마 반영', 'k4', 'doing', 'u3', '2026-09-10', '2026-09-12'),
   mk('k21', 'HW-21', '개발자 계정 배포', 'k4', 'todo', 'u1', '2026-09-12', '2026-09-15'),
+  // 정해진 안건(DB 결정)에 걸린 채 막힘으로 남은 것 — 리스크의 '풀어도 됨'
+  mk('k22', 'HW-22', '스테이징 DB 구성', 'k4', 'blocked', 'u3', '2026-10-13', '2026-10-20'),
   // 다른 프로젝트
   {
     ...mk('x1', 'PAS-1', '현행 분석', null, 'doing', 'u2', '2026-09-14', '2026-09-30'),
@@ -112,4 +115,5 @@ export const taskThreadLinks: TaskThreadLink[] = [
   { taskId: 'k18', threadId: 't5' }, // 기간계 API ↔ in · out 정의
   { taskId: 'k13', threadId: 't8' }, // 모델링 ↔ 학습 데이터 범위
   { taskId: 'k3', threadId: 't9' }, // 프로그램 설계 ↔ 공통 코드 체계
+  { taskId: 'k22', threadId: 't2' }, // 스테이징 DB 구성 ↔ DB 결정
 ]

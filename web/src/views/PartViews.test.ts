@@ -72,16 +72,16 @@ beforeEach(() => {
 })
 
 describe('작업 화면의 [내 파트 | 전체]', () => {
-  it('인프라(u3)는 내 파트로 열리고, 전체로 바꾸면 21건이 다 선다', async () => {
+  it('인프라(u3)는 내 파트로 열리고, 전체로 바꾸면 22건이 다 선다', async () => {
     await signedIn('u3@innoflow.local')
     const w = await mountAt('/tasks')
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
-    expect(w.text()).toContain('총 9건 중 1–8건')
+    expect(w.text()).toContain('총 10건 중 1–8건')
     expect(w.text()).not.toContain('가상비서')
 
     await click(scopeButton('all'))
-    expect(w.text()).toContain('총 21건 중 1–8건')
+    expect(w.text()).toContain('총 22건 중 1–8건')
   })
 
   it('파트 칩은 파트가 있는 행에만 붙는다 — 공통은 안 그린다', async () => {
@@ -111,17 +111,17 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
   it('?part= 로 들어오면 그 파트로 걸러진 채 열린다. 이 프로젝트에 없는 파트면 거르지 않는다', async () => {
     await signedIn('u1@innoflow.local')
     const w = await mountAt('/tasks?part=pt1')
-    expect(w.text()).toContain('총 4건')
+    expect(w.text()).toContain('총 5건')
 
     const other = await mountAt('/tasks?part=pt9')
-    expect(other.text()).toContain('총 21건')
+    expect(other.text()).toContain('총 22건')
   })
 
   it('시스템 관리자는 속한 파트가 없어 전환이 없다', async () => {
     await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
     const w = await mountAt('/tasks')
     expect(scopeButton('mine')).toBeNull()
-    expect(w.text()).toContain('총 21건')
+    expect(w.text()).toContain('총 22건')
   })
 
   it("'내 파트' 에서 안 보이는 작업도 주소로 열면 열린다", async () => {

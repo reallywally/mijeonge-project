@@ -68,7 +68,7 @@ describe('프로젝트 관리 화면', () => {
 
     expect(w.get('[data-task-key-prefix]').text()).toBe('HW')
     expect(w.find('input[aria-label="작업 키 접두사"]').exists()).toBe(false)
-    expect(w.get('[data-stat="tasks"]').text()).toContain('21')
+    expect(w.get('[data-stat="tasks"]').text()).toContain('22')
     expect(w.get('[data-stat="threads"]').text()).toContain('9')
     expect(w.get('[data-stat="parts"]').text()).toContain('3')
     expect(w.get('[data-stat="members"]').text()).toContain('4')
@@ -127,7 +127,7 @@ describe('파트 관리 화면', () => {
     await signedIn('u1@innoflow.local')
     const { w } = await mountAt('/projects/p1/parts?part=pt1')
     expect(w.get('a[data-link="tasks"]').attributes('href')).toBe('/tasks?part=pt1')
-    expect(w.get('a[data-link="tasks"]').text()).toContain('작업 4건')
+    expect(w.get('a[data-link="tasks"]').text()).toContain('작업 5건')
     expect(w.get('a[data-link="threads"]').attributes('href')).toBe('/threads?part=pt1')
     expect(w.get('a[data-link="threads"]').text()).toContain('안건 3건')
   })

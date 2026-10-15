@@ -30,7 +30,7 @@ async function mountGantt() {
 describe('간트차트', () => {
   it('목록과 달리 계층 트리로 선다', async () => {
     const w = await mountGantt()
-    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(21)
+    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(22)
 
     const tool01 = w.get('.gantt_grid_data [data-task-id="k8"]')
     /* 개발 › AI Biz › 가상비서 아래 네 번째 단 */
@@ -45,8 +45,11 @@ describe('간트차트', () => {
 
   it('기간 미정 작업은 그리드에는 서고 막대는 없다', async () => {
     const w = await mountGantt()
-    /* 21건 중 기간 미정 한 건만 막대가 없다 */
-    expect(w.findAll('.gantt_task_line')).toHaveLength(20)
+    /* 기간 미정(k18)만 막대가 없다. 스테이징 DB 구성(k22, 10월)은 막대가 있지만
+       보이는 폭(1200px) 밖이라 dhtmlx 가 그리지 않는다 — 그래서 그려진 막대는 20개다 */
+    const bars = w.findAll('.gantt_task_line').map((b) => b.attributes('data-task-id'))
+    expect(bars).toHaveLength(20)
+    expect(bars).not.toContain('k22')
 
     const row = w.get('.gantt_grid_data [data-task-id="k18"]')
     expect(row.classes()).toContain('tg-row-unscheduled')
@@ -78,7 +81,7 @@ describe('간트차트', () => {
     expect(w.findAll('.gantt_task_cell.tg-weekend').length).toBeGreaterThan(0)
     /* 오늘은 날짜 눈금 한 칸과 줄마다 한 칸 — 세로로 이어져 선이 된다 */
     expect(w.findAll('.gantt_scale_cell.tg-today')).toHaveLength(1)
-    expect(w.findAll('.gantt_task_cell.tg-today')).toHaveLength(21)
+    expect(w.findAll('.gantt_task_cell.tg-today')).toHaveLength(22)
     vi.useRealTimers()
   })
 
@@ -108,7 +111,7 @@ describe('간트차트', () => {
 
     expect(w.emitted('open-task')).toBeUndefined()
     /* 가상비서 아래 네 줄이 접힌다 */
-    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(17)
+    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(18)
   })
 
   it("'+' 는 그 줄 아래로 작업을 만들라고 알린다 — 라이브러리가 직접 만들지 않는다", async () => {
@@ -118,8 +121,8 @@ describe('간트차트', () => {
     await flushPromises()
 
     expect(w.emitted('add-task')).toEqual([['k4']])
-    expect(taskStore.rows).toHaveLength(21)
-    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(21)
+    expect(taskStore.rows).toHaveLength(22)
+    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(22)
   })
 
   it('기본 편집창은 뜨지 않는다', async () => {

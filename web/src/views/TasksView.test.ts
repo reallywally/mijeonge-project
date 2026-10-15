@@ -136,7 +136,7 @@ describe('작업 목록 화면', () => {
   it('한 쪽에 여덟 줄씩 놓고 총 건수를 적는다', async () => {
     const w = await mountView()
     expect(w.findAll('tbody tr')).toHaveLength(8)
-    expect(w.text()).toContain('총 21건 중 1–8건')
+    expect(w.text()).toContain('총 22건 중 1–8건')
   })
 
   it('제목 아래에 어디에 속한 작업인지 경로가 붙는다', async () => {
@@ -148,7 +148,7 @@ describe('작업 목록 화면', () => {
   it('상태 칩이 그 상태의 수를 들고 있다', async () => {
     const w = await mountView()
     const chips = w.findAll('button').map((b) => b.text())
-    expect(chips.some((t) => t.startsWith('막힘') && t.endsWith('1'))).toBe(true)
+    expect(chips.some((t) => t.startsWith('막힘') && t.endsWith('2'))).toBe(true)
     expect(chips.some((t) => t.startsWith('기간 미정') && t.endsWith('1'))).toBe(true)
   })
 
@@ -162,9 +162,10 @@ describe('작업 목록 화면', () => {
     await link!.trigger('click')
 
     const rows = w.findAll('tbody tr')
-    expect(rows).toHaveLength(1)
+    expect(rows).toHaveLength(2)
     expect(rows[0].text()).toContain('보험료 산출 기간계 API 개발')
     expect(rows[0].text()).toContain('기간 미정')
+    expect(rows[1].text()).toContain('스테이징 DB 구성')
   })
 
   it('기간이 잡힌 작업은 기간이 슬래시로 적힌다', async () => {
@@ -181,7 +182,7 @@ describe('작업 상세 팝업', () => {
 
     expect(popupText()).toContain('개발 환경 설정')
     expect(popupText()).toContain('HW-4')
-    expect(popupText()).toContain('최상위 작업 · 하위 3건')
+    expect(popupText()).toContain('최상위 작업 · 하위 4건')
     /* 본문은 줄마다 고칠 수 있는 칸으로 뜬다 */
     expect(fieldValues()).toContain('mysql 설치와 계정 발급')
     /* 걸린 안건이 지금까지 정해진 내용까지 달고 온다 */
@@ -288,7 +289,7 @@ describe('작업 상세 팝업', () => {
     await mountView('/tasks/k4')
     const taskStore = useTaskStore()
     const children = () => taskStore.tasks.filter((t) => t.parentId === 'k4')
-    expect(children()).toHaveLength(3)
+    expect(children()).toHaveLength(4)
 
     await click(popupButton('하위 작업 추가'))
     expect(popupText()).not.toContain('만들고 계속 추가')
@@ -300,7 +301,7 @@ describe('작업 상세 팝업', () => {
       .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     await flushPromises()
 
-    expect(children()).toHaveLength(4)
+    expect(children()).toHaveLength(5)
     const made = children().at(-1)!
     expect(made.title).toBe('스테이징 서버 신청')
     expect([made.status, made.priority, made.ownerId, made.start, made.due]).toEqual([
@@ -319,7 +320,7 @@ describe('작업 추가 팝업', () => {
   it('상세와 같은 칸에 제목 · 내용을 적고 만들면 목록 건수가 늘어난다', async () => {
     const w = await mountView('/tasks/new')
     const taskStore = useTaskStore()
-    expect(taskStore.rows).toHaveLength(21)
+    expect(taskStore.rows).toHaveLength(22)
 
     await type('textarea[aria-label="제목"]', 'CI 러너 붙이기')
     const body = document.body.querySelector<HTMLTextAreaElement>('[data-task-body] textarea')!
@@ -336,13 +337,13 @@ describe('작업 추가 팝업', () => {
 
     await click(popupButton('만들기'))
 
-    expect(taskStore.rows).toHaveLength(22)
+    expect(taskStore.rows).toHaveLength(23)
     const made = taskStore.rows.find((r) => r.task.title === 'CI 러너 붙이기')!
     expect(made.task.body.map((l) => [l.kind, l.text])).toEqual([
       ['check', '러너 등록'],
       ['bullet', '사내 인증서가 필요하다'],
     ])
-    expect(w.text()).toContain('총 22건 중 1–8건')
+    expect(w.text()).toContain('총 23건 중 1–8건')
   })
 
   it('찾아서 골라 둔 안건이 만들 때 같이 걸린다', async () => {
@@ -354,7 +355,7 @@ describe('작업 추가 팝업', () => {
     await keydown('input[placeholder="안건 제목으로 찾기"]', 'Enter')
     /* 아직 만들기 전이라 표에만 서 있다 */
     expect(popupText()).toContain('개발 서버 백업 주기')
-    expect(taskStore.rows).toHaveLength(21)
+    expect(taskStore.rows).toHaveLength(22)
 
     await click(popupButton('만들기'))
     const made = taskStore.rows.find((r) => r.task.title === '백업 스크립트')!
@@ -396,9 +397,9 @@ describe('칸반보드 탭', () => {
     expect(w.text()).toContain('해야 할 일')
     expect(w.text()).toContain('막힘')
 
-    /* 잎 작업 14건만 올라온다 — 자식이 있는 7건(설계 · 개발 환경 설정 · 개발 …)은 빠진다 */
+    /* 잎 작업 15건만 올라온다 — 자식이 있는 7건(설계 · 개발 환경 설정 · 개발 …)은 빠진다 */
     const ids = w.findAll('[data-task-id]').map((c) => c.attributes('data-task-id'))
-    expect(ids).toHaveLength(14)
+    expect(ids).toHaveLength(15)
     /* 설계(k1) · 개발 환경 설정(k4) · 개발(k5) · AI Biz(k6) … 는 카드가 없다.
        제목 아래 경로로만 남는다 */
     for (const parentId of ['k1', 'k4', 'k5', 'k6', 'k7', 'k12', 'k14']) {
@@ -485,13 +486,13 @@ describe('간트차트 탭', () => {
     expect(gantt.classes()).toContain('border-foreground')
     /* 조회 조건 · 페이징은 목록 탭의 것이라 간트에는 없다 */
     expect(w.text()).not.toContain('조회 조건에 맞는 작업이 없습니다')
-    expect(w.text()).toContain('/ 21 완료')
+    expect(w.text()).toContain('/ 22 완료')
     expect(w.text()).toContain('막대 읽는 법')
   })
 
   it('목록과 달리 계층을 그대로 넘긴다. 기간 미정은 막대가 없다', async () => {
     await mountView('/tasks?view=gantt')
-    expect(chart.parsed).toHaveLength(21)
+    expect(chart.parsed).toHaveLength(22)
     expect(parsed('HW-8').parent).toBe('k7')
     expect(parsed('HW-1').parent).toBe('0')
     expect(parsed('HW-18').unscheduled).toBe(true)

@@ -37,7 +37,7 @@ function seen(memberId: string) {
 describe('내 파트 — 시드로 사람마다', () => {
   it('인프라(u3) 는 공통 · 인프라 작업을 보고, AI · 기간계 작업은 안 본다', () => {
     const u3 = seen('u3')
-    expect(u3.tasks).toEqual(['k1', 'k2', 'k3', 'k4', 'k5', 'k17', 'k19', 'k20', 'k21'])
+    expect(u3.tasks).toEqual(['k1', 'k2', 'k3', 'k4', 'k5', 'k17', 'k19', 'k20', 'k21', 'k22'])
     expect(u3.context).toEqual([])
     /* 서버 OS · DB · 백업(인프라) + 공통 둘(t6 · t9). AI 안건과 기간계 안건은 안 보인다 */
     expect(u3.threads).toEqual(['t1', 't2', 't4', 't6', 't9'])
