@@ -159,9 +159,9 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 ### 10-2 챗봇 도구
 
-- [ ] `TOOLS` 에 `get_decision_risks`(`member_id?` · `part_id?`) · `tool_label` · `run_tool` 갈래
-- [ ] 시스템 프롬프트에 규칙 넷(`docs/api/risk.md` '챗봇 도구') — `high` 부터, 왜 · 무엇이 막히나 · 다음 할 일, 근거 표시, 숫자를 지어내지 않는다
-- [ ] `test_chat.py` — 가짜 클라이언트로 도구 갈래 · 거르기(`member_id` · `part_id`) · 다른 프로젝트 id 를 못 찾음
+- [x] `TOOLS` 에 `get_decision_risks`(`member_id?` · `part_id?`) · `tool_label` · `run_tool` 갈래
+- [x] 시스템 프롬프트에 규칙 넷(`docs/api/risk.md` '챗봇 도구') — `high` 부터, 왜 · 무엇이 막히나 · 다음 할 일, 근거 표시, 숫자를 지어내지 않는다
+- [x] `test_chat.py` — 가짜 클라이언트로 도구 갈래 · 거르기(`member_id` · `part_id`) · 다른 프로젝트 id 를 못 찾음
 
 ### 10-3 평가 (사람이 돌린다)
 
@@ -193,7 +193,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `docs/api/chat.md` · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). **7-2 채팅 끝남** (2026-10-11) — `POST .../chat` SSE · 도구 루프 · 제한 · 가짜 클라이언트 검사 33개. **작업 초안 끝남** (2026-10-12) — `list_members` · `propose_tasks` 도구 · `proposal` 이벤트 · `ChatMessage.proposal` · `POST .../tasks/batch`(한 트랜잭션). 다음은 7-3 평가셋 |
 | 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. Q29 ~ Q31 닫힘 |
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
-| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. 다음은 10-2 챗봇 도구 |
+| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. 다음은 10-3 평가 |
 
 ## 아직 안 정한 것
 

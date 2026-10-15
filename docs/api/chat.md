@@ -294,3 +294,17 @@ export interface TaskBatchResult {
 - 도구 고르기를 시스템 프롬프트에 적었다 — 낱말 · 주제는 `search_tasks`, 전체를 훑을 때는 `list_tasks`,
   중복은 `find_similar_tasks`, 하나를 자세히는 `get_task`
 - 함께 고친 것: 답은 존댓말로만, 영어 문장 · "찾아보겠습니다" 같은 진행 중계를 쓰지 않는다
+
+## AI 챗봇 — 결정 리스크 (2026-10-15)
+
+"뭐가 위험해?" · "이번 주 뭐부터 정해야 해?" 를 처리한다. 계약 · 계산은 `docs/api/risk.md` 의 '챗봇 도구 — `get_decision_risks`'.
+요청 · 응답 모양은 그대로고, `tool` 이벤트의 `name` 에 하나가 는다 — 화면은 `label` 만 띄우므로 **계약 변경은 없다**.
+
+| 도구 | 하는 일 | 화면 라벨 |
+| --- | --- | --- |
+| `get_decision_risks` | `GET .../risks` 와 같은 계산(`DecisionRiskReport`). `member_id` · `part_id` 를 주면 `threads` · `tasks` 를 그 사람 · 파트로 거른다(`owners` 는 그대로). `part_id` 에는 파트 이름도 넣을 수 있다 | 결정 리스크 보는 중 |
+
+- 답하는 규칙: 리스크 · 막힘 · 우선순위 질문에 먼저 부르고, `high` 부터 왜 · 무엇이 막히나 · 다음 할 일을 근거 표시와 함께 말한다.
+  '풀어도 됨'(`decidedButBlocked`)은 풀어도 된다고 말하되 바꾸지 않는다. 숫자는 도구가 준 그대로, 신호는 화면의 말로
+- 지금 도구 전체: `search_threads` · `get_thread` · `search_tasks` · `get_task` · `list_tasks` · `find_similar_tasks` ·
+  `get_decision_risks` · `list_members` · `propose_tasks`

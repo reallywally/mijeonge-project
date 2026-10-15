@@ -20,6 +20,7 @@ ToolName = Literal[
     "get_task",
     "list_tasks",
     "find_similar_tasks",
+    "get_decision_risks",
     "list_members",
     "propose_tasks",
 ]
@@ -152,3 +153,9 @@ class FindSimilarTasksInput(Schema):
     # id 나 작업 키. 없으면 프로젝트 전체에서 쌍을 찾는다
     task_id: str | None = None
     limit: int = Field(default=20, ge=1, le=30)
+
+
+class GetDecisionRisksInput(Schema):
+    member_id: str | None = None
+    # 파트 id 나 파트 이름 — 파트 목록 도구가 없어 Claude 는 사용자가 말한 이름을 넣는다
+    part_id: str | None = None

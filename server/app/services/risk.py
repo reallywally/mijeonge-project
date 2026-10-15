@@ -11,12 +11,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings as app_settings
-from app.errors import ApiError
-from app.models import Entry, RiskSetting, Task, TaskThreadLink, Thread
+from app.errors import ApiError, not_found
+from app.models import Entry, Part, ProjectMember, RiskSetting, Task, TaskThreadLink, Thread
 from app.schemas.risk import (
     DecisionRiskReport,
     OwnerLoad,
@@ -427,3 +427,59 @@ def _owner_loads(
         )
     )
     return loads
+
+
+async def decision_risks_for(
+    session: AsyncSession,
+    project_id: str,
+    *,
+    today: date,
+    member_id: str | None = None,
+    part: str | None = None,
+) -> DecisionRiskReport:
+    """챗봇 도구 `get_decision_risks`. 같은 계산을 사람 · 파트로 좁힌다 — `owners` 는 그대로 둔다.
+
+    `part` 는 파트 id 나 이름이다 — Claude 가 파트 id 를 알 길이 없어 이름도 받는다.
+    없는 · 다른 프로젝트의 멤버 · 파트는 '못 찾았다' 로 낸다(있는지조차 알리지 않는다).
+    """
+    report = await decision_risks(session, project_id, today=today)
+    member_id = (member_id or "").strip() or None
+    part = (part or "").strip() or None
+    part_id = await _resolve_part(session, project_id, part) if part is not None else None
+    if member_id is not None and not await _member_in(session, project_id, member_id, report):
+        raise not_found("MEMBER_NOT_FOUND", "멤버를 찾을 수 없습니다.")
+
+    def keep(owner_id: str | None, item_part: str | None) -> bool:
+        return (member_id is None or owner_id == member_id) and (
+            part_id is None or item_part == part_id
+        )
+
+    return report.model_copy(
+        update={
+            "threads": [t for t in report.threads if keep(t.owner_id, t.part_id)],
+            "tasks": [t for t in report.tasks if keep(t.owner_id, t.part_id)],
+        }
+    )
+
+
+async def _resolve_part(session: AsyncSession, project_id: str, part: str) -> str:
+    # 보관한 파트도 찾는다 — 지난 작업 · 안건이 아직 가리킨다
+    found = await session.scalar(
+        select(Part.id)
+        .where(Part.project_id == project_id, or_(Part.id == part, Part.name == part))
+        .order_by(Part.id != part)
+        .limit(1)
+    )
+    if found is None:
+        raise not_found("PART_NOT_FOUND", "파트를 찾을 수 없습니다.")
+    return found
+
+
+async def _member_in(
+    session: AsyncSession, project_id: str, member_id: str, report: DecisionRiskReport
+) -> bool:
+    """부여된 멤버이거나, 빠졌어도 이 프로젝트의 안건 · 작업을 아직 맡고 있는 사람."""
+    if await session.get(ProjectMember, (project_id, member_id)) is not None:
+        return True
+    owners = {t.owner_id for t in report.threads} | {t.owner_id for t in report.tasks}
+    return member_id in owners | {o.member_id for o in report.owners}
