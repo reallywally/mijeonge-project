@@ -160,7 +160,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | --- | --- | --- | --- | --- |
 | GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 안건과 어긋난 작업 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 | `DecisionRiskReport` | 구현 |
 | GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 다섯) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 다섯 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 |
-| POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`threadIds` · `taskIds`)을 Claude 가 읽고 먼저 정할 것 · 바로 풀 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 합의 |
+| POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`threadIds` · `taskIds`)을 Claude 가 읽고 먼저 정할 것 · 바로 풀 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 |
 
 ## 열린 질문
 

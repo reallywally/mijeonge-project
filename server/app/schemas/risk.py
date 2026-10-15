@@ -89,3 +89,14 @@ class DecisionRiskReport(Schema):
     threads: list[ThreadRisk]
     tasks: list[TaskRisk]
     owners: list[OwnerLoad]
+
+
+# AI 요약이 한 번에 받는 줄 수 — 화면 한 장에 보이는 만큼이다 (docs/api/risk.md 'AI 요약')
+SUMMARY_IDS_MAX = 100
+
+
+class RiskSummaryInput(Schema):
+    """POST .../risks/summary. 화면에 지금 보이는 줄 — 키는 둘 다 있어야 한다(빈 배열은 된다)."""
+
+    thread_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)
+    task_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)

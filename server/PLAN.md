@@ -171,10 +171,10 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 리스크 화면의 [AI 요약]. 계약은 `../docs/api/risk.md` 'AI 요약'(합의 2026-10-15).
 
-- [ ] `RiskSummaryInput` 스키마(각 0 ~ 100개) · `POST /api/projects/{projectId}/risks/summary` — 챗봇과 같은 제한 · 클라이언트 의존성 · SSE 응답을 그대로 쓴다
-- [ ] `app/services/risk_summary.py` — `decision_risks` 를 다시 계산해 보낸 id 로 거르고, 위쪽 안건 5개의 배경 · 후보 · 이력 · 연결 작업과 담당자 이름을 모은다. 둘 다 비면 Claude 없이 고정 문구
-- [ ] 도구 없이 한 번 스트림으로 부른다. 시스템 프롬프트는 계약의 '답의 모양' 그대로. 이벤트 · 오류 변환(`extract_refs` · `_api_error_event`)은 `chat.py` 것을 다시 쓴다
-- [ ] 검사 — 가짜 클라이언트로: 거르기(남의 id · 리스크 아닌 id 버림) · 빈 입력이면 Claude 를 안 부름 · 넣는 근거에 이름이 들어가고 id 가 안 샘 · 422 · 404 · 503(키 없음) · 스트림 중 오류
+- [x] `RiskSummaryInput` 스키마(각 0 ~ 100개) · `POST /api/projects/{projectId}/risks/summary` — 챗봇과 같은 제한 · 클라이언트 의존성 · SSE 응답을 그대로 쓴다
+- [x] `app/services/risk_summary.py` — `decision_risks` 를 다시 계산해 보낸 id 로 거르고, 위쪽 안건 5개의 배경 · 후보 · 이력 · 연결 작업과 담당자 이름을 모은다. 둘 다 비면 Claude 없이 고정 문구
+- [x] 도구 없이 한 번 스트림으로 부른다. 시스템 프롬프트는 계약의 '답의 모양' 그대로. 이벤트 · 오류 변환(`extract_refs` · `_api_error_event`)은 `chat.py` 것을 다시 쓴다
+- [x] 검사 — 가짜 클라이언트로: 거르기(남의 id · 리스크 아닌 id 버림) · 빈 입력이면 Claude 를 안 부름 · 넣는 근거에 이름이 들어가고 id 가 안 샘 · 422 · 404 · 503(키 없음) · 스트림 중 오류
 
 **끝난 것으로 보는 기준** — 시드 프로젝트에서 `GET .../risks` 가 넣어 둔 세 경우를 `high` · `medium` 과 작업 신호로 내고,
 챗봇에 "이번 주 뭐부터 정해야 해?" 를 물으면 같은 순서로 근거 칩과 함께 답한다.
@@ -202,7 +202,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `docs/api/chat.md` · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). **7-2 채팅 끝남** (2026-10-11) — `POST .../chat` SSE · 도구 루프 · 제한 · 가짜 클라이언트 검사 33개. **작업 초안 끝남** (2026-10-12) — `list_members` · `propose_tasks` 도구 · `proposal` 이벤트 · `ChatMessage.proposal` · `POST .../tasks/batch`(한 트랜잭션). 다음은 7-3 평가셋 |
 | 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. Q29 ~ Q31 닫힘 |
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
-| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. 다음은 10-3 평가 |
+| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 |
 
 ## 아직 안 정한 것
 
