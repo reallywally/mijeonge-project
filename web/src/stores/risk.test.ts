@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as api from '@/api'
 import { ApiError, fetchRiskSettings, putRiskSettings } from '@/api'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
@@ -123,5 +124,120 @@ describe('기준 바꾸기', () => {
     expect(result.ok).toBe(false)
     expect(Object.keys(result.ok ? {} : result.detail).sort()).toEqual(['highScore', 'staleDays'])
     expect(toastError).not.toHaveBeenCalled()
+  })
+})
+
+describe('AI 요약', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  /* 로그인 · 보고서는 진짜 시간으로 받고, 요약 스트림부터 가짜 타이머로 넘긴다 */
+  async function ready(email: string) {
+    await signedIn(email)
+    const risk = useRiskStore()
+    await risk.load()
+    vi.useFakeTimers()
+    return risk
+  }
+
+  it('보이는 줄(내 파트로 거른 것) 그대로 보내고, 다 받으면 done 이다', async () => {
+    const risk = await ready('u3@innoflow.local')
+    const spy = vi.spyOn(api, 'streamRiskSummary')
+
+    const done = risk.summarize()
+    expect(spy.mock.calls[0][0]).toBe('p1')
+    expect(spy.mock.calls[0][1]).toEqual({ threadIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
+    expect(risk.summarizing).toBe(true)
+    expect(risk.canSummarize).toBe(false)
+
+    await vi.runAllTimersAsync()
+    await expect(done).resolves.toBe(true)
+    expect(risk.summary).toMatchObject({
+      status: 'done',
+      asOf: '2026-10-15',
+      threadIds: ['t9', 't4'],
+      taskIds: ['k22', 'k3'],
+    })
+    expect(risk.summary?.text).toContain('먼저 정할 것')
+    expect(risk.summary?.text).toContain('[[thread:t9]]')
+    /* 보이지 않는 줄은 근거로도 안 나온다 */
+    expect(risk.summary?.text).not.toContain('[[thread:t5]]')
+    expect(risk.summaryChanged).toBe(false)
+  })
+
+  it('[내 파트 | 전체] 를 바꾸면 바뀜이 서고, 저절로 다시 부르지 않는다. 되돌리면 풀린다', async () => {
+    const risk = await ready('u3@innoflow.local')
+    const spy = vi.spyOn(api, 'streamRiskSummary')
+    void risk.summarize()
+    await vi.runAllTimersAsync()
+
+    usePartStore().setScope('all')
+    expect(risk.summaryChanged).toBe(true)
+    expect(risk.summary?.status).toBe('done')
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    usePartStore().setScope('mine')
+    expect(risk.summaryChanged).toBe(false)
+  })
+
+  it('멈추면 받은 데까지 남기고 타이머도 남지 않는다', async () => {
+    const risk = await ready('u1@innoflow.local')
+    const done = risk.summarize()
+    await vi.advanceTimersByTimeAsync(api.MOCK_STEP_MS * 5)
+    const partial = risk.summary?.text ?? ''
+    expect(partial.length).toBeGreaterThan(0)
+
+    risk.stopSummary()
+    expect(risk.summarizing).toBe(false)
+    expect(risk.summary?.status).toBe('stopped')
+    await vi.runAllTimersAsync()
+    await expect(done).resolves.toBe(false)
+    expect(risk.summary?.text).toBe(partial)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('보이는 줄이 0건이면 부르지 않는다', async () => {
+    await signedIn('u1@innoflow.local')
+    const risk = useRiskStore()
+    useDataStore().setProject('p3')
+    await risk.load()
+    const spy = vi.spyOn(api, 'streamRiskSummary')
+
+    expect(risk.visibleCount).toBe(0)
+    expect(risk.canSummarize).toBe(false)
+    await expect(risk.summarize()).resolves.toBe(false)
+    expect(spy).not.toHaveBeenCalled()
+    expect(risk.summary).toBeNull()
+  })
+
+  it('오류는 챗봇과 같은 문구로 단다', async () => {
+    const risk = await ready('u1@innoflow.local')
+    vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* () {
+      yield { type: 'delta', text: '한 줄 총평' }
+      throw new ApiError(200, { code: 'CHAT_UNAVAILABLE', message: '' })
+    })
+
+    await expect(risk.summarize()).resolves.toBe(false)
+    expect(risk.summary).toMatchObject({
+      status: 'error',
+      text: '한 줄 총평',
+      error: 'AI 가 지금 응답하지 않습니다. 잠시 뒤에 다시 물어 주세요.',
+    })
+    expect(risk.canSummarize).toBe(true)
+  })
+
+  it('프로젝트를 바꾸거나 버리면 받는 중인 요청을 끊고 비운다', async () => {
+    const risk = await ready('u1@innoflow.local')
+    const old = risk.summarize()
+    await vi.advanceTimersByTimeAsync(api.MOCK_STEP_MS * 3)
+
+    useDataStore().setProject('p3')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(risk.summary).toBeNull()
+    await vi.runAllTimersAsync()
+    await expect(old).resolves.toBe(false)
+    expect(risk.summary).toBeNull()
   })
 })

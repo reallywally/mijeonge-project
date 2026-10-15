@@ -208,15 +208,18 @@ export function toChatEvent({ event, data }: SseMessage, status = 200): ChatEven
   throw unreachable(status)
 }
 
-async function* serverEvents(
-  projectId: string,
-  messages: ChatMessage[],
+/**
+ * JSON 을 POST 하고 SSE 를 ChatEvent 로 읽는다. 챗봇과 리스크 AI 요약(api/risk.ts)이 같은 스트림 모양이라 같이 쓴다.
+ * 끝맺음 판정은 하지 않는다 — settle 을 거친다
+ */
+export async function* postSse(
+  path: string,
+  input: unknown,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const input: ChatInput = { messages }
   let res: Response
   try {
-    res = await fetch(`/api/projects/${id(projectId)}/chat`, {
+    res = await fetch(`/api${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify(input),
@@ -239,6 +242,26 @@ async function* serverEvents(
     const event = toChatEvent(message, res.status)
     if (event) yield event
   }
+}
+
+/** 목업 갈래가 정해 둔 글을 서버처럼 흘린다 — delta 조각들 → done */
+export async function* mockDeltas(
+  text: string,
+  signal: AbortSignal,
+  refs: ChatRef[] = [],
+): AsyncGenerator<ChatEvent> {
+  const chars = Array.from(text)
+  for (let i = 0; i < chars.length; i += CHUNK) {
+    await sleep(MOCK_STEP_MS, signal)
+    yield { type: 'delta', text: chars.slice(i, i + CHUNK).join('') }
+  }
+  await sleep(MOCK_STEP_MS, signal)
+  yield { type: 'done', refs }
+}
+
+function serverEvents(projectId: string, messages: ChatMessage[], signal: AbortSignal) {
+  const input: ChatInput = { messages }
+  return postSse(`/projects/${id(projectId)}/chat`, input, signal)
 }
 
 /** 질문을 보내고 ChatEvent 를 하나씩 낸다. 멈추면 AbortError(DOMException)로 끝난다 */

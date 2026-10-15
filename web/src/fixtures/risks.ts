@@ -1,3 +1,4 @@
+import { THREAD_SIGNAL_LABEL } from '@/lib/risk'
 import type { DecisionRiskReport } from '@/types/domain'
 
 /*
@@ -203,3 +204,65 @@ const p2: MockRiskReport = {
 export const riskReports: Record<string, MockRiskReport> = { p1, p2 }
 
 export const RISK_AS_OF = '2026-10-15'
+
+/** 거른 뒤 둘 다 비면 서버가 Claude 를 부르지 않고 내는 한 줄 (docs/api/risk.md 'AI 요약') */
+export const RISK_SUMMARY_EMPTY = '지금 짚을 리스크가 없습니다.'
+
+/**
+ * 목업 AI 요약 — 계약의 '답의 모양' 칸 순서를 지킨 고정 문구. 받은 보고서(보이는 줄로 거른 것)의 숫자 · 신호만 옮긴다.
+ * 근거는 그 보고서의 안건 · 작업 id 로 단다 — 화면이 칩으로 바꾼다
+ */
+export function mockRiskSummary(
+  report: Omit<DecisionRiskReport, 'owners'>,
+  nameOf: (memberId: string | null) => string,
+): string {
+  const { threads, tasks, settings } = report
+  if (threads.length === 0 && tasks.length === 0) return RISK_SUMMARY_EMPTY
+
+  const out: string[] = []
+  const top = threads[0]
+  out.push(
+    top
+      ? `한 줄 총평 — 지금 가장 큰 병목은 [[thread:${top.threadId}]] 입니다(${top.score}점 · ${top.level}).`
+      : `한 줄 총평 — 안 정해진 안건 리스크는 없고, 안건과 어긋난 작업 ${tasks.length}건이 있습니다.`,
+  )
+
+  if (threads.length > 0) {
+    out.push('', '먼저 정할 것')
+    threads.slice(0, 3).forEach((t, i) => {
+      const why = t.signals.map((s) => THREAD_SIGNAL_LABEL[s]).join(' · ')
+      const waiting = [...t.blockedTaskIds, ...t.waitingTaskIds]
+      const blocks =
+        waiting.length > 0
+          ? `작업 ${waiting.length}건(${waiting.map((id) => `[[task:${id}]]`).join(' ')})이 기다립니다`
+          : '막힌 작업은 아직 없습니다'
+      const next = t.lastDeferNote
+        ? `마지막 미룸 사유 "${t.lastDeferNote}" 를 풀어 다음 회의에 올린다`
+        : '후보를 좁혀 다음 회의에 올린다'
+      out.push(
+        `${i + 1}. [[thread:${t.threadId}]] — ${why} · ${blocks} · ${next} · ${nameOf(t.ownerId)}`,
+      )
+    })
+  }
+
+  const loose = tasks.filter((t) => t.signal !== 'dueBeforeDecision')
+  if (loose.length > 0) {
+    out.push('', '바로 풀 수 있는 것')
+    for (const t of loose)
+      out.push(
+        t.signal === 'decidedButBlocked'
+          ? `- [[task:${t.taskId}]] — 근거 안건이 정해졌으니 막힘을 풀고 진행 중으로 돌린다 · ${nameOf(t.ownerId)}`
+          : `- [[task:${t.taskId}]] — 막힌 이유를 안건으로 올리거나 상태를 되돌린다 · ${nameOf(t.ownerId)}`,
+      )
+  }
+
+  const stale = threads.filter((t) => t.signals.includes('stale')).length
+  if (threads.length > 1 && stale * 2 > threads.length) {
+    out.push(
+      '',
+      '눈에 띄는 점',
+      `- 안건 ${threads.length}건 중 ${stale}건이 '오래 멈춤' 입니다 — 기준(멈춤 ${settings.staleDays}일)이 회의 주기보다 짧을 수 있습니다.`,
+    )
+  }
+  return out.join('\n')
+}

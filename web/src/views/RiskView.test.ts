@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import * as api from '@/api'
+import { ApiError } from '@/api'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
@@ -197,5 +199,131 @@ describe('기준 바꾸기', () => {
 
     await type('staleDays', '8')
     expect(problem('staleDays')).toBeNull()
+  })
+})
+
+describe('AI 요약', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const card = () => document.body.querySelector('[data-risk-summary]')
+  const line = () => document.body.querySelector('[data-summary-line]')?.textContent?.trim()
+  const ANSWER =
+    '한 줄 총평 — [[thread:t9]] 가 병목입니다.\n- [[task:k3]] 기한 확인 [[thread:nope]]'
+
+  function answerWith(text = ANSWER) {
+    return vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* () {
+      yield { type: 'delta', text }
+      yield { type: 'done', refs: [] }
+    })
+  }
+
+  it('누를 때만 부른다 — 보이는 줄 그대로 보내고, 끝나면 기준일 · 건수와 [다시 요약]', async () => {
+    await signedIn('u3@innoflow.local')
+    const spy = answerWith()
+    await mountRisks()
+
+    expect(spy).not.toHaveBeenCalled()
+    expect(line()).toBe('보이는 안건 2 · 작업 2건을 정리합니다')
+
+    await click(button('AI 요약'))
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][1]).toEqual({ threadIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
+    expect(line()).toBe('2026-10-15 기준 · 보이는 4건')
+    expect(button('다시 요약')).toBeTruthy()
+    expect(card()?.textContent).toContain('가 병목입니다.')
+  })
+
+  it('근거는 챗봇 칩으로 — 스냅샷에 없는 id 는 안 그리고, 누르면 상세가 뜬다', async () => {
+    await signedIn('u3@innoflow.local')
+    answerWith()
+    await mountRisks()
+    await click(button('AI 요약'))
+
+    const threadChip = card()?.querySelector('[data-ref-thread="t9"]')
+    expect(threadChip?.textContent).toContain('공통 코드 체계 확정')
+    expect(card()?.querySelector('[data-ref-task="k3"]')?.textContent).toContain('HW-3')
+    expect(card()?.querySelectorAll('[data-ref-thread]')).toHaveLength(1)
+    expect(card()?.textContent).not.toContain('nope')
+    expect(card()?.innerHTML).not.toContain('[[')
+
+    await click(threadChip)
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
+      '공통 코드 체계 확정',
+    )
+  })
+
+  it('[내 파트 | 전체] 를 바꾸면 흐리게 하고 다시 요약을 권한다 — 저절로 부르지 않는다', async () => {
+    await signedIn('u3@innoflow.local')
+    const spy = answerWith()
+    await mountRisks()
+    await click(button('AI 요약'))
+
+    await click(scopeButton('all'))
+    expect(card()?.querySelector('[data-summary-changed]')).toBeTruthy()
+    expect(line()).toBe('목록이 바뀌었습니다 —')
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    await click(button('다시 요약'))
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy.mock.calls[1][1]).toEqual({
+      threadIds: ['t5', 't3', 't8', 't9', 't4', 't7'],
+      taskIds: ['k22', 'k3', 'k13'],
+    })
+    expect(card()?.querySelector('[data-summary-changed]')).toBeNull()
+  })
+
+  it('받는 중엔 [멈춤] — 누르면 받은 데까지 남기고 멈춘다', async () => {
+    await signedIn('u1@innoflow.local')
+    vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* (_p, _i, signal) {
+      yield { type: 'delta', text: '한 줄 총평' }
+      await new Promise((_, reject) =>
+        signal.addEventListener('abort', () => reject(new DOMException('', 'AbortError'))),
+      )
+    })
+    await mountRisks()
+
+    await click(button('AI 요약'))
+    expect(button('AI 요약')).toBeUndefined()
+    await click(button('멈춤'))
+
+    expect(card()?.textContent).toContain('한 줄 총평')
+    expect(card()?.textContent).toContain('멈췄습니다.')
+    expect(button('다시 요약')!.disabled).toBe(false)
+  })
+
+  it('보이는 줄이 0건이면 버튼이 꺼진다', async () => {
+    await signedIn('u1@innoflow.local')
+    useDataStore().setProject('p3')
+    await mountRisks()
+
+    expect(button('AI 요약')!.disabled).toBe(true)
+    expect(line()).toBe('보이는 리스크가 없어 정리할 것이 없습니다.')
+  })
+
+  it('오류는 챗봇과 같은 문구로', async () => {
+    await signedIn('u1@innoflow.local')
+    vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* () {
+      yield* []
+      throw new ApiError(429, { code: 'CHAT_RATE_LIMITED', message: '' })
+    })
+    await mountRisks()
+
+    await click(button('AI 요약'))
+    expect(card()?.querySelector('[data-summary-error]')?.textContent?.trim()).toBe(
+      '질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요.',
+    )
+  })
+
+  it('화면을 떠나면 버린다', async () => {
+    await signedIn('u1@innoflow.local')
+    answerWith()
+    const w = await mountRisks()
+    await click(button('AI 요약'))
+    expect(useRiskStore().summary).not.toBeNull()
+
+    w.unmount()
+    expect(useRiskStore().summary).toBeNull()
   })
 })

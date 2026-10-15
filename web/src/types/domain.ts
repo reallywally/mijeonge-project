@@ -566,6 +566,14 @@ export interface DecisionRiskReport {
   owners: OwnerLoad[]
 }
 
+/** AI 요약에 보내는 것 — 화면에 지금 보이는 줄의 id. 각 0 ~ 100개 (docs/api/risk.md 'AI 요약') */
+export interface RiskSummaryInput {
+  /** 화면에 보이는 안건 리스크 줄 — ThreadRisk.threadId */
+  threadIds: string[]
+  /** 화면에 보이는 어긋난 작업 줄 — TaskRisk.taskId */
+  taskIds: string[]
+}
+
 export type ThreadRiskSignal =
   | 'overdue'
   | 'dueSoon'

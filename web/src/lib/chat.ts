@@ -1,5 +1,5 @@
 import type { ApiError } from '@/api/client'
-import type { ChatLine, ChatMessage, ChatProposal } from '@/types/domain'
+import type { ChatLine, ChatMessage, ChatProposal, ChatRef } from '@/types/domain'
 
 /** 계약의 messages 상한 (API.md '## AI 챗봇') */
 export const MAX_CHAT_MESSAGES = 20
@@ -70,4 +70,28 @@ export function chatErrorText(error: ApiError): string {
     default:
       return error.message || CHAT_ERROR_FALLBACK[error.code] || '답을 받지 못했습니다.'
   }
+}
+
+/** 답 본문의 한 조각 — 글이거나 근거 하나 */
+export type ChatSegment = { text: string } | { ref: ChatRef }
+
+const REF_RE = /\[\[(thread|task):([^\]\s]+)\]\]/g
+/* 받는 중 끝에 걸린 덜 온 표시('[[thr' · '[[task:k1') — 다 올 때까지 글자로 비치지 않게 뗀다 */
+const PARTIAL_REF_RE = /\[(?:\[(?:[a-z]*(?::[^\]\s]*\]?)?)?)?$/
+
+/**
+ * 답 본문을 글 · 근거 조각으로 쪼갠다 (docs/api/chat.md '근거 표시'). 근거가 스냅샷에 있는지는 그리는 쪽이 본다.
+ * 글은 그대로 둔다 — 마크다운을 풀지 않고 줄바꿈만 살려 그린다
+ */
+export function splitRefs(text: string): ChatSegment[] {
+  const body = text.replace(PARTIAL_REF_RE, '')
+  const out: ChatSegment[] = []
+  let at = 0
+  for (const m of body.matchAll(REF_RE)) {
+    if (m.index > at) out.push({ text: body.slice(at, m.index) })
+    out.push({ ref: { kind: m[1] as ChatRef['kind'], id: m[2] } })
+    at = m.index + m[0].length
+  }
+  if (at < body.length) out.push({ text: body.slice(at) })
+  return out
 }

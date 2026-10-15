@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { Loader2, RefreshCw, SlidersHorizontal } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { Loader2, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, Square } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import ChatRefText from '@/components/app/ChatRefText.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import RiskSettingsDialog from '@/components/app/RiskSettingsDialog.vue'
@@ -37,6 +38,20 @@ watch(
   () => void risk.load(),
   { immediate: true },
 )
+
+/* AI 요약은 이 화면에서만 산다 — 떠나면 버리고, 받는 중이면 끊는다 */
+onBeforeUnmount(() => risk.resetSummary())
+
+const summaryLine = computed(() => {
+  const s = risk.summary
+  if (s && risk.summaryChanged) return '목록이 바뀌었습니다 —'
+  if (s?.status === 'streaming')
+    return `보이는 안건 ${s.threadIds.length} · 작업 ${s.taskIds.length}건을 정리하는 중…`
+  if (s) return `${s.asOf} 기준 · 보이는 ${s.threadIds.length + s.taskIds.length}건`
+  if (risk.tooManyToSummarize) return '보이는 줄이 너무 많습니다 — 내 파트로 좁혀 주세요.'
+  if (risk.visibleCount === 0) return '보이는 리스크가 없어 정리할 것이 없습니다.'
+  return `보이는 안건 ${risk.visibleIds.threadIds.length} · 작업 ${risk.visibleIds.taskIds.length}건을 정리합니다`
+})
 
 const canEditSettings = computed(
   () => data.currentProjectId !== '' && canManageProject(auth.me, data.currentProjectId),
@@ -131,6 +146,85 @@ function openTask(id: string) {
             <SlidersHorizontal class="size-4" />
             기준 바꾸기
           </Button>
+        </section>
+
+        <!-- AI 요약 — 누를 때만 부른다. 답은 AI 가 낸 글이라 v-html 없이 줄바꿈만 살린다 -->
+        <section
+          v-if="risk.report"
+          class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-[17px] py-[11px] shadow-sm"
+          aria-label="AI 요약"
+          data-risk-summary
+        >
+          <div class="flex items-center gap-2.5">
+            <Sparkles class="size-4 shrink-0 text-muted-foreground" />
+            <span class="shrink-0 text-sm font-medium">AI 요약</span>
+            <span class="min-w-0 grow truncate text-xs text-muted-foreground" data-summary-line>{{
+              summaryLine
+            }}</span>
+            <Button
+              v-if="risk.summarizing"
+              variant="outline"
+              class="shrink-0"
+              @click="risk.stopSummary()"
+            >
+              <Square class="size-3.5 fill-current" />
+              멈춤
+            </Button>
+            <Button
+              v-else-if="risk.summary"
+              variant="outline"
+              class="shrink-0"
+              :disabled="!risk.canSummarize"
+              @click="risk.summarize()"
+            >
+              <RotateCcw class="size-4" />
+              다시 요약
+            </Button>
+            <Button
+              v-else
+              variant="outline"
+              class="shrink-0"
+              :disabled="!risk.canSummarize"
+              @click="risk.summarize()"
+            >
+              <Sparkles class="size-4" />
+              AI 요약
+            </Button>
+          </div>
+
+          <div
+            v-if="risk.summary"
+            class="flex flex-col gap-1.5 transition-opacity"
+            :class="risk.summaryChanged ? 'opacity-50' : ''"
+            :data-summary-changed="risk.summaryChanged || undefined"
+            aria-live="polite"
+          >
+            <ChatRefText
+              v-if="risk.summary.text"
+              :text="risk.summary.text"
+              data-summary-text
+              @open-thread="openThread"
+              @open-task="openTask"
+            />
+            <p
+              v-if="risk.summary.status === 'streaming' && !risk.summary.text"
+              class="flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <Loader2 class="size-3.5 animate-spin" />
+              요약을 준비하는 중…
+            </p>
+            <p v-else-if="risk.summary.status === 'stopped'" class="text-xs text-muted-foreground">
+              멈췄습니다.
+            </p>
+            <p
+              v-else-if="risk.summary.status === 'error'"
+              class="text-xs text-destructive"
+              role="alert"
+              data-summary-error
+            >
+              {{ risk.summary.error }}
+            </p>
+          </div>
         </section>
 
         <p
