@@ -158,13 +158,13 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 안건과 어긋난 작업 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 | `DecisionRiskReport` | 합의 |
-| GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 다섯) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 다섯 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 합의 |
+| GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 안건과 어긋난 작업 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 | `DecisionRiskReport` | 구현 |
+| GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 다섯) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 다섯 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 |
 
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q36).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q38).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

@@ -29,6 +29,7 @@ from app.models import (
     PartMember,
     Project,
     ProjectMember,
+    RiskSetting,
     Task,
     TaskComment,
     TaskLine,
@@ -47,9 +48,9 @@ def d(day: str | None) -> date | None:
 
 
 def projects() -> list[Project]:
-    # last_task_no 는 픽스처가 이미 써 버린 마지막 번호다 — 다음 작업이 HW-22 · PAS-3 로 나온다
+    # last_task_no 는 픽스처가 이미 써 버린 마지막 번호다 — 다음 작업이 HW-23 · PAS-3 로 나온다
     return [
-        Project(id="p1", name="한화손보 차세대", task_key_prefix="HW", last_task_no=21),
+        Project(id="p1", name="한화손보 차세대", task_key_prefix="HW", last_task_no=22),
         Project(id="p2", name="삼성생명 PAS", task_key_prefix="PAS", last_task_no=2),
         Project(id="p3", name="경영지원 파트", task_key_prefix="MG", last_task_no=0),
     ]
@@ -110,7 +111,7 @@ def grants() -> list[ProjectMember]:
 PARTS = [("pt1", "인프라"), ("pt2", "AI"), ("pt3", "기간계 연동")]
 PART_MEMBERS = [("pt1", "u3"), ("pt2", "u1"), ("pt2", "u4"), ("pt3", "u2")]
 TASK_PARTS = {
-    **dict.fromkeys(("k4", "k19", "k20", "k21"), "pt1"),
+    **dict.fromkeys(("k4", "k19", "k20", "k21", "k22"), "pt1"),
     **dict.fromkeys((f"k{n}" for n in range(6, 17)), "pt2"),
     "k18": "pt3",
 }
@@ -427,6 +428,8 @@ def tasks() -> list[Task]:
             "2026-09-12",
         ),
         task("k21", "HW-21", "개발자 계정 배포", "k4", "todo", "u1", "2026-09-12", "2026-09-15"),
+        # 결정 병목 리스크 — DB 는 이미 정해졌는데(t2) 막힘을 안 풀어 둔 작업(decidedButBlocked)
+        task("k22", "HW-22", "스테이징 DB 구성", "k4", "blocked", "u3", "2026-10-13", "2026-10-20"),
         # 다른 프로젝트
         task(
             "x1",
@@ -461,6 +464,7 @@ TASK_THREAD_LINKS = [
     ("k18", "t5"),  # 기간계 API ↔ in · out 정의
     ("k13", "t8"),  # 모델링 ↔ 학습 데이터 범위
     ("k3", "t9"),  # 프로그램 설계 ↔ 공통 코드 체계
+    ("k22", "t2"),  # 스테이징 DB 구성 ↔ DB 결정 — 정해졌는데 막힘
 ]
 
 
@@ -508,6 +512,7 @@ def comments() -> list[TaskComment]:
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        RiskSetting,
         TaskComment,
         TaskThreadLink,
         TaskLine,

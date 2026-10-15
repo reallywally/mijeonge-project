@@ -146,16 +146,16 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 ### 10-1 기준 · 계산 (Claude 없이)
 
-- [ ] 리비전 `0011_risk_setting` — `risk_setting(project_id PK · FK cascade, due_soon_days, defer_count, stale_days, high_score, medium_score, updated_at)` + 범위 CHECK · `high_score > medium_score`
-- [ ] `GET · PUT /api/projects/{projectId}/risk-settings` — 없으면 기본값, PUT 은 upsert. PUT 은 `require_project_admin`. 범위 · 대소 위반 422
-- [ ] `app/schemas/risk.py` — `RiskSettings` · `DecisionRiskReport` · `ThreadRisk` · `TaskRisk` · `OwnerLoad` (camelCase alias)
-- [ ] `app/services/risk.py` — 그 프로젝트의 기준을 읽어 신호 여덟 · 작업 신호 셋 · `owners` · 점수 · 등급 · 정렬 (`docs/api/risk.md` 그대로). 쓴 기준을 `settings` 로 싣는다
+- [x] 리비전 `0011_risk_setting` — `risk_setting(project_id PK · FK cascade, due_soon_days, defer_count, stale_days, high_score, medium_score, updated_at)` + 범위 CHECK · `high_score > medium_score`
+- [x] `GET · PUT /api/projects/{projectId}/risk-settings` — 없으면 기본값, PUT 은 upsert. PUT 은 `require_project_admin`. 범위 · 대소 위반 422
+- [x] `app/schemas/risk.py` — `RiskSettings` · `DecisionRiskReport` · `ThreadRisk` · `TaskRisk` · `OwnerLoad` (camelCase alias)
+- [x] `app/services/risk.py` — 그 프로젝트의 기준을 읽어 신호 여덟 · 작업 신호 셋 · `owners` · 점수 · 등급 · 정렬 (`docs/api/risk.md` 그대로). 쓴 기준을 `settings` 로 싣는다
   - `overdue` 와 `dueSoon` 은 같이 안 낸다. `noDueDate` 는 연결된 작업이 있을 때만
   - `impactTaskCount` — 막힌 연결 작업과 그 하위(완료 제외)를 **중복 없이**. 계층 고리는 서비스가 막지만 방문 집합으로 한 번 더 지킨다
   - `idleDays` — 마지막 이력의 `created_at` 을 KST 날짜로 옮겨 센다. 이력이 없으면 안건 등록 시각
-- [ ] `GET /api/projects/{projectId}/risks` — `require_scope` 로 멤버 경계, 없는 프로젝트 404
-- [ ] `tests/test_risk.py` — 신호 하나에 검사 하나 이상 + 경계값(기한 당일 · 3일째 · 미룸 정확히 2번) · 정렬 고정 · 연쇄 중복 · 다른 프로젝트 연결이 안 섞임 · 권한(멤버 아님 403) · **기준을 바꾸면 결과가 바뀜** · 설정 PUT 권한(일반 사용자 403) · 422
-- [ ] 시드에 리스크가 보이는 줄을 더한다 — 기한 지난 안건 하나 · 두 번 미룬 안건 하나 · 정해졌는데 막힘인 작업 하나
+- [x] `GET /api/projects/{projectId}/risks` — `require_scope` 로 멤버 경계, 없는 프로젝트 404
+- [x] `tests/test_risk.py` — 신호 하나에 검사 하나 이상 + 경계값(기한 당일 · 3일째 · 미룸 정확히 2번) · 정렬 고정 · 연쇄 중복 · 다른 프로젝트 연결이 안 섞임 · 권한(멤버 아님 — 스냅샷 경계대로 404) · **기준을 바꾸면 결과가 바뀜** · 설정 PUT 권한(일반 사용자 403) · 422
+- [x] 시드에 리스크가 보이는 줄을 더한다 — 기한 지난 안건 하나 · 두 번 미룬 안건 하나 · 정해졌는데 막힘인 작업 하나
 
 ### 10-2 챗봇 도구
 
@@ -193,7 +193,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `docs/api/chat.md` · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). **7-2 채팅 끝남** (2026-10-11) — `POST .../chat` SSE · 도구 루프 · 제한 · 가짜 클라이언트 검사 33개. **작업 초안 끝남** (2026-10-12) — `list_members` · `propose_tasks` 도구 · `proposal` 이벤트 · `ChatMessage.proposal` · `POST .../tasks/batch`(한 트랜잭션). 다음은 7-3 평가셋 |
 | 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. Q29 ~ Q31 닫힘 |
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
-| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). 10-1 진행 중 |
+| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. 다음은 10-2 챗봇 도구 |
 
 ## 아직 안 정한 것
 

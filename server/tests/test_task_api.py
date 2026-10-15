@@ -58,11 +58,11 @@ async def test_body_lines_get_server_ids_in_order(client: httpx.AsyncClient) -> 
 
 
 async def test_keys_come_from_the_project_counter(client: httpx.AsyncClient) -> None:
-    """픽스처가 HW-21 까지 썼다. 최댓값이 아니라 프로젝트의 카운터에서 센다."""
+    """픽스처가 HW-22 까지 썼다. 최댓값이 아니라 프로젝트의 카운터에서 센다."""
     first = (await client.post("/api/projects/p1/tasks", json=NEW_TASK)).json()
     second = (await client.post("/api/projects/p1/tasks", json=NEW_TASK)).json()
 
-    assert [first["key"], second["key"]] == ["HW-22", "HW-23"]
+    assert [first["key"], second["key"]] == ["HW-23", "HW-24"]
 
 
 async def test_key_prefix_follows_the_project(client: httpx.AsyncClient) -> None:
@@ -101,7 +101,7 @@ async def test_written_task_shows_up_at_the_end_of_the_snapshot(
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
     assert snap["tasks"][-1]["id"] == task["id"]
-    assert len(snap["tasks"]) == 22
+    assert len(snap["tasks"]) == 23
 
 
 async def test_task_cannot_be_its_own_parent(client: httpx.AsyncClient) -> None:

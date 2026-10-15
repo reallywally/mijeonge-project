@@ -170,3 +170,69 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
         "parts",
         "partMembers",
     }
+
+
+# 결정 병목 리스크 — docs/api/risk.md '응답' · '기준 설정'. 집계를 서버가 하는 첫 예외라(Q35)
+# 계산된 타입이 응답으로 나간다. 어긋나면 계약 쪽이 기준이다
+RISK_SHAPES: dict[str, set[str]] = {
+    "RiskSettings": {"dueSoonDays", "deferCount", "staleDays", "highScore", "mediumScore"},
+    "DecisionRiskReport": {"asOf", "settings", "threads", "tasks", "owners"},
+    "ThreadRisk": {
+        "threadId",
+        "title",
+        "state",
+        "ownerId",
+        "partId",
+        "dueDate",
+        "overdueDays",
+        "deferCount",
+        "lastDeferNote",
+        "idleDays",
+        "blockedTaskIds",
+        "waitingTaskIds",
+        "impactTaskCount",
+        "nearestTaskDue",
+        "signals",
+        "score",
+        "level",
+    },
+    "TaskRisk": {
+        "taskId",
+        "key",
+        "title",
+        "status",
+        "ownerId",
+        "partId",
+        "due",
+        "threadIds",
+        "signal",
+    },
+    "OwnerLoad": {
+        "memberId",
+        "openThreads",
+        "overdueThreads",
+        "blockedTasks",
+        "blockingImpact",
+    },
+}
+
+
+@pytest.mark.parametrize("name", sorted(RISK_SHAPES))
+def test_risk_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드가 계약과 같아야 한다."""
+    if name in FIELDS:
+        assert set(FIELDS[name]) == RISK_SHAPES[name], f"domain.ts 의 {name} 이 risk.md 와 다르다"
+
+
+async def test_risk_report_matches_contract(client: AsyncClient) -> None:
+    body = (await client.get("/api/projects/p1/risks")).json()
+    assert set(body) == RISK_SHAPES["DecisionRiskReport"]
+    assert set(body["settings"]) == RISK_SHAPES["RiskSettings"]
+    for key, name in (("threads", "ThreadRisk"), ("tasks", "TaskRisk"), ("owners", "OwnerLoad")):
+        assert body[key], f"{name} 을 볼 수 있는 줄이 시드에 없다"
+        for row in body[key]:
+            assert set(row) == RISK_SHAPES[name]
+            # null 은 domain.ts 가 허락한 자리에서만
+            for field, value in row.items():
+                if value is None and name in FIELDS:
+                    assert FIELDS[name][field], f"{name}.{field} 가 null 로 나갔다"
