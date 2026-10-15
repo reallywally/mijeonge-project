@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
-import { chatErrorText, MAX_CHAT_MESSAGES, toChatMessages } from '@/lib/chat'
+import { chatErrorText, MAX_CHAT_MESSAGES, splitRefs, toChatMessages } from '@/lib/chat'
 import type { ChatLine } from '@/types/domain'
 
 let seq = 0
@@ -69,5 +69,30 @@ describe('챗봇 오류 문구', () => {
     expect(chatErrorText(e(422, 'VALIDATION_ERROR', '입력값이 올바르지 않습니다.'))).toContain(
       '너무 길어',
     )
+  })
+})
+
+describe('답 본문의 근거 표시', () => {
+  it('글 · 근거 조각으로 쪼갠다', () => {
+    expect(splitRefs('먼저 [[thread:t5]] 를 정하면\n[[task:k18]] 이 풀립니다')).toEqual([
+      { text: '먼저 ' },
+      { ref: { kind: 'thread', id: 't5' } },
+      { text: ' 를 정하면\n' },
+      { ref: { kind: 'task', id: 'k18' } },
+      { text: ' 이 풀립니다' },
+    ])
+  })
+
+  it('모르는 종류 · 빈 id 는 글자 그대로 둔다', () => {
+    expect(splitRefs('[[meeting:m1]] [[thread:]]')).toEqual([
+      { text: '[[meeting:m1]] [[thread:]]' },
+    ])
+  })
+
+  it('받는 중 끝에 걸린 덜 온 표시는 뗀다', () => {
+    expect(splitRefs('병목은 [[thr')).toEqual([{ text: '병목은 ' }])
+    expect(splitRefs('병목은 [[thread:t5]')).toEqual([{ text: '병목은 ' }])
+    expect(splitRefs('병목은 [')).toEqual([{ text: '병목은 ' }])
+    expect(splitRefs('[[thread:t5]]')).toEqual([{ ref: { kind: 'thread', id: 't5' } }])
   })
 })

@@ -200,6 +200,7 @@ async def test_request_follows_the_settings(session: AsyncSession) -> None:
         "get_task",
         "list_tasks",
         "find_similar_tasks",
+        "get_decision_risks",
         "list_members",
         "propose_tasks",
     }
@@ -891,3 +892,99 @@ async def test_similar_tasks_around_one_task(pg_session: AsyncSession) -> None:
         pg_session, "p1", "find_similar_tasks", {"task_id": "PAS-1"}
     )
     assert is_error and json.loads(content) == {"error": "작업을 찾을 수 없습니다."}
+
+
+# --- 결정 리스크 도구 ---------------------------------------------------------
+
+
+async def risks(s: AsyncSession, args: dict[str, Any], project: str = "p1") -> dict[str, Any]:
+    content, is_error = await chat_service.run_tool(s, project, "get_decision_risks", args)
+    assert not is_error, content
+    report: dict[str, Any] = json.loads(content)
+    return report
+
+
+async def test_decision_risks_tool_round(session: AsyncSession) -> None:
+    """도구 갈래 — 같은 계산(services/risk.py)의 보고서가 camelCase 그대로 다음 차례에 실린다."""
+    await seed(session)
+    fake = FakeClient(
+        Turn(tools=[("get_decision_risks", {})]),
+        Turn(texts=["DB 결정은 풀어도 됩니다 [[task:k22]]"]),
+    )
+    events = await run(session, fake)
+
+    assert events[0].type == "tool" and events[0].name == "get_decision_risks"
+    assert events[0].label == "결정 리스크 보는 중"
+    (result,) = tool_results(fake.calls[1])
+    assert result["is_error"] is False
+    report = json.loads(result["content"])
+    assert set(report) == {"asOf", "settings", "threads", "tasks", "owners"}
+    # 오늘은 프롬프트의 오늘과 같은 한국 시간이다
+    assert report["asOf"] == today_kst().isoformat()
+    assert {"taskId": "k22", "signal": "decidedButBlocked"}.items() <= next(
+        t for t in report["tasks"] if t["taskId"] == "k22"
+    ).items()
+    assert events[-1].type == "done"
+
+
+async def test_decision_risks_by_member(session: AsyncSession) -> None:
+    await seed(session)
+    whole = await risks(session, {})
+    mine = await risks(session, {"member_id": "u3"})
+
+    assert mine["threads"] == [t for t in whole["threads"] if t["ownerId"] == "u3"]
+    assert mine["tasks"] == [t for t in whole["tasks"] if t["ownerId"] == "u3"]
+    assert any(t["taskId"] == "k22" for t in mine["tasks"])
+    # 사람별 표는 거르지 않는다
+    assert mine["owners"] == whole["owners"]
+
+
+async def test_decision_risks_by_part_id_or_name(session: AsyncSession) -> None:
+    await seed(session)
+    whole = await risks(session, {})
+    by_id = await risks(session, {"part_id": "pt1"})
+
+    assert by_id["threads"] == [t for t in whole["threads"] if t["partId"] == "pt1"]
+    assert by_id["tasks"] == [t for t in whole["tasks"] if t["partId"] == "pt1"]
+    assert any(t["taskId"] == "k22" for t in by_id["tasks"])
+    assert by_id["owners"] == whole["owners"]
+    # 파트 목록 도구가 없어 Claude 는 이름을 넣는다 — 같은 결과다
+    assert await risks(session, {"part_id": " 인프라 "}) == by_id
+    # 둘 다 주면 둘 다 맞는 것만
+    both = await risks(session, {"member_id": "u1", "part_id": "pt1"})
+    assert all(t["ownerId"] == "u1" and t["partId"] == "pt1" for t in both["threads"])
+    assert not any(t["taskId"] == "k22" for t in both["tasks"])
+
+
+@pytest.mark.parametrize(
+    ("project", "args", "message"),
+    [
+        ("p1", {"member_id": "nobody"}, "멤버를 찾을 수 없습니다."),
+        # 관리자는 어느 프로젝트에도 부여되지 않았다 — 있는 멤버라도 이 프로젝트에선 못 찾는다
+        ("p1", {"member_id": "admin"}, "멤버를 찾을 수 없습니다."),
+        ("p1", {"part_id": "pt9"}, "파트를 찾을 수 없습니다."),
+        # pt1 · '인프라' 는 p1 의 파트다 — p2 의 대화에서는 있는지조차 모른다
+        ("p2", {"part_id": "pt1"}, "파트를 찾을 수 없습니다."),
+        ("p2", {"part_id": "인프라"}, "파트를 찾을 수 없습니다."),
+    ],
+)
+async def test_decision_risks_unknown_id_is_not_found(
+    session: AsyncSession, project: str, args: dict[str, Any], message: str
+) -> None:
+    await seed(session)
+    content, is_error = await chat_service.run_tool(session, project, "get_decision_risks", args)
+    assert is_error
+    assert json.loads(content) == {"error": message}
+
+
+async def test_decision_risks_cannot_switch_project(session: AsyncSession) -> None:
+    """입력에 project_id 를 끼워 넣어도 경로의 프로젝트만 계산한다."""
+    await seed(session)
+    report = await risks(session, {"project_id": "p1"}, project="p2")
+    assert not any(t["threadId"] in {"t3", "t5"} for t in report["threads"])
+    assert not any(t["taskId"] == "k22" for t in report["tasks"])
+
+
+def test_decision_risks_label() -> None:
+    assert chat_service.tool_label("get_decision_risks", {}) == "결정 리스크 보는 중"
+    assert "get_decision_risks" in {tool["name"] for tool in chat_service.TOOLS}

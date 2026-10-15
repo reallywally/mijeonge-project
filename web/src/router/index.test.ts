@@ -17,6 +17,7 @@ vi.mock('@/views/LoginView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/AdminMembersView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/ProjectSettingsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/ProjectPartsView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/RiskView.vue', () => ({ default: { template: '<div />' } }))
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })

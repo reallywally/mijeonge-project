@@ -34,6 +34,7 @@ from app.schemas.chat import (
     DoneEvent,
     ErrorEvent,
     FindSimilarTasksInput,
+    GetDecisionRisksInput,
     GetTaskInput,
     GetThreadInput,
     ListTasksInput,
@@ -46,6 +47,7 @@ from app.schemas.chat import (
 )
 from app.schemas.task import PROPOSAL_MAX
 from app.services import project as project_service
+from app.services import risk as risk_service
 from app.services import search as search_service
 from app.services import task as task_service
 from app.time import today_kst
@@ -76,7 +78,8 @@ SYSTEM_PROMPT = """\
   (예: 'OS' ↔ '운영체제' ↔ '우분투', 'DB' ↔ '데이터베이스')
 - 안건을 찾았으면 get_thread 로 이력을 읽고 답한다. 검색 결과의 한 줄만 보고 단정하지 않는다
 - 도구 고르기: 특정 낱말 · 주제의 작업은 search_tasks, 작업 전체를 훑어야 하면(전체 현황 · 빠진 것)
-  list_tasks, 중복 · 겹치는 작업은 find_similar_tasks 다. 하나를 자세히 보려면 get_task
+  list_tasks, 중복 · 겹치는 작업은 find_similar_tasks 다. 하나를 자세히 보려면 get_task.
+  리스크 · 막힘 · 무엇부터 정해야 하나는 get_decision_risks 다
 
 ## 중복 · 비슷한 작업
 1. find_similar_tasks 로 글자가 비슷한 후보 쌍을 받는다. 작업 하나를 콕 집었으면 task_id 를 넣는다
@@ -90,6 +93,24 @@ SYSTEM_PROMPT = """\
 5. "중복 가능성 높음" · "확인 필요" 로 나눠 말하고,
    왜 그렇게 봤는지(제목 · 본문 · 담당자 · 기간)를 짧게 붙인다.
    합치거나 지우는 것은 화면에서 사람이 한다 — 너는 바꾸지 못한다
+
+## 결정 리스크
+1. "뭐가 위험해?" · "막힌 거 뭐 있어?" · "이번 주 뭐부터 정해야 해?" 처럼 리스크 · 막힘 · 우선순위를
+   물으면 get_decision_risks 를 먼저 부른다.
+   사람을 콕 집었으면 list_members 로 id 를 찾아 member_id 에,
+   파트를 콕 집었으면 그 이름을 part_id 에 넣는다
+2. 답은 level 이 high 인 것부터 도구가 준 순서대로 말한다. 한 줄마다 왜(신호) ·
+   무엇이 막히나(막힌 작업 · impactTaskCount) · 다음 할 일(누가 무엇을 정하면 되나)을 말하고
+   [[thread:ID]] · [[task:ID]] 근거를 단다. 담당자는 list_members 로 이름을 찾아 말한다
+3. tasks 의 decidedButBlocked 는 걸린 안건이 다 정해졌으니 "막힘을 풀어도 된다" 고 말한다.
+   너는 작업 상태를 바꾸지 못한다 — 화면에서 사람이 바꾼다고 말한다
+4. 점수 · 등급 · 날 수 같은 숫자는 도구가 준 그대로만 쓴다. 지어내거나 고쳐 매기지 않는다.
+   리스크가 하나도 없으면 없다고 말한다
+5. 신호는 영어 이름 대신 화면의 말로 쓴다 —
+   overdue 기한 지남 · dueSoon 기한 임박 · deferredRepeatedly 여러 번 미룸 · stale 오래 멈춤 ·
+   blocking 작업을 막는 중 · decisionAfterTaskDue 작업 기한이 먼저 · noOwner 담당자 없음 ·
+   noDueDate 기한 없음 / decidedButBlocked 풀어도 됨 · blockedWithoutThread 막힌 이유 없음 ·
+   dueBeforeDecision 결정이 기한보다 늦음. 등급은 high 높음 · medium 중간 · low 낮음
 
 ## 답하는 규칙
 1. 결정이 바뀐 안건은 이력의 **마지막 decide · change 줄이 지금의 결정**이다.
@@ -257,10 +278,31 @@ TOOLS: list[BetaToolParam] = [
         },
     },
     {
+        "name": "get_decision_risks",
+        "description": (
+            "안 정해진 안건이 막는(막을) 일을 규칙으로 계산한 결정 리스크 보고서를 준다. "
+            "threads: 위험한 안건(score 내림차순, level high/medium/low, signals, "
+            "blockedTaskIds · impactTaskCount), tasks: 안건과 어긋난 작업(signal 하나), "
+            "owners: 사람별로 몰린 정도(memberId null 은 담당자 없음), settings: 쓴 기준. "
+            "member_id 를 주면 그 사람이 맡은 안건 · 작업만, part_id 를 주면 그 파트의 것만 남긴다"
+            "(owners 는 그대로). 사람 이름으로 물으면 list_members 로 id 를 먼저 찾는다. "
+            "part_id 에는 파트 이름(예: '인프라')을 그대로 넣어도 된다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "member_id": {"type": "string", "description": "list_members 의 id"},
+                "part_id": {"type": "string", "description": "파트 id 나 파트 이름"},
+            },
+        },
+    },
+    {
         "name": "list_members",
         "description": (
             "이 프로젝트의 담당자 후보(활성 멤버) 목록(id · name)을 준다. "
-            "담당자 이름을 owner_id 로 바꿀 때 쓴다. 여기 없는 사람은 담당자로 둘 수 없다."
+            "담당자 이름을 owner_id 로 바꾸거나, "
+            "도구 결과의 ownerId · memberId 를 이름으로 바꿀 때 쓴다. "
+            "여기 없는 사람은 담당자로 둘 수 없다."
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
@@ -358,6 +400,8 @@ def tool_label(name: ToolName, raw: object) -> str:
             return "작업 목록 보는 중"
         case "find_similar_tasks":
             return "비슷한 작업 찾는 중"
+        case "get_decision_risks":
+            return "결정 리스크 보는 중"
         case "list_members":
             return "멤버 확인 중"
         case "propose_tasks":
@@ -400,6 +444,13 @@ async def run_tool(
                     session, project_id, task_id=f.task_id, limit=f.limit
                 )
                 return _dump_list(pairs), False
+            case "get_decision_risks":
+                g = GetDecisionRisksInput.model_validate(raw)
+                # 오늘은 프롬프트의 오늘과 같은 기준(한국 시간)이다
+                report = await risk_service.decision_risks_for(
+                    session, project_id, today=today_kst(), member_id=g.member_id, part=g.part_id
+                )
+                return report.model_dump_json(by_alias=True), False
             case "list_members":
                 # 담당자 후보는 그 프로젝트의 활성 멤버뿐이다 (docs/api/auth.md)
                 members = await project_service.list_members(session, assignable_in=project_id)

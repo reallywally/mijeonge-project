@@ -41,6 +41,21 @@ def _sse(event: ChatEvent) -> str:
     return f"event: {event.type}\ndata: {event.model_dump_json(by_alias=True)}\n\n"
 
 
+def sse_response(events: AsyncIterator[ChatEvent]) -> StreamingResponse:
+    """챗봇과 리스크 요약이 같이 쓴다 — 화면이 같은 스트림 읽기를 쓴다."""
+
+    async def body() -> AsyncIterator[str]:
+        async for event in events:
+            yield _sse(event)
+
+    return StreamingResponse(
+        body(),
+        media_type="text/event-stream",
+        # 프록시가 모아 두었다 한꺼번에 내보내지 않게
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.post(
     "/projects/{project_id}/chat",
     response_class=StreamingResponse,
@@ -64,15 +79,6 @@ async def chat(
             429, "CHAT_RATE_LIMITED", "질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요."
         )
 
-    async def body() -> AsyncIterator[str]:
-        async for event in chat_service.answer(
-            client, session, settings, project.id, project.name, payload.messages
-        ):
-            yield _sse(event)
-
-    return StreamingResponse(
-        body(),
-        media_type="text/event-stream",
-        # 프록시가 모아 두었다 한꺼번에 내보내지 않게
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    return sse_response(
+        chat_service.answer(client, session, settings, project.id, project.name, payload.messages)
     )

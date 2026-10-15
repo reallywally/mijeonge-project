@@ -61,7 +61,7 @@ async def test_seed_parts_match_contract_table(client: httpx.AsyncClient) -> Non
     snap = await snapshot(client)
     tasks = {t["id"]: t["partId"] for t in snap["tasks"]}
     threads = {t["id"]: t["partId"] for t in snap["threads"]}
-    assert {k for k, v in tasks.items() if v == "pt1"} == {"k4", "k19", "k20", "k21"}
+    assert {k for k, v in tasks.items() if v == "pt1"} == {"k4", "k19", "k20", "k21", "k22"}
     assert {k for k, v in tasks.items() if v == "pt2"} == {f"k{n}" for n in range(6, 17)}
     assert {k for k, v in tasks.items() if v == "pt3"} == {"k18"}
     assert {k for k, v in tasks.items() if v is None} == {"k1", "k2", "k3", "k5", "k17"}
@@ -81,7 +81,7 @@ async def test_snapshot_does_not_filter_by_part(as_member: AsMember) -> None:
     """파트는 권한이 아니다 — 파트가 없는 사람(admin 말고 u2 는 pt3 뿐)도 전부 받는다."""
     u2 = await as_member("u2")
     snap = await snapshot(u2)
-    assert len(snap["tasks"]) == 21 and len(snap["threads"]) == 9
+    assert len(snap["tasks"]) == 22 and len(snap["threads"]) == 9
     assert len(snap["parts"]) == 3
 
 

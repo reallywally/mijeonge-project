@@ -95,7 +95,7 @@ async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> Non
     assert [t["key"] for t in p2["tasks"]] == ["PAS-1", "PAS-2"]
     assert [t["id"] for t in p2["threads"]] == ["t10"]
     assert all(t["projectId"] == "p1" for t in p1["tasks"])
-    assert len(p1["tasks"]) == 21
+    assert len(p1["tasks"]) == 22
 
 
 async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> None:
@@ -110,7 +110,7 @@ async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> N
 
     assert [t["id"] for t in snap["threads"]] == [f"t{n}" for n in range(1, 10)]
     assert [e["id"] for e in snap["entries"]] == [f"e{n}" for n in range(1, 7)]
-    assert [t["key"] for t in snap["tasks"]] == [f"HW-{n}" for n in range(1, 22)]
+    assert [t["key"] for t in snap["tasks"]] == [f"HW-{n}" for n in range(1, 23)]
 
 
 async def test_created_at_is_utc_and_dates_are_days(client: httpx.AsyncClient) -> None:
@@ -154,7 +154,7 @@ async def test_task_body_keeps_its_order(client: httpx.AsyncClient) -> None:
 async def test_task_thread_links(client: httpx.AsyncClient) -> None:
     snap = (await client.get("/api/projects/p1/snapshot")).json()
     assert {"taskId": "k4", "threadId": "t1"} in snap["taskThreadLinks"]
-    assert len(snap["taskThreadLinks"]) == 5
+    assert len(snap["taskThreadLinks"]) == 6
 
 
 async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:

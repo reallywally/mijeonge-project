@@ -34,7 +34,7 @@ describe('작업 목록', () => {
 
     expect(label('HW-8')).toBe('개발 › AI Biz › 가상비서 › tool01')
     expect(label('HW-1')).toBe('설계')
-    expect(task.parentOptions).toHaveLength(21)
+    expect(task.parentOptions).toHaveLength(22)
   })
 
   it('기간이 둘 다 없는 작업만 기간 미정이다', () => {
@@ -52,9 +52,9 @@ describe('작업 목록', () => {
 
   it('상태별 수를 센다', () => {
     const task = useTaskStore()
-    expect(task.statusCounts.all).toBe(21)
-    expect(task.statusCounts.blocked).toBe(1)
-    expect(task.blockedCount).toBe(1)
+    expect(task.statusCounts.all).toBe(22)
+    expect(task.statusCounts.blocked).toBe(2)
+    expect(task.blockedCount).toBe(2)
   })
 })
 
@@ -79,7 +79,7 @@ describe('작업 상세', () => {
   it('하위 작업과 끝난 수를 센다', () => {
     const task = useTaskStore()
     const detail = task.taskDetail('k4')!
-    expect(detail.children.map((c) => c.task.key)).toEqual(['HW-19', 'HW-20', 'HW-21'])
+    expect(detail.children.map((c) => c.task.key)).toEqual(['HW-19', 'HW-20', 'HW-21', 'HW-22'])
     expect(detail.doneChildCount).toBe(1)
   })
 
@@ -142,20 +142,20 @@ describe('작업 추가', () => {
     const data = useDataStore()
 
     const first = await task.addTask(input('CI 러너 늘리기'))
-    expect(data.allTasks.find((t) => t.id === first)!.key).toBe('HW-22')
+    expect(data.allTasks.find((t) => t.id === first)!.key).toBe('HW-23')
 
     data.allTasks = data.allTasks.filter((t) => t.id !== first)
     const second = await task.addTask(input('배포 스크립트 정리'))
-    expect(data.allTasks.find((t) => t.id === second)!.key).toBe('HW-23')
+    expect(data.allTasks.find((t) => t.id === second)!.key).toBe('HW-24')
   })
 })
 
 describe('상태 바꾸기', () => {
   it('막힘에서 진행 중으로 옮기면 목록의 수도 따라 바뀐다', () => {
     const task = useTaskStore()
-    expect(task.blockedCount).toBe(1)
+    expect(task.blockedCount).toBe(2)
     task.setStatus('k18', 'doing')
-    expect(task.blockedCount).toBe(0)
+    expect(task.blockedCount).toBe(1)
     expect(task.rows.find((r) => r.task.key === 'HW-18')!.task.status).toBe('doing')
   })
 

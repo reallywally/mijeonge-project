@@ -15,7 +15,7 @@ describe('스토어를 간트가 먹는 모양으로', () => {
   it('목록과 달리 계층을 그대로 들고 간다', () => {
     expect(item('HW-1').parent).toBe('0')
     expect(item('HW-8').parent).toBe(item('HW-7').id)
-    expect(items()).toHaveLength(21)
+    expect(items()).toHaveLength(22)
   })
 
   it('자식이 있는 작업은 묶음 막대가 된다', () => {
@@ -73,7 +73,7 @@ describe('눈금과 기간 글씨', () => {
   })
 
   it('맨 아래 기간은 기간이 잡힌 작업의 처음과 끝이다', () => {
-    expect(rangeLabel(useTaskStore().rows)).toBe('2026년 9월 7일 – 10월 4일')
+    expect(rangeLabel(useTaskStore().rows)).toBe('2026년 9월 7일 – 10월 20일')
   })
 
   it('기간이 잡힌 작업이 없으면 적지 않는다', () => {

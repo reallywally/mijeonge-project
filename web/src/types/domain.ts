@@ -506,6 +506,7 @@ export type ChatEvent =
         | 'list_tasks'
         | 'find_similar_tasks'
         | 'list_members'
+        | 'get_decision_risks'
         | 'propose_tasks'
       label: string
     }
@@ -534,4 +535,104 @@ export interface ChatLine {
   error: string
   /** assistant 줄만 — 이 답이 낸 작업 초안. done 으로 끝난 답에만 붙는다 */
   proposal?: ChatProposal
+}
+
+/* 결정 병목 리스크 — 계산은 서버가 하고 화면은 받아 그린다 (docs/api/risk.md · Q35) */
+
+/** 리스크를 가르는 문턱값 다섯 — 프로젝트마다 둔다. PUT 은 다섯 값을 통째로 보낸다 */
+export interface RiskSettings {
+  /** 결정 기한이 이 날 수 안이면 '기한 임박'. 1 ~ 30, 기본 3 */
+  dueSoonDays: number
+  /** defer 줄이 이 횟수 이상이면 '여러 번 미룸'. 1 ~ 10, 기본 2 */
+  deferCount: number
+  /** 마지막 이력 뒤 이 날 수를 넘기면 '오래 멈춤'. 1 ~ 90, 기본 7 */
+  staleDays: number
+  /** 점수가 이 값 이상이면 high. 2 ~ 30, 기본 6. mediumScore 보다 커야 한다 */
+  highScore: number
+  /** 점수가 이 값 이상이면 medium. 1 ~ 29, 기본 3 */
+  mediumScore: number
+}
+
+export interface DecisionRiskReport {
+  /** 계산 기준일 — 한국 시간 오늘. YYYY-MM-DD */
+  asOf: string
+  /** 이 계산에 쓴 기준 */
+  settings: RiskSettings
+  /** 안 정해진 안건 중 신호가 하나라도 있는 것. score 내림차순 */
+  threads: ThreadRisk[]
+  /** 안건과 어긋난 작업 */
+  tasks: TaskRisk[]
+  /** 사람별로 몰린 정도. 담당자 없음은 memberId null 한 줄 */
+  owners: OwnerLoad[]
+}
+
+/** AI 요약에 보내는 것 — 화면에 지금 보이는 줄의 id. 각 0 ~ 100개 (docs/api/risk.md 'AI 요약') */
+export interface RiskSummaryInput {
+  /** 화면에 보이는 안건 리스크 줄 — ThreadRisk.threadId */
+  threadIds: string[]
+  /** 화면에 보이는 어긋난 작업 줄 — TaskRisk.taskId */
+  taskIds: string[]
+}
+
+export type ThreadRiskSignal =
+  | 'overdue'
+  | 'dueSoon'
+  | 'deferredRepeatedly'
+  | 'stale'
+  | 'blocking'
+  | 'decisionAfterTaskDue'
+  | 'noOwner'
+  | 'noDueDate'
+
+export type RiskLevel = 'high' | 'medium' | 'low'
+
+export interface ThreadRisk {
+  threadId: string
+  title: string
+  state: 'queued' | 'open'
+  ownerId: string | null
+  partId: string | null
+  dueDate: string | null
+  /** 기한을 넘긴 날 수. 기한이 없거나 안 넘었으면 0 */
+  overdueDays: number
+  deferCount: number
+  /** 마지막 defer 줄의 note. 없으면 '' */
+  lastDeferNote: string
+  /** 마지막 이력(없으면 등록) 뒤 지난 날 수 */
+  idleDays: number
+  blockedTaskIds: string[]
+  /** 아직 안 막혔지만 이 결정을 기다리는 연결 작업(해야 할 일 · 진행 중) */
+  waitingTaskIds: string[]
+  /** 막힌 연결 작업과 그 하위 중 완료가 아닌 것의 수 (중복 없이) */
+  impactTaskCount: number
+  /** 연결된 작업(완료 제외) 중 가장 이른 기한 */
+  nearestTaskDue: string | null
+  signals: ThreadRiskSignal[]
+  score: number
+  level: RiskLevel
+}
+
+export type TaskRiskSignal = 'decidedButBlocked' | 'blockedWithoutThread' | 'dueBeforeDecision'
+
+export interface TaskRisk {
+  taskId: string
+  key: string
+  title: string
+  status: 'todo' | 'doing' | 'blocked'
+  ownerId: string | null
+  partId: string | null
+  due: string | null
+  /** 이 신호의 근거가 된 안건들. blockedWithoutThread 면 [] */
+  threadIds: string[]
+  signal: TaskRiskSignal
+}
+
+export interface OwnerLoad {
+  /** null 은 '담당자 없음' */
+  memberId: string | null
+  openThreads: number
+  overdueThreads: number
+  blockedTasks: number
+  /** 이 사람이 정하면 풀리는 일의 양 (impactTaskCount 의 합, 중복 없이) */
+  blockingImpact: number
 }

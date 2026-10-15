@@ -15,7 +15,7 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
 
     assert await count(Thread) == 10
     assert await count(Entry) == 6
-    assert await count(Task) == 23
+    assert await count(Task) == 24
     assert await count(TaskLine) == 7
 
 
@@ -24,7 +24,7 @@ async def test_seed_is_repeatable(session: AsyncSession) -> None:
     await seed(session)
     await seed(session)
     total = (await session.execute(select(func.count()).select_from(Task))).scalar_one()
-    assert total == 23
+    assert total == 24
 
 
 async def test_scenario_records_stand(session: AsyncSession) -> None:

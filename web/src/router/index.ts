@@ -90,6 +90,11 @@ const router = createRouter({
       name: 'thread',
       component: () => import('@/views/ThreadListView.vue'),
     },
+    {
+      path: '/risks',
+      name: 'risks',
+      component: () => import('@/views/RiskView.vue'),
+    },
   ],
 })
 
