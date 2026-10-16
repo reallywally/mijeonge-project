@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FolderClosed,
   KeyRound,
+  ListChecks,
   ListTree,
   Loader2,
   LogOut,
@@ -32,18 +33,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 import { canManageAccounts, canManageProject, GRADE_LABEL, gradeOf } from '@/lib/access'
 import { useAuthStore } from '@/stores/auth'
+import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 
-/* 대메뉴는 작업 · 안건 · 리스크 셋이다. 위에서 프로젝트를 고르면 세 화면 모두 그 프로젝트 안에서만 돈다.
-   관리 메뉴는 권한이 있는 사람에게만 보인다 — 숨기는 것은 편의이고 막는 것은 서버다. */
+/* 대메뉴는 작업 · 안건 · 리스크 · 확인 요청 넷이다. 위에서 프로젝트를 고르면 세 화면 모두 그 프로젝트 안에서만 돈다.
+   관리 메뉴는 권한이 있는 사람에게만 보인다 — 숨기는 것은 편의이고 막는 것은 서버다.
+   확인 요청 배지는 지금 프로젝트의 내 대기 수, 프로젝트 고르기에는 다른 프로젝트의 수 — 0 이면 안 그린다 (Q38) */
 const data = useDataStore()
 const auth = useAuthStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
+const checks = useCheckStore()
 const router = useRouter()
 
 const manageProject = computed(
@@ -134,12 +139,26 @@ async function logout() {
             :model-value="data.currentProjectId"
             @update:model-value="(id) => data.setProject(String(id))"
           >
-            <SelectTrigger class="h-11 w-full bg-card text-sm font-semibold">
-              <SelectValue />
+            <SelectTrigger class="h-11 w-full gap-2 bg-card text-sm font-semibold">
+              <SelectValue class="min-w-0 grow truncate text-left" />
+              <Badge
+                v-if="checks.pendingElsewhere > 0"
+                variant="secondary"
+                class="shrink-0 px-1.5 font-normal"
+                :title="`다른 프로젝트에 확인 대기 ${checks.pendingElsewhere}건`"
+                data-check-badge-elsewhere
+                >{{ checks.pendingElsewhere }}</Badge
+              >
             </SelectTrigger>
             <SelectContent>
               <SelectItem v-for="p in data.allProjects" :key="p.id" :value="p.id">
                 {{ p.name }}
+                <span
+                  v-if="p.id !== data.currentProjectId && checks.pendingOf(p.id) > 0"
+                  class="text-xs text-muted-foreground"
+                  :data-check-badge-project="p.id"
+                  >· 확인 대기 {{ checks.pendingOf(p.id) }}</span
+                >
               </SelectItem>
             </SelectContent>
           </Select>
@@ -177,6 +196,21 @@ async function logout() {
           >
             <TriangleAlert class="size-4 shrink-0" />
             <span class="grow">리스크</span>
+          </RouterLink>
+          <RouterLink
+            to="/checks"
+            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
+            active-class="bg-accent font-medium text-accent-foreground"
+          >
+            <ListChecks class="size-4 shrink-0" />
+            <span class="grow">확인 요청</span>
+            <Badge
+              v-if="checks.pendingHere > 0"
+              class="px-1.5"
+              :aria-label="`확인 대기 ${checks.pendingHere}건`"
+              data-check-badge
+              >{{ checks.pendingHere }}</Badge
+            >
           </RouterLink>
         </nav>
 

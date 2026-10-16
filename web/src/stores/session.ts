@@ -1,6 +1,7 @@
 import { useAdminStore } from '@/stores/admin'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { useCheckStore } from '@/stores/check'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
@@ -16,6 +17,7 @@ export function clearSession() {
   useAdminStore().clear()
   usePartStore().clear()
   useRiskStore().clear()
+  useCheckStore().clear()
   useDataStore().clear()
   useAuthStore().clear()
 }

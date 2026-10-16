@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed } from 'lucide-vue-next'
+import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
 import ThreadDecisionPanel from '@/components/app/ThreadDecisionPanel.vue'
@@ -109,6 +110,12 @@ function setPart(value: string | null) {
 
             <ThreadDecisionPanel :detail="detail" @open-thread="(id) => emit('open-thread', id)" />
           </ThreadFields>
+
+          <CheckRequestSection
+            target-type="thread"
+            :target-id="detail.thread.id"
+            :target-label="detail.thread.title"
+          />
 
           <section class="flex flex-col gap-3.5">
             <div class="flex items-baseline gap-2">

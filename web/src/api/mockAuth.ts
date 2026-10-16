@@ -1,12 +1,20 @@
 import { mockError } from '@/api/client'
-import { accounts, members, partMembers, parts, projectGrants } from '@/fixtures'
+import { accounts, checkRequests, members, partMembers, parts, projectGrants } from '@/fixtures'
 import type { MockAccount, MockProjectGrant } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
-import type { Me, Member, MemberAccount, Part, PartMember, RiskSettings } from '@/types/domain'
+import type {
+  CheckRequest,
+  Me,
+  Member,
+  MemberAccount,
+  Part,
+  PartMember,
+  RiskSettings,
+} from '@/types/domain'
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · parts · comments · tasks · risk 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks · risk · checks 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -19,6 +27,9 @@ interface MockDb {
   partMembers: PartMember[]
   /** 프로젝트별 리스크 기준. 없으면 기본값 */
   riskSettings: Record<string, RiskSettings>
+  /** 확인 요청 — 배열 순서가 seq 순서다 */
+  checks: CheckRequest[]
+  checkSeq: number
 }
 
 const fresh = (): MockDb => ({
@@ -28,6 +39,8 @@ const fresh = (): MockDb => ({
   parts: structuredClone(parts),
   partMembers: structuredClone(partMembers),
   riskSettings: {},
+  checks: structuredClone(checkRequests),
+  checkSeq: 0,
 })
 
 let db = fresh()

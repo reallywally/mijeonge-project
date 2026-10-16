@@ -636,3 +636,40 @@ export interface OwnerLoad {
   /** 이 사람이 정하면 풀리는 일의 양 (impactTaskCount 의 합, 중복 없이) */
   blockingImpact: number
 }
+
+/* 확인 요청 — 작업 · 안건에 붙는 '확인해 주세요' 한 줄. 쪽지가 아니다 (docs/api/check.md) */
+
+export type CheckTargetType = 'task' | 'thread'
+
+/** 받는 사람 한 명당 한 줄. 한 번에 보낸 줄은 같은 text · createdAt 을 갖는다 */
+export interface CheckRequest {
+  id: string
+  projectId: string
+  targetType: CheckTargetType
+  targetId: string
+  senderId: string
+  recipientId: string
+  /** 1 ~ 29자 */
+  text: string
+  /** ISO 8601 UTC, Z */
+  createdAt: string
+  /** null 이면 대기 */
+  confirmedAt: string | null
+}
+
+/** POST /api/projects/{projectId}/checks — 보낸 사람은 로그인한 사람이다 */
+export interface CheckRequestInput {
+  targetType: CheckTargetType
+  targetId: string
+  /** 1명 이상 20명 이하, 겹치면 하나로 */
+  recipientIds: string[]
+  text: string
+}
+
+/** GET /api/checks/pending-count */
+export interface CheckPendingCount {
+  /** 내가 받은 대기 수 — 내가 볼 수 있는 프로젝트 전부의 합 */
+  total: number
+  /** 대기가 하나라도 있는 프로젝트만 */
+  byProject: Record<string, number>
+}
