@@ -2,7 +2,7 @@
 
 프로젝트 경계는 라우터 단위로 건다(`main.py` 의 `require_scope`).
 엔드포인트마다 검사를 적지 않는다 — 경로에 `project_id` · `task_id` · `thread_id` ·
-`comment_id` · `part_id` 가 있으면 그 레코드의 프로젝트로 본다.
+`comment_id` · `part_id` · `check_id` 가 있으면 그 레코드의 프로젝트로 본다.
 """
 
 from typing import Annotated
