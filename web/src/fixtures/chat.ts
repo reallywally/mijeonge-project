@@ -54,7 +54,7 @@ const proposeTools: MockChatReply['tools'] = [
 
 /*
  * 목업 챗봇의 답. 서버 없이 화면을 만들려는 것이라 질문을 이해하지 않고 낱말로만 고른다.
- * 근거 표시(`[[thread:ID]]`)는 칩(7-3)이 생기면 넣는다 — 지금 넣으면 글자 그대로 보인다.
+ * 근거 표시(`[[thread:ID]]` · `[[task:ID]]`)는 서버처럼 본문에 섞는다 — 화면이 칩으로 바꾼다 (7-3).
  */
 export const chatReplies: MockChatReply[] = [
   {
@@ -65,7 +65,7 @@ export const chatReplies: MockChatReply[] = [
     ],
     answer:
       '서버 OS 는 우분투 최신 버전으로 정해졌습니다.\n' +
-      '‘서버 OS 결정’ 안건에 2026-09-09 결정으로 남아 있고, PM 에게 전달받아 이도현이 정리했습니다.\n' +
+      '[[thread:t1]] 에 2026-09-09 결정으로 남아 있고, PM 에게 전달받아 이도현이 정리했습니다.\n' +
       '후보였던 록키 · CentOS 는 고르지 않았습니다.',
   },
   {
@@ -73,16 +73,16 @@ export const chatReplies: MockChatReply[] = [
     tools: [{ name: 'search_threads', label: '결정 전 안건 찾는 중' }],
     answer:
       '아직 정해지지 않은 안건은 이렇습니다.\n' +
-      '- 사내망에서 외부 모델 호출 허용 범위 — 한 번 미뤘습니다. 정보보안팀 확인이 먼저입니다.\n' +
-      '- 보험료 산출 기간계 API 호출 in · out 정의 — 두 번 미뤘습니다. 업무 정의가 아직 없습니다.\n' +
+      '- [[thread:t3]] — 한 번 미뤘습니다. 정보보안팀 확인이 먼저입니다.\n' +
+      '- [[thread:t5]] — 두 번 미뤘습니다. 업무 정의가 아직 없습니다.\n' +
       '- 개발 서버 백업 주기 · 가상비서 tool 만드는 순서 · AI 심사 학습 데이터 범위 · 공통 코드 체계 확정 — 등록만 되어 있습니다.',
   },
   {
     keywords: ['막힌', '막힘', 'blocked'],
     tools: [{ name: 'search_tasks', label: '막힌 작업 찾는 중' }],
     answer:
-      '막힌 작업은 HW-18 보험료 산출 기간계 API 개발 하나입니다.\n' +
-      '연결된 안건 ‘보험료 산출 기간계 API 호출 in · out 정의’ 가 아직 정해지지 않아 멈춰 있습니다.',
+      '막힌 작업은 [[task:k18]] 하나입니다.\n' +
+      '연결된 안건 [[thread:t5]] 가 아직 정해지지 않아 멈춰 있습니다.',
   },
   {
     keywords: ['만들어', '등록해', '추가해'],

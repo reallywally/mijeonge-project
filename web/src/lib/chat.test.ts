@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/api/client'
-import { chatErrorText, MAX_CHAT_MESSAGES, splitRefs, toChatMessages } from '@/lib/chat'
+import {
+  chatErrorText,
+  collectRefs,
+  MAX_CHAT_MESSAGES,
+  splitRefs,
+  toChatMessages,
+} from '@/lib/chat'
 import type { ChatLine } from '@/types/domain'
 
 let seq = 0
@@ -94,5 +100,12 @@ describe('답 본문의 근거 표시', () => {
     expect(splitRefs('병목은 [[thread:t5]')).toEqual([{ text: '병목은 ' }])
     expect(splitRefs('병목은 [')).toEqual([{ text: '병목은 ' }])
     expect(splitRefs('[[thread:t5]]')).toEqual([{ ref: { kind: 'thread', id: 't5' } }])
+  })
+
+  it('본문의 근거를 처음 나온 순서로 겹치지 않게 모은다', () => {
+    expect(collectRefs('[[task:k18]] · [[thread:t5]] · [[task:k18]] · [[thread:t')).toEqual([
+      { kind: 'task', id: 'k18' },
+      { kind: 'thread', id: 't5' },
+    ])
   })
 })

@@ -126,7 +126,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/projects/{projectId}/search?q=&limit=` | 안건 · 이력 · 작업을 글자로 찾는다. 챗봇이 쓰는 검색 도구를 사람도 부를 수 있게 그대로 연다. 빈 `q` 는 422, `limit` 은 1 ~ 50 (`docs/api/chat.md` '검색') | `SearchResult` | 구현 |
-| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 구현 |
+| POST | `/api/projects/{projectId}/chat` | 저장된 안건 · 작업을 근거로 질문에 답한다. **SSE 스트림**이다 | `text/event-stream` (`ChatEvent`) | 연결 |
 
 인증 · 권한 · 사용자 관리(`server/PLAN.md` 8단계 · `web/PLAN.md` 8단계). 모양과 권한 규칙은 `docs/api/auth.md` 다.
 **이미 있는 API 도 바뀐다** — 그 파일의 '이미 있는 API 에서 바뀌는 것'.
