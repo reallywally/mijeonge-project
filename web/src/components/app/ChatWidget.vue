@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { ArrowUp, Loader2, MessageCircle, RotateCcw, Square, X } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
 import ChatProposalCard from '@/components/app/ChatProposalCard.vue'
+import ChatRefText from '@/components/app/ChatRefText.vue'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { insertMention, mentionCandidates, mentionQuery, type MentionQuery } from '@/lib/mention'
@@ -15,6 +17,7 @@ import { useTaskStore } from '@/stores/task'
 const data = useDataStore()
 const chat = useChatStore()
 const taskStore = useTaskStore()
+const router = useRouter()
 
 const EXAMPLES = ['서버 OS 뭐로 정했지?', '아직 안 정해진 안건 뭐 있어?', '막힌 작업 알려줘']
 
@@ -73,6 +76,14 @@ function send(text = draft.value) {
   mention.value = null
   void chat.ask(text)
   focusInput()
+}
+
+/* 근거 칩은 주소로 간다 — 그 화면이 기존 상세 팝업을 띄운다. 창은 닫지 않는다(대화가 이어진다) */
+function openThread(id: string) {
+  void router.push({ name: 'thread', params: { id } })
+}
+function openTask(id: string) {
+  void router.push({ name: 'task', params: { id } })
 }
 
 /* Enter 는 보내기, Shift+Enter 는 줄바꿈. 한글 조합을 끝내는 Enter 는 보내지 않는다 */
@@ -189,13 +200,15 @@ watch(
               {{ line.text }}
             </p>
             <template v-else>
-              <!-- 답은 AI 가 낸 글이라 v-html 로 그리지 않는다. 줄바꿈만 살린다 -->
-              <p
+              <!-- 답은 AI 가 낸 글이라 v-html 로 그리지 않는다. 근거 표시만 칩으로, 사용자 글은 그대로 둔다 -->
+              <ChatRefText
                 v-if="line.text"
-                class="max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm break-words whitespace-pre-wrap"
-              >
-                {{ line.text }}
-              </p>
+                :text="line.text"
+                class="max-w-[85%] rounded-lg bg-muted px-3 py-2"
+                data-answer-text
+                @open-thread="openThread"
+                @open-task="openTask"
+              />
               <ChatProposalCard
                 v-if="line.proposal"
                 :proposal="line.proposal"

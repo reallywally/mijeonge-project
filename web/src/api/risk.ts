@@ -3,6 +3,7 @@ import { id, mockError, request } from '@/api/client'
 import { later, memberOf, mockDb, requireManager, requireMe, requireProject } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import { mockRiskSummary, RISK_AS_OF, riskReports } from '@/fixtures'
+import { collectRefs } from '@/lib/chat'
 import { DEFAULT_RISK_SETTINGS, riskSettingsProblems } from '@/lib/risk'
 import type {
   ChatEvent,
@@ -78,12 +79,7 @@ const mock = {
       { ...report, threads, tasks },
       (memberId) => (memberId && memberOf(memberId)?.name) || '담당자 없음',
     )
-    const refs: ChatRef[] = []
-    for (const m of text.matchAll(/\[\[(thread|task):([^\]\s]+)\]\]/g)) {
-      const kind = m[1] as ChatRef['kind']
-      if (!refs.some((r) => r.kind === kind && r.id === m[2])) refs.push({ kind, id: m[2] })
-    }
-    return { text, refs }
+    return { text, refs: collectRefs(text) }
   },
 }
 

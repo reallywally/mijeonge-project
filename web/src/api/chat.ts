@@ -1,6 +1,7 @@
 import { ApiError, errorOf, id, unreachable } from '@/api/client'
 import { isMockMode } from '@/api/mode'
 import { CHAT_MOCK_ERROR_KEYWORD, chatFallback, chatMockError, chatReplies } from '@/fixtures/chat'
+import { collectRefs } from '@/lib/chat'
 import type {
   ChatEvent,
   ChatInput,
@@ -60,7 +61,7 @@ async function* mockEvents(
   }
 
   await sleep(MOCK_STEP_MS, signal)
-  yield { type: 'done', refs: [] }
+  yield { type: 'done', refs: collectRefs(reply.answer) }
 }
 
 /**

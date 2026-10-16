@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
@@ -21,8 +21,20 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-async function opened() {
-  const w = mount(ChatWidget, { attachTo: document.body })
+/* 칩이 주소로 가는지 보려고 이름 있는 두 경로만 둔다 */
+function makeRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/threads/:id', name: 'thread', component: { template: '<div />' } },
+      { path: '/tasks/:id', name: 'task', component: { template: '<div />' } },
+      { path: '/:any(.*)*', component: { template: '<div />' } },
+    ],
+  })
+}
+
+async function opened(router = makeRouter()) {
+  const w = mount(ChatWidget, { attachTo: document.body, global: { plugins: [router] } })
   await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
   await nextTick()
   return w
@@ -161,12 +173,7 @@ describe('챗봇 창', () => {
 
 describe('챗봇 창 — 작업 초안', () => {
   it('답 안에 초안 카드가 서고, [등록] 을 누르면 작업 칩으로 바뀐다', async () => {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/:any(.*)*', component: { template: '<div />' } }],
-    })
-    const w = mount(ChatWidget, { attachTo: document.body, global: { plugins: [router] } })
-    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    const w = await opened()
     await textarea(w).setValue('간담회 준비 작업 만들어줘')
     await textarea(w).trigger('keydown', { key: 'Enter' })
     await vi.runAllTimersAsync()
@@ -183,5 +190,92 @@ describe('챗봇 창 — 작업 초안', () => {
       made.map((t) => `/tasks/${t.id}`),
     )
     expect(w.text()).toContain('작업 3건을 등록했습니다')
+  })
+})
+
+describe('챗봇 창 — 근거 칩', () => {
+  const answer = (text: string, status: 'streaming' | 'done' = 'done') => ({
+    id: 'a',
+    role: 'assistant' as const,
+    text,
+    status,
+    tool: '',
+    error: '',
+  })
+
+  it('목업 답의 근거가 칩으로 선다 — 안건은 제목 + 상태 배지, 작업은 key + 제목', async () => {
+    const w = await opened()
+    await textarea(w).setValue('서버 OS 뭐로 정했지?')
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await vi.runAllTimersAsync()
+
+    const chip = w.get('[data-ref-thread="t1"]')
+    expect(chip.text()).toContain('서버 OS 결정')
+    expect(chip.text()).toContain('결정됨')
+    expect(w.get('[data-answer-text]').text()).not.toContain('[[')
+
+    useChatStore().lines.push(answer('막힌 작업은 [[task:k18]] 하나입니다.'))
+    await nextTick()
+    const task = w.get('[data-ref-task="k18"]')
+    expect(task.text()).toContain('HW-18')
+    expect(task.text()).toContain('보험료 산출 기간계 API 개발')
+  })
+
+  it('미룬 안건 칩에는 미룬 횟수가 같이 선다', async () => {
+    const w = await opened()
+    useChatStore().lines.push(answer('[[thread:t5]] 가 아직입니다.'))
+    await nextTick()
+    expect(w.get('[data-ref-thread="t5"]').text()).toContain('2번 미뤄짐')
+  })
+
+  it('스냅샷에 없는 id 는 칩도 글자도 그리지 않는다', async () => {
+    const w = await opened()
+    useChatStore().lines.push(answer('근거: [[thread:nope]] · [[task:k999]] 끝'))
+    await nextTick()
+    expect(w.find('[data-ref-thread]').exists()).toBe(false)
+    expect(w.find('[data-ref-task]').exists()).toBe(false)
+    const text = w.get('[data-answer-text]').text()
+    expect(text).not.toContain('nope')
+    expect(text).not.toContain('[[')
+    expect(text).toContain('끝')
+  })
+
+  it('칩을 누르면 그 주소로 가고 창은 열린 채 대화가 남는다', async () => {
+    const router = makeRouter()
+    const w = await opened(router)
+    useChatStore().lines.push(answer('[[thread:t1]] · [[task:k18]]'))
+    await nextTick()
+
+    await w.get('[data-ref-thread="t1"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/threads/t1')
+
+    await w.get('[data-ref-task="k18"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/tasks/k18')
+
+    expect(w.find('[role="dialog"]').exists()).toBe(true)
+    expect(useChatStore().lines).toHaveLength(1)
+  })
+
+  it('받는 중 끝에 걸린 덜 온 표시는 닫힐 때까지 비치지 않는다', async () => {
+    const w = await opened()
+    const chat = useChatStore()
+    chat.lines.push(answer('정했습니다. [[thread:t', 'streaming'))
+    await nextTick()
+    expect(w.get('[data-answer-text]').text()).toBe('정했습니다.')
+    expect(w.find('[data-ref-thread]').exists()).toBe(false)
+
+    chat.lines[0].text += '1]]'
+    await nextTick()
+    expect(w.find('[data-ref-thread="t1"]').exists()).toBe(true)
+  })
+
+  it('사용자가 친 글은 칩으로 바꾸지 않는다', async () => {
+    const w = await opened()
+    useChatStore().lines.push({ ...answer('[[thread:t1]] 이거 뭐야'), role: 'user' })
+    await nextTick()
+    expect(w.find('[data-ref-thread]').exists()).toBe(false)
+    expect(w.text()).toContain('[[thread:t1]] 이거 뭐야')
   })
 })

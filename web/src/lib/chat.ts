@@ -95,3 +95,13 @@ export function splitRefs(text: string): ChatSegment[] {
   if (at < body.length) out.push({ text: body.slice(at) })
   return out
 }
+
+/** 본문에 나온 근거를 처음 나온 순서로, 겹치지 않게 — 목업이 서버의 `done.refs` 를 흉내 낼 때 쓴다 */
+export function collectRefs(text: string): ChatRef[] {
+  const refs: ChatRef[] = []
+  for (const seg of splitRefs(text)) {
+    if ('ref' in seg && !refs.some((r) => r.kind === seg.ref.kind && r.id === seg.ref.id))
+      refs.push(seg.ref)
+  }
+  return refs
+}
