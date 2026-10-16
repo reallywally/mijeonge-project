@@ -22,6 +22,7 @@ from app.db import engine, session_factory
 from app.models import (
     AuthIdentity,
     AuthSession,
+    CheckRequest,
     Entry,
     EntryDetail,
     Member,
@@ -38,7 +39,8 @@ from app.models import (
     ThreadOption,
 )
 from app.services.auth import PASSWORD
-from app.time import at
+from app.services.check import recipient_loads
+from app.time import at, today_kst
 
 # createdAt 은 픽스처의 값을 그대로 쓴다 — 계약대로 ISO 8601 UTC(`…Z`) 다.
 
@@ -509,9 +511,81 @@ def comments() -> list[TaskComment]:
     ]
 
 
+# 확인 요청 — docs/api/check.md '시드 · 목업' 표 그대로. 프론트 목업이 같은 id 를 쓴다.
+# (id, 작업, 안건, 보낸, 받는, text, createdAt, confirmedAt). c3 · c4 는 한 번에 둘에게 보낸 것이다
+CHECKS = [
+    (
+        "c1",
+        "k22",
+        None,
+        "u1",
+        "u3",
+        "스테이징 DB 구성 순서 봐 주세요",
+        "2026-10-14T01:00:00Z",
+        None,
+    ),
+    (
+        "c2",
+        None,
+        "t3",
+        "u3",
+        "u1",
+        "외부 모델 호출 범위 의견 주세요",
+        "2026-10-13T02:00:00Z",
+        "2026-10-14T05:00:00Z",
+    ),
+    (
+        "c3",
+        "k18",
+        None,
+        "u2",
+        "u4",
+        "in · out 정의 초안 확인 부탁해요",
+        "2026-10-15T00:30:00Z",
+        None,
+    ),
+    (
+        "c4",
+        "k18",
+        None,
+        "u2",
+        "u1",
+        "in · out 정의 초안 확인 부탁해요",
+        "2026-10-15T00:30:00Z",
+        None,
+    ),
+]
+
+
+async def checks(session: AsyncSession) -> list[CheckRequest]:
+    """부하는 목업에 없다 — 넣는 그 시각의 작업 · 안건으로 센다. 작업 · 안건을 먼저 넣는다."""
+    loads = await recipient_loads(
+        session, "p1", sorted({row[4] for row in CHECKS}), today=today_kst()
+    )
+    return [
+        CheckRequest(
+            id=id_,
+            project_id="p1",
+            task_id=task_id,
+            thread_id=thread_id,
+            sender_id=sender,
+            recipient_id=recipient,
+            text=text_,
+            created_at=at(created),
+            confirmed_at=at(confirmed) if confirmed else None,
+            load_open_tasks=loads[recipient].open_tasks,
+            load_blocked_tasks=loads[recipient].blocked_tasks,
+            load_due_soon_tasks=loads[recipient].due_soon_tasks,
+            load_open_threads=loads[recipient].open_threads,
+        )
+        for id_, task_id, thread_id, sender, recipient, text_, created, confirmed in CHECKS
+    ]
+
+
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        CheckRequest,
         RiskSetting,
         TaskComment,
         TaskThreadLink,
@@ -556,7 +630,7 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in ("thread", "entry", "task", "task_comment"):
+    for table in ("thread", "entry", "task", "task_comment", "check_request"):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
@@ -584,6 +658,8 @@ async def seed(session: AsyncSession) -> None:
     await session.flush()
     session.add_all(in_order(comments()))
     await session.flush()
+    session.add_all(in_order(await checks(session)))
+    await session.flush()
     await advance_identity(session)
     session.add_all(
         [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
@@ -605,6 +681,7 @@ async def run() -> None:
         "task": len(tasks()),
         "comment": len(comments()),
         "link": len(TASK_THREAD_LINKS),
+        "check": len(CHECKS),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")

@@ -167,10 +167,10 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/projects/{projectId}/checks` | 그 프로젝트의 확인 요청 전부(`seq` 오름차순). 받은 것 · 보낸 것 · 작업/안건별은 화면이 거른다 | `CheckRequest[]` | 합의 |
-| POST | `/api/projects/{projectId}/checks` | 보내기 — 작업 · 안건 하나, 받는 사람 1 ~ 20명, 29자까지. 받는 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 받는 사람의 부하를 찍는다 | `CheckRequest[]` · 201 | 합의 |
-| POST | `/api/checks/{checkId}/confirm` | 확인 — 받은 사람만(403 `FORBIDDEN`), 멱등 | `CheckRequest` | 합의 |
-| GET | `/api/checks/pending-count` | 헤더 배지 — 내 대기 수, 합과 프로젝트별 | `CheckPendingCount` | 합의 |
+| GET | `/api/projects/{projectId}/checks` | 그 프로젝트의 확인 요청 전부(`seq` 오름차순). 받은 것 · 보낸 것 · 작업/안건별은 화면이 거른다 | `CheckRequest[]` | 구현 |
+| POST | `/api/projects/{projectId}/checks` | 보내기 — 작업 · 안건 하나, 받는 사람 1 ~ 20명, 29자까지. 받는 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 받는 사람의 부하를 찍는다 | `CheckRequest[]` · 201 | 구현 |
+| POST | `/api/checks/{checkId}/confirm` | 확인 — 받은 사람만(403 `FORBIDDEN`), 멱등 | `CheckRequest` | 구현 |
+| GET | `/api/checks/pending-count` | 헤더 배지 — 내 대기 수, 합과 프로젝트별 | `CheckPendingCount` | 구현 |
 
 ## 열린 질문
 

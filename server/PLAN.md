@@ -199,14 +199,14 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 ### 11-1 체크리스트
 
-- [ ] 리비전 `0012_check_request` — 테이블 · CHECK 둘(대상 하나 · `text` 길이) · 복합 FK 둘(cascade) · 인덱스 `(project_id, seq)` · `(recipient_id, confirmed_at)`
-- [ ] `app/models/check.py` · `app/schemas/check.py`(`CheckRequest` · `CheckRequestInput` · `CheckPendingCount`, camelCase alias)
-- [ ] `app/services/check.py` — 목록 · 보내기(검사 순서는 계약대로, 한 트랜잭션, 부하 찍기) · 확인(멱등) · 대기 수
-- [ ] `app/api/check.py` — 네 경로. `/api/checks/{checkId}` 는 `require_scope` 가 요청의 프로젝트로 본다(`services/access.py` 에 갈래)
-- [ ] 오류 코드 `CHECK_NOT_FOUND` · `CHECK_TARGET_NOT_FOUND` · `CHECK_RECIPIENT_SELF`(+ 이미 있는 `MEMBER_NOT_IN_PROJECT`)
-- [ ] 시드 `c1` ~ `c4`(계약 '시드 · 목업' 그대로, 부하는 넣을 때 계산)
-- [ ] `tests/test_check.py` — 보내기(여럿 · 겹친 사람 하나로 · 부하 값) · 검사(422 셋 · 400 셋 · 남의 프로젝트 대상) · 확인(받은 사람만 · 멱등) · 목록 경계(404) · 대기 수(프로젝트별 · 부여 빠진 프로젝트 제외) · 작업 · 안건 지우면 같이 지워짐 · `test_contract_types.py` 대조
-- [ ] `API.md` 네 줄 `구현`
+- [x] 리비전 `0012_check_request` — 테이블 · CHECK 둘(대상 하나 · `text` 길이) · 복합 FK 둘(cascade) · 인덱스 `(project_id, seq)` · `(recipient_id, confirmed_at)`
+- [x] `app/models/check.py` · `app/schemas/check.py`(`CheckRequest` · `CheckRequestInput` · `CheckPendingCount`, camelCase alias — 응답 스키마 이름은 ORM 과 겹쳐 `CheckRequestOut`, 댓글의 `TaskCommentOut` 과 같은 방식)
+- [x] `app/services/check.py` — 목록 · 보내기(검사 순서는 계약대로, 한 트랜잭션, 부하 찍기) · 확인(멱등) · 대기 수
+- [x] `app/api/check.py` — 네 경로. `/api/checks/{checkId}` 는 `require_scope` 가 요청의 프로젝트로 본다(`services/access.py` 에 갈래)
+- [x] 오류 코드 `CHECK_NOT_FOUND` · `CHECK_TARGET_NOT_FOUND` · `CHECK_RECIPIENT_SELF`(+ 이미 있는 `MEMBER_NOT_IN_PROJECT`)
+- [x] 시드 `c1` ~ `c4`(계약 '시드 · 목업' 그대로, 부하는 넣을 때 계산)
+- [x] `tests/test_check.py` — 보내기(여럿 · 겹친 사람 하나로 · 부하 값) · 검사(422 셋 · 400 셋 · 남의 프로젝트 대상) · 확인(받은 사람만 · 멱등) · 목록 경계(404) · 대기 수(프로젝트별 · 부여 빠진 프로젝트 제외) · 작업 · 안건 지우면 같이 지워짐 · `test_contract_types.py` 대조
+- [x] `API.md` 네 줄 `구현`
 
 **커밋** — ① 테이블 · API · 검사 ② 시드
 
@@ -230,7 +230,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. Q29 ~ Q31 닫힘 |
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
 | 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 |
-| 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. 11-1 시작 |
+| 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **11-1 끝남** (2026-10-16) — 리비전 `0012_check_request` · 네 경로 · `services/check.py`(보낼 때 부하 찍기, 기한 임박은 오늘(KST) + 3일 고정) · `require_scope` 의 `check_id` 갈래 · 시드 `c1` ~ `c4` · `tests/test_check.py`. API.md 네 줄 `구현`. 2차(확인율 분석)는 기록이 쌓인 뒤 |
 
 ## 아직 안 정한 것
 

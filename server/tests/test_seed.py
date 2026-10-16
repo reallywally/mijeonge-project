@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Entry, Task, TaskLine, Thread
+from app.models import CheckRequest, Entry, Task, TaskLine, Thread
 from scripts.seed import seed
 
 
@@ -17,6 +17,7 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
     assert await count(Entry) == 6
     assert await count(Task) == 24
     assert await count(TaskLine) == 7
+    assert await count(CheckRequest) == 4
 
 
 async def test_seed_is_repeatable(session: AsyncSession) -> None:
