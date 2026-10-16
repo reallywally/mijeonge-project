@@ -20,6 +20,7 @@
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
 | `docs/api/part.md` | 파트 — 보기 범위(권한 아님) · 파트 관리 · 작업 · 안건의 `partId` |
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
+| `docs/api/check.md` | 확인 요청 — 작업 · 안건에 붙는 '확인해 주세요' 한 줄 · 받은 것 / 보낸 것 · 배지. 2차 확인율 분석의 테두리 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
 - 새 도메인의 계약이 길어지면(표 한 줄로 안 끝나면) `docs/api/<도메인>.md` 를 새로 세우고 위 표에 줄을 더한다
@@ -161,6 +162,15 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 안건과 어긋난 작업 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 | `DecisionRiskReport` | 구현 |
 | GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 다섯) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 다섯 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 |
 | POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`threadIds` · `taskIds`)을 Claude 가 읽고 먼저 정할 것 · 바로 풀 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 |
+
+확인 요청(`server/PLAN.md` 11단계 · `web/PLAN.md` 12단계). 모양은 `docs/api/check.md` 다. 기획은 `docs/check-request-proposal.md`, 결정은 Q38 ~ Q41.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/projects/{projectId}/checks` | 그 프로젝트의 확인 요청 전부(`seq` 오름차순). 받은 것 · 보낸 것 · 작업/안건별은 화면이 거른다 | `CheckRequest[]` | 합의 |
+| POST | `/api/projects/{projectId}/checks` | 보내기 — 작업 · 안건 하나, 받는 사람 1 ~ 20명, 29자까지. 받는 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 받는 사람의 부하를 찍는다 | `CheckRequest[]` · 201 | 합의 |
+| POST | `/api/checks/{checkId}/confirm` | 확인 — 받은 사람만(403 `FORBIDDEN`), 멱등 | `CheckRequest` | 합의 |
+| GET | `/api/checks/pending-count` | 헤더 배지 — 내 대기 수, 합과 프로젝트별 | `CheckPendingCount` | 합의 |
 
 ## 열린 질문
 
