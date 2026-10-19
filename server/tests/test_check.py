@@ -1,27 +1,47 @@
-"""확인 요청 — `docs/api/check.md`. 보내기 · 목록 · 확인 · 배지와 그 경계.
+"""확인 요청 — `docs/api/check.md`(2026-10-19 고침). 보내기 · 목록 · 확인 · 배지와 그 경계.
 
-시드 p1 에 c1 ~ c4 가 있다(계약 '시드 · 목업' 표). 부하 계산은 빈 p3 에 줄을 손으로 세워
-서비스에 바로 묻는다 — `today` 를 넘겨 날짜에 안 흔들린다.
+시드 p1 에 c1 ~ c4 가 있다(계약 '시드 · 목업' 표). t2 의 결정 e3 · t1 의 결정 e1 은 이미 보냈고
+t6(참조 u2, 연결 작업 없음)은 아직 안 보냈다. 부하 계산은 빈 p3 에 줄을 손으로 세워 본다.
 """
 
 from datetime import date, timedelta
-from typing import Any
 
 import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CheckRequest, Member, Task, Thread
+from app.models import CheckRequest, Entry, Member, Task, Thread, ThreadCc
+from app.services import check as check_service
 from app.services.check import Load, recipient_loads
 from app.time import at, today_kst
 from tests.conftest import AsMember
 
-TASK = {"targetType": "task", "targetId": "k4", "recipientIds": ["u2"], "text": "봐 주세요"}
+
+async def send(c: httpx.AsyncClient, thread: str) -> httpx.Response:
+    return await c.post(f"/api/threads/{thread}/checks")
 
 
-async def send(c: httpx.AsyncClient, body: dict[str, Any], project: str = "p1") -> httpx.Response:
-    return await c.post(f"/api/projects/{project}/checks", json=body)
+async def change(c: httpx.AsyncClient, thread: str) -> str:
+    """결정을 바꾼다 — 새 change 이력의 id."""
+    res = await c.post(
+        f"/api/threads/{thread}/entries", json={"kind": "change", "text": "다시 정했다"}
+    )
+    assert res.status_code == 201
+    entry_id: str = res.json()["entry"]["id"]
+    return entry_id
+
+
+async def link(c: httpx.AsyncClient, task: str, thread: str) -> None:
+    assert (await c.put(f"/api/tasks/{task}/threads/{thread}")).status_code in (200, 201, 204)
+
+
+async def set_cc(c: httpx.AsyncClient, thread: str, cc_ids: list[str]) -> None:
+    assert (await c.patch(f"/api/threads/{thread}", json={"ccIds": cc_ids})).status_code == 200
+
+
+def recipients(res: httpx.Response) -> list[str]:
+    return [row["recipientId"] for row in res.json()]
 
 
 # --- 목록 ---
@@ -36,16 +56,16 @@ async def test_list_is_seed_in_seq_order(as_member: AsMember) -> None:
     assert rows[0] == {
         "id": "c1",
         "projectId": "p1",
-        "targetType": "task",
-        "targetId": "k22",
+        "threadId": "t2",
+        "entryId": "e3",
         "senderId": "u1",
         "recipientId": "u3",
-        "text": "스테이징 DB 구성 순서 봐 주세요",
         "createdAt": "2026-10-14T01:00:00Z",
         "confirmedAt": None,
     }
-    assert rows[1]["targetType"] == "thread" and rows[1]["targetId"] == "t3"
+    assert [row["recipientId"] for row in rows[:3]] == ["u3", "u2", "u4"]
     assert rows[1]["confirmedAt"] == "2026-10-14T05:00:00Z"
+    assert (rows[3]["threadId"], rows[3]["entryId"], rows[3]["senderId"]) == ("t1", "e1", "u3")
     # 부하는 응답에 싣지 않는다
     assert not any(key.startswith("load") for row in rows for key in row)
 
@@ -64,130 +84,201 @@ async def test_list_needs_the_grant(client: httpx.AsyncClient, as_member: AsMemb
 
 async def test_needs_login(anon: httpx.AsyncClient) -> None:
     assert (await anon.get("/api/projects/p1/checks")).status_code == 401
+    assert (await send(anon, "t6")).status_code == 401
     assert (await anon.get("/api/checks/pending-count")).status_code == 401
+
+
+async def test_old_send_path_is_gone(as_member: AsMember) -> None:
+    u1 = await as_member("u1")
+    res = await u1.post("/api/projects/p1/checks", json={})
+    assert res.status_code == 405
 
 
 # --- 보내기 ---
 
 
-async def test_send_to_many_makes_a_row_each(as_member: AsMember) -> None:
+async def test_send_goes_to_cc_on_the_latest_decision(as_member: AsMember) -> None:
+    """t6 — 연결 작업이 없고 참조가 u2 하나. 계약 '시드 · 목업' 의 마지막 줄."""
     u1 = await as_member("u1")
-    body = {
-        "targetType": "task",
-        "targetId": "k4",
-        # 겹친 사람은 하나로, 순서는 처음 나온 자리대로
-        "recipientIds": ["u3", "u2", "u3"],
-        "text": "  계정 목록 봐 주세요  ",
-        "senderId": "u4",  # 모르는 키 — 보낸 사람은 로그인한 사람이다
-    }
-    res = await send(u1, body)
+    res = await send(u1, "t6")
     assert res.status_code == 201
     rows = res.json()
-    assert [row["recipientId"] for row in rows] == ["u3", "u2"]
-    assert {row["senderId"] for row in rows} == {"u1"}
-    assert {row["text"] for row in rows} == {"계정 목록 봐 주세요"}
-    assert len({row["createdAt"] for row in rows}) == 1
-    assert all(row["confirmedAt"] is None for row in rows)
-    assert all(row["targetType"] == "task" and row["targetId"] == "k4" for row in rows)
+    assert len(rows) == 1
+    row = rows[0]
+    assert set(row) == {
+        "id",
+        "projectId",
+        "threadId",
+        "entryId",
+        "senderId",
+        "recipientId",
+        "createdAt",
+        "confirmedAt",
+    }
+    assert (row["projectId"], row["threadId"], row["entryId"]) == ("p1", "t6", "e6")
+    assert (row["senderId"], row["recipientId"], row["confirmedAt"]) == ("u1", "u2", None)
+    assert row["createdAt"].endswith("Z")
 
     listed = (await u1.get("/api/projects/p1/checks")).json()
-    assert [row["id"] for row in listed[-2:]] == [row["id"] for row in rows]
+    assert listed[-1]["id"] == row["id"]
 
 
-async def test_send_on_a_thread(as_member: AsMember, session: AsyncSession) -> None:
-    u2 = await as_member("u2")
-    res = await send(
-        u2, {"targetType": "thread", "targetId": "t3", "recipientIds": ["u1"], "text": "의견"}
+async def test_body_is_ignored(as_member: AsMember) -> None:
+    """본문이 없다 — 받는 사람 · 보낸 사람을 실어 와도 서버가 정한 대로 간다."""
+    u1 = await as_member("u1")
+    res = await u1.post(
+        "/api/threads/t6/checks", json={"recipientIds": ["u4"], "senderId": "u3", "text": "x"}
     )
     assert res.status_code == 201
-    row = res.json()[0]
-    assert (row["targetType"], row["targetId"]) == ("thread", "t3")
-    stored = await session.get(CheckRequest, row["id"])
-    assert stored is not None
-    assert (stored.task_id, stored.thread_id) == (None, "t3")
+    assert [(row["senderId"], row["recipientId"]) for row in res.json()] == [("u1", "u2")]
 
 
-async def test_text_can_be_29_characters(as_member: AsMember) -> None:
+async def test_one_batch_shares_entry_and_time(as_member: AsMember) -> None:
     u1 = await as_member("u1")
-    assert (await send(u1, {**TASK, "text": "가" * 29})).status_code == 201
+    entry_id = await change(u1, "t2")
+    res = await send(u1, "t2")
+    assert res.status_code == 201
+    rows = res.json()
+    assert {row["entryId"] for row in rows} == {entry_id}
+    assert len({row["createdAt"] for row in rows}) == 1
 
 
-@pytest.mark.parametrize(
-    ("change", "field"),
-    [
-        ({"text": "   "}, "text"),
-        ({"text": "가" * 30}, "text"),
-        ({"recipientIds": []}, "recipientIds"),
-        ({"recipientIds": [f"m{n}" for n in range(21)]}, "recipientIds"),
-        ({"targetType": "meeting"}, "targetType"),
-    ],
-    ids=["blank-text", "long-text", "no-recipient", "too-many", "bad-target-type"],
-)
-async def test_send_shape_is_422(as_member: AsMember, change: dict[str, Any], field: str) -> None:
+async def test_recipients_are_task_owners_then_cc(client: httpx.AsyncClient) -> None:
+    """작업 seq 순 담당자 다음 참조 순. 겹치면 처음 자리, 담당자 없는 작업은 건너뛴다."""
+    # 링크를 거는 순서와 상관없이 작업 seq 순이다 — k9(u4) · k13(u1) · k15(u2), k1 은 담당자 없음
+    for task in ("k15", "k9", "k13", "k1"):
+        await link(client, task, "t6")
+    await set_cc(client, "t6", ["u3", "u2", "u1"])
+    res = await send(client, "t6")  # 시스템 관리자가 보낸다 — 받는 사람 누구도 빠지지 않는다
+    assert res.status_code == 201
+    assert recipients(res) == ["u4", "u1", "u2", "u3"]
+
+
+async def test_sender_is_left_out(as_member: AsMember, client: httpx.AsyncClient) -> None:
+    """t1 — 연결 작업 k4 담당 u3, 참조 u1. 누른 사람은 받지 않는다."""
+    u3 = await as_member("u3")
+    await change(u3, "t1")
+    res = await send(u3, "t1")
+    assert res.status_code == 201
+    assert recipients(res) == ["u1"]
+
+    # 결정을 또 바꾸면 이번엔 u1 이 누른다 — u3 만 받는다
     u1 = await as_member("u1")
-    res = await send(u1, {**TASK, **change})
-    assert res.status_code == 422
-    body = res.json()
-    assert body["code"] == "VALIDATION_ERROR"
-    assert field in body["detail"]
+    await change(u1, "t1")
+    again = await send(u1, "t1")
+    assert again.status_code == 201
+    assert recipients(again) == ["u3"]
 
 
-@pytest.mark.parametrize(
-    ("target_type", "target_id"),
-    [("task", "nope"), ("task", "x1"), ("thread", "t10"), ("thread", "k4"), ("task", "t3")],
-    ids=["missing", "other-project-task", "other-project-thread", "task-as-thread", "wrong-kind"],
-)
-async def test_target_must_be_this_projects(
-    as_member: AsMember, target_type: str, target_id: str
-) -> None:
-    u1 = await as_member("u1")
-    res = await send(u1, {**TASK, "targetType": target_type, "targetId": target_id})
-    assert res.status_code == 400
-    assert res.json()["code"] == "CHECK_TARGET_NOT_FOUND"
-    assert "targetId" in res.json()["detail"]
-
-
-async def test_cannot_send_to_myself(as_member: AsMember) -> None:
-    u1 = await as_member("u1")
-    res = await send(u1, {**TASK, "recipientIds": ["u2", "u1"]})
-    assert res.status_code == 400
-    assert res.json()["code"] == "CHECK_RECIPIENT_SELF"
-    assert res.json()["detail"] == {"recipientIds.1": "나 자신은 고를 수 없습니다."}
-
-
-async def test_recipient_must_be_an_active_grant(
+async def test_inactive_or_ungranted_are_skipped(
     client: httpx.AsyncClient, as_member: AsMember, session: AsyncSession
 ) -> None:
+    """t2 — k4 · k22 담당 u3, 참조 u2 · u4. 빠진 사람은 오류 없이 건너뛴다."""
     u4 = await session.get(Member, "u4")
     assert u4 is not None
     u4.active = False
     await session.commit()
+    assert (await client.delete("/api/projects/p1/members/u2")).status_code == 204
+
     u1 = await as_member("u1")
-    # admin 은 부여 없이 다 보지만 p1 에 부여되지 않았다
-    res = await send(u1, {**TASK, "recipientIds": ["u2", "admin", "u4", "ghost"]})
+    await change(u1, "t2")
+    res = await send(u1, "t2")
+    assert res.status_code == 201
+    assert recipients(res) == ["u3"]
+
+
+async def test_not_decided_is_400(as_member: AsMember) -> None:
+    u1 = await as_member("u1")
+    for thread in ("t3", "t4"):  # open · queued
+        res = await send(u1, thread)
+        assert res.status_code == 400
+        assert res.json()["code"] == "CHECK_THREAD_NOT_DECIDED"
+
+
+async def test_same_decision_only_once(as_member: AsMember) -> None:
+    u1 = await as_member("u1")
+    assert (await send(u1, "t6")).status_code == 201
+    again = await send(u1, "t6")
+    assert again.status_code == 409
+    assert again.json()["code"] == "CHECK_ALREADY_SENT"
+    # 시드가 이미 보낸 결정도 같다
+    assert (await send(u1, "t2")).json()["code"] == "CHECK_ALREADY_SENT"
+    assert len((await u1.get("/api/projects/p1/checks")).json()) == 5
+
+
+async def test_changed_decision_can_be_sent_again(as_member: AsMember) -> None:
+    """결정을 바꾸면 다시 보낸다. 앞 결정의 대기 줄은 그대로 남는다."""
+    u1 = await as_member("u1")
+    entry_id = await change(u1, "t2")
+    res = await send(u1, "t2")
+    assert res.status_code == 201
+    assert recipients(res) == ["u3", "u2", "u4"]
+    rows = (await u1.get("/api/projects/p1/checks")).json()
+    sent = [row["entryId"] for row in rows if row["threadId"] == "t2"]
+    assert sent == ["e3"] * 3 + [entry_id] * 3
+    assert rows[0]["confirmedAt"] is None
+
+
+async def test_defer_after_decision_does_not_reopen(as_member: AsMember) -> None:
+    """미룸은 결정이 아니다 — 최근 결정은 그대로라 다시 못 보낸다."""
+    u1 = await as_member("u1")
+    res = await u1.post("/api/threads/t2/entries", json={"kind": "defer", "text": "다시 보자"})
+    assert res.status_code == 201
+    assert (await send(u1, "t2")).json()["code"] == "CHECK_ALREADY_SENT"
+
+
+async def test_no_recipients_is_400(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    # 참조가 나 하나뿐
+    u2 = await as_member("u2")
+    res = await send(u2, "t6")
     assert res.status_code == 400
-    body = res.json()
-    assert body["code"] == "MEMBER_NOT_IN_PROJECT"
-    assert set(body["detail"]) == {"recipientIds.1", "recipientIds.2", "recipientIds.3"}
-    # 한 줄도 안 남는다
-    assert len((await u1.get("/api/projects/p1/checks")).json()) == 4
+    assert res.json()["code"] == "CHECK_NO_RECIPIENTS"
+    # 참조도 연결 작업도 없다
+    await set_cc(client, "t6", [])
+    u1 = await as_member("u1")
+    res = await send(u1, "t6")
+    assert res.status_code == 400
+    assert res.json()["code"] == "CHECK_NO_RECIPIENTS"
+    assert (await u1.get("/api/projects/p1/checks")).json()[-1]["id"] == "c4"
 
 
 async def test_checks_run_in_contract_order(as_member: AsMember) -> None:
-    """대상 → 나 자신 → 부여."""
+    """이미 보냄(409)이 받을 사람 없음(400)보다 먼저다."""
     u1 = await as_member("u1")
-    both = await send(u1, {**TASK, "targetId": "nope", "recipientIds": ["u1"]})
-    assert both.json()["code"] == "CHECK_TARGET_NOT_FOUND"
-    self_and_stranger = await send(u1, {**TASK, "recipientIds": ["ghost", "u1"]})
-    assert self_and_stranger.json()["code"] == "CHECK_RECIPIENT_SELF"
+    assert (await send(u1, "t6")).status_code == 201
+    # u2 혼자라면 받을 사람이 없지만, 그 전에 이미 보냈다
+    u2 = await as_member("u2")
+    assert (await send(u2, "t6")).json()["code"] == "CHECK_ALREADY_SENT"
 
 
-async def test_send_needs_the_grant(client: httpx.AsyncClient, as_member: AsMember) -> None:
+async def test_unknown_or_foreign_thread_is_404(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    u1 = await as_member("u1")
+    missing = await send(u1, "nope")
+    assert missing.status_code == 404
+    assert missing.json()["code"] == "THREAD_NOT_FOUND"
+    # 부여받지 않은 프로젝트의 안건은 없는 것처럼
     assert (await client.delete("/api/projects/p1/members/u4")).status_code == 204
     u4 = await as_member("u4")
-    res = await send(u4, TASK)
-    assert res.status_code == 404
-    assert res.json()["code"] == "PROJECT_NOT_FOUND"
+    foreign = await send(u4, "t6")
+    assert foreign.status_code == 404
+    assert foreign.json()["code"] == "THREAD_NOT_FOUND"
+
+
+async def test_race_lands_on_409(as_member: AsMember, monkeypatch: pytest.MonkeyPatch) -> None:
+    """동시에 두 번 — 앞 검사를 지나친 늦은 쪽은 unique (entry_id, recipient_id) 에 걸린다."""
+    u1 = await as_member("u1")
+    assert (await send(u1, "t6")).status_code == 201
+
+    async def not_yet(*_args: object) -> bool:
+        return False
+
+    monkeypatch.setattr(check_service, "_already_sent", not_yet)
+    late = await send(u1, "t6")
+    assert late.status_code == 409
+    assert late.json()["code"] == "CHECK_ALREADY_SENT"
+    assert len((await u1.get("/api/projects/p1/checks")).json()) == 5
 
 
 async def test_send_stamps_recipient_load(as_member: AsMember, session: AsyncSession) -> None:
@@ -221,16 +312,26 @@ async def test_send_stamps_recipient_load(as_member: AsMember, session: AsyncSes
                 state=state,
                 owner_id="u2",
                 created_at=at("2026-10-01T00:00:00Z"),
+                cc=[
+                    ThreadCc(project_id="p3", member_id=member_id, sort_order=order)
+                    for order, member_id in enumerate(["u2", "u3"] if id_ == "h3" else [])
+                ],
             )
         )
+    await session.flush()
+    session.add(
+        Entry(
+            id="hd",
+            thread_id="h3",
+            kind="decide",
+            text="정했다",
+            created_at=at("2026-10-02T00:00:00Z"),
+        )
+    )
     await session.commit()
 
     u1 = await as_member("u1")
-    res = await send(
-        u1,
-        {"targetType": "task", "targetId": "q1", "recipientIds": ["u2", "u3"], "text": "봐 주세요"},
-        project="p3",
-    )
+    res = await send(u1, "h3")
     assert res.status_code == 201
     loads = {}
     for row in res.json():
@@ -275,8 +376,8 @@ async def test_only_the_recipient_confirms(client: httpx.AsyncClient, as_member:
     assert res.json()["code"] == "FORBIDDEN"
     # 시스템 관리자 · 보낸 사람도 대신 못 한다
     assert (await client.post("/api/checks/c4/confirm")).status_code == 403
-    u2 = await as_member("u2")
-    assert (await u2.post("/api/checks/c4/confirm")).status_code == 403
+    u3 = await as_member("u3")
+    assert (await u3.post("/api/checks/c4/confirm")).status_code == 403
 
 
 async def test_confirm_is_idempotent(as_member: AsMember) -> None:
@@ -289,7 +390,8 @@ async def test_confirm_is_idempotent(as_member: AsMember) -> None:
     assert again.status_code == 200
     assert again.json() == body
     # 이미 확인된 시드 줄은 시각이 그대로다
-    seeded = await u1.post("/api/checks/c2/confirm")
+    u2 = await as_member("u2")
+    seeded = await u2.post("/api/checks/c2/confirm")
     assert seeded.json()["confirmedAt"] == "2026-10-14T05:00:00Z"
 
 
@@ -311,18 +413,18 @@ async def test_confirm_unknown_or_foreign_is_404(
 # --- 배지 ---
 
 
-async def test_pending_count_per_project(as_member: AsMember) -> None:
+async def test_pending_count_per_project(client: httpx.AsyncClient, as_member: AsMember) -> None:
     u1 = await as_member("u1")
     assert (await u1.get("/api/checks/pending-count")).json() == {
         "total": 1,
         "byProject": {"p1": 1},
     }
+    # p2 의 t10 을 정하고 u1 을 참조로 — u2 가 보낸다
+    await set_cc(client, "t10", ["u1"])
+    decided = await client.post("/api/threads/t10/entries", json={"kind": "decide", "text": "x"})
+    assert decided.status_code == 201
     u2 = await as_member("u2")
-    sent = await send(
-        u2,
-        {"targetType": "task", "targetId": "x1", "recipientIds": ["u1"], "text": "봐 주세요"},
-        project="p2",
-    )
+    sent = await send(u2, "t10")
     assert sent.status_code == 201
     assert (await u1.get("/api/checks/pending-count")).json() == {
         "total": 2,
@@ -355,13 +457,12 @@ async def test_pending_count_skips_lost_grants(
 # --- 걸린 것을 지우면 ---
 
 
-async def test_deleting_the_target_deletes_the_checks(
+async def test_deleting_thread_or_entry_deletes_the_checks(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    for model, id_ in ((Task, "k18"), (Thread, "t3")):
+    for model, id_ in ((Thread, "t1"), (Entry, "e3")):
         row = await session.get(model, id_)
         assert row is not None
         await session.delete(row)
     await session.commit()
-    left = (await client.get("/api/projects/p1/checks")).json()
-    assert [row["id"] for row in left] == ["c1"]
+    assert (await client.get("/api/projects/p1/checks")).json() == []

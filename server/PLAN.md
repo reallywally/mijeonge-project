@@ -210,6 +210,17 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 **커밋** — ① 테이블 · API · 검사 ② 시드
 
+### 2026-10-19 고침 — 결정 알림으로 좁힘 (Q42 ~ Q44)
+
+작업 쪽을 걷고, 결정된 안건에서 본문 없이 보낸다. 받는 사람은 서버가 정한다 — 연결 작업 담당자 + 안건의 참조. 한 결정에 한 번.
+
+- [x] 리비전 `0013_check_on_decision` — `check_request` 를 지우고 다시 세운다(있던 줄은 버린다, ALTER 없이). `task_id` · `text` · CHECK 둘 걷음, `thread_id` NOT NULL, `entry_id` → entry cascade, unique `(entry_id, recipient_id)`. `thread_cc` 생성. downgrade 는 옛 모양의 빈 테이블로
+- [x] 참조 — `ThreadCc` · `Thread.cc`(thread_option 과 같은 방식), `ThreadOut.ccIds` · `ThreadCreate` · `ThreadPatch`(통째로 교체, `null` 은 422). 0 ~ 20명(합치기 전에 센다), 겹치면 처음 자리, 부여된 활성 멤버만 — 400 `MEMBER_NOT_IN_PROJECT` · `detail` 은 걸린 자리 전부. 이미 걸려 있던 사람은 담당자처럼 그대로 둘 수 있다
+- [x] 보내기 `POST /api/threads/{threadId}/checks` — 404 → `CHECK_THREAD_NOT_DECIDED` → `CHECK_ALREADY_SENT`(최근 decide · change = seq 최대) → `CHECK_NO_RECIPIENTS`. 받는 사람은 `services/check.py` 의 `recipients_of`. 동시 요청은 unique 위반을 잡아 409. 옛 `POST /api/projects/{projectId}/checks` 는 걷음
+- [x] `CheckRequestOut` 은 `threadId` · `entryId`. `CheckRequestInput` · `CheckTargetType` · `CHECK_TEXT_MAX` · `CHECK_TARGET_NOT_FOUND` · `CHECK_RECIPIENT_SELF` 걷음
+- [x] 시드 — 참조 t1 · t2 · t6, 요청 c1 ~ c4 새 표 그대로. `test_seed` 가 c1 ~ c4 를 받는 사람 규칙과 대조
+- [x] 검사 — `test_check.py` 다시 씀, 참조는 `test_thread_api.py`, `test_contract_types.py` · `test_read_api.py` 에 `ccIds` · 새 `CheckRequest`
+
 ---
 
 ## 진행 상황
@@ -230,7 +241,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. Q29 ~ Q31 닫힘 |
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
 | 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 |
-| 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **11-1 끝남** (2026-10-16) — 리비전 `0012_check_request` · 네 경로 · `services/check.py`(보낼 때 부하 찍기, 기한 임박은 오늘(KST) + 3일 고정) · `require_scope` 의 `check_id` 갈래 · 시드 `c1` ~ `c4` · `tests/test_check.py`. API.md 네 줄 `구현`. 2차(확인율 분석)는 기록이 쌓인 뒤 |
+| 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **11-1 끝남** (2026-10-16) — 리비전 `0012_check_request` · 네 경로 · `services/check.py`(보낼 때 부하 찍기, 기한 임박은 오늘(KST) + 3일 고정) · `require_scope` 의 `check_id` 갈래 · 시드 `c1` ~ `c4` · `tests/test_check.py`. API.md 네 줄 `구현`. **2026-10-19 고침 끝남** — 결정 알림으로 좁힘 · 참조(`thread_cc`) · 리비전 `0013_check_on_decision`. 2차(확인율 분석)는 기록이 쌓인 뒤 |
 
 ## 아직 안 정한 것
 

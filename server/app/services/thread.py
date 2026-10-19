@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Entry, EntryDetail, Thread, ThreadOption, new_id
+from app.models import Entry, EntryDetail, Thread, ThreadCc, ThreadOption, new_id
 from app.schemas.thread import (
     EntryAdded,
     EntryCreate,
@@ -42,6 +42,7 @@ def to_thread(row: Thread) -> ThreadOut:
         options=[option.text for option in row.options],
         due_date=row.due_date,
         part_id=row.part_id,
+        cc_ids=[cc.member_id for cc in row.cc],
     )
 
 
@@ -80,6 +81,35 @@ async def _guard_owner(
         )
 
 
+async def _cc_rows(
+    session: AsyncSession,
+    project_id: str,
+    cc_ids: list[str],
+    *,
+    keep: frozenset[str] = frozenset(),
+) -> list[ThreadCc]:
+    """참조 배열 → 행. 겹친 사람은 처음 자리 하나로 합친다.
+
+    새로 넣는 사람은 그 프로젝트의 활성 멤버여야 한다 — 걸린 자리를 전부 짚는다.
+    `keep` 은 이미 참조로 걸려 있던 사람이다. 담당자처럼 그대로 두는 것은 막지 않는다.
+    """
+    granted = await access.active_project_members(session, project_id, set(cc_ids))
+    missing = {
+        f"ccIds.{index}": "이 프로젝트에 부여되지 않았거나 비활성인 사람입니다."
+        for index, member_id in enumerate(cc_ids)
+        if member_id not in granted and member_id not in keep
+    }
+    if missing:
+        raise ApiError(
+            400, "MEMBER_NOT_IN_PROJECT", "이 프로젝트에 부여되지 않은 사람입니다.", missing
+        )
+    unique = list(dict.fromkeys(cc_ids))
+    return [
+        ThreadCc(project_id=project_id, member_id=member_id, sort_order=order)
+        for order, member_id in enumerate(unique)
+    ]
+
+
 def apply_entry_to_thread(thread: Thread, kind: str, owner_id: str | None) -> None:
     """줄 하나가 안건에 남기는 흔적.
 
@@ -99,6 +129,7 @@ async def create_thread(session: AsyncSession, project_id: str, payload: ThreadC
     await project_service.load_project(session, project_id)
     await _guard_owner(session, project_id, payload.owner_id, "THREAD_OWNER_NOT_FOUND")
     await part_service.guard_part(session, project_id, payload.part_id)
+    cc = await _cc_rows(session, project_id, payload.cc_ids)
     thread = Thread(
         id=new_id(),
         project_id=project_id,
@@ -115,6 +146,7 @@ async def create_thread(session: AsyncSession, project_id: str, payload: ThreadC
             ThreadOption(id=new_id(), text=text, sort_order=order)
             for order, text in enumerate(payload.options)
         ],
+        cc=cc,
     )
     session.add(thread)
     await session.commit()
@@ -149,6 +181,14 @@ async def patch_thread(session: AsyncSession, thread_id: str, payload: ThreadPat
             ThreadOption(id=new_id(), text=text, sort_order=order)
             for order, text in enumerate(payload.options)
         ]
+    if "cc_ids" in sent and payload.cc_ids is not None:
+        keep = frozenset(cc.member_id for cc in thread.cc)
+        rows = await _cc_rows(session, thread.project_id, payload.cc_ids, keep=keep)
+        # 통째로 갈아끼운다. pk 가 (thread_id, member_id) 라 옛 줄을 먼저 지워야
+        # 같은 사람을 다시 넣을 때 부딪히지 않는다
+        thread.cc = []
+        await session.flush()
+        thread.cc = rows
     await session.commit()
     return to_thread(thread)
 

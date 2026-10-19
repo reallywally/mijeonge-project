@@ -238,21 +238,19 @@ async def test_risk_report_matches_contract(client: AsyncClient) -> None:
                     assert FIELDS[name][field], f"{name}.{field} 가 null 로 나갔다"
 
 
-# 확인 요청 — docs/api/check.md '모양'. 어긋나면 계약 쪽이 기준이다.
+# 확인 요청 — docs/api/check.md '모양'(2026-10-19 고침). 어긋나면 계약 쪽이 기준이다.
 # null 이 나갈 수 있는 자리는 `CheckRequest.confirmedAt` 하나다
 CHECK_SHAPES: dict[str, set[str]] = {
     "CheckRequest": {
         "id",
         "projectId",
-        "targetType",
-        "targetId",
+        "threadId",
+        "entryId",
         "senderId",
         "recipientId",
-        "text",
         "createdAt",
         "confirmedAt",
     },
-    "CheckRequestInput": {"targetType", "targetId", "recipientIds", "text"},
     "CheckPendingCount": {"total", "byProject"},
 }
 CHECK_NULLABLE = {"CheckRequest": {"confirmedAt"}}
@@ -265,6 +263,16 @@ def test_check_shapes_do_not_drift_from_domain_ts(name: str) -> None:
         assert set(FIELDS[name]) == CHECK_SHAPES[name], f"domain.ts 의 {name} 이 check.md 와 다르다"
         nullable = {field for field, allowed in FIELDS[name].items() if allowed}
         assert nullable == CHECK_NULLABLE.get(name, set())
+
+
+def test_check_input_is_gone_from_domain_ts() -> None:
+    """보내기에 본문이 없어졌다 — `CheckRequestInput` 이 남아 있으면 화면이 옛 모양으로 보낸다."""
+    assert "CheckRequestInput" not in FIELDS
+
+
+def test_thread_cc_ids_in_domain_ts() -> None:
+    """참조는 `string[]` 다 — null 이 아니라 [] 로 비운다 (Q17)."""
+    assert FIELDS["Thread"].get("ccIds") is False
 
 
 async def test_check_responses_match_contract(client: AsyncClient) -> None:

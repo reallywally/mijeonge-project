@@ -6,6 +6,9 @@ from pydantic_core import PydanticCustomError
 
 from app.schemas.base import Schema, Utc
 
+# 참조는 0 ~ 20명 (docs/api/check.md '참조')
+CC_MAX = 20
+
 EntryKindIn = Literal["raise", "defer", "decide", "refine", "change", "split"]
 
 
@@ -23,6 +26,8 @@ class ThreadOut(Schema):
     due_date: date | None = None
     # null 이면 프로젝트 공통 (docs/api/part.md)
     part_id: str | None = None
+    # 참조 — thread_cc 행을 순서대로 편다. 없으면 [] (docs/api/check.md)
+    cc_ids: list[str] = Field(default_factory=list)
 
 
 class EntryOut(Schema):
@@ -50,6 +55,8 @@ class ThreadCreate(Schema):
     due_date: date | None = None
     # 안 보내면 공통(null)이다 — 작업과 달리 따를 상위가 없다
     part_id: str | None = None
+    # 개수는 겹친 것을 합치기 전에 센다 — 오류 detail 의 자리(`ccIds.1`)가 보낸 배열을 짚는다
+    cc_ids: list[str] = Field(default=[], max_length=CC_MAX)
 
 
 class EntryCreate(Schema):
@@ -79,12 +86,14 @@ class ThreadPatch(Schema):
     due_date: date | None = None
     # null 로 보내면 공통
     part_id: str | None = None
+    # 통째로 갈아끼운다. 안 보내면 그대로
+    cc_ids: list[str] | None = Field(default=None, max_length=CC_MAX)
 
-    @field_validator("title", "description", "options")
+    @field_validator("title", "description", "options", "cc_ids")
     @classmethod
     def _not_null(cls, value: object) -> object:
         # 기본값(None)에는 안 돈다 — 화면이 명시적으로 null 을 보낸 경우만 걸린다.
-        # 이 셋은 빈 값이 '' · [] 라 null 을 '비우기'로 받아 주면 계약이 두 벌이 된다
+        # 이 넷은 빈 값이 '' · [] 라 null 을 '비우기'로 받아 주면 계약이 두 벌이 된다
         if value is None:
             raise PydanticCustomError("null_not_allowed", "null 로 비울 수 없는 값입니다.")
         return value

@@ -3,7 +3,8 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CheckRequest, Entry, Task, TaskLine, Thread
+from app.models import CheckRequest, Entry, Task, TaskLine, Thread, ThreadCc
+from app.services.check import recipients_of
 from scripts.seed import seed
 
 
@@ -18,6 +19,7 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
     assert await count(Task) == 24
     assert await count(TaskLine) == 7
     assert await count(CheckRequest) == 4
+    assert await count(ThreadCc) == 4
 
 
 async def test_seed_is_repeatable(session: AsyncSession) -> None:
@@ -45,3 +47,20 @@ async def test_scenario_records_stand(session: AsyncSession) -> None:
     env = (await session.execute(select(Task).where(Task.id == "k4"))).scalar_one()
     assert [line.text for line in env.lines][:2] == ["서버 신청서 제출", "우분투 최신 버전 설치"]
     assert [line.sort_order for line in env.lines] == list(range(7))
+
+
+async def test_seed_checks_follow_the_recipient_rule(session: AsyncSession) -> None:
+    """c1 ~ c4 는 서버가 그때 보냈다면 정했을 받는 사람 그대로다 (check.md '시드 · 목업')."""
+    await seed(session)
+    rows = (await session.scalars(select(CheckRequest).order_by(CheckRequest.seq))).all()
+    assert [(r.id, r.thread_id, r.entry_id, r.sender_id, r.recipient_id) for r in rows] == [
+        ("c1", "t2", "e3", "u1", "u3"),
+        ("c2", "t2", "e3", "u1", "u2"),
+        ("c3", "t2", "e3", "u1", "u4"),
+        ("c4", "t1", "e1", "u3", "u1"),
+    ]
+    for thread_id, sender in (("t2", "u1"), ("t1", "u3")):
+        thread = await session.get(Thread, thread_id)
+        assert thread is not None
+        expected = [r.recipient_id for r in rows if r.thread_id == thread_id]
+        assert await recipients_of(session, thread, sender) == expected

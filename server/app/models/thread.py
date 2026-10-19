@@ -63,6 +63,12 @@ class Thread(Base):
         order_by="ThreadOption.sort_order",
         lazy="selectin",
     )
+    # 참조 — 결정을 같이 알아야 할 사람. 확인 요청이 받는 사람으로 쓴다 (docs/api/check.md)
+    cc: Mapped[list["ThreadCc"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="ThreadCc.sort_order",
+        lazy="selectin",
+    )
 
 
 class ThreadOption(Base):
@@ -77,6 +83,25 @@ class ThreadOption(Base):
     sort_order: Mapped[int] = mapped_column(Integer)
 
     thread: Mapped[Thread] = relationship(back_populates="options")
+
+
+class ThreadCc(Base):
+    """참조 한 사람. 프론트는 string[] 이라 순서가 뜻을 갖는다."""
+
+    __tablename__ = "thread_cc"
+    __table_args__ = (
+        # 안건과 같은 프로젝트여야 한다 (Q13 · Q16 과 같은 방식). 안건을 지우면 같이 지운다
+        ForeignKeyConstraint(
+            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+        ),
+    )
+
+    thread_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # FK 는 위의 복합 FK 하나뿐이다
+    project_id: Mapped[str] = mapped_column(String(36))
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    member_id: Mapped[str] = mapped_column(ForeignKey("member.id"), primary_key=True)
+    sort_order: Mapped[int] = mapped_column(Integer)
 
 
 class Entry(Base):

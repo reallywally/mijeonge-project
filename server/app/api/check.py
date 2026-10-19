@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.deps import CurrentActor, ProjectScope, Session
-from app.schemas.check import CheckPendingCount, CheckRequestInput, CheckRequestOut
+from app.schemas.check import CheckPendingCount, CheckRequestOut
 from app.services import check as check_service
 from app.time import today_kst
 
@@ -13,16 +13,19 @@ router = APIRouter(tags=["check"])
 async def list_checks(
     project_id: str, scope: ProjectScope, session: Session
 ) -> list[CheckRequestOut]:
-    """그 프로젝트의 요청 전부. 받은 것 · 보낸 것 · 작업/안건별은 화면이 거른다."""
+    """그 프로젝트의 요청 전부. 받은 것 · 보낸 것 · 안건별은 화면이 거른다."""
     return await check_service.list_checks(session, scope.project_id)
 
 
-@router.post("/projects/{project_id}/checks", status_code=201)
+@router.post("/threads/{thread_id}/checks", status_code=201)
 async def send_checks(
-    project_id: str, payload: CheckRequestInput, scope: ProjectScope, session: Session
+    thread_id: str, scope: ProjectScope, session: Session
 ) -> list[CheckRequestOut]:
-    """보낸 사람은 로그인한 사람이다. '오늘' 은 한국 시간이다 — 기한은 사람이 고른 날짜라서."""
-    return await check_service.send_checks(session, scope, payload, today=today_kst())
+    """본문이 없다 — 실어 와도 읽지 않는다. 보낸 사람은 로그인한 사람, 받는 사람은 서버가 정한다.
+
+    '오늘' 은 한국 시간이다 — 기한은 사람이 고른 날짜라서.
+    """
+    return await check_service.send_checks(session, scope, thread_id, today=today_kst())
 
 
 @router.post("/checks/{check_id}/confirm")

@@ -19,6 +19,7 @@ THREAD_KEYS = {
     "parentThreadId",
     "createdAt",
     "partId",
+    "ccIds",
 }
 ENTRY_KEYS = {
     "id",

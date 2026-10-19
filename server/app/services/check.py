@@ -1,6 +1,7 @@
 """확인 요청 — 목록 · 보내기 · 확인 · 배지.
 
-계약은 `docs/api/check.md`. 답 · 수정 · 삭제 · 확인 취소는 없다.
+계약은 `docs/api/check.md`. 내용 · 수정 · 삭제 · 확인 취소는 없다.
+받는 사람은 서버가 정한다 — 연결 작업의 담당자 + 안건의 참조. 한 결정에 한 번 (Q42 ~ Q44).
 경로의 요청이 내 프로젝트의 것인지는 `access.resolve_scope` 가 본다.
 """
 
@@ -8,17 +9,14 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import CheckRequest, ProjectMember, Task, Thread, new_id
-from app.schemas.check import (
-    CheckPendingCount,
-    CheckRequestInput,
-    CheckRequestOut,
-    CheckTargetType,
-)
+from app.models import CheckRequest, Entry, ProjectMember, Task, TaskThreadLink, Thread, new_id
+from app.schemas.check import CheckPendingCount, CheckRequestOut
 from app.services.access import Scope, active_project_members, forbidden
+from app.services.thread import DECIDING_KINDS
 from app.time import now
 
 # '기한 임박' — 리스크 기본값과 같지만 프로젝트 기준을 따르지 않고 고정한다.
@@ -35,20 +33,13 @@ class Load:
 
 
 def to_check(row: CheckRequest) -> CheckRequestOut:
-    target_type: CheckTargetType
-    if row.task_id is not None:
-        target_type, target_id = "task", row.task_id
-    else:
-        assert row.thread_id is not None  # CHECK 가 둘 중 하나를 보장한다
-        target_type, target_id = "thread", row.thread_id
     return CheckRequestOut(
         id=row.id,
         project_id=row.project_id,
-        target_type=target_type,
-        target_id=target_id,
+        thread_id=row.thread_id,
+        entry_id=row.entry_id,
         sender_id=row.sender_id,
         recipient_id=row.recipient_id,
-        text=row.text,
         created_at=row.created_at,
         confirmed_at=row.confirmed_at,
     )
@@ -102,78 +93,108 @@ async def list_checks(session: AsyncSession, project_id: str) -> list[CheckReque
     return [to_check(row) for row in rows.all()]
 
 
-async def _guard_target(session: AsyncSession, project_id: str, payload: CheckRequestInput) -> None:
-    model = Task if payload.target_type == "task" else Thread
-    found = await session.scalar(
-        select(model.id).where(model.id == payload.target_id, model.project_id == project_id)
+async def _latest_decision(session: AsyncSession, thread_id: str) -> Entry | None:
+    """지금의 결정 — decide · change 이력 중 seq 가 가장 큰 것 (created_at 으로 가리지 않는다)."""
+    found: Entry | None = await session.scalar(
+        select(Entry)
+        .where(Entry.thread_id == thread_id, Entry.kind.in_(DECIDING_KINDS))
+        .order_by(Entry.seq.desc())
+        .limit(1)
     )
-    if found is None:
-        what = "작업" if payload.target_type == "task" else "안건"
-        raise ApiError(
-            400,
-            "CHECK_TARGET_NOT_FOUND",
-            f"이 프로젝트에서 그 {what}을 찾을 수 없습니다.",
-            {"targetId": f"{what}을 찾을 수 없습니다."},
+    return found
+
+
+async def _already_sent(session: AsyncSession, entry_id: str) -> bool:
+    found = await session.scalar(
+        select(CheckRequest.id).where(CheckRequest.entry_id == entry_id).limit(1)
+    )
+    return found is not None
+
+
+async def recipients_of(session: AsyncSession, thread: Thread, sender_id: str) -> list[str]:
+    """연결 작업의 담당자(작업 seq 순) 다음 참조(ccIds 순). 겹치면 처음 자리 하나.
+
+    보낸 사람은 뺀다. 지금 부여된 활성 멤버가 아니면 조용히 건너뛴다 — 오류로 내면
+    부여가 빠진 한 사람 때문에 아무에게도 못 보낸다.
+    """
+    owners = await session.scalars(
+        select(Task.owner_id)
+        .join(TaskThreadLink, TaskThreadLink.task_id == Task.id)
+        .where(
+            TaskThreadLink.thread_id == thread.id,
+            Task.project_id == thread.project_id,
+            Task.owner_id.is_not(None),
         )
+        .order_by(Task.seq)
+    )
+    ordered = [owner for owner in owners.all() if owner is not None]
+    ordered += [cc.member_id for cc in thread.cc]
+    candidates = [member_id for member_id in dict.fromkeys(ordered) if member_id != sender_id]
+    granted = await active_project_members(session, thread.project_id, candidates)
+    return [member_id for member_id in candidates if member_id in granted]
+
+
+def _already_sent_error() -> ApiError:
+    return ApiError(409, "CHECK_ALREADY_SENT", "이 결정은 이미 확인 요청을 보냈습니다.")
 
 
 async def send_checks(
-    session: AsyncSession, scope: Scope, payload: CheckRequestInput, *, today: date
+    session: AsyncSession, scope: Scope, thread_id: str, *, today: date
 ) -> list[CheckRequestOut]:
-    """받는 사람 수만큼 줄을 한 트랜잭션으로. 검사 순서는 계약대로 — 대상 → 나 자신 → 부여."""
-    project_id = scope.project_id
-    await _guard_target(session, project_id, payload)
+    """받는 사람 수만큼 줄을 한 트랜잭션으로.
 
-    # 겹친 사람은 처음 나온 자리 하나로. 오류는 보낸 배열의 자리를 짚는다
-    first_at: dict[str, int] = {}
-    for index, member_id in enumerate(payload.recipient_ids):
-        first_at.setdefault(member_id, index)
-
-    if scope.actor.id in first_at:
+    검사 순서는 계약대로 — 경로의 안건 404(require_scope) → 결정 안 됨 → 이미 보냄 →
+    받을 사람 없음.
+    """
+    thread = await session.scalar(
+        select(Thread).where(Thread.id == thread_id, Thread.project_id == scope.project_id)
+    )
+    if thread is None:
+        raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
+    decision = await _latest_decision(session, thread.id) if thread.state == "decided" else None
+    if decision is None:
+        raise ApiError(
+            400, "CHECK_THREAD_NOT_DECIDED", "결정된 안건만 확인 요청을 보낼 수 있습니다."
+        )
+    if await _already_sent(session, decision.id):
+        raise _already_sent_error()
+    recipients = await recipients_of(session, thread, scope.actor.id)
+    if not recipients:
         raise ApiError(
             400,
-            "CHECK_RECIPIENT_SELF",
-            "자기 자신에게는 확인 요청을 보낼 수 없습니다.",
-            {f"recipientIds.{first_at[scope.actor.id]}": "나 자신은 고를 수 없습니다."},
+            "CHECK_NO_RECIPIENTS",
+            "받을 사람이 없습니다. 연결 작업의 담당자나 참조를 더해 주세요.",
         )
 
-    granted = await active_project_members(session, project_id, list(first_at))
-    missing = {
-        f"recipientIds.{index}": "이 프로젝트에 부여되지 않았거나 비활성인 사람입니다."
-        for member_id, index in first_at.items()
-        if member_id not in granted
-    }
-    if missing:
-        raise ApiError(
-            400, "MEMBER_NOT_IN_PROJECT", "이 프로젝트에 부여되지 않은 사람입니다.", missing
-        )
-
-    recipients = list(first_at)
-    loads = await recipient_loads(session, project_id, recipients, today=today)
+    loads = await recipient_loads(session, thread.project_id, recipients, today=today)
     sent_at = now()
     rows: list[CheckRequest] = []
-    for member_id in recipients:
-        load = loads[member_id]
-        row = CheckRequest(
-            id=new_id(),
-            project_id=project_id,
-            task_id=payload.target_id if payload.target_type == "task" else None,
-            thread_id=payload.target_id if payload.target_type == "thread" else None,
-            sender_id=scope.actor.id,
-            recipient_id=member_id,
-            text=payload.text,
-            created_at=sent_at,
-            confirmed_at=None,
-            load_open_tasks=load.open_tasks,
-            load_blocked_tasks=load.blocked_tasks,
-            load_due_soon_tasks=load.due_soon_tasks,
-            load_open_threads=load.open_threads,
-        )
-        session.add(row)
-        # 한 줄씩 밀어야 seq 가 recipientIds 순서다
-        await session.flush()
-        rows.append(row)
-    await session.commit()
+    try:
+        for member_id in recipients:
+            load = loads[member_id]
+            row = CheckRequest(
+                id=new_id(),
+                project_id=thread.project_id,
+                thread_id=thread.id,
+                entry_id=decision.id,
+                sender_id=scope.actor.id,
+                recipient_id=member_id,
+                created_at=sent_at,
+                confirmed_at=None,
+                load_open_tasks=load.open_tasks,
+                load_blocked_tasks=load.blocked_tasks,
+                load_due_soon_tasks=load.due_soon_tasks,
+                load_open_threads=load.open_threads,
+            )
+            session.add(row)
+            # 한 줄씩 밀어야 seq 가 받는 사람 순서다
+            await session.flush()
+            rows.append(row)
+        await session.commit()
+    except IntegrityError as exc:
+        # 동시에 두 번 눌렀다 — 늦은 쪽이 unique (entry_id, recipient_id) 에 걸렸다
+        await session.rollback()
+        raise _already_sent_error() from exc
     return [to_check(row) for row in rows]
 
 
