@@ -1,15 +1,30 @@
 import { mockError } from '@/api/client'
-import { accounts, checkRequests, members, partMembers, parts, projectGrants } from '@/fixtures'
+import {
+  accounts,
+  checkRequests,
+  entries,
+  members,
+  partMembers,
+  parts,
+  projectGrants,
+  taskThreadLinks,
+  tasks,
+  threads,
+} from '@/fixtures'
 import type { MockAccount, MockProjectGrant } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
 import type {
   CheckRequest,
+  Entry,
   Me,
   Member,
   MemberAccount,
   Part,
   PartMember,
   RiskSettings,
+  Task,
+  TaskThreadLink,
+  Thread,
 } from '@/types/domain'
 
 /*
@@ -73,6 +88,25 @@ export function resetMockAuth() {
 }
 
 export const mockDb = () => db
+
+/** 목업의 안건 · 이력 · 작업 — 목업 갈래에서는 이것들을 데이터 스토어가 들고 고친다 */
+export interface MockWorld {
+  threads: Thread[]
+  entries: Entry[]
+  tasks: Task[]
+  taskThreads: TaskThreadLink[]
+}
+
+let worldOf: (() => MockWorld) | null = null
+
+/* 화면에서 결정하거나 새로 만든 목업 안건도 서버처럼 따지려고, 데이터 스토어가 자기 배열을 알려 준다.
+   알려 준 것이 없으면(api 만 부르는 테스트) 픽스처를 본다 */
+export function provideMockWorld(fn: (() => MockWorld) | null) {
+  worldOf = fn
+}
+
+export const mockWorld = (): MockWorld =>
+  worldOf?.() ?? { threads, entries, tasks, taskThreads: taskThreadLinks }
 
 export const accountOf = (memberId: string) => db.accounts.find((a) => a.memberId === memberId)
 export const memberOf = (memberId: string) => db.members.find((m) => m.id === memberId)

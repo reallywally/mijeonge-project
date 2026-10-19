@@ -147,6 +147,8 @@ export interface Thread {
   parentThreadId: string | null
   /** 속한 파트. null 은 프로젝트 공통 */
   partId: string | null
+  /** 참조 — 결정을 같이 알아야 할 사람. 순서가 있다. 없으면 [] (docs/api/check.md) */
+  ccIds: string[]
   createdAt: string
 }
 
@@ -187,6 +189,8 @@ export interface ThreadInput {
   ownerId?: string | null
   /** 안 보내면 공통(null) */
   partId?: string | null
+  /** 참조 0 ~ 20명. 안 보내면 [] */
+  ccIds?: string[]
 }
 
 /**
@@ -201,6 +205,8 @@ export interface ThreadPatch {
   dueDate?: string | null
   /** null 로 공통. 보관 파트는 새로 달 수 없다(이미 달린 것을 두는 것은 된다) */
   partId?: string | null
+  /** 참조를 통째로 바꾼다 */
+  ccIds?: string[]
 }
 
 /** 안건 이력 한 줄 — Entry 에 화면에서 필요한 것만 붙였다 */
@@ -637,33 +643,21 @@ export interface OwnerLoad {
   blockingImpact: number
 }
 
-/* 확인 요청 — 작업 · 안건에 붙는 '확인해 주세요' 한 줄. 쪽지가 아니다 (docs/api/check.md) */
+/* 확인 요청 — 결정된 안건의 '이 결정 확인해 주세요' 버튼 하나. 쪽지가 아니다 (docs/api/check.md) */
 
-export type CheckTargetType = 'task' | 'thread'
-
-/** 받는 사람 한 명당 한 줄. 한 번에 보낸 줄은 같은 text · createdAt 을 갖는다 */
+/** 받는 사람 한 명당 한 줄. 한 번에 보낸 줄은 같은 entryId · createdAt 을 갖는다 */
 export interface CheckRequest {
   id: string
   projectId: string
-  targetType: CheckTargetType
-  targetId: string
+  threadId: string
+  /** 이 요청이 알린 결정 — 그 안건의 decide · change 이력 */
+  entryId: string
   senderId: string
   recipientId: string
-  /** 1 ~ 29자 */
-  text: string
   /** ISO 8601 UTC, Z */
   createdAt: string
   /** null 이면 대기 */
   confirmedAt: string | null
-}
-
-/** POST /api/projects/{projectId}/checks — 보낸 사람은 로그인한 사람이다 */
-export interface CheckRequestInput {
-  targetType: CheckTargetType
-  targetId: string
-  /** 1명 이상 20명 이하, 겹치면 하나로 */
-  recipientIds: string[]
-  text: string
 }
 
 /** GET /api/checks/pending-count */

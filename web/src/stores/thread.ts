@@ -144,6 +144,8 @@ export const useThreadStore = defineStore('thread', () => {
   }
 
   const cleanOptions = (options: string[]) => options.map((o) => o.trim()).filter(Boolean)
+  /** 참조는 겹치면 처음 자리 하나 — 서버도 그렇게 저장한다 */
+  const uniqueIds = (ids: string[]) => [...new Set(ids)]
 
   /** 서버가 돌려준 안건으로 갈아끼운다 */
   function replaceThread(next: Thread) {
@@ -165,6 +167,7 @@ export const useThreadStore = defineStore('thread', () => {
       ownerId: input.ownerId ?? null,
       /* 안 보내면 공통 — 작업과 달리 따를 상위가 없다 */
       partId: input.partId ?? null,
+      ccIds: input.ccIds ?? [],
     }
     if (!data.mock) {
       try {
@@ -178,11 +181,13 @@ export const useThreadStore = defineStore('thread', () => {
     }
     if (data.rejectOwner(clean.ownerId, 'THREAD_OWNER_NOT_FOUND')) return null
     if (data.rejectPart(clean.partId)) return null
+    if (data.rejectCc(clean.ccIds)) return null
     const id = data.nextId('nt')
     data.allThreads.unshift({
       id,
       projectId: data.currentProjectId,
       ...clean,
+      ccIds: uniqueIds(clean.ccIds),
       state: 'queued',
       parentThreadId: null,
       createdAt: nowIso(),
@@ -201,6 +206,7 @@ export const useThreadStore = defineStore('thread', () => {
     if (patch.title !== undefined && !patch.title.trim()) return false
     if (data.rejectOwner(patch.ownerId, 'THREAD_OWNER_NOT_FOUND', thread.ownerId)) return false
     if (data.rejectPart(patch.partId, thread.partId)) return false
+    if (data.rejectCc(patch.ccIds, thread.ccIds)) return false
     const clean: ThreadPatch = {}
     if (patch.title !== undefined) clean.title = thread.title = patch.title.trim()
     if (patch.description !== undefined)
@@ -209,6 +215,10 @@ export const useThreadStore = defineStore('thread', () => {
     if (patch.dueDate !== undefined) clean.dueDate = thread.dueDate = patch.dueDate || null
     if (patch.ownerId !== undefined) clean.ownerId = thread.ownerId = patch.ownerId
     if (patch.partId !== undefined) clean.partId = thread.partId = patch.partId
+    if (patch.ccIds !== undefined) {
+      clean.ccIds = [...patch.ccIds]
+      thread.ccIds = uniqueIds(patch.ccIds)
+    }
     if (!data.mock) {
       void data.save(`thread:${threadId}`, () => api.patchThread(threadId, clean), replaceThread)
     }

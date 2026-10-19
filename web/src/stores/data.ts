@@ -14,6 +14,7 @@ import {
   threads,
 } from '@/fixtures'
 import { canCreateProject, canManageProject, canSeeProject } from '@/lib/access'
+import { CC_MAX } from '@/lib/check'
 import { assignableMembers, memberLabel } from '@/lib/member'
 import { toastError } from '@/lib/notify'
 import { makeTaskKeyPrefix } from '@/lib/project'
@@ -62,6 +63,14 @@ export const useDataStore = defineStore('data', () => {
   const allEntries = ref<Entry[]>(mock ? structuredClone(entries) : [])
   const allTasks = ref<Task[]>(mock ? structuredClone(tasks) : [])
   const taskThreads = ref<TaskThreadLink[]>(mock ? structuredClone(taskThreadLinks) : [])
+  /* 목업의 확인 요청 보내기가 화면에서 결정하거나 만든 안건까지 서버처럼 따지게 */
+  if (mock)
+    api.provideMockWorld(() => ({
+      threads: allThreads.value,
+      entries: allEntries.value,
+      tasks: allTasks.value,
+      taskThreads: taskThreads.value,
+    }))
   /** 파트와 소속. 서버 모드는 고른 프로젝트 하나치, 목업은 전부 — 프로젝트로 거르는 것은 part 스토어다 */
   const parts = ref<Part[]>(mock ? structuredClone(partFixtures) : [])
   const partMembers = ref<PartMember[]>(mock ? structuredClone(partMemberFixtures) : [])
@@ -428,6 +437,41 @@ export const useDataStore = defineStore('data', () => {
     return true
   }
 
+  /**
+   * 목업 갈래가 서버처럼 참조를 거른다 — null · 21명 이상이면 422(겹치기 전에 센다),
+   * 새로 넣은 사람이 고른 프로젝트의 활성 멤버가 아니면 MEMBER_NOT_IN_PROJECT 로 걸린 자리 전부(겹친 자리까지)를 짚는다.
+   * 이미 참조에 있던 사람(kept)은 그사이 빠졌어도 그대로 둘 수 있다. 거절했으면 서버와 같은 코드로 알리고 true
+   */
+  function rejectCc(ccIds: string[] | null | undefined, kept: string[] = []) {
+    if (!mock || ccIds === undefined) return false
+    if (ccIds === null || ccIds.length > CC_MAX) {
+      toastError(
+        new ApiError(422, {
+          code: 'VALIDATION_ERROR',
+          message: '입력값이 올바르지 않습니다.',
+          detail: {
+            ccIds: ccIds === null ? '참조는 목록이어야 합니다.' : `참조는 ${CC_MAX}명까지입니다.`,
+          },
+        }),
+      )
+      return true
+    }
+    const detail: Record<string, string> = {}
+    ccIds.forEach((id, i) => {
+      if (!kept.includes(id) && !assignable.value.some((m) => m.id === id))
+        detail[`ccIds.${i}`] = '이 프로젝트에 부여되지 않았거나 비활성인 사람입니다.'
+    })
+    if (Object.keys(detail).length === 0) return false
+    toastError(
+      new ApiError(400, {
+        code: 'MEMBER_NOT_IN_PROJECT',
+        message: '이 프로젝트에 부여되지 않은 사람입니다.',
+        detail,
+      }),
+    )
+    return true
+  }
+
   /** 사용자 관리에서 등록 · 수정한 것을 멤버 목록에 맞춘다 */
   function upsertMember(member: Member) {
     const at = allMembers.value.findIndex((m) => m.id === member.id)
@@ -495,6 +539,7 @@ export const useDataStore = defineStore('data', () => {
     upsertMember,
     rejectOwner,
     rejectPart,
+    rejectCc,
     renameProject,
     grantMember,
     revokeMember,

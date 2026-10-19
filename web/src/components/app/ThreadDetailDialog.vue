@@ -72,6 +72,12 @@ function setOwner(value: string | null) {
   if (t && value !== t.ownerId) threadStore.updateThread(t.id, { ownerId: value })
 }
 
+/* 참조는 통째로 바꾼다 — 칩 하나를 더하거나 빼도 목록 전체를 보낸다 */
+function setCc(value: string[]) {
+  const t = detail.value?.thread
+  if (t && value.join() !== t.ccIds.join()) threadStore.updateThread(t.id, { ccIds: value })
+}
+
 function setPart(value: string | null) {
   const t = detail.value?.thread
   if (t && value !== t.partId) threadStore.updateThread(t.id, { partId: value })
@@ -111,11 +117,7 @@ function setPart(value: string | null) {
             <ThreadDecisionPanel :detail="detail" @open-thread="(id) => emit('open-thread', id)" />
           </ThreadFields>
 
-          <CheckRequestSection
-            target-type="thread"
-            :target-id="detail.thread.id"
-            :target-label="detail.thread.title"
-          />
+          <CheckRequestSection :thread-id="detail.thread.id" />
 
           <section class="flex flex-col gap-3.5">
             <div class="flex items-baseline gap-2">
@@ -182,10 +184,12 @@ function setPart(value: string | null) {
           :due-date="detail.thread.dueDate ?? ''"
           :owner-id="detail.thread.ownerId"
           :part-id="detail.thread.partId"
+          :cc-ids="detail.thread.ccIds"
           :overdue="detail.overdue"
           @update:due-date="setDueDate"
           @update:owner-id="setOwner"
           @update:part-id="setPart"
+          @update:cc-ids="setCc"
         >
           <template #top>
             <div class="flex items-center gap-2">

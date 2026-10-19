@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
-import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
@@ -299,12 +298,6 @@ const threadChoices = computed(() => {
             @link-thread="(id) => taskStore.linkThread(detail!.task.id, id)"
             @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
             @open-thread="(id) => emit('open-thread', id)"
-          />
-
-          <CheckRequestSection
-            target-type="task"
-            :target-id="detail.task.id"
-            :target-label="`${detail.task.key} ${detail.task.title}`"
           />
 
           <div class="h-px bg-border" />

@@ -1,5 +1,5 @@
 export { ApiError, isUnreachable, messageOf, setUnauthenticatedHandler } from './client'
-export { resetMockAuth } from './mockAuth'
+export { provideMockWorld, resetMockAuth } from './mockAuth'
 export { isMockMode } from './mode'
 export * from './admin'
 export * from './auth'

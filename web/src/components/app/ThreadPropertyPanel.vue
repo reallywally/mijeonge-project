@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import CcField from '@/components/app/CcField.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,8 @@ defineProps<{ overdue?: boolean }>()
 const dueDate = defineModel<string>('dueDate', { required: true })
 const ownerId = defineModel<string | null>('ownerId', { required: true })
 const partId = defineModel<string | null>('partId', { required: true })
+/* 참조 — 담당자 곁에 둔다. 확인 요청을 받는 사람이 담당 작업 말고 여기서도 나온다 */
+const ccIds = defineModel<string[]>('ccIds', { required: true })
 
 const data = useDataStore()
 const NONE = 'none'
@@ -84,6 +87,8 @@ const ghost =
           </Select>
         </dd>
       </div>
+
+      <CcField v-model="ccIds" />
 
       <PartField v-model="partId" :trigger-class="ghost" />
     </dl>

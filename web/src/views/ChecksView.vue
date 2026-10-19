@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ArrowRight, Check, Loader2, RefreshCw } from 'lucide-vue-next'
+import { Check, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import CheckStateLabel from '@/components/app/CheckStateLabel.vue'
-import CheckTargetChip from '@/components/app/CheckTargetChip.vue'
-import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
+import CheckThreadChip from '@/components/app/CheckThreadChip.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +19,7 @@ import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
 
 /* 확인 요청 — 받은 것 · 보낸 것. 프로젝트의 요청 전부를 받아 여기서 거르고 줄 세운다.
+   보낸 것은 한 번에 보낸 묶음(결정 하나)이 한 줄이고, 펼치면 사람별이다.
    [내 파트 | 전체] 는 두지 않는다 — 나에게 온 것 · 내가 보낸 것은 파트와 상관없다 */
 const data = useDataStore()
 const checks = useCheckStore()
@@ -38,6 +38,9 @@ const tabs = computed<{ key: Tab; label: string; count: number }[]>(() => [
 ])
 
 const nameOf = (id: string) => data.memberName(id) ?? '알 수 없음'
+/** 요청이 알린 결정 한 줄 */
+const decisionText = (entryId: string) =>
+  data.allEntries.find((e) => e.id === entryId)?.text ?? '지워진 결정'
 
 const busyId = ref<string | null>(null)
 async function confirm(checkId: string) {
@@ -47,29 +50,24 @@ async function confirm(checkId: string) {
   busyId.value = null
 }
 
-/* 칩을 누르면 기존 상세 팝업. 이 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 */
+const expanded = ref<string[]>([])
+function toggle(entryId: string) {
+  expanded.value = expanded.value.includes(entryId)
+    ? expanded.value.filter((id) => id !== entryId)
+    : [...expanded.value, entryId]
+}
+
+/* 칩을 누르면 안건 상세 팝업. 이 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 */
 const threadDetailId = ref<string | null>(null)
-const taskDetailId = ref<string | null>(null)
 const threadOpen = computed({
   get: () => threadDetailId.value !== null,
   set: (open: boolean) => {
     if (!open) threadDetailId.value = null
   },
 })
-const taskOpen = computed({
-  get: () => taskDetailId.value !== null,
-  set: (open: boolean) => {
-    if (!open) taskDetailId.value = null
-  },
-})
 
 function openThread(id: string) {
-  taskDetailId.value = null
   threadDetailId.value = id
-}
-function openTask(id: string) {
-  threadDetailId.value = null
-  taskDetailId.value = id
 }
 </script>
 
@@ -110,8 +108,8 @@ function openTask(id: string) {
           <div class="flex grow flex-col gap-2.5">
             <h1 class="text-2xl font-semibold tracking-tight">확인 요청</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-              작업 · 안건에 걸린 '확인해 주세요' 한 줄입니다. 대기와 확인 두 상태뿐이고, 확인하면
-              보낸 사람에게 시각이 남습니다.
+              결정된 안건의 '이 결정 확인해 주세요' 입니다. 대기와 확인 두 상태뿐이고, 확인하면 보낸
+              사람에게 시각이 남습니다.
             </p>
           </div>
           <Button
@@ -152,7 +150,9 @@ function openTask(id: string) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/50 hover:bg-muted/50">
-                <TableHead class="h-10 text-xs font-medium text-muted-foreground">내용</TableHead>
+                <TableHead class="h-10 text-xs font-medium text-muted-foreground"
+                  >안건 · 결정</TableHead
+                >
                 <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
                   >보낸 사람</TableHead
                 >
@@ -173,15 +173,12 @@ function openTask(id: string) {
                 :data-check-received="c.id"
               >
                 <TableCell class="min-w-0 py-2.5">
-                  <p class="truncate text-sm">{{ c.text }}</p>
-                  <div class="mt-1.5 flex min-w-0">
-                    <CheckTargetChip
-                      :target-type="c.targetType"
-                      :target-id="c.targetId"
-                      @open-task="openTask"
-                      @open-thread="openThread"
-                    />
+                  <div class="flex min-w-0">
+                    <CheckThreadChip :thread-id="c.threadId" @open="openThread" />
                   </div>
+                  <p class="mt-1.5 truncate text-sm" data-check-decision>
+                    {{ decisionText(c.entryId) }}
+                  </p>
                 </TableCell>
                 <TableCell class="text-sm">{{ nameOf(c.senderId) }}</TableCell>
                 <TableCell class="text-sm text-muted-foreground">{{
@@ -210,7 +207,7 @@ function openTask(id: string) {
           </Table>
         </div>
 
-        <!-- 보낸 것 — 최근 순 -->
+        <!-- 보낸 것 — 최근 순, 한 번에 보낸 묶음이 한 줄 -->
         <div
           v-else
           class="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
@@ -220,52 +217,71 @@ function openTask(id: string) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/50 hover:bg-muted/50">
-                <TableHead class="h-10 text-xs font-medium text-muted-foreground">내용</TableHead>
-                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
-                  >받는 사람</TableHead
+                <TableHead class="h-10 text-xs font-medium text-muted-foreground"
+                  >안건 · 결정</TableHead
                 >
                 <TableHead class="h-10 w-[112px] text-xs font-medium text-muted-foreground"
                   >보낸 날</TableHead
                 >
                 <TableHead
                   class="h-10 w-[136px] text-right text-xs font-medium text-muted-foreground"
-                  >상태</TableHead
+                  >확인</TableHead
                 >
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow
-                v-for="c in checks.sent"
-                :key="c.id"
-                class="hover:bg-transparent"
-                :data-check-sent="c.id"
-              >
-                <TableCell class="min-w-0 py-2.5">
-                  <p class="truncate text-sm">{{ c.text }}</p>
-                  <div class="mt-1.5 flex min-w-0">
-                    <CheckTargetChip
-                      :target-type="c.targetType"
-                      :target-id="c.targetId"
-                      @open-task="openTask"
-                      @open-thread="openThread"
-                    />
-                  </div>
-                </TableCell>
-                <TableCell class="text-sm">
-                  <span class="inline-flex items-center gap-1">
-                    <ArrowRight class="size-3 text-muted-foreground" />
-                    {{ nameOf(c.recipientId) }}
-                  </span>
-                </TableCell>
-                <TableCell class="text-sm text-muted-foreground">{{
-                  dayTime(c.createdAt)
-                }}</TableCell>
-                <TableCell class="text-right">
-                  <CheckStateLabel :confirmed-at="c.confirmedAt" />
-                </TableCell>
-              </TableRow>
+              <template v-for="b in checks.sent" :key="b.entryId">
+                <TableRow class="hover:bg-transparent" :data-check-sent="b.entryId">
+                  <TableCell class="min-w-0 py-2.5">
+                    <div class="flex min-w-0">
+                      <CheckThreadChip :thread-id="b.threadId" @open="openThread" />
+                    </div>
+                    <p class="mt-1.5 truncate text-sm" data-check-decision>
+                      {{ decisionText(b.entryId) }}
+                    </p>
+                  </TableCell>
+                  <TableCell class="text-sm text-muted-foreground">{{
+                    dayTime(b.createdAt)
+                  }}</TableCell>
+                  <TableCell class="text-right">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-sm hover:bg-accent"
+                      :aria-expanded="expanded.includes(b.entryId)"
+                      data-check-expand
+                      @click="toggle(b.entryId)"
+                    >
+                      <span data-check-progress>확인 {{ b.confirmed }} / {{ b.rows.length }}</span>
+                      <ChevronDown
+                        v-if="expanded.includes(b.entryId)"
+                        class="size-3.5 text-muted-foreground"
+                      />
+                      <ChevronRight v-else class="size-3.5 text-muted-foreground" />
+                    </button>
+                  </TableCell>
+                </TableRow>
+                <TableRow
+                  v-if="expanded.includes(b.entryId)"
+                  class="bg-muted/50 hover:bg-muted/50"
+                  :data-check-people="b.entryId"
+                >
+                  <TableCell colspan="3" class="py-1.5">
+                    <ol class="flex flex-col">
+                      <li
+                        v-for="c in b.rows"
+                        :key="c.id"
+                        class="flex min-h-8 items-center gap-2.5 pl-6 text-sm"
+                        :data-check-row="c.id"
+                      >
+                        <span class="min-w-0 grow truncate">{{ nameOf(c.recipientId) }}</span>
+                        <CheckStateLabel :confirmed-at="c.confirmedAt" />
+                      </li>
+                    </ol>
+                  </TableCell>
+                </TableRow>
+              </template>
               <TableRow v-if="checks.sent.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="4" class="h-20 text-center text-sm text-muted-foreground">
+                <TableCell colspan="3" class="h-20 text-center text-sm text-muted-foreground">
                   보낸 확인 요청이 없습니다.
                 </TableCell>
               </TableRow>
@@ -278,12 +294,6 @@ function openTask(id: string) {
     <ThreadDetailDialog
       v-model:open="threadOpen"
       :thread-id="threadDetailId"
-      @open-thread="openThread"
-    />
-    <TaskDetailDialog
-      v-model:open="taskOpen"
-      :task-id="taskDetailId"
-      @open-task="openTask"
       @open-thread="openThread"
     />
   </AppShell>

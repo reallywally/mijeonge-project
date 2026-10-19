@@ -19,6 +19,7 @@ export const threads: Thread[] = [
     ownerId: 'u3',
     parentThreadId: null,
     partId: 'pt1',
+    ccIds: ['u1'],
     createdAt: '2026-09-08T00:30:00Z',
   },
   {
@@ -32,6 +33,7 @@ export const threads: Thread[] = [
     ownerId: 'u3',
     parentThreadId: null,
     partId: 'pt1',
+    ccIds: ['u2', 'u4'],
     createdAt: '2026-09-08T00:35:00Z',
   },
   {
@@ -46,6 +48,7 @@ export const threads: Thread[] = [
     ownerId: 'u1',
     parentThreadId: null,
     partId: 'pt2',
+    ccIds: [],
     createdAt: '2026-09-09T02:10:00Z',
   },
   {
@@ -59,6 +62,7 @@ export const threads: Thread[] = [
     ownerId: null,
     parentThreadId: null,
     partId: 'pt1',
+    ccIds: [],
     createdAt: '2026-09-10T06:20:00Z',
   },
   // 시나리오 2 — 두 번 미뤄진 안건
@@ -74,6 +78,7 @@ export const threads: Thread[] = [
     ownerId: 'u4',
     parentThreadId: null,
     partId: 'pt3',
+    ccIds: [],
     createdAt: '2026-09-07T00:10:00Z',
   },
   // 시나리오 3 — 한 번에 정해진 안건
@@ -88,6 +93,7 @@ export const threads: Thread[] = [
     ownerId: 'u1',
     parentThreadId: null,
     partId: null,
+    ccIds: ['u2'],
     createdAt: '2026-09-14T01:00:00Z',
   },
   {
@@ -101,6 +107,7 @@ export const threads: Thread[] = [
     ownerId: 'u4',
     parentThreadId: null,
     partId: 'pt2',
+    ccIds: [],
     createdAt: '2026-09-12T05:40:00Z',
   },
   {
@@ -114,6 +121,7 @@ export const threads: Thread[] = [
     ownerId: 'u1',
     parentThreadId: null,
     partId: 'pt2',
+    ccIds: [],
     createdAt: '2026-09-12T05:45:00Z',
   },
   {
@@ -127,6 +135,7 @@ export const threads: Thread[] = [
     ownerId: 'u2',
     parentThreadId: null,
     partId: null,
+    ccIds: [],
     createdAt: '2026-09-15T00:20:00Z',
   },
   // 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
@@ -141,6 +150,7 @@ export const threads: Thread[] = [
     ownerId: 'u2',
     parentThreadId: null,
     partId: null,
+    ccIds: [],
     createdAt: '2026-09-16T01:05:00Z',
   },
 ]

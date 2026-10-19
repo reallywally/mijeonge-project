@@ -1,109 +1,68 @@
 import { id, mockError, request } from '@/api/client'
-import { forbidden, later, memberOf, mockDb, requireMe, requireProject } from '@/api/mockAuth'
+import {
+  forbidden,
+  later,
+  memberOf,
+  mockDb,
+  mockWorld,
+  requireMe,
+  requireProject,
+} from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
-import { tasks, threads } from '@/fixtures'
 import { canSeeProject } from '@/lib/access'
-import { CHECK_RECIPIENTS_MAX, CHECK_TEXT_MAX, checkTextLength } from '@/lib/check'
+import { checkRecipients, checksOfEntry, latestDecision } from '@/lib/check'
 import { nowIso } from '@/lib/date'
-import type {
-  CheckPendingCount,
-  CheckRequest,
-  CheckRequestInput,
-  CheckTargetType,
-} from '@/types/domain'
+import type { CheckPendingCount, CheckRequest } from '@/types/domain'
 
 /* 확인 요청 (docs/api/check.md). 목업 갈래도 서버와 같은 순서 · 같은 코드로 거절한다 —
-   422(모양 · 글자 수 · 사람 수) → CHECK_TARGET_NOT_FOUND → CHECK_RECIPIENT_SELF → MEMBER_NOT_IN_PROJECT */
-
-const invalid = (detail: Record<string, string>) =>
-  mockError(422, 'VALIDATION_ERROR', '입력값이 올바르지 않습니다.', detail)
+   THREAD_NOT_FOUND → CHECK_THREAD_NOT_DECIDED → CHECK_ALREADY_SENT → CHECK_NO_RECIPIENTS */
 
 const notFound = () => mockError(404, 'CHECK_NOT_FOUND', '확인 요청을 찾을 수 없습니다.')
-
-/* 화면에서 만든 목업 작업 · 안건은 픽스처에 없어 어느 프로젝트 것인지 모른다 — 그런 id 는 통과시키고,
-   픽스처에 있는데 다른 프로젝트 · 다른 종류면 거절한다 */
-function targetKnownElsewhere(projectId: string, type: CheckTargetType, targetId: string) {
-  const own = type === 'task' ? tasks : threads
-  const found = own.find((r) => r.id === targetId)
-  if (found) return found.projectId !== projectId
-  const other = type === 'task' ? threads : tasks
-  return other.some((r) => r.id === targetId)
-}
-
-function validate(input: CheckRequestInput): Record<string, string> {
-  const detail: Record<string, string> = {}
-  if (input.targetType !== 'task' && input.targetType !== 'thread')
-    detail.targetType = '작업이나 안건이어야 합니다.'
-  if (typeof input.targetId !== 'string' || !input.targetId)
-    detail.targetId = '걸 작업이나 안건이 없습니다.'
-  if (!Array.isArray(input.recipientIds) || input.recipientIds.length === 0)
-    detail.recipientIds = '받는 사람을 골라 주세요.'
-  else if (input.recipientIds.length > CHECK_RECIPIENTS_MAX)
-    detail.recipientIds = `받는 사람은 ${CHECK_RECIPIENTS_MAX}명까지입니다.`
-  const n = typeof input.text === 'string' ? checkTextLength(input.text) : 0
-  if (n === 0) detail.text = '내용을 적어 주세요.'
-  else if (n > CHECK_TEXT_MAX) detail.text = `내용은 ${CHECK_TEXT_MAX}자까지입니다.`
-  return detail
-}
 
 const mock = {
   list(projectId: string): CheckRequest[] {
     requireProject(requireMe(), projectId)
     return structuredClone(mockDb().checks.filter((c) => c.projectId === projectId))
   },
-  send(projectId: string, input: CheckRequestInput): CheckRequest[] {
+  send(threadId: string): CheckRequest[] {
     const me = requireMe()
-    requireProject(me, projectId)
-    const detail = validate(input)
-    if (Object.keys(detail).length > 0) throw invalid(detail)
-    if (targetKnownElsewhere(projectId, input.targetType, input.targetId)) {
-      const what = input.targetType === 'task' ? '작업' : '안건'
-      throw mockError(
-        400,
-        'CHECK_TARGET_NOT_FOUND',
-        `이 프로젝트에서 그 ${what}을 찾을 수 없습니다.`,
-        { targetId: `${what}을 찾을 수 없습니다.` },
-      )
-    }
-    /* 겹친 사람은 처음 나온 자리 하나로 — 오류는 보낸 배열의 자리를 짚는다 */
-    const firstAt = new Map<string, number>()
-    input.recipientIds.forEach((memberId, i) => {
-      if (!firstAt.has(memberId)) firstAt.set(memberId, i)
-    })
-    if (firstAt.has(me.id))
-      throw mockError(
-        400,
-        'CHECK_RECIPIENT_SELF',
-        '자기 자신에게는 확인 요청을 보낼 수 없습니다.',
-        { [`recipientIds.${firstAt.get(me.id)}`]: '나 자신은 고를 수 없습니다.' },
-      )
+    const world = mockWorld()
+    const thread = world.threads.find((t) => t.id === threadId)
+    /* 남의 프로젝트 안건은 없는 것처럼 */
+    if (!thread || !canSeeProject(me, thread.projectId))
+      throw mockError(404, 'THREAD_NOT_FOUND', '안건을 찾을 수 없습니다.')
+    const decision = latestDecision(world.entries, threadId)
+    if (thread.state !== 'decided' || !decision)
+      throw mockError(400, 'CHECK_THREAD_NOT_DECIDED', '결정된 안건만 확인을 요청할 수 있습니다.')
     const db = mockDb()
-    const outside: Record<string, string> = {}
-    for (const [memberId, i] of firstAt) {
-      const granted = db.grants.some((g) => g.projectId === projectId && g.memberId === memberId)
-      if (!granted || !memberOf(memberId)?.active)
-        outside[`recipientIds.${i}`] = '이 프로젝트에 부여되지 않았거나 비활성인 사람입니다.'
-    }
-    if (Object.keys(outside).length > 0)
+    if (checksOfEntry(db.checks, decision.id).length > 0)
+      throw mockError(409, 'CHECK_ALREADY_SENT', '이 결정은 이미 확인을 요청했습니다.')
+    const recipients = checkRecipients({
+      thread,
+      tasks: world.tasks,
+      taskThreads: world.taskThreads,
+      senderId: me.id,
+      eligible: (memberId) =>
+        !!memberOf(memberId)?.active &&
+        db.grants.some((g) => g.projectId === thread.projectId && g.memberId === memberId),
+    })
+    if (recipients.length === 0)
       throw mockError(
         400,
-        'MEMBER_NOT_IN_PROJECT',
-        '이 프로젝트에 부여되지 않은 사람입니다.',
-        outside,
+        'CHECK_NO_RECIPIENTS',
+        '받을 사람이 없습니다. 연결 작업 담당자나 참조를 더해 주세요.',
       )
 
-    const text = input.text.trim()
     const createdAt = nowIso()
-    const made = [...firstAt.keys()].map((recipientId) => {
+    const made = recipients.map((recipientId) => {
       db.checkSeq += 1
       const row: CheckRequest = {
         id: `mck${db.checkSeq}`,
-        projectId,
-        targetType: input.targetType,
-        targetId: input.targetId,
+        projectId: thread.projectId,
+        threadId,
+        entryId: decision.id,
         senderId: me.id,
         recipientId,
-        text,
         createdAt,
         confirmedAt: null,
       }
@@ -144,11 +103,11 @@ export const fetchChecks = (projectId: string) =>
     ? later(() => mock.list(projectId))
     : request<CheckRequest[]>('GET', `/projects/${id(projectId)}/checks`)
 
-/** 보내기 — 받는 사람 수만큼 줄이 생긴다(recipientIds 순서). 보낸 사람은 로그인한 사람이다 */
-export const sendCheck = (projectId: string, input: CheckRequestInput) =>
+/** 보내기 — 본문 없음. 받는 사람은 서버가 정하고 그 수만큼 줄이 생긴다. 보낸 사람은 로그인한 사람이다 */
+export const sendCheck = (threadId: string) =>
   isMockMode()
-    ? later(() => mock.send(projectId, input))
-    : request<CheckRequest[]>('POST', `/projects/${id(projectId)}/checks`, input)
+    ? later(() => mock.send(threadId))
+    : request<CheckRequest[]>('POST', `/threads/${id(threadId)}/checks`)
 
 /** 확인 — 받은 사람만(그 밖은 403). 이미 확인했으면 그대로 돌려준다 */
 export const confirmCheck = (checkId: string) =>

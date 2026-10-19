@@ -2,22 +2,41 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { messageOf } from '@/api'
-import { isPending, sortReceived, sortSent } from '@/lib/check'
+import {
+  type CheckBatch,
+  type CheckBlock,
+  checkBlock,
+  checkRecipients,
+  groupByEntry,
+  isPending,
+  latestDecision,
+  sortReceived,
+  sortSentBatches,
+} from '@/lib/check'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
-import type {
-  CheckPendingCount,
-  CheckRequest,
-  CheckRequestInput,
-  CheckTargetType,
-} from '@/types/domain'
+import type { CheckPendingCount, CheckRequest, Entry } from '@/types/domain'
+
+/** 안건 상세의 확인 요청 칸이 그리는 것 */
+export interface ThreadCheckState {
+  /** 지금의 최근 결정 — 없으면 결정 전 */
+  decision: Entry | null
+  /** 누르면 받을 사람 — 서버와 같은 셈으로 미리 센다 */
+  recipientIds: string[]
+  /** 못 누르는 까닭. 누를 수 있으면 null */
+  block: CheckBlock | null
+  /** 지금 결정으로 보낸 묶음 */
+  current: CheckBatch | null
+  /** 앞 결정들로 보낸 묶음 — 최근 순 */
+  older: CheckBatch[]
+}
 
 /** 배지를 다시 받는 간격 (docs/api/check.md '화면') */
 export const CHECK_BADGE_INTERVAL_MS = 60_000
 
 /**
- * 확인 요청 — 고른 프로젝트의 요청 전부를 들고 받은 것 · 보낸 것 · 작업/안건별을 계산한다('집계는 프론트가 한다').
+ * 확인 요청 — 고른 프로젝트의 요청 전부를 들고 받은 것 · 보낸 것 · 안건별을 계산한다('집계는 프론트가 한다').
  * 목록은 '확인 요청' 화면에 들어올 때 · 상세를 열 때 · 내가 보내거나 확인한 뒤 받는다.
  * 배지(pending-count)는 앱이 뜰 때 · 창 포커스 · 60초마다 — startBadge 가 맡는다.
  * [내 파트 | 전체] 는 따르지 않는다 — 나에게 온 것 · 내가 보낸 것은 파트와 상관없다
@@ -43,12 +62,40 @@ export const useCheckStore = defineStore('check', () => {
   const received = computed(() =>
     sortReceived(current.value.filter((c) => c.recipientId === me.value)),
   )
-  const sent = computed(() => sortSent(current.value.filter((c) => c.senderId === me.value)))
+  /** 보낸 것 — 한 번에 보낸 묶음(결정 하나)이 한 줄 */
+  const sent = computed(() =>
+    sortSentBatches(groupByEntry(current.value.filter((c) => c.senderId === me.value))),
+  )
   const receivedPending = computed(() => received.value.filter(isPending))
 
-  /** 그 작업 · 안건에 걸린 요청 — 오래된 것 먼저 */
-  const forTarget = (type: CheckTargetType, targetId: string) =>
-    current.value.filter((c) => c.targetType === type && c.targetId === targetId)
+  /** 받는 사람 셈의 '활성 멤버' — 고른 프로젝트에 부여된 활성 멤버 */
+  const eligible = (memberId: string) => data.assignable.some((m) => m.id === memberId)
+
+  /**
+   * 안건 상세의 확인 요청 — 최근 결정 · 받을 사람 · 못 누르는 까닭 · 보낸 묶음.
+   * 목록을 아직 못 받았으면 보냈는지 모르므로 누를 수 없게 둔다(sent 로 본다)
+   */
+  function forThread(threadId: string): ThreadCheckState | null {
+    const thread = data.allThreads.find((t) => t.id === threadId)
+    if (!thread) return null
+    const decision = latestDecision(data.allEntries, threadId)
+    const batches = groupByEntry(current.value.filter((c) => c.threadId === threadId))
+    const now = decision ? (batches.find((b) => b.entryId === decision.id) ?? null) : null
+    const recipientIds = checkRecipients({
+      thread,
+      tasks: data.allTasks,
+      taskThreads: data.taskThreads,
+      senderId: me.value,
+      eligible,
+    })
+    return {
+      decision,
+      recipientIds,
+      block: checkBlock(thread, decision, now !== null || !loaded.value, recipientIds.length),
+      current: now,
+      older: sortSentBatches(batches.filter((b) => b !== now)),
+    }
+  }
 
   /** 내가 받은 대기만 [확인] 할 수 있다 */
   const canConfirm = (c: CheckRequest) => isPending(c) && c.recipientId === me.value
@@ -78,25 +125,21 @@ export const useCheckStore = defineStore('check', () => {
   }
 
   /**
-   * 보낸다. 실패하면 서버 message 를 돌려준다 — 대화 상자가 그대로 띄운다.
+   * 그 안건의 최근 결정으로 보낸다 — 본문이 없고 받는 사람은 서버가 정한다.
+   * 보낸 줄 수를 돌려준다. 실패하면 알리고(이미 보냈으면 목록을 다시 받아 버튼이 닫힌다) null.
    * 받는 사람의 배지는 그쪽 화면이 다시 받을 때 는다
    */
-  async function send(
-    input: CheckRequestInput,
-  ): Promise<{ ok: true; count: number } | { ok: false; message: string }> {
+  async function send(threadId: string): Promise<number | null> {
     const projectId = data.currentProjectId
     try {
-      const made = await api.sendCheck(projectId, {
-        targetType: input.targetType,
-        targetId: input.targetId,
-        recipientIds: [...input.recipientIds],
-        text: input.text.trim(),
-      })
+      const made = await api.sendCheck(threadId)
       if (rowsProjectId.value === projectId) rows.value = [...rows.value, ...made]
       void load()
-      return { ok: true, count: made.length }
+      return made.length
     } catch (e) {
-      return { ok: false, message: messageOf(e) }
+      toastError(e)
+      void load()
+      return null
     }
   }
 
@@ -176,7 +219,7 @@ export const useCheckStore = defineStore('check', () => {
     received,
     receivedPending,
     sent,
-    forTarget,
+    forThread,
     canConfirm,
     load,
     send,
