@@ -118,7 +118,7 @@ export interface Project {
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
 | `CheckRequest` | `confirmedAt` (스냅샷 밖 — `GET /api/projects/{projectId}/checks` 로만 나간다, `check.md`) |
 
-그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Entry.detail` · `Task.body` 는
+그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Thread.ccIds` · `Entry.detail` · `Task.body` 는
 `[]` 다. 보장은 **세 겹**이고, 한 겹이라도 새면 화면이 `.length` 에서 터진다.
 
 | 겹 | 어떻게 |

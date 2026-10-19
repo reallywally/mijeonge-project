@@ -20,7 +20,7 @@
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
 | `docs/api/part.md` | 파트 — 보기 범위(권한 아님) · 파트 관리 · 작업 · 안건의 `partId` |
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
-| `docs/api/check.md` | 확인 요청 — 작업 · 안건에 붙는 '확인해 주세요' 한 줄 · 받은 것 / 보낸 것 · 배지. 2차 확인율 분석의 테두리 |
+| `docs/api/check.md` | 확인 요청 — 결정된 안건에서 버튼 하나로 연결 작업 담당자 + 참조에게 · 받은 것 / 보낸 것 · 배지. 안건의 참조(`ccIds`). 2차 확인율 분석의 테두리 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
 - 새 도메인의 계약이 길어지면(표 한 줄로 안 끝나면) `docs/api/<도메인>.md` 를 새로 세우고 위 표에 줄을 더한다
@@ -110,8 +110,8 @@
 | PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 연결 |
 | PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 연결 |
 | PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 연결 |
-| POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 연결 |
-| PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` 는 통째로 갈아끼운다. 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 연결 |
+| POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` · `ccIds`(참조, `check.md`) 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 연결 |
+| PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate` · `ccIds`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` · `ccIds` 는 통째로 갈아끼운다(`ccIds` 에 `null` 도 422). 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 연결 |
 | GET | `/api/tasks/{taskId}/comments` | 작업 댓글 목록 — **등록 순(`seq` 오름차순, 오래된 것 먼저)**. 없는 작업은 404 `TASK_NOT_FOUND` | `TaskComment[]` | 구현 |
 | POST | `/api/tasks/{taskId}/comments` | 댓글 등록 — `{ body }`. `body` 는 앞뒤 공백을 떼고 비면 422. **작성자는 로그인한 사람** — `authorId` 를 보내도 무시한다 (8단계) | `TaskComment` · 201 | 구현 |
 | PATCH | `/api/comments/{commentId}` | 댓글 본문 수정 — `{ body }`. `editedAt` 이 지금 시각이 된다. 빈 `body` 는 422, 없는 댓글은 404 `COMMENT_NOT_FOUND`. **작성자만** 고친다 — 그 밖은 403 `FORBIDDEN` (8단계) | `TaskComment` | 구현 |
@@ -163,19 +163,19 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 다섯) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 다섯 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 |
 | POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`threadIds` · `taskIds`)을 Claude 가 읽고 먼저 정할 것 · 바로 풀 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 |
 
-확인 요청(`server/PLAN.md` 11단계 · `web/PLAN.md` 12단계). 모양은 `docs/api/check.md` 다. 기획은 `docs/check-request-proposal.md`, 결정은 Q38 ~ Q41.
+확인 요청(`server/PLAN.md` 11단계 · `web/PLAN.md` 12단계). 모양은 `docs/api/check.md` 다. 기획은 `docs/check-request-proposal.md`, 결정은 Q38 ~ Q44.
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/projects/{projectId}/checks` | 그 프로젝트의 확인 요청 전부(`seq` 오름차순). 받은 것 · 보낸 것 · 작업/안건별은 화면이 거른다 | `CheckRequest[]` | 구현 |
-| POST | `/api/projects/{projectId}/checks` | 보내기 — 작업 · 안건 하나, 받는 사람 1 ~ 20명, 29자까지. 받는 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 받는 사람의 부하를 찍는다 | `CheckRequest[]` · 201 | 구현 |
+| POST | `/api/threads/{threadId}/checks` | 보내기 — 본문 없음. 결정된 안건 · 최근 결정 하나에 한 번. 받는 사람은 연결 작업 담당자 + 참조(나 빼고). 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 부하를 찍는다 | `CheckRequest[]` · 201 | 구현 (2026-10-19 고침) |
 | POST | `/api/checks/{checkId}/confirm` | 확인 — 받은 사람만(403 `FORBIDDEN`), 멱등 | `CheckRequest` | 구현 |
 | GET | `/api/checks/pending-count` | 헤더 배지 — 내 대기 수, 합과 프로젝트별 | `CheckPendingCount` | 구현 |
 
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q42).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q45).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |
