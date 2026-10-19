@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppBootScreen from '@/components/app/AppBootScreen.vue'
 import ChatWidget from '@/components/app/ChatWidget.vue'
 import { Toaster } from '@/components/ui/sonner'
 import { emptyProjectsHome } from '@/lib/access'
 import { useAuthStore } from '@/stores/auth'
+import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
 
 const data = useDataStore()
@@ -13,6 +15,14 @@ const route = useRoute()
 const router = useRouter()
 
 void data.boot()
+
+/* 확인 요청 배지 — 앱이 뜰 때 · 창 포커스 · 60초마다. 로그인해 앱이 서 있는 동안만 돈다 */
+const checks = useCheckStore()
+watch(
+  () => data.status === 'ready' && auth.me !== null,
+  (on) => (on ? checks.startBadge() : checks.stopBadge()),
+  { immediate: true },
+)
 
 /* 처음 뜰 때 실패했다가 다시 붙은 경우 — 라우터 가드는 이미 지나갔으니 갈 곳을 여기서 정한다 (API.md Q18) */
 async function retry() {

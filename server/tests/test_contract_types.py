@@ -236,3 +236,53 @@ async def test_risk_report_matches_contract(client: AsyncClient) -> None:
             for field, value in row.items():
                 if value is None and name in FIELDS:
                     assert FIELDS[name][field], f"{name}.{field} 가 null 로 나갔다"
+
+
+# 확인 요청 — docs/api/check.md '모양'(2026-10-19 고침). 어긋나면 계약 쪽이 기준이다.
+# null 이 나갈 수 있는 자리는 `CheckRequest.confirmedAt` 하나다
+CHECK_SHAPES: dict[str, set[str]] = {
+    "CheckRequest": {
+        "id",
+        "projectId",
+        "threadId",
+        "entryId",
+        "senderId",
+        "recipientId",
+        "createdAt",
+        "confirmedAt",
+    },
+    "CheckPendingCount": {"total", "byProject"},
+}
+CHECK_NULLABLE = {"CheckRequest": {"confirmedAt"}}
+
+
+@pytest.mark.parametrize("name", sorted(CHECK_SHAPES))
+def test_check_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드 · null 자리가 계약과 같아야 한다."""
+    if name in FIELDS:
+        assert set(FIELDS[name]) == CHECK_SHAPES[name], f"domain.ts 의 {name} 이 check.md 와 다르다"
+        nullable = {field for field, allowed in FIELDS[name].items() if allowed}
+        assert nullable == CHECK_NULLABLE.get(name, set())
+
+
+def test_check_input_is_gone_from_domain_ts() -> None:
+    """보내기에 본문이 없어졌다 — `CheckRequestInput` 이 남아 있으면 화면이 옛 모양으로 보낸다."""
+    assert "CheckRequestInput" not in FIELDS
+
+
+def test_thread_cc_ids_in_domain_ts() -> None:
+    """참조는 `string[]` 다 — null 이 아니라 [] 로 비운다 (Q17)."""
+    assert FIELDS["Thread"].get("ccIds") is False
+
+
+async def test_check_responses_match_contract(client: AsyncClient) -> None:
+    rows = (await client.get("/api/projects/p1/checks")).json()
+    assert rows, "CheckRequest 를 볼 수 있는 줄이 시드에 없다"
+    for row in rows:
+        assert set(row) == CHECK_SHAPES["CheckRequest"]
+        for field, value in row.items():
+            if value is None:
+                assert field in CHECK_NULLABLE["CheckRequest"], f"CheckRequest.{field} 가 null"
+    assert {row["confirmedAt"] is None for row in rows} == {True, False}
+    count = (await client.get("/api/checks/pending-count")).json()
+    assert set(count) == CHECK_SHAPES["CheckPendingCount"]

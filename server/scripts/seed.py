@@ -22,6 +22,7 @@ from app.db import engine, session_factory
 from app.models import (
     AuthIdentity,
     AuthSession,
+    CheckRequest,
     Entry,
     EntryDetail,
     Member,
@@ -35,10 +36,12 @@ from app.models import (
     TaskLine,
     TaskThreadLink,
     Thread,
+    ThreadCc,
     ThreadOption,
 )
 from app.services.auth import PASSWORD
-from app.time import at
+from app.services.check import recipient_loads
+from app.time import at, today_kst
 
 # createdAt 은 픽스처의 값을 그대로 쓴다 — 계약대로 ISO 8601 UTC(`…Z`) 다.
 
@@ -115,6 +118,8 @@ TASK_PARTS = {
     **dict.fromkeys((f"k{n}" for n in range(6, 17)), "pt2"),
     "k18": "pt3",
 }
+# 참조 — docs/api/check.md '시드 · 목업' 표 그대로. 표에 없는 안건은 []
+THREAD_CC = {"t1": ["u1"], "t2": ["u2", "u4"], "t6": ["u2"]}
 THREAD_PARTS = {
     **dict.fromkeys(("t1", "t2", "t4"), "pt1"),
     **dict.fromkeys(("t3", "t7", "t8"), "pt2"),
@@ -155,6 +160,10 @@ def thread(
         options=[
             ThreadOption(id=f"{id_}o{i + 1}", thread_id=id_, text=text, sort_order=i)
             for i, text in enumerate(options)
+        ],
+        cc=[
+            ThreadCc(thread_id=id_, project_id=project, member_id=member_id, sort_order=i)
+            for i, member_id in enumerate(THREAD_CC.get(id_, []))
         ],
     )
 
@@ -509,9 +518,45 @@ def comments() -> list[TaskComment]:
     ]
 
 
+# 확인 요청 — docs/api/check.md '시드 · 목업' 표 그대로. 프론트 목업이 같은 id 를 쓴다.
+# (id, 안건, 결정, 보낸, 받는, createdAt, confirmedAt).
+# c1 ~ c3 은 t2 의 결정 e3 으로 한 번에 보낸 것이다
+CHECKS = [
+    ("c1", "t2", "e3", "u1", "u3", "2026-10-14T01:00:00Z", None),
+    ("c2", "t2", "e3", "u1", "u2", "2026-10-14T01:00:00Z", "2026-10-14T05:00:00Z"),
+    ("c3", "t2", "e3", "u1", "u4", "2026-10-14T01:00:00Z", None),
+    ("c4", "t1", "e1", "u3", "u1", "2026-10-15T00:30:00Z", None),
+]
+
+
+async def checks(session: AsyncSession) -> list[CheckRequest]:
+    """부하는 목업에 없다 — 넣는 그 시각의 작업 · 안건으로 센다. 작업 · 안건을 먼저 넣는다."""
+    loads = await recipient_loads(
+        session, "p1", sorted({row[4] for row in CHECKS}), today=today_kst()
+    )
+    return [
+        CheckRequest(
+            id=id_,
+            project_id="p1",
+            thread_id=thread_id,
+            entry_id=entry_id,
+            sender_id=sender,
+            recipient_id=recipient,
+            created_at=at(created),
+            confirmed_at=at(confirmed) if confirmed else None,
+            load_open_tasks=loads[recipient].open_tasks,
+            load_blocked_tasks=loads[recipient].blocked_tasks,
+            load_due_soon_tasks=loads[recipient].due_soon_tasks,
+            load_open_threads=loads[recipient].open_threads,
+        )
+        for id_, thread_id, entry_id, sender, recipient, created, confirmed in CHECKS
+    ]
+
+
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        CheckRequest,
         RiskSetting,
         TaskComment,
         TaskThreadLink,
@@ -520,6 +565,7 @@ async def clear(session: AsyncSession) -> None:
         EntryDetail,
         Entry,
         ThreadOption,
+        ThreadCc,
         Thread,
         PartMember,
         Part,
@@ -556,7 +602,7 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in ("thread", "entry", "task", "task_comment"):
+    for table in ("thread", "entry", "task", "task_comment", "check_request"):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
@@ -584,6 +630,8 @@ async def seed(session: AsyncSession) -> None:
     await session.flush()
     session.add_all(in_order(comments()))
     await session.flush()
+    session.add_all(in_order(await checks(session)))
+    await session.flush()
     await advance_identity(session)
     session.add_all(
         [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
@@ -605,6 +653,7 @@ async def run() -> None:
         "task": len(tasks()),
         "comment": len(comments()),
         "link": len(TASK_THREAD_LINKS),
+        "check": len(CHECKS),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")

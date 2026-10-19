@@ -1,7 +1,20 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, chat, comment, health, part, project, risk, search, task, thread
+from app.api import (
+    admin,
+    auth,
+    chat,
+    check,
+    comment,
+    health,
+    part,
+    project,
+    risk,
+    search,
+    task,
+    thread,
+)
 from app.api.deps import require_json, require_scope
 from app.config import settings
 from app.errors import install_error_handlers
@@ -36,5 +49,6 @@ for scoped in (
     search.router,
     chat.router,
     risk.router,
+    check.router,
 ):
     app.include_router(scoped, prefix="/api", dependencies=[Depends(require_scope)])

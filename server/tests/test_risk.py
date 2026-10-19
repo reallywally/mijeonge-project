@@ -420,6 +420,13 @@ async def test_owner_loads(db: AsyncSession) -> None:
 # --- 기준 --------------------------------------------------------------------------
 
 
+@pytest.fixture
+def pinned_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    """API 가 보는 '오늘' 을 TODAY 에 묶는다 — 시드 기한이 고정이라 날이 지나면 신호가 바뀐다."""
+    monkeypatch.setattr("app.api.risk.today_kst", lambda: TODAY)
+
+
+@pytest.mark.usefixtures("pinned_today")
 async def test_settings_change_the_result(client: httpx.AsyncClient) -> None:
     before = (await client.get("/api/projects/p1/risks")).json()
     t5 = next(t for t in before["threads"] if t["threadId"] == "t5")
@@ -441,6 +448,7 @@ async def test_settings_change_the_result(client: httpx.AsyncClient) -> None:
     assert other["deferCount"] == 2
 
 
+@pytest.mark.usefixtures("pinned_today")
 async def test_level_follows_score_thresholds(client: httpx.AsyncClient) -> None:
     res = await client.put(
         "/api/projects/p1/risk-settings",

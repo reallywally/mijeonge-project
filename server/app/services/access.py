@@ -11,7 +11,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Member, Part, Project, ProjectMember, Task, TaskComment, Thread
+from app.models import CheckRequest, Member, Part, Project, ProjectMember, Task, TaskComment, Thread
 from app.services.auth import Actor
 
 
@@ -40,6 +40,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "thread_id": ("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다."),
     "comment_id": ("COMMENT_NOT_FOUND", "댓글을 찾을 수 없습니다."),
     "part_id": ("PART_NOT_FOUND", "파트를 찾을 수 없습니다."),
+    "check_id": ("CHECK_NOT_FOUND", "확인 요청을 찾을 수 없습니다."),
 }
 
 
@@ -54,6 +55,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             stmt = select(Thread.project_id).where(Thread.id == value)
         case "part_id":
             stmt = select(Part.project_id).where(Part.id == value)
+        case "check_id":
+            stmt = select(CheckRequest.project_id).where(CheckRequest.id == value)
         case "comment_id":
             stmt = (
                 select(Task.project_id)

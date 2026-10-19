@@ -25,6 +25,7 @@ const options = ref('')
 const dueDate = ref('')
 const ownerId = ref<string | null>(null)
 const partId = ref<string | null>(null)
+const ccIds = ref<string[]>([])
 const keepOpen = ref(false)
 const saving = ref(false)
 
@@ -38,6 +39,7 @@ function resetForm() {
   dueDate.value = ''
   ownerId.value = null
   partId.value = null
+  ccIds.value = []
 }
 
 watch(
@@ -62,6 +64,7 @@ async function submit() {
     dueDate: dueDate.value || null,
     ownerId: ownerId.value,
     partId: partId.value,
+    ccIds: ccIds.value,
   })
   saving.value = false
   /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
@@ -121,6 +124,7 @@ function onKeydown(e: KeyboardEvent) {
           v-model:due-date="dueDate"
           v-model:owner-id="ownerId"
           v-model:part-id="partId"
+          v-model:cc-ids="ccIds"
         >
           <template #top>
             <div class="flex items-center gap-2">

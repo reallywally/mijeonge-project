@@ -5,7 +5,9 @@
 """
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import Member
 from tests.test_read_api import ENTRY_KEYS, THREAD_KEYS
 
 
@@ -283,3 +285,100 @@ async def test_patch_ignores_state(client: httpx.AsyncClient) -> None:
     thread = res.json()
     assert thread["state"] == "queued"
     assert thread["title"] == "백업 주기"
+
+
+# --- 참조(ccIds) — docs/api/check.md '참조' ---
+
+
+async def test_add_thread_keeps_cc_in_order_without_duplicates(client: httpx.AsyncClient) -> None:
+    res = await client.post(
+        "/api/projects/p1/threads",
+        json={"title": "로그 보관 기간", "ownerId": "u2", "ccIds": ["u4", "u2", "u4", "u1"]},
+    )
+    assert res.status_code == 201
+    # 겹친 사람은 처음 자리 하나로. 안건 담당자를 넣어도 된다
+    assert res.json()["ccIds"] == ["u4", "u2", "u1"]
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert snap["threads"][-1]["ccIds"] == ["u4", "u2", "u1"]
+
+
+async def test_add_thread_without_cc_gets_empty_list(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/projects/p1/threads", json={"title": "로그 보관 기간"})
+    assert res.json()["ccIds"] == []
+
+
+async def test_snapshot_carries_seed_cc(client: httpx.AsyncClient) -> None:
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    cc = {t["id"]: t["ccIds"] for t in snap["threads"]}
+    assert cc["t1"] == ["u1"]
+    assert cc["t2"] == ["u2", "u4"]
+    assert cc["t6"] == ["u2"]
+    # 없으면 null 이 아니라 []
+    assert cc["t3"] == [] and cc["t4"] == []
+
+
+async def test_patch_replaces_cc_and_leaves_it_when_not_sent(client: httpx.AsyncClient) -> None:
+    res = await client.patch("/api/threads/t2", json={"ccIds": ["u4", "u1", "u4"]})
+    assert res.status_code == 200
+    assert res.json()["ccIds"] == ["u4", "u1"]
+    # 안 보내면 그대로
+    res = await client.patch("/api/threads/t2", json={"title": "DB 결정 (확정)"})
+    assert res.json()["ccIds"] == ["u4", "u1"]
+    # 비우기는 []
+    res = await client.patch("/api/threads/t2", json={"ccIds": []})
+    assert res.json()["ccIds"] == []
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert next(t for t in snap["threads"] if t["id"] == "t2")["ccIds"] == []
+
+
+async def test_patch_rejects_null_cc(client: httpx.AsyncClient) -> None:
+    res = await client.patch("/api/threads/t2", json={"ccIds": None})
+    assert res.status_code == 422
+    assert "ccIds" in res.json()["detail"]
+
+
+async def test_more_than_20_cc_is_422(client: httpx.AsyncClient) -> None:
+    # 개수는 합치기 전에 센다 — 같은 사람 21번이어도 넘친다
+    too_many = ["u1"] * 21
+    created = await client.post("/api/projects/p1/threads", json={"title": "x", "ccIds": too_many})
+    patched = await client.patch("/api/threads/t2", json={"ccIds": too_many})
+    for res in (created, patched):
+        assert res.status_code == 422
+        assert res.json()["code"] == "VALIDATION_ERROR"
+        assert "ccIds" in res.json()["detail"]
+    assert (await client.patch("/api/threads/t2", json={"ccIds": ["u1"] * 20})).status_code == 200
+
+
+async def test_cc_must_be_active_grants(client: httpx.AsyncClient) -> None:
+    """admin 은 p1 에 부여되지 않았고, u3 은 부여를 뺐고, ghost 는 없다."""
+    assert (await client.delete("/api/projects/p1/members/u3")).status_code == 204
+    body = {"ccIds": ["u1", "admin", "ghost", "u3", "admin"]}
+    for res in (
+        await client.post("/api/projects/p1/threads", json={"title": "x", **body}),
+        await client.patch("/api/threads/t6", json=body),
+    ):
+        assert res.status_code == 400
+        error = res.json()
+        assert error["code"] == "MEMBER_NOT_IN_PROJECT"
+        # 걸린 자리 전부
+        assert set(error["detail"]) == {"ccIds.1", "ccIds.2", "ccIds.3", "ccIds.4"}
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert next(t for t in snap["threads"] if t["id"] == "t6")["ccIds"] == ["u2"]
+
+
+async def test_cc_already_there_may_stay_when_it_goes_inactive(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """담당자와 같다 — 이미 걸려 있던 사람을 그대로 두는 수정은 막지 않는다. 새로 넣는 것만 본다."""
+    u4 = await session.get(Member, "u4")
+    assert u4 is not None
+    u4.active = False
+    await session.commit()
+    res = await client.patch("/api/threads/t2", json={"ccIds": ["u2", "u4", "u1"]})
+    assert res.status_code == 200
+    assert res.json()["ccIds"] == ["u2", "u4", "u1"]
+    res = await client.patch("/api/threads/t6", json={"ccIds": ["u2", "u4"]})
+    assert res.status_code == 400
+    assert res.json()["detail"] == {
+        "ccIds.1": "이 프로젝트에 부여되지 않았거나 비활성인 사람입니다."
+    }

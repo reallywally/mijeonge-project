@@ -95,6 +95,11 @@ const router = createRouter({
       name: 'risks',
       component: () => import('@/views/RiskView.vue'),
     },
+    {
+      path: '/checks',
+      name: 'checks',
+      component: () => import('@/views/ChecksView.vue'),
+    },
   ],
 })
 

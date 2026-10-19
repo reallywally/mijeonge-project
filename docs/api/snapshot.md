@@ -108,7 +108,7 @@ export interface Project {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 일곱 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 여덟 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
@@ -116,8 +116,9 @@ export interface Project {
 | `Entry` | `ownerId` |
 | `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
+| `CheckRequest` | `confirmedAt` (스냅샷 밖 — `GET /api/projects/{projectId}/checks` 로만 나간다, `check.md`) |
 
-그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Entry.detail` · `Task.body` 는
+그래서 `Entry.note` · `Thread.description` 은 `''`, `Thread.options` · `Thread.ccIds` · `Entry.detail` · `Task.body` 는
 `[]` 다. 보장은 **세 겹**이고, 한 겹이라도 새면 화면이 `.length` 에서 터진다.
 
 | 겹 | 어떻게 |
