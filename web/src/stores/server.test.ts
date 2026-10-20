@@ -9,6 +9,7 @@ import {
   projectGrants,
   projects,
   tasks,
+  taskDependencies,
   taskThreadLinks,
   threads,
 } from '@/fixtures'
@@ -50,6 +51,9 @@ const snapshotOf = (projectId: string): ProjectSnapshot => ({
   tasks: tasks.filter((t) => t.projectId === projectId),
   taskThreadLinks: taskThreadLinks.filter((l) =>
     tasks.some((t) => t.id === l.taskId && t.projectId === projectId),
+  ),
+  taskDependencies: taskDependencies.filter((d) =>
+    tasks.some((t) => t.id === d.taskId && t.projectId === projectId),
   ),
   parts: parts.filter((p) => p.projectId === projectId),
   partMembers: partMembers.filter((pm) =>

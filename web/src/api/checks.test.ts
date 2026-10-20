@@ -54,6 +54,7 @@ function world(patch: Partial<Thread> = {}, extra: Partial<MockWorld> = {}): Moc
     entries: [...entries, entry],
     tasks: [...tasks],
     taskThreads: [...taskThreadLinks],
+    taskDependencies: [],
     ...extra,
   }
 }
@@ -115,6 +116,7 @@ describe('목업 갈래', () => {
       entries: [...entries, change],
       tasks,
       taskThreads: taskThreadLinks,
+      taskDependencies: [],
     }))
     const made = await sendCheck('t2')
     expect(made.map((c) => [c.entryId, c.recipientId])).toEqual([

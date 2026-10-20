@@ -298,6 +298,10 @@ export interface Task {
   commentCount: number
   /** 출처 회의록. 없으면 null */
   minutesId: string | null
+  /** 지금 상태가 된 시각(task_log 의 마지막 줄). ISO 8601 UTC, Z */
+  statusChangedAt: string
+  /** statusChangedAt 이 마이그레이션이 넣은 줄의 시각이면 true — 실제로는 더 오래됐을 수 있다 */
+  statusSinceBackfill: boolean
 }
 
 /** 작업 댓글 — GET /api/tasks/{taskId}/comments 는 오래된 것부터 낸다 */
@@ -333,6 +337,28 @@ export interface TaskThreadLink {
   threadId: string
 }
 
+/** 선행 작업 — 뒤 작업(taskId)은 선행(dependsOnId)이 끝나야 시작한다. 막지는 않고 알려 주기만 한다 (docs/api/task-flow.md) */
+export interface TaskDependency {
+  /** 뒤 작업 */
+  taskId: string
+  /** 먼저 끝나야 하는 작업 */
+  dependsOnId: string
+}
+
+/** POST /api/projects/{projectId}/dependencies/suggest — 저장하지 않는다. 사람이 줄마다 [적용] 한다 */
+export interface DependencySuggestions {
+  suggestions: DependencySuggestion[]
+  /** 완료 아닌 작업이 많아 앞에서 잘랐으면 true */
+  truncated: boolean
+}
+
+export interface DependencySuggestion {
+  taskId: string
+  dependsOnId: string
+  /** 왜 — 한 문장 */
+  reason: string
+}
+
 /** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
 export interface TaskRow {
   task: Task
@@ -358,6 +384,10 @@ export interface TaskDetail {
   /** 이 작업을 하다가 정해야 했던 것들 */
   threads: TaskThreadRow[]
   doneChildCount: number
+  /** 이 작업의 선행 작업 */
+  dependsOn: Task[]
+  /** 이 작업을 선행으로 둔 작업 — 읽기만 한다 */
+  dependents: Task[]
 }
 
 /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
@@ -430,6 +460,8 @@ export interface ProjectSnapshot {
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
+  /** taskId · dependsOnId 순 (docs/api/task-flow.md) */
+  taskDependencies: TaskDependency[]
   /** 이름 순 · 보관 포함 */
   parts: Part[]
   /** (partId, memberId) 순 */

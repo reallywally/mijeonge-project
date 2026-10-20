@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Check } from 'lucide-vue-next'
+import { Check, Clock } from 'lucide-vue-next'
 import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,8 @@ defineProps<{
   parentChoices: { id: string; label: string }[]
   /** 상태 옆의 '완료' 버튼 — 이미 있는 작업에만 */
   showDone?: boolean
+  /** '진행 중 · 12일째' — 이미 있는 작업에만 */
+  statusSince?: string
 }>()
 const status = defineModel<TaskStatus>('status', { required: true })
 const ownerId = defineModel<string | null>('ownerId', { required: true })
@@ -77,6 +79,14 @@ const ghost =
         완료
       </Button>
     </div>
+    <p
+      v-if="statusSince"
+      class="-mt-2 flex items-center gap-1.5 px-0.5 text-xs text-muted-foreground"
+      data-status-since
+    >
+      <Clock class="size-3" />
+      {{ statusSince }}
+    </p>
 
     <dl class="flex flex-col gap-0.5">
       <div class="flex min-h-9 items-center gap-2">

@@ -1,17 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Gantt, escapeHTML } from 'dhtmlx-gantt'
-import type { GanttStatic, Task as GanttTask } from 'dhtmlx-gantt'
+import type { GanttStatic, Link, Task as GanttTask } from 'dhtmlx-gantt'
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
+import { toast } from 'vue-sonner'
 import { isoDay } from '@/lib/date'
-import { endToDue, rangeLabel, toGanttItems, weekLabel } from '@/lib/gantt'
-import type { GanttItem } from '@/lib/gantt'
+import { DEPENDENCY_ERRORS, dependencyProblem } from '@/lib/dependency'
+import {
+  endToDue,
+  linkToDependency,
+  rangeLabel,
+  toGanttItems,
+  toGanttLinks,
+  weekLabel,
+} from '@/lib/gantt'
+import type { GanttItem, GanttLink } from '@/lib/gantt'
 import { taskStatusLabel } from '@/lib/task'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 
 /* 간트차트 — 목록이 평평한 게시판인 자리에서 이쪽은 계층 트리다.
-   고리는 한 방향이다: 스토어 → gantt.parse. 되돌아오는 건 끌어 놓은 기간 하나뿐이다.
+   고리는 한 방향이다: 스토어 → gantt.parse. 되돌아오는 건 끌어 놓은 기간과 끌어 건 선행 관계뿐이다 —
+   선행 관계는 간트가 제 손으로 그리지 않게 막고 스토어에 넣어, 스토어가 다시 그리게 한다.
    라이브러리 기본 편집창(lightbox)은 끄고 우리 작업 상세 팝업을 띄운다. */
 const emit = defineEmits<{
   (e: 'open-task', id: string): void
@@ -28,6 +38,8 @@ const items = computed(() =>
   toGanttItems(taskStore.visibleRows, taskStatusLabel, partStore.isContextTask),
 )
 const period = computed(() => rangeLabel(taskStore.visibleRows))
+/* 선행 관계 — 선행의 끝 → 뒤 작업의 시작. 한쪽이 거르기로 빠졌으면 그리지 않는다 */
+const links = computed(() => toGanttLinks(taskStore.dependencies, items.value))
 
 /* 그리드 칸은 dhtmlx 가 innerHTML 로 그린다 — Vue 컴포넌트를 넣을 수 없어 글자로 짠다.
    우리 것임을 알아보게 tg- 를 붙이고 색은 아래 <style> 에서 토큰으로만 준다 */
@@ -101,8 +113,8 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.config.scale_height = 46
   g.config.grid_width = 462
   g.config.open_tree_initially = true
-  /* 선후 관계도 진척도 모델에 없다 — 끌어서 만들 수 없게 막는다 */
-  g.config.drag_links = false
+  /* 진척도는 모델에 없다 — 끌어서 만들 수 없게 막는다. 선행 관계는 막대 끝에서 끌어 건다 */
+  g.config.drag_links = true
   g.config.drag_progress = false
   g.config.details_on_dblclick = false
   g.config.columns = [
@@ -116,6 +128,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.templates.task_class = (_s: Date, _e: Date, task: GanttTask) =>
     `tg-bar tg-bar-${asItem(task).status}`
   g.templates.task_text = () => ''
+  g.templates.link_class = () => 'tg-link'
   g.templates.timeline_cell_class = (_task: GanttTask, date: Date) => cellClass(date)
   g.templates.grid_row_class = (_s: Date, _e: Date, task: GanttTask) =>
     [
@@ -147,8 +160,61 @@ function setup(g: GanttStatic, el: HTMLElement) {
     return true
   })
 
+  /* 끌어 건 화살표 — 간트가 직접 넣지 않게 늘 false 를 내고 스토어에 맡긴다. 못 거는 것은 그 자리에서 까닭을 띄운다 */
+  g.attachEvent('onBeforeLinkAdd', (_id: string | number, link: Link) => {
+    if (syncingLinks) return true
+    const dep = linkToDependency(link)
+    if (!dep) {
+      toast.error('앞 작업 막대의 오른쪽 끝에서 뒤 작업 막대의 왼쪽 끝으로 끌어 겁니다.')
+      return false
+    }
+    const problem = dependencyProblem(
+      taskStore.tasks,
+      taskStore.dependencies,
+      dep.taskId,
+      dep.dependsOnId,
+    )
+    if (problem) {
+      toast.error(DEPENDENCY_ERRORS[problem].message)
+      return false
+    }
+    void taskStore.addDependency(dep.taskId, dep.dependsOnId)
+    return false
+  })
+  /* 화살표를 누르면 묻고 뗀다. 두 번 누르기는 라이브러리의 기본 지우기 창이 떠서 막는다 */
+  g.attachEvent('onLinkClick', (id: string | number) => {
+    const link = links.value.find((l) => l.id === String(id))
+    if (link) confirmUnlink(link)
+  })
+  g.attachEvent('onLinkDblClick', () => false)
+
   g.init(el)
-  g.parse({ data: items.value, links: [] })
+  g.parse({ data: items.value, links: links.value })
+}
+
+const keyTitle = (id: string) => {
+  const task = taskStore.tasks.find((t) => t.id === id)
+  return task ? `${task.key} ${task.title}` : ''
+}
+
+function confirmUnlink(link: GanttLink) {
+  const message = `선행 관계를 뗄까요?\n${keyTitle(link.source)} → ${keyTitle(link.target)}`
+  if (!window.confirm(message)) return
+  void taskStore.removeDependency(link.target, link.source)
+}
+
+/* 스토어에서 바뀐 선행 관계만 간트에 옮긴다 — 통째로 다시 그리면 보던 자리가 처음으로 튄다.
+   여기서 넣는 addLink 는 onBeforeLinkAdd 를 거치므로 그동안은 통과시킨다 */
+let syncingLinks = false
+function syncLinks(g: GanttStatic, next: GanttLink[]) {
+  const wanted = new Set(next.map((l) => l.id))
+  syncingLinks = true
+  try {
+    for (const l of g.getLinks()) if (!wanted.has(String(l.id))) g.deleteLink(l.id)
+    for (const l of next) if (!g.isLinkExists(l.id)) g.addLink({ ...l })
+  } finally {
+    syncingLinks = false
+  }
 }
 
 onMounted(() => {
@@ -166,8 +232,16 @@ onBeforeUnmount(() => {
 watch(items, (next) => {
   if (!chart || fromChart) return
   chart.clearAll()
-  chart.parse({ data: next, links: [] })
+  chart.parse({ data: next, links: links.value })
 })
+
+/* 막대를 옮겨도 links 는 새 배열로 다시 서므로, 걸린 쌍이 달라졌을 때만 옮긴다 */
+watch(
+  () => links.value.map((l) => l.id).join(','),
+  () => {
+    if (chart) syncLinks(chart, links.value)
+  },
+)
 
 watch(scale, () => {
   if (!chart) return
@@ -188,7 +262,8 @@ function showToday() {
       class="flex h-[42px] shrink-0 items-center gap-2 border-t border-border bg-background px-4"
     >
       <span class="text-xs text-muted-foreground">
-        막대를 끌거나 늘리면 기간이 바뀝니다. 기간 미정 작업은 막대가 없습니다.
+        막대를 끌거나 늘리면 기간이 바뀝니다. 막대 끝에서 다른 막대로 끌면 선행 작업이 걸리고,
+        화살표를 누르면 뗍니다.
       </span>
       <div class="grow" />
       <span class="text-xs text-muted-foreground">{{ period }}</span>
@@ -339,6 +414,14 @@ function showToday() {
 .tg-root .tg-avatar-none {
   background: transparent;
   color: var(--muted-foreground);
+}
+
+/* 선행 관계 화살표 — 흐리게 두고 가리키면 짙게 */
+.tg-root {
+  --dhx-gantt-link-background: var(--muted-foreground);
+  --dhx-gantt-link-background-hover: var(--foreground);
+  --dhx-gantt-link-handle-border: var(--primary);
+  --dhx-gantt-link-handle-background: var(--background);
 }
 
 /* 막대 — 완료는 채우고, 진행 중은 테두리, 해야 할 일은 옅게, 묶음은 자식들의 기간 */

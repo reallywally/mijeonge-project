@@ -8,6 +8,7 @@ import {
   partMembers,
   parts,
   projectGrants,
+  taskDependencies,
   taskThreadLinks,
   tasks,
   threads,
@@ -25,13 +26,14 @@ import type {
   PartMember,
   RiskSettings,
   Task,
+  TaskDependency,
   TaskThreadLink,
   Thread,
 } from '@/types/domain'
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · parts · comments · tasks · risk · checks · minutes 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks · dependencies · risk · checks · minutes 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -102,6 +104,7 @@ export interface MockWorld {
   entries: Entry[]
   tasks: Task[]
   taskThreads: TaskThreadLink[]
+  taskDependencies: TaskDependency[]
 }
 
 let worldOf: (() => MockWorld) | null = null
@@ -113,7 +116,7 @@ export function provideMockWorld(fn: (() => MockWorld) | null) {
 }
 
 export const mockWorld = (): MockWorld =>
-  worldOf?.() ?? { threads, entries, tasks, taskThreads: taskThreadLinks }
+  worldOf?.() ?? { threads, entries, tasks, taskThreads: taskThreadLinks, taskDependencies }
 
 export const accountOf = (memberId: string) => db.accounts.find((a) => a.memberId === memberId)
 export const memberOf = (memberId: string) => db.members.find((m) => m.id === memberId)

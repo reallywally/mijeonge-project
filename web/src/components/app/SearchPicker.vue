@@ -13,6 +13,8 @@ const props = defineProps<{
   placeholder: string
   /** 고를 것이 하나도 없을 때 */
   emptyLabel: string
+  /** 보이되 못 고르는 줄의 까닭 — 있으면 흐리게 두고 옆에 적는다 */
+  disabledReason?: (item: T) => string | null
 }>()
 const emit = defineEmits<{ (e: 'pick', item: T): void }>()
 defineSlots<{ item(props: { item: T }): unknown }>()
@@ -32,8 +34,10 @@ const matches = computed(() => {
     .slice(0, LIMIT)
 })
 
+const reasonOf = (item: T) => props.disabledReason?.(item) ?? null
+
 function pick(item: T | undefined) {
-  if (!item) return
+  if (!item || reasonOf(item)) return
   emit('pick', item)
   query.value = ''
   active.value = 0
@@ -97,13 +101,20 @@ function onInput() {
         :key="keyOf(item)"
         role="option"
         :aria-selected="i === active"
-        class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs"
-        :class="i === active ? 'bg-accent text-accent-foreground' : ''"
+        :aria-disabled="reasonOf(item) !== null"
+        class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs"
+        :class="[
+          i === active ? 'bg-accent text-accent-foreground' : '',
+          reasonOf(item) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        ]"
         @mouseenter="active = i"
         @mousedown.prevent="pick(item)"
       >
         <Plus class="size-3 shrink-0 text-muted-foreground" />
         <slot name="item" :item="item" />
+        <span v-if="reasonOf(item)" class="shrink-0 text-muted-foreground">{{
+          reasonOf(item)
+        }}</span>
       </li>
       <li v-if="matches.length === 0" class="px-2 py-1.5 text-xs text-muted-foreground">
         '{{ query.trim() }}' 이 들어간 것이 없습니다

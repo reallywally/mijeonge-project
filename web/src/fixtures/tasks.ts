@@ -1,5 +1,12 @@
 import { taskComments } from '@/fixtures/comments'
-import type { Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
+import type {
+  DependencySuggestion,
+  Task,
+  TaskDependency,
+  TaskLine,
+  TaskStatus,
+  TaskThreadLink,
+} from '@/types/domain'
 
 /**
  * 작업. memo 의 "기본 사용법" 에 적힌 트리를 그대로 깔았다.
@@ -19,6 +26,14 @@ const PART_OF: Record<string, string> = {
   k18: 'pt3',
 }
 
+/* 상태 기록 — docs/api/task-flow.md '시드 · 목업'. 둘은 리포트 시연용으로 오래 둔다:
+   k20 은 계획이 사흘(9/10 ~ 9/12)인데 10/8 부터 진행 중, k22 는 10/13 부터 막힘.
+   그 밖은 작업의 start(없으면 등록 시각)에 지금 상태가 됐다고 본다 */
+const STATUS_SINCE: Record<string, string> = {
+  k20: '2026-10-08T00:00:00Z',
+  k22: '2026-10-13T00:00:00Z',
+}
+
 function mk(
   id: string,
   key: string,
@@ -30,6 +45,7 @@ function mk(
   due: string | null,
   body: TaskLine[] = [],
 ): Task {
+  const createdAt = '2026-09-04T00:20:00Z'
   return {
     id,
     projectId: 'p1',
@@ -43,9 +59,11 @@ function mk(
     due,
     priority: 'normal',
     partId: PART_OF[id] ?? null,
-    createdAt: '2026-09-04T00:20:00Z',
+    createdAt,
     commentCount: taskComments.filter((c) => c.taskId === id).length,
     minutesId: null,
+    statusChangedAt: STATUS_SINCE[id] ?? (start ? `${start}T00:00:00Z` : createdAt),
+    statusSinceBackfill: false,
   }
 }
 
@@ -118,3 +136,26 @@ export const taskThreadLinks: TaskThreadLink[] = [
   { taskId: 'k3', threadId: 't9' }, // 프로그램 설계 ↔ 공통 코드 체계
   { taskId: 'k22', threadId: 't2' }, // 스테이징 DB 구성 ↔ DB 결정
 ]
+
+/** 선행 작업 (p1) — taskId · dependsOnId 순. 스냅샷 순서와 같다 */
+export const taskDependencies: TaskDependency[] = [
+  { taskId: 'k20', dependsOnId: 'k19' }, // DB 설치 ← 서버 발급 — 서버가 있어야 설치한다
+  { taskId: 'k21', dependsOnId: 'k20' }, // 개발자 계정 배포 ← DB 설치 — DB 가 떠야 계정을 만든다
+  { taskId: 'k22', dependsOnId: 'k20' }, // 스테이징 DB 구성 ← DB 설치 — 개발 DB 구성을 본떠 만든다
+]
+
+/** AI 선행 관계 찾기의 목업 답 — 시드에 없는 그럴듯한 관계 둘. 이미 걸었거나 걸 수 없게 됐으면 목업 api 가 버린다 */
+export const mockDependencySuggestions: Record<string, DependencySuggestion[]> = {
+  p1: [
+    {
+      taskId: 'k16',
+      dependsOnId: 'k15',
+      reason: '기존 상품을 분석해야 추천 모델에 넣을 상품 속성을 정할 수 있다.',
+    },
+    {
+      taskId: 'k18',
+      dependsOnId: 'k3',
+      reason: '프로그램 설계가 끝나야 기간계 API 의 입출력을 확정할 수 있다.',
+    },
+  ],
+}

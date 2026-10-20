@@ -13,6 +13,7 @@ import type {
   ProjectRole,
   ProjectSnapshot,
   Task,
+  TaskDependency,
   TaskThreadLink,
   Thread,
 } from '@/types/domain'
@@ -37,6 +38,7 @@ export interface SnapshotRecords {
   allEntries: Entry[]
   allTasks: Task[]
   taskThreads: TaskThreadLink[]
+  taskDependencies: TaskDependency[]
   parts: Part[]
   partMembers: PartMember[]
 }
@@ -48,6 +50,7 @@ export function toRecords(snapshot: ProjectSnapshot): SnapshotRecords {
     allEntries: snapshot.entries,
     allTasks: snapshot.tasks,
     taskThreads: snapshot.taskThreadLinks,
+    taskDependencies: snapshot.taskDependencies,
     parts: snapshot.parts,
     partMembers: snapshot.partMembers,
   }
