@@ -338,6 +338,20 @@ def user_message(context: SummaryContext) -> str:
     return f"화면에 보이는 결정 리스크다. 답의 모양대로 정리하라.\n\n{data}"
 
 
+def one_shot(settings: Settings, system: str, user_text: str) -> dict[str, Any]:
+    """도구 없이 한 번 부르는 요청 — 리스크 요약 · 선행 관계 제안이 같이 쓴다."""
+    return {
+        "model": settings.chat_model,
+        "max_tokens": settings.chat_max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user_text}],
+        # thinking 은 넘기지 않는다 — 챗봇과 같은 이유(Sonnet 5.5 는 끌 수 없다)
+        "output_config": {"effort": settings.chat_effort},
+        "fallbacks": "default",
+        "betas": [FALLBACK_BETA],
+    }
+
+
 async def nothing() -> AsyncIterator[ChatEvent]:
     """거른 뒤 아무 줄도 없을 때 — Claude 를 부르지 않는다."""
     yield DeltaEvent(text=NOTHING)
@@ -356,14 +370,7 @@ async def summarize(
     written: list[str] = []
     try:
         async with client.beta.messages.stream(
-            model=settings.chat_model,
-            max_tokens=settings.chat_max_tokens,
-            system=system_prompt(project_name, today),
-            messages=[{"role": "user", "content": user_message(context)}],
-            # thinking 은 넘기지 않는다 — 챗봇과 같은 이유(Sonnet 5.5 는 끌 수 없다)
-            output_config={"effort": settings.chat_effort},
-            fallbacks="default",
-            betas=[FALLBACK_BETA],
+            **one_shot(settings, system_prompt(project_name, today), user_message(context))
         ) as stream:
             async for chunk in stream:
                 if chunk.type != "text" or not chunk.text:

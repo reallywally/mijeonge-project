@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import ProjectScope
 from app.db import get_session
 from app.schemas.task import (
     TaskBatchInput,
@@ -21,22 +22,26 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.post("/projects/{project_id}/tasks", status_code=201)
-async def create_task(project_id: str, payload: TaskCreate, session: Session) -> TaskOut:
-    return await task_service.create_task(session, project_id, payload)
+async def create_task(
+    project_id: str, payload: TaskCreate, scope: ProjectScope, session: Session
+) -> TaskOut:
+    return await task_service.create_task(session, project_id, payload, scope.actor.id)
 
 
 @router.post("/projects/{project_id}/tasks/batch", status_code=201)
 async def create_tasks(
-    project_id: str, payload: TaskBatchInput, session: Session
+    project_id: str, payload: TaskBatchInput, scope: ProjectScope, session: Session
 ) -> TaskBatchResult:
     """챗봇 초안을 한 번에 등록한다. 한 트랜잭션 — 하나라도 틀리면 아무것도 안 남는다."""
-    return await task_service.create_tasks(session, project_id, payload)
+    return await task_service.create_tasks(session, project_id, payload, scope.actor.id)
 
 
 @router.patch("/tasks/{task_id}")
-async def patch_task(task_id: str, payload: TaskPatch, session: Session) -> TaskOut:
+async def patch_task(
+    task_id: str, payload: TaskPatch, scope: ProjectScope, session: Session
+) -> TaskOut:
     """부분 수정 — 상태 · 담당자 · 기간 · 상위 작업이 다 이 하나로 들어온다."""
-    return await task_service.patch_task(session, task_id, payload)
+    return await task_service.patch_task(session, task_id, payload, scope.actor.id)
 
 
 @router.patch("/tasks/{task_id}/lines/{line_id}")

@@ -49,6 +49,9 @@ TASK_KEYS = {
     "commentCount",
     "partId",
     "minutesId",
+    # 지금 상태가 된 시각 (docs/api/task-flow.md)
+    "statusChangedAt",
+    "statusSinceBackfill",
 }
 
 
@@ -79,6 +82,8 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
         "entries",
         "tasks",
         "taskThreadLinks",
+        # 선행 작업 (docs/api/task-flow.md)
+        "taskDependencies",
         # 파트 — 보관 포함 전부. 거르는 것은 화면이다 (docs/api/part.md)
         "parts",
         "partMembers",
@@ -89,6 +94,7 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
     assert set(snap["tasks"][0]) == TASK_KEYS
     assert set(snap["tasks"][3]["body"][0]) == {"id", "kind", "text", "done", "level"}
     assert set(snap["taskThreadLinks"][0]) == {"taskId", "threadId"}
+    assert set(snap["taskDependencies"][0]) == {"taskId", "dependsOnId"}
 
 
 async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> None:

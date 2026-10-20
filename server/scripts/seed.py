@@ -34,7 +34,9 @@ from app.models import (
     RiskSetting,
     Task,
     TaskComment,
+    TaskDependency,
     TaskLine,
+    TaskLog,
     TaskThreadLink,
     Thread,
     ThreadCc,
@@ -478,6 +480,86 @@ TASK_THREAD_LINKS = [
 ]
 
 
+# 선행 작업 (뒤 작업, 선행 작업) — docs/api/task-flow.md '시드 · 목업'
+TASK_DEPENDENCIES = [
+    ("k20", "k19"),  # 서버가 있어야 DB 를 설치한다
+    ("k21", "k20"),  # DB 가 떠야 계정을 만든다
+    ("k22", "k20"),  # 개발 DB 구성을 본떠 스테이징을 만든다
+]
+# 지어 둔 사람 — 개발 환경 설정(k4) 담당
+DEPENDENCY_BY = "u3"
+
+# 리포트 시연용으로 오래 둔 상태 — (작업, 앞 상태, 지금 상태, 바뀐 시각)
+DEMO_STATUS_CHANGES = [
+    # 계획은 09-10 ~ 09-12 사흘 — 리포트의 '오래 걸림'
+    ("k20", "todo", "doing", "2026-10-08T00:00:00Z"),
+    ("k22", "todo", "blocked", "2026-10-13T00:00:00Z"),
+]
+
+
+def dependencies() -> list[TaskDependency]:
+    return [
+        TaskDependency(
+            task_id=task_id,
+            depends_on_id=depends_on_id,
+            project_id="p1",
+            created_by=DEPENDENCY_BY,
+            created_at=at("2026-09-04T00:30:00Z"),
+        )
+        for task_id, depends_on_id in TASK_DEPENDENCIES
+    ]
+
+
+def demo_log(task: Task, from_status: str, to_status: str, changed_at: str) -> TaskLog:
+    return TaskLog(
+        project_id=task.project_id,
+        task_id=task.id,
+        from_status=from_status,
+        to_status=to_status,
+        changed_by=task.owner_id,
+        changed_at=at(changed_at),
+        backfilled=False,
+    )
+
+
+def task_logs() -> list[TaskLog]:
+    """작업마다 등록 → 지금 상태. 시연용 둘은 등록(todo) 줄 뒤에 오래된 바뀜을 하나 더 둔다.
+
+    그 밖은 작업의 start(없으면 등록 시각)에 지금 상태로 한 줄. 시드는 backfill 이 아니다.
+    """
+    demo = {row[0]: row for row in DEMO_STATUS_CHANGES}
+    rows: list[TaskLog] = []
+    for task in tasks():
+        if task.id in demo:
+            _, before, after, changed_at = demo[task.id]
+            rows.append(
+                TaskLog(
+                    project_id=task.project_id,
+                    task_id=task.id,
+                    from_status=None,
+                    to_status=before,
+                    changed_by=task.owner_id,
+                    changed_at=task.created_at,
+                    backfilled=False,
+                )
+            )
+            rows.append(demo_log(task, before, after, changed_at))
+            continue
+        since = at(f"{task.start.isoformat()}T00:00:00Z") if task.start else task.created_at
+        rows.append(
+            TaskLog(
+                project_id=task.project_id,
+                task_id=task.id,
+                from_status=None,
+                to_status=task.status,
+                changed_by=task.owner_id,
+                changed_at=since,
+                backfilled=False,
+            )
+        )
+    return rows
+
+
 def comments() -> list[TaskComment]:
     """`fixtures/comments.ts` — 작업마다 오래된 것부터."""
     rows = [
@@ -619,6 +701,8 @@ async def clear(session: AsyncSession) -> None:
         RiskSetting,
         TaskComment,
         TaskThreadLink,
+        TaskDependency,
+        TaskLog,
         TaskLine,
         Task,
         EntryDetail,
@@ -662,7 +746,15 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in ("thread", "entry", "task", "task_comment", "check_request", "minutes"):
+    for table in (
+        "thread",
+        "entry",
+        "task",
+        "task_comment",
+        "check_request",
+        "minutes",
+        "task_log",
+    ):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
@@ -689,6 +781,8 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(in_order(tasks()))
     await session.flush()
     session.add_all(in_order(comments()))
+    session.add_all(in_order(task_logs()))
+    session.add_all(dependencies())
     await session.flush()
     session.add_all(in_order(await checks(session)))
     session.add_all(in_order(minutes()))
@@ -714,6 +808,8 @@ async def run() -> None:
         "task": len(tasks()),
         "comment": len(comments()),
         "link": len(TASK_THREAD_LINKS),
+        "dependency": len(TASK_DEPENDENCIES),
+        "task_log": len(task_logs()),
         "check": len(CHECKS),
         "minutes": len(minutes()),
     }

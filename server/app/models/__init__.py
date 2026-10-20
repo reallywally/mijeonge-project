@@ -5,7 +5,14 @@ from app.models.minutes import Minutes
 from app.models.part import Part, PartMember
 from app.models.project import Member, Project, ProjectMember
 from app.models.risk import RiskSetting
-from app.models.task import Task, TaskComment, TaskLine, TaskThreadLink
+from app.models.task import (
+    Task,
+    TaskComment,
+    TaskDependency,
+    TaskLine,
+    TaskLog,
+    TaskThreadLink,
+)
 from app.models.thread import Entry, EntryDetail, Thread, ThreadCc, ThreadOption
 
 __all__ = [
@@ -24,7 +31,9 @@ __all__ = [
     "RiskSetting",
     "Task",
     "TaskComment",
+    "TaskDependency",
     "TaskLine",
+    "TaskLog",
     "TaskThreadLink",
     "Thread",
     "ThreadCc",

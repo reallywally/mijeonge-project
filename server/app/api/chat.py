@@ -37,6 +37,23 @@ def get_rate_limiter() -> RateLimiter:
     return _limiter
 
 
+def ready_client(
+    request: Request, client: AsyncAnthropic | None, limiter: RateLimiter
+) -> AsyncAnthropic:
+    """도구 없이 한 번 부르는 것(리스크 요약 · 선행 관계 제안)의 문턱 — 키 없음 503, 제한 429.
+
+    챗봇과 같은 클라이언트 · 같은 제한기라 서로의 횟수를 같이 먹는다.
+    """
+    if client is None:
+        raise ApiError(503, "CHAT_UNAVAILABLE", "AI 챗봇이 아직 설정되지 않았습니다.")
+    ip = request.client.host if request.client else "unknown"
+    if not limiter.allow(ip):
+        raise ApiError(
+            429, "CHAT_RATE_LIMITED", "질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요."
+        )
+    return client
+
+
 def _sse(event: ChatEvent | MinutesEvent) -> str:
     # 프론트는 event 줄로 가른다. data 는 한 줄 JSON 이라 줄바꿈이 끼지 않는다
     return f"event: {event.type}\ndata: {event.model_dump_json(by_alias=True)}\n\n"

@@ -67,6 +67,7 @@ CASES: list[tuple[str, Pick]] = [
     ("Task", lambda body: body["tasks"]),
     ("TaskLine", lambda body: [line for task in body["tasks"] for line in task["body"]]),
     ("TaskThreadLink", lambda body: body["taskThreadLinks"]),
+    ("TaskDependency", lambda body: body["taskDependencies"]),
 ]
 
 
@@ -197,6 +198,7 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
         "entries",
         "tasks",
         "taskThreadLinks",
+        "taskDependencies",
         "parts",
         "partMembers",
     }
@@ -396,3 +398,32 @@ async def test_minutes_responses_match_contract(client: AsyncClient) -> None:
     for field, value in one.items():
         if value is None:
             assert field in MINUTES_NULLABLE["Minutes"], f"Minutes.{field} 가 null"
+
+
+# 선행 작업 · 작업 상태 기록 — docs/api/task-flow.md. 어긋나면 계약 쪽이 기준이다.
+# null 이 나가는 자리가 없다(statusChangedAt 은 backfill 이 있어 늘 있다)
+TASK_FLOW_SHAPES: dict[str, set[str]] = {
+    "TaskDependency": {"taskId", "dependsOnId"},
+    "DependencySuggestions": {"suggestions", "truncated"},
+    "DependencySuggestion": {"taskId", "dependsOnId", "reason"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(TASK_FLOW_SHAPES))
+def test_task_flow_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    declared = FIELDS[name]
+    assert set(declared) == TASK_FLOW_SHAPES[name], f"domain.ts 의 {name} 이 task-flow.md 와 다르다"
+    assert not any(declared.values()), f"domain.ts 의 {name} 에 null 자리가 있다"
+
+
+def test_task_status_since_in_domain_ts() -> None:
+    """둘 다 null 이 아니다 — 모든 작업에 상태 기록이 적어도 한 줄 있다."""
+    assert FIELDS["Task"].get("statusChangedAt") is False
+    assert FIELDS["Task"].get("statusSinceBackfill") is False
+    assert FIELDS["ProjectSnapshot"].get("taskDependencies") is False
+
+
+def test_task_status_since_in_snapshot(snapshot: dict[str, Any]) -> None:
+    for task in snapshot["tasks"]:
+        assert isinstance(task["statusChangedAt"], str) and task["statusChangedAt"].endswith("Z")
+        assert isinstance(task["statusSinceBackfill"], bool)
