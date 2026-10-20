@@ -24,6 +24,8 @@ export interface ProjectSnapshot {
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
+  /** 선행 작업 (2026-10-20, task-flow.md) */
+  taskDependencies: TaskDependency[]
   /** 파트 — 이름 순 · 보관 포함 (docs/api/part.md) */
   parts: Part[]
   /** (partId, memberId) 순 */
@@ -75,6 +77,7 @@ export interface Project {
 | `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
 | `tasks` | `task.projectId === projectId` |
 | `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지) |
+| `taskDependencies` | `project_id` 가 그 프로젝트인 것 (`task-flow.md`) |
 | `parts` | `part.projectId === projectId` — 보관(`active=false`)도 싣는다 |
 | `partMembers` | `partId` 가 위 `parts` 안에 있는 것 |
 

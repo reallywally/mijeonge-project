@@ -263,6 +263,56 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 **다음 (이 단계 밖)** — 1-2 `.docx` · `.pdf` 를 서버가 글로 뽑기, 계약의 '확장'(`minutes_file`), 2단계 녹음(Q47).
 
+## 13단계 · 선행 작업 · 작업 상태 기록 — 리포트의 바탕
+
+계약은 `../docs/api/task-flow.md`(합의 2026-10-20 · Q49 · Q50 닫힘), 화면은 `../web/PLAN.md` 14단계다.
+리포트(`../docs/api/report.md`, 14단계)가 "A 가 먼저" · "오래 걸림" 을 말하려면 둘 다 데이터로 있어야 한다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 검사 | `services/dependency.py` 의 `check` 하나 — 프로젝트의 계층 · 선행을 한 번 읽어(`load_graph`) 메모리에서 본다. PUT 과 AI 제안이 같이 쓴다 | 제안 수십 개를 거를 때 줄마다 DB 를 다시 읽지 않고, 앞에서 받아들인 제안까지 얹어 순환 · 개수를 본다 |
+| 상태 기록 | `services/task.py` 의 `record_status` 하나. 작업이 생기는 길은 전부 `_insert_task` 를 지나므로(등록 · 일괄 · 회의록 apply) 거기서 첫 줄, PATCH 는 상태가 바뀔 때만 | 길마다 따로 적으면 하나를 빠뜨린다 |
+| 마지막 줄 | `seq` 가장 큰 줄 — `changed_at` 으로 고르지 않는다 | Q15 와 같다. 시연 스크립트가 넣는 줄은 시각이 더 이르지만 나중 줄이다 |
+| AI 제안 | 리스크 요약과 같은 틀 — 요청 모양(`risk_summary.one_shot`) · 문턱(`api/chat.ready_client` — 503 · 429) · SDK 오류 바꾸기(`chat._api_error_event`)를 같이 쓴다. Claude 는 작업을 **키**로만 본다 | id 를 넣으면 지어낸 id 와 진짜를 가르기 어렵다. 키는 프로젝트 안에서 유일해 되돌리기 쉽다 |
+
+### 13-1 체크리스트
+
+- [x] 리비전 `0015_task_flow` — `task_dependency`(pk (task_id, depends_on_id) · 복합 FK 둘 cascade · `task_id <> depends_on_id` · created_by → member) · `task_log`(복합 FK cascade · from/to 상태 check · changed_by null · seq Identity · backfilled) · 인덱스 `(task_id, seq)`. 기존 작업마다 backfill 한 줄(등록 순서대로 seq 를 직접 주고 Postgres 시퀀스를 민다). downgrade 도
+- [x] `PUT · DELETE /api/tasks/{taskId}/dependencies/{dependsOnId}` — 멱등. 404 `TASK_NOT_FOUND` → 400 `TASK_DEPENDENCY_HIERARCHY` → 409 `TASK_DEPENDENCY_CYCLE` → 400 `TASK_DEPENDENCY_LIMIT`(20). 이미 걸린 것은 검사 없이 200. 스냅샷 `taskDependencies`(taskId, dependsOnId 순)
+- [x] `task_log` — 등록 · PATCH · `tasks/batch` · 회의록 apply. 상태 그대로인 PATCH 는 안 남김. `TaskOut` 에 `statusChangedAt` · `statusSinceBackfill` — 스냅샷 · 쓰기 응답 · 챗봇 `get_task`
+- [x] `POST /api/projects/{projectId}/dependencies/suggest` — `services/dependency_suggest.py`. 완료 아닌 작업 200개(기한 이른 순 null 뒤 → 등록 순) · 본문 앞 3줄 · 걸린 안건 제목 · 넣은 작업끼리의 선행. 답은 JSON(코드 블록 표시는 떼고 읽음), 모양이 틀리거나 거절이면 502 `DEPENDENCY_SUGGEST_FAILED`
+- [x] 시드 — 선행 셋, 작업마다 상태 한 줄(start 0시 UTC, 없으면 등록 시각), k20 · k22 는 등록(todo) 줄 + 시연 줄. `scripts/demo_task_log.py` — 개발 DB 에 선행 셋 · 시연 줄만(있거나 지금 상태가 다르면 건너뜀)
+- [x] 검사 — `tests/test_task_flow.py`(PUT/DELETE 검사 전부 · 권한 · cascade · 길마다 기록 · 상태 그대로 PATCH · seq 로 마지막 줄 · 마이그레이션 backfill · 시연 스크립트 · 제안 거르기 · 20개 · 잘림 · 502 · 503 · 429). `test_contract_types.py` · `test_read_api.py` 키 목록
+- [x] 개발 DB — `alembic upgrade head` · `scripts/demo_task_log.py`(시드는 안 돌림)
+- [ ] 평가 — 실제 키로 제안을 돌려 근거가 약한 것이 섞이는지 본다. 7-3 평가셋 옆에 둔다
+
+## 14단계 · 프로젝트 진행 리포트 — 지난 7일을 규칙으로 세고 Claude 가 손쓸 것을 쓴다
+
+계약은 `../docs/api/report.md`(합의 2026-10-20 · Q49 ~ Q51 닫힘), 화면은 `../web/PLAN.md` 15단계다.
+바탕은 13단계(선행 작업 · 상태 기록)와 10단계(결정 병목 계산 · AI 요약의 틀)다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 계산 | `services/progress.py` 의 `progress_facts` 하나 — 리스크와 같이 몇 번의 select 로 다 읽고 파이썬에서 센다. `today` 를 인자로 받는다. 리포트는 `progress_with_risks` 로 병목 안건의 등급 · 신호까지 같이 받는다 | 나중의 챗봇 도구가 같은 함수를 부른다. 리스크를 두 번 세지 않는다 |
+| 문턱값 | 리스크 기준(`RiskSettings`) 그대로. `decidedButBlocked` 도 `decision_risks` 의 것을 쓴다 | 기준이 두 벌이면 리스크 화면과 리포트가 다른 말을 한다 |
+| Claude | 리스크 AI 요약과 같은 틀 — `risk_summary.one_shot` · `api/chat.ready_client`(503 · 429, 제한기 공유) · `chat._api_error_event` · `extract_refs`. 도구 없이 한 번 | 같은 오류 처리 · 같은 모델 설정 |
+| 저장 | `services/report.py` 의 `write` 맨 끝 한 자리에서만 — 스트림이 끝까지 성공한 뒤. 끊김 · error 면 거기 닿지 않는다 | 화면이 [멈추기] 를 누르거나 연결이 끊기면 제너레이터가 저장 전에 멈춘다 |
+| facts | jsonb(검사의 sqlite 는 JSON)에 camelCase 그대로. 목록의 숫자도 여기서 읽는다 | 만든 때의 계산이다 — 다시 세지 않는다 |
+
+### 14-1 체크리스트
+
+- [x] 리비전 `0016_project_report` — `project_report`(project cascade · facts jsonb · created_by → member · seq Identity unique) · 인덱스 `(project_id, seq)`. downgrade 도. 시드 `clear` 에 더함(시드 리포트는 없다)
+- [x] `services/progress.py` — 신호 일곱 · 점수 · 정렬 · 30개 · KST 날 수 · previous · 사람별
+- [x] `GET · POST /api/projects/{projectId}/reports` · `GET · DELETE /api/reports/{reportId}` — SSE `facts → delta… → done{report, refs}`, 작업 0개는 Claude 없이 고정 문구, 잘리면 한 줄 붙여 저장, refs 는 넣어 준 id 만. 경로 `report_id` 를 `require_scope` 에(404 `REPORT_NOT_FOUND`), 지우기는 만든 사람 · 프로젝트 관리자 · 시스템 관리자
+- [x] 시스템 프롬프트 · 넣는 근거 — 계약의 'Claude 가 쓰는 것' 그대로(이름으로만, attention 위 8개 상세, 기간의 결정 이력, 앞 리포트 글)
+- [x] 검사 — `tests/test_progress.py`(신호마다 · backfill · 점수 · 정렬 · 30개 · previous · 완료 제외 · 시드 HW-20) · `tests/test_report.py`(SSE 순서 · 저장 · 실패 · 끊김 · 작업 0개 · refs · 근거 · 503 · 429 · 권한 · 404) · `test_contract_types.py` 의 리포트 모양
+- [x] 개발 DB — `alembic upgrade head`(시드는 안 돌림). 실제 키로 p1 리포트 한 편을 만들어 봤다
+- [ ] 평가 — '먼저 손쓸 것' 이 attention 순서 · 숫자를 지키는지, 지어낸 근거가 없는지 몇 번 돌려 본다. 7-3 평가셋 옆에 둔다
+
 ---
 
 ## 진행 상황
@@ -285,6 +335,8 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 |
 | 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **11-1 끝남** (2026-10-16) — 리비전 `0012_check_request` · 네 경로 · `services/check.py`(보낼 때 부하 찍기, 기한 임박은 오늘(KST) + 3일 고정) · `require_scope` 의 `check_id` 갈래 · 시드 `c1` ~ `c4` · `tests/test_check.py`. API.md 네 줄 `구현`. **2026-10-19 고침 끝남** — 결정 알림으로 좁힘 · 참조(`thread_cc`) · 리비전 `0013_check_on_decision`. 2차(확인율 분석)는 기록이 쌓인 뒤 |
 | 12 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘. **12-1 끝남** (2026-10-19) — `POST .../minutes/draft`(SSE · `propose_minutes`, 챗봇 루프 재사용) · `POST .../minutes/apply`(한 트랜잭션) · 검사 함수 하나를 둘이 같이 씀 · 마이그레이션 없음. API.md 두 줄 `구현`. **2026-10-20 고침 끝남** (Q48) — 게시판(`minutes` · CRUD) · draft/apply 를 `/api/minutes/{id}/…` 로 · 출처 `minutesId` · 요약 저장 · 리비전 `0014_minutes` · 시드 `m1`. API.md 네 줄 `구현 (2026-10-20 고침)`. 다음은 평가 |
+| 13 선행 작업 · 작업 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **13-1 끝남** (2026-10-20) — 리비전 `0015_task_flow`(backfill 포함) · 선행 PUT · DELETE · 검사 함수 하나 · `task_log` 를 모든 길에서 · `Task.statusChangedAt` · `statusSinceBackfill` · AI 제안(JSON, 리스크 요약 틀 재사용) · 시드 · `scripts/demo_task_log.py`. API.md 두 줄 `구현`. 다음은 14 리포트 |
+| 14 프로젝트 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
 
 ## 아직 안 정한 것
 

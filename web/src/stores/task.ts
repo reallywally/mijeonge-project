@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import * as api from '@/api'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
+import { dependencyChoices } from '@/lib/dependency'
 import { toastError } from '@/lib/notify'
 import { inheritedPartId } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
@@ -73,8 +74,8 @@ export const useTaskStore = defineStore('task', () => {
   const fullPath = (task: Task) => [...ancestorTitles(task), task.title].join(' › ')
 
   /** 상위 작업 고르기 목록. 고르는 값은 이름이 아니라 id 다 */
-  const parentOptions = computed<{ id: string; label: string }[]>(() =>
-    tasks.value.map((t) => ({ id: t.id, label: fullPath(t) })),
+  const parentOptions = computed<{ id: string; key: string; label: string }[]>(() =>
+    tasks.value.map((t) => ({ id: t.id, key: t.key, label: fullPath(t) })),
   )
 
   const periodLabel = (task: Task) =>
@@ -151,6 +152,87 @@ export const useTaskStore = defineStore('task', () => {
       children,
       threads: threadsOfTask(taskId).map(threadRow),
       doneChildCount: children.filter((c) => c.task.status === 'done').length,
+      dependsOn: dependsOnOf(taskId),
+      dependents: dependentsOf(taskId),
+    }
+  }
+
+  /* 선행 작업 — 레코드는 데이터 스토어에 있고, 고른 프로젝트의 작업끼리만 본다 */
+  const dependencies = computed(() =>
+    data.taskDependencies.filter((d) => byId.value[d.taskId] && byId.value[d.dependsOnId]),
+  )
+
+  /** 이 작업보다 먼저 끝나야 하는 작업 */
+  const dependsOnOf = (taskId: string): Task[] =>
+    dependencies.value.filter((d) => d.taskId === taskId).map((d) => byId.value[d.dependsOnId])
+
+  /** 이 작업을 기다리는 작업 */
+  const dependentsOf = (taskId: string): Task[] =>
+    dependencies.value.filter((d) => d.dependsOnId === taskId).map((d) => byId.value[d.taskId])
+
+  /** 선행으로 고를 수 있는 것 — 자기 · 상위 · 하위 · 이미 건 것은 빠지고, 순환이 되는 것은 까닭이 붙는다 */
+  const dependencyChoicesFor = (taskId: string) =>
+    dependencyChoices(tasks.value, dependencies.value, taskId)
+
+  const hasDependency = (taskId: string, dependsOnId: string) =>
+    data.taskDependencies.some((d) => d.taskId === taskId && d.dependsOnId === dependsOnId)
+
+  function dropDependency(taskId: string, dependsOnId: string) {
+    data.taskDependencies = data.taskDependencies.filter(
+      (d) => !(d.taskId === taskId && d.dependsOnId === dependsOnId),
+    )
+  }
+
+  /* 같은 쌍에 걸기 · 떼기가 겹치면 마지막에 보낸 것만 되돌릴 자격이 있다 — 앞의 실패가 뒤의 결과를 덮지 않게 */
+  const dependencyTurn = new Map<string, number>()
+  let dependencyTicket = 0
+  const takeTurn = (key: string) => {
+    dependencyTicket += 1
+    dependencyTurn.set(key, dependencyTicket)
+    return dependencyTicket
+  }
+
+  /**
+   * 선행 작업을 건다. 화면에 먼저 넣고, 거절되면 빼고 까닭을 띄운다(링크와 같다).
+   * 목업도 api 를 거친다 — 상하위 · 순환 · 20개 검사가 서버와 같은 코드로 나와야 해서다.
+   * 목업은 응답 뒤에 넣는다 — 목업 api 는 이미 걸린 관계를 검사 없이 통과시키므로(서버와 같다) 먼저 넣으면 제 검사를 건너뛴다.
+   * 실패하면 그 까닭 한 줄, 되면 null. 제안 창처럼 그 줄에 까닭을 다는 자리는 quiet 로 토스트를 끈다
+   */
+  async function addDependency(
+    taskId: string,
+    dependsOnId: string,
+    { quiet = false } = {},
+  ): Promise<string | null> {
+    if (hasDependency(taskId, dependsOnId)) return null
+    const key = `${taskId}:${dependsOnId}`
+    const mine = takeTurn(key)
+    if (!data.mock) data.taskDependencies.push({ taskId, dependsOnId })
+    try {
+      await api.putTaskDependency(taskId, dependsOnId)
+      if (data.mock && !hasDependency(taskId, dependsOnId))
+        data.taskDependencies.push({ taskId, dependsOnId })
+      return null
+    } catch (e) {
+      if (!data.mock && dependencyTurn.get(key) === mine) dropDependency(taskId, dependsOnId)
+      if (!quiet) toastError(e)
+      return api.messageOf(e)
+    }
+  }
+
+  /** 선행 작업을 뗀다. 실패하면 다시 넣고 알린다 */
+  async function removeDependency(taskId: string, dependsOnId: string): Promise<boolean> {
+    if (!hasDependency(taskId, dependsOnId)) return true
+    const key = `${taskId}:${dependsOnId}`
+    const mine = takeTurn(key)
+    dropDependency(taskId, dependsOnId)
+    try {
+      await api.deleteTaskDependency(taskId, dependsOnId)
+      return true
+    } catch (e) {
+      if (dependencyTurn.get(key) === mine && !hasDependency(taskId, dependsOnId))
+        data.taskDependencies.push({ taskId, dependsOnId })
+      toastError(e)
+      return false
     }
   }
 
@@ -180,6 +262,12 @@ export const useTaskStore = defineStore('task', () => {
   function setStatus(taskId: string, status: TaskStatus) {
     const task = findTask(taskId)
     if (!task) return
+    /* 상태가 바뀌면 기록이 한 줄 는다 — 목업은 여기서, 서버는 응답의 값으로 갈아끼운다.
+       그대로인 것은 남기지 않는다 (docs/api/task-flow.md) */
+    if (task.status !== status) {
+      task.statusChangedAt = nowIso()
+      task.statusSinceBackfill = false
+    }
     task.status = status
     patch(taskId, { status })
   }
@@ -331,6 +419,7 @@ export const useTaskStore = defineStore('task', () => {
     const partId = inheritedPartId(input.partId, parentTask)
     if (data.rejectPart(partId)) return null
     const id = data.nextId('nk')
+    const createdAt = nowIso()
     data.allTasks.push({
       id,
       projectId: data.currentProjectId,
@@ -345,9 +434,11 @@ export const useTaskStore = defineStore('task', () => {
       due: input.due,
       priority: input.priority,
       partId,
-      createdAt: nowIso(),
+      createdAt,
       commentCount: 0,
       minutesId: null,
+      statusChangedAt: createdAt,
+      statusSinceBackfill: false,
     })
     for (const threadId of input.threadIds) addLink(id, threadId)
     return id
@@ -435,5 +526,11 @@ export const useTaskStore = defineStore('task', () => {
     addTaskBatch,
     linkThread,
     unlinkThread,
+    dependencies,
+    dependsOnOf,
+    dependentsOf,
+    dependencyChoicesFor,
+    addDependency,
+    removeDependency,
   }
 })

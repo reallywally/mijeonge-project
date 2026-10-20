@@ -1,5 +1,5 @@
 import { dayToDate, isoDay, shiftDays } from '@/lib/date'
-import type { TaskRow, TaskStatus } from '@/types/domain'
+import type { TaskDependency, TaskRow, TaskStatus } from '@/types/domain'
 
 /**
  * 스토어의 작업 행을 dhtmlx-gantt 가 먹는 모양으로 옮긴다.
@@ -79,4 +79,41 @@ export function rangeLabel(rows: TaskRow[]) {
   const first = dayToDate(days[0])
   const last = dayToDate(days[days.length - 1])
   return `${first.getFullYear()}년 ${first.getMonth() + 1}월 ${first.getDate()}일 – ${last.getMonth() + 1}월 ${last.getDate()}일`
+}
+
+/** dhtmlx 의 finish-to-start — 선행의 끝 → 뒤 작업의 시작. 우리 선행 관계는 이것 하나뿐이다 */
+export const FINISH_TO_START = '0'
+
+export interface GanttLink {
+  id: string
+  /** 선행 작업 */
+  source: string
+  /** 뒤 작업 */
+  target: string
+  type: typeof FINISH_TO_START
+}
+
+export const linkIdOf = (d: TaskDependency) => `${d.dependsOnId}>${d.taskId}`
+
+/** 선행 관계를 화살표로 — 양쪽 작업이 다 간트에 서 있는 것만. 한쪽이 거르기로 빠졌으면 그릴 자리가 없다 */
+export function toGanttLinks(deps: TaskDependency[], items: { id: string }[]): GanttLink[] {
+  const ids = new Set(items.map((i) => i.id))
+  return deps
+    .filter((d) => ids.has(d.taskId) && ids.has(d.dependsOnId))
+    .map((d) => ({
+      id: linkIdOf(d),
+      source: d.dependsOnId,
+      target: d.taskId,
+      type: FINISH_TO_START,
+    }))
+}
+
+/** 끌어 만든 화살표를 우리 선행 관계로. 끝 → 시작이 아니거나 제자리로 끌었으면 null */
+export function linkToDependency(link: {
+  source: string | number
+  target: string | number
+  type: string
+}): TaskDependency | null {
+  if (String(link.type) !== FINISH_TO_START || link.source === link.target) return null
+  return { taskId: String(link.target), dependsOnId: String(link.source) }
 }

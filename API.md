@@ -22,6 +22,8 @@
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
 | `docs/api/check.md` | 확인 요청 — 결정된 안건에서 버튼 하나로 연결 작업 담당자 + 참조에게 · 받은 것 / 보낸 것 · 배지. 안건의 참조(`ccIds`). 2차 확인율 분석의 테두리 |
 | `docs/api/minutes.md` | 회의록 — 게시판(쓰기 · 읽기 · 고치기 · 지우기) · 회의록 하나 → 새 안건 · 기존 안건 이력 · 작업 초안(SSE) → 고른 것만 한 번에 등록, 출처 `minutesId`. 2단계 녹음 업로드의 테두리 |
+| `docs/api/task-flow.md` | 선행 작업(사람이 지정 · AI 제안 → [적용]) · 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕 |
+| `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
 - 새 도메인의 계약이 길어지면(표 한 줄로 안 끝나면) `docs/api/<도메인>.md` 를 새로 세우고 위 표에 줄을 더한다
@@ -182,10 +184,24 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | POST | `/api/minutes/{minutesId}/draft` | 저장된 본문 → 초안. Claude 도구 루프, 저장하지 않는다 | `text/event-stream` (`MinutesEvent`) | 구현 (2026-10-20 고침) |
 | POST | `/api/minutes/{minutesId}/apply` | 고른 초안(새 안건 · 기존 안건 이력 · 작업 · 링크)을 한 트랜잭션으로, 만든 것에 출처 `minutesId` · 회의록 요약 저장 | `MinutesApplyResult` · 201 | 구현 (2026-10-20 고침) |
 
+선행 작업 · 작업 상태 기록(`server/PLAN.md` 13단계 · `web/PLAN.md` 14단계). 모양은 `docs/api/task-flow.md` 다. 결정은 Q49 · Q50.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| PUT · DELETE | `/api/tasks/{taskId}/dependencies/{dependsOnId}` | 선행 작업 걸기 · 떼기 (멱등). 자기 · 상위 ↔ 하위 400, 순환 409, 20개까지 | `TaskDependency` · 204 | 구현 |
+| POST | `/api/projects/{projectId}/dependencies/suggest` | AI 가 빠진 선행 관계를 이유와 함께 제안 — 저장하지 않는다 | `DependencySuggestions` | 구현 |
+
+프로젝트 진행 리포트(왼쪽 메뉴 '리포트', `server/PLAN.md` 14단계 · `web/PLAN.md` 15단계). 모양은 `docs/api/report.md` 다. 결정은 Q49 ~ Q51.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET · POST | `/api/projects/{projectId}/reports` | 목록 · 만들기(본문 없음 — 계산 → `facts` → Claude 글 스트림 → 다 받으면 저장) | `ReportItem[]` · `text/event-stream` (`ReportEvent`) | 구현 |
+| GET · DELETE | `/api/reports/{reportId}` | 읽기 · 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | `Report` · 204 | 구현 |
+
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q49).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q52).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

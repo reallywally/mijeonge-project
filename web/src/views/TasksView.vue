@@ -10,9 +10,11 @@ import {
   MessageSquare,
   Plus,
   Search,
+  Sparkles,
   SquareKanban,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import DependencySuggestDialog from '@/components/app/DependencySuggestDialog.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TaskBoard from '@/components/app/TaskBoard.vue'
@@ -210,6 +212,9 @@ const barLegend = [
   },
 ]
 
+/* [AI 선행 관계 찾기] — 세 탭 어디서든 같은 창이다 */
+const suggestOpen = ref(false)
+
 /* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다 */
 const checked = ref<Set<string>>(new Set())
 const checkedCount = computed(() => checked.value.size)
@@ -348,6 +353,10 @@ function bulkOwner(value: string) {
         칸반보드
       </RouterLink>
       <div class="grow" />
+      <Button variant="outline" size="sm" @click="suggestOpen = true">
+        <Sparkles class="size-4" />
+        AI 선행 관계 찾기
+      </Button>
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>
@@ -661,6 +670,8 @@ function bulkOwner(value: string) {
       @open-task="openTask"
       @open-thread="(id) => router.push(`/threads/${id}`)"
     />
+
+    <DependencySuggestDialog v-model:open="suggestOpen" @open-task="openTask" />
 
     <TaskCreateDialog
       v-model:open="createOpen"

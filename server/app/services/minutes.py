@@ -318,7 +318,7 @@ def _entry_create(entry: ProposedEntryBody) -> EntryCreate:
 
 
 async def apply_minutes(
-    session: AsyncSession, minutes_id: str, payload: MinutesApplyInput
+    session: AsyncSession, minutes_id: str, payload: MinutesApplyInput, actor_id: str
 ) -> MinutesApplyResult:
     """고른 초안을 한 트랜잭션에 넣는다. 하나라도 틀리면 아무것도 안 남는다 — 발번한 번호까지.
 
@@ -333,7 +333,7 @@ async def apply_minutes(
         raise problems[0]
 
     try:
-        result = await _insert(session, project, minutes.id, threads, entries, tasks)
+        result = await _insert(session, project, minutes.id, threads, entries, tasks, actor_id)
         if payload.summary is not None:
             # updated_at 은 그대로 둔다 — '고친 시각' 은 사람이 글을 고친 때다
             minutes.summary = payload.summary
@@ -352,6 +352,7 @@ async def _insert(
     threads: list[ProposedThread],
     entries: list[ProposedEntry],
     tasks: list[ProposedMinutesTask],
+    actor_id: str,
 ) -> MinutesApplyResult:
     created_at = now()
     thread_ids: dict[str, str] = {}
@@ -426,7 +427,10 @@ async def _insert(
             "thread_ids": linked,
         }
         # partId 는 안 보낸다 — 상위 작업의 파트를 따르고, 최상위면 공통이다
-        task = await task_service._insert_task(session, project, TaskCreate.model_validate(fields))
+        # 상태 기록 첫 줄도 여기서 남는다 — 등록과 같은 함수다
+        task = await task_service._insert_task(
+            session, project, TaskCreate.model_validate(fields), actor_id
+        )
         task.minutes_id = minutes_id
         task_ids[row.temp_id] = task.id
         created_tasks.append(task)
@@ -437,7 +441,10 @@ async def _insert(
         threads=[thread_service.to_thread(thread) for thread in created_threads],
         entries=added,
         updated_threads=[thread_service.to_thread(thread) for thread in updated.values()],
-        tasks=[task_service.to_task(task, comment_count=0) for task in created_tasks],
+        tasks=[
+            task_service.to_task(task, 0, task_service.StatusSince(task.created_at, False))
+            for task in created_tasks
+        ],
         links=links,
         thread_id_by_temp_id=thread_ids,
         task_id_by_temp_id=task_ids,

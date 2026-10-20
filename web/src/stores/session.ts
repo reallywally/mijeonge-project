@@ -7,6 +7,7 @@ import { useDataStore } from '@/stores/data'
 import { useMinutesStore } from '@/stores/minutes'
 import { useMinutesDraftStore } from '@/stores/minutesDraft'
 import { usePartStore } from '@/stores/part'
+import { useReportStore } from '@/stores/report'
 import { useRiskStore } from '@/stores/risk'
 
 /**
@@ -19,6 +20,7 @@ export function clearSession() {
   useAdminStore().clear()
   usePartStore().clear()
   useRiskStore().clear()
+  useReportStore().clear()
   useCheckStore().clear()
   useMinutesDraftStore().reset()
   useMinutesStore().clear()

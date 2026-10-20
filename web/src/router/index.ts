@@ -96,6 +96,16 @@ const router = createRouter({
       component: () => import('@/views/RiskView.vue'),
     },
     {
+      path: '/reports',
+      name: 'reports',
+      component: () => import('@/views/ReportsView.vue'),
+    },
+    {
+      path: '/reports/:reportId',
+      name: 'report',
+      component: () => import('@/views/ReportDetailView.vue'),
+    },
+    {
       path: '/checks',
       name: 'checks',
       component: () => import('@/views/ChecksView.vue'),

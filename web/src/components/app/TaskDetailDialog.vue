@@ -4,6 +4,7 @@ import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
+import TaskDependencies from '@/components/app/TaskDependencies.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
@@ -16,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
+import { statusSinceLabel } from '@/lib/dependency'
 import { periodProblem, TASK_STATUS_OPTIONS } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
@@ -25,7 +27,7 @@ import { useThreadStore } from '@/stores/thread'
 import type { TaskLine, TaskStatus } from '@/types/domain'
 
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
-   따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 연결, 오른쪽이 속성이다.
+   따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 선행 작업 · 연결, 오른쪽이 속성이다.
    안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. 그 아래 확인 요청, 맨 아래가 댓글이다. */
 const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -296,6 +298,8 @@ const threadChoices = computed(() => {
             </div>
           </section>
 
+          <TaskDependencies :task-id="detail.task.id" @open-task="(id) => emit('open-task', id)" />
+
           <TaskLinks
             :threads="detail.threads"
             :thread-choices="threadChoices"
@@ -317,6 +321,7 @@ const threadChoices = computed(() => {
           :parent-id="detail.task.parentId"
           :part-id="detail.task.partId"
           :parent-choices="parentChoices"
+          :status-since="statusSinceLabel(detail.task)"
           show-done
           @update:status="(v) => taskStore.setStatus(detail!.task.id, v)"
           @update:owner-id="(v) => taskStore.setOwner(detail!.task.id, v)"

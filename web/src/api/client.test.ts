@@ -94,6 +94,7 @@ describe('스냅샷', () => {
     entries: [],
     tasks: [],
     taskThreadLinks: [{ taskId: 'k1', threadId: 't1' }],
+    taskDependencies: [{ taskId: 'k20', dependsOnId: 'k19' }],
     parts: [{ id: 'pt1', projectId: 'p1', name: '인프라', active: true }],
     partMembers: [{ partId: 'pt1', memberId: 'u3' }],
   }
@@ -108,10 +109,12 @@ describe('스냅샷', () => {
         'partMembers',
         'parts',
         'project',
+        'taskDependencies',
         'taskThreads',
       ].sort(),
     )
     expect(records.taskThreads).toBe(snapshot.taskThreadLinks)
+    expect(records.taskDependencies).toBe(snapshot.taskDependencies)
     expect(records.parts).toBe(snapshot.parts)
     expect(records.partMembers).toBe(snapshot.partMembers)
   })

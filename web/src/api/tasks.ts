@@ -107,6 +107,7 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
 
   const taskIdByTempId: Record<string, string> = {}
   const madeByTempId: Record<string, Task> = {}
+  const createdAt = nowIso()
   const made = input.tasks.map((t): Task => {
     mockSeq += 1
     const taskId = `bt${mockSeq}`
@@ -131,9 +132,12 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       priority: t.priority,
       /* 초안은 partId 를 싣지 않는다 — 부모를 따른다 (docs/api/part.md) */
       partId: inheritedPartId(undefined, parent),
-      createdAt: nowIso(),
+      createdAt,
       commentCount: 0,
       minutesId: null,
+      /* 만들 때도 상태 기록이 한 줄 남는다 (docs/api/task-flow.md) */
+      statusChangedAt: createdAt,
+      statusSinceBackfill: false,
     }
     madeByTempId[t.tempId] = task
     return task

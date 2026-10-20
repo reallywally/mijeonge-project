@@ -2,8 +2,17 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Gantt } from 'dhtmlx-gantt'
+import type { GanttStatic } from 'dhtmlx-gantt'
+import { toast } from 'vue-sonner'
 import TaskGantt from './TaskGantt.vue'
+import { resetMockAuth } from '@/api/mockAuth'
+import { MOCK_PASSWORD } from '@/fixtures'
+import { useAuthStore } from '@/stores/auth'
+import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
+
+vi.mock('vue-sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 /* dhtmlx 는 컨테이너의 실제 높이를 재서 보이는 줄만 그린다. jsdom 은 모든 크기가 0 이라
    한 줄도 안 그려지므로, 이 파일에서만 크기를 있는 척해 준다. 이렇게 해야 우리가 붙인
@@ -130,5 +139,86 @@ describe('간트차트', () => {
     await w.get('.gantt_grid_data [data-task-id="k4"]').trigger('dblclick')
     await flushPromises()
     expect(document.querySelector('.gantt_cal_light')).toBeNull()
+  })
+})
+
+describe('간트차트 — 선행 관계', () => {
+  /* 끌어 거는 손놀림은 jsdom 에서 재현이 어렵다 — 간트가 끌기를 마치고 부르는 자리(onBeforeLinkAdd)를 직접 부른다 */
+  let chart: GanttStatic
+  const pairs = () => useDataStore().taskDependencies.map((d) => `${d.dependsOnId}>${d.taskId}`)
+
+  beforeEach(async () => {
+    resetMockAuth()
+    vi.mocked(toast.error).mockClear()
+    const real = Gantt.getGanttInstance.bind(Gantt)
+    vi.spyOn(Gantt, 'getGanttInstance').mockImplementation((...args) => {
+      chart = real(...args)
+      return chart
+    })
+    await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('선행 관계를 선행의 끝 → 뒤 작업의 시작 화살표로 그린다', async () => {
+    const w = await mountGantt()
+    expect(chart.getLinks().map((l) => [l.source, l.target, l.type])).toEqual([
+      ['k19', 'k20', '0'],
+      ['k20', 'k21', '0'],
+      ['k20', 'k22', '0'],
+    ])
+    expect(w.find('.gantt_task_link[data-link-id="k19>k20"]').exists()).toBe(true)
+  })
+
+  it('끌어 건 것은 간트가 직접 넣지 않고 스토어를 거쳐 다시 그려진다', async () => {
+    await mountGantt()
+    const passed = chart.callEvent('onBeforeLinkAdd', [
+      'tmp',
+      { id: 'tmp', source: 'k15', target: 'k16', type: '0' },
+    ])
+    expect(passed).toBe(false)
+    await flushPromises()
+    expect(pairs()).toContain('k15>k16')
+    expect(chart.isLinkExists('k15>k16')).toBe(true)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('순환 · 상하위 · 끝 → 시작이 아닌 것은 그 자리에서 까닭을 띄우고 걸지 않는다', async () => {
+    await mountGantt()
+    const add = (source: string, target: string, type = '0') =>
+      chart.callEvent('onBeforeLinkAdd', ['tmp', { id: 'tmp', source, target, type }])
+
+    expect(add('k21', 'k19')).toBe(false)
+    expect(add('k4', 'k20')).toBe(false)
+    expect(add('k15', 'k16', '1')).toBe(false)
+    await flushPromises()
+    expect(vi.mocked(toast.error).mock.calls.map((c) => c[0])).toEqual([
+      '선행 작업이 이미 이 작업을 기다리고 있어 순환이 생깁니다.',
+      '자기 자신이나 상위 · 하위 작업은 선행 작업으로 둘 수 없습니다.',
+      '앞 작업 막대의 오른쪽 끝에서 뒤 작업 막대의 왼쪽 끝으로 끌어 겁니다.',
+    ])
+    expect(pairs()).toEqual(['k19>k20', 'k20>k21', 'k20>k22'])
+  })
+
+  it('화살표를 누르면 묻고 뗀다 — 아니라고 하면 그대로', async () => {
+    await mountGantt()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    chart.callEvent('onLinkClick', ['k19>k20'])
+    await flushPromises()
+    expect(confirm.mock.calls[0][0]).toContain('HW-19 서버 발급받고 접속 확인 → HW-20')
+    expect(pairs()).toContain('k19>k20')
+
+    confirm.mockReturnValueOnce(true)
+    chart.callEvent('onLinkClick', ['k19>k20'])
+    await flushPromises()
+    expect(pairs()).not.toContain('k19>k20')
+    expect(chart.isLinkExists('k19>k20')).toBe(false)
+  })
+
+  it('두 번 눌러도 라이브러리의 지우기 창은 뜨지 않는다', async () => {
+    await mountGantt()
+    expect(chart.callEvent('onLinkDblClick', ['k19>k20'])).toBe(false)
   })
 })

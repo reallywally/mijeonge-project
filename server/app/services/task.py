@@ -6,8 +6,10 @@
 """
 
 from collections.abc import Collection, Sequence
+from datetime import datetime
+from typing import NamedTuple
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
@@ -16,6 +18,7 @@ from app.models import (
     Task,
     TaskComment,
     TaskLine,
+    TaskLog,
     TaskThreadLink,
     Thread,
     new_id,
@@ -39,8 +42,16 @@ from app.services import project as project_service
 from app.time import now
 
 
-def to_task(row: Task, comment_count: int) -> TaskOut:
-    """개수를 따로 받는다 — 작업마다 세면 목록 하나가 쿼리 수십 개가 된다(`comment_counts`)."""
+class StatusSince(NamedTuple):
+    """지금 상태가 된 시각 — task_log 의 마지막 줄 (docs/api/task-flow.md)."""
+
+    changed_at: datetime
+    backfilled: bool
+
+
+def to_task(row: Task, comment_count: int, since: StatusSince) -> TaskOut:
+    """개수 · 상태 시각을 따로 받는다 — 작업마다 세면 목록 하나가 쿼리 수십 개가 된다
+    (`comment_counts` · `status_since_map`)."""
     return TaskOut(
         id=row.id,
         project_id=row.project_id,
@@ -57,7 +68,64 @@ def to_task(row: Task, comment_count: int) -> TaskOut:
         created_at=row.created_at,
         comment_count=comment_count,
         minutes_id=row.minutes_id,
+        status_changed_at=since.changed_at,
+        status_since_backfill=since.backfilled,
     )
+
+
+def record_status(
+    session: AsyncSession,
+    task: Task,
+    from_status: str | None,
+    changed_by: str | None,
+    at: datetime,
+) -> StatusSince:
+    """상태가 바뀐 줄 하나 — **상태가 바뀌는 길은 전부 이것을 부른다**(등록 · PATCH · 일괄 · 회의록)
+
+    같은 상태로의 '바뀜' 은 부르는 쪽이 거른다. 커밋하지 않는다.
+    """
+    session.add(
+        TaskLog(
+            id=new_id(),
+            project_id=task.project_id,
+            task_id=task.id,
+            from_status=from_status,
+            to_status=task.status,
+            changed_by=changed_by,
+            changed_at=at,
+            backfilled=False,
+        )
+    )
+    return StatusSince(at, False)
+
+
+def _last_logs() -> Select[tuple[str, datetime, bool]]:
+    last = (
+        select(TaskLog.task_id, func.max(TaskLog.seq).label("seq"))
+        .group_by(TaskLog.task_id)
+        .subquery()
+    )
+    return select(TaskLog.task_id, TaskLog.changed_at, TaskLog.backfilled).join(
+        last, (last.c.task_id == TaskLog.task_id) & (last.c.seq == TaskLog.seq)
+    )
+
+
+async def status_since_map(session: AsyncSession, project_id: str) -> dict[str, StatusSince]:
+    """그 프로젝트 작업들의 '지금 상태가 된 시각' 을 한 번에 — 순서는 seq 가 정한다 (API.md Q15)."""
+    rows = await session.execute(_last_logs().where(TaskLog.project_id == project_id))
+    return {task_id: StatusSince(at, backfilled) for task_id, at, backfilled in rows.tuples()}
+
+
+async def status_since(session: AsyncSession, task: Task) -> StatusSince:
+    found = (await session.execute(_last_logs().where(TaskLog.task_id == task.id))).one_or_none()
+    if found is None:
+        # 줄이 없을 수 없지만(backfill) 비었으면 등록 시각으로 본다 — 500 을 내지 않는다
+        return StatusSince(task.created_at, True)
+    return StatusSince(found.changed_at, found.backfilled)
+
+
+def since_or_created(found: dict[str, StatusSince], task: Task) -> StatusSince:
+    return found.get(task.id) or StatusSince(task.created_at, True)
 
 
 async def comment_counts(session: AsyncSession, project_id: str) -> dict[str, int]:
@@ -139,8 +207,11 @@ async def _guard_parent(
         walker = await session.scalar(select(Task.parent_id).where(Task.id == walker))
 
 
-async def _insert_task(session: AsyncSession, project: Project, payload: TaskCreate) -> Task:
-    """작업 하나를 넣는다. 커밋하지 않는다 — 일괄 등록이 여럿을 한 트랜잭션에 묶는다."""
+async def _insert_task(
+    session: AsyncSession, project: Project, payload: TaskCreate, actor_id: str | None
+) -> Task:
+    """작업 하나를 넣는다 — 상태 기록 첫 줄(`null → 상태`)까지.
+    커밋하지 않는다 — 일괄 등록 · 회의록 apply 가 여럿을 한 트랜잭션에 묶는다."""
     await _guard_parent(session, project.id, None, payload.parent_id)
     part_id = await _part_for_new_task(session, project.id, payload)
 
@@ -172,6 +243,7 @@ async def _insert_task(session: AsyncSession, project: Project, payload: TaskCre
     )
     session.add(task)
     await session.flush()
+    record_status(session, task, None, actor_id, task.created_at)
 
     for thread_id in dict.fromkeys(payload.thread_ids):
         await _attach_thread(session, task, thread_id)
@@ -207,13 +279,15 @@ async def _guard_owner(session: AsyncSession, project_id: str, owner_id: str | N
         )
 
 
-async def create_task(session: AsyncSession, project_id: str, payload: TaskCreate) -> TaskOut:
+async def create_task(
+    session: AsyncSession, project_id: str, payload: TaskCreate, actor_id: str
+) -> TaskOut:
     project = await project_service.load_project(session, project_id)
     await _guard_owner(session, project.id, payload.owner_id)
-    task = await _insert_task(session, project, payload)
+    task = await _insert_task(session, project, payload, actor_id)
     await session.commit()
     # 방금 만든 작업이라 댓글이 있을 수 없다
-    return to_task(task, comment_count=0)
+    return to_task(task, 0, StatusSince(task.created_at, False))
 
 
 def proposal_problems(tasks: Sequence[ProposedTask]) -> dict[str, str]:
@@ -296,7 +370,7 @@ async def missing_parents(
 
 
 async def create_tasks(
-    session: AsyncSession, project_id: str, payload: TaskBatchInput
+    session: AsyncSession, project_id: str, payload: TaskBatchInput, actor_id: str
 ) -> TaskBatchResult:
     """초안을 한 트랜잭션에 넣는다. 하나라도 틀리면 아무것도 안 남는다 — 발번한 번호까지."""
     project = await project_service.load_project(session, project_id)
@@ -331,7 +405,7 @@ async def create_tasks(
             # 보낸 줄만 partId 를 넘긴다 — 안 보낸 줄은 앞의 상위를 따른다
             if "part_id" in item.model_fields_set:
                 fields["part_id"] = item.part_id
-            task = await _insert_task(session, project, TaskCreate.model_validate(fields))
+            task = await _insert_task(session, project, TaskCreate.model_validate(fields), actor_id)
             id_by_temp[item.temp_id] = task.id
             created.append(task)
         await session.commit()
@@ -340,7 +414,7 @@ async def create_tasks(
         await session.rollback()
         raise
     return TaskBatchResult(
-        tasks=[to_task(task, comment_count=0) for task in created],
+        tasks=[to_task(task, 0, StatusSince(task.created_at, False)) for task in created],
         task_id_by_temp_id=id_by_temp,
     )
 
@@ -359,8 +433,11 @@ async def _guard_batch_parts(
             )
 
 
-async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) -> TaskOut:
+async def patch_task(
+    session: AsyncSession, task_id: str, payload: TaskPatch, actor_id: str
+) -> TaskOut:
     task = await load_task(session, task_id)
+    before = task.status
     # exclude_unset — 안 보낸 것과 null 로 보낸 것을 가른다. ownerId: null 은 담당자 지우기다
     changes = payload.model_dump(exclude_unset=True, exclude={"body"})
     if "body" in payload.model_fields_set:
@@ -375,8 +452,11 @@ async def patch_task(session: AsyncSession, task_id: str, payload: TaskPatch) ->
         await part_service.guard_part(session, task.project_id, changes["part_id"])
     for field, value in changes.items():
         setattr(task, field, value)
+    # 상태가 그대로인 수정은 남기지 않는다 — '진행 중이 된 지 며칠' 이 다시 0 이 되면 안 된다
+    if task.status != before:
+        record_status(session, task, before, actor_id, now())
     await session.commit()
-    return to_task(task, await comment_count(session, task.id))
+    return to_task(task, await comment_count(session, task.id), await status_since(session, task))
 
 
 def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:
@@ -408,7 +488,7 @@ async def set_line_done(session: AsyncSession, task_id: str, line_id: str, done:
         raise bad_request("TASK_LINE_NOT_CHECKABLE", "체크박스가 아닌 줄은 켜고 끌 수 없습니다.")
     line.done = done
     await session.commit()
-    return to_task(task, await comment_count(session, task.id))
+    return to_task(task, await comment_count(session, task.id), await status_since(session, task))
 
 
 async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> None:

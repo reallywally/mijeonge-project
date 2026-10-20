@@ -466,6 +466,9 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       createdAt,
       commentCount: 0,
       minutesId,
+      /* 만들 때도 상태 기록이 한 줄 남는다 (docs/api/task-flow.md) */
+      statusChangedAt: createdAt,
+      statusSinceBackfill: false,
     }
     taskIdByTempId[t.tempId] = task.id
     madeByTempId[t.tempId] = task

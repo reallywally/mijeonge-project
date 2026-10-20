@@ -100,4 +100,4 @@ async def apply_minutes(
     minutes_id: str, payload: MinutesApplyInput, scope: ProjectScope, session: Session
 ) -> MinutesApplyResult:
     """고른 초안을 한 번에 등록한다. 한 트랜잭션 — 하나라도 틀리면 아무것도 안 남는다."""
-    return await minutes_service.apply_minutes(session, minutes_id, payload)
+    return await minutes_service.apply_minutes(session, minutes_id, payload, scope.actor.id)

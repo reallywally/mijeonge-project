@@ -39,6 +39,10 @@ class TaskOut(Schema):
     comment_count: int
     # AI 정리로 등록한 회의록. 손으로 만든 것은 null (docs/api/minutes.md)
     minutes_id: str | None = None
+    # 지금 상태가 된 시각 — task_log 의 마지막 줄. 모든 작업에 줄이 있어 null 이 아니다
+    status_changed_at: Utc
+    # 그 줄이 마이그레이션의 backfill 이면 true — 실제로는 더 오래됐을 수 있다 (task-flow.md)
+    status_since_backfill: bool
 
 
 class TaskLineIn(Schema):
@@ -139,6 +143,26 @@ class TaskLinePatch(Schema):
 class TaskThreadLinkOut(Schema):
     task_id: str
     thread_id: str
+
+
+class TaskDependencyOut(Schema):
+    # 뒤 작업
+    task_id: str
+    # 먼저 끝나야 하는 작업
+    depends_on_id: str
+
+
+class DependencySuggestionOut(Schema):
+    task_id: str
+    depends_on_id: str
+    # 왜 — 한 문장
+    reason: str
+
+
+class DependencySuggestionsOut(Schema):
+    suggestions: list[DependencySuggestionOut]
+    # 완료 아닌 작업이 많아 앞에서 잘랐으면 true
+    truncated: bool
 
 
 # 앞뒤 공백을 떼고 비면 422 다(string_too_short)
