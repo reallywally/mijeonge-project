@@ -16,11 +16,11 @@ export const MOCK_STEP_MS = 40
 const CHUNK = 4
 
 /** fetch 가 끊길 때 내는 것과 같은 모양 — 스토어가 멈춤을 한 가지로만 알아보게 */
-const aborted = () => new DOMException('요청을 멈췄습니다.', 'AbortError')
+export const aborted = () => new DOMException('요청을 멈췄습니다.', 'AbortError')
 
 export const isAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError'
 
-function sleep(ms: number, signal: AbortSignal) {
+export function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) return reject(aborted())
     const timer = setTimeout(() => {
@@ -68,11 +68,16 @@ async function* mockEvents(
  * 계약의 끝맺음을 지킨다 — error 이벤트는 ApiError 로 던지고, done 에서 멈추고,
  * done 도 error 도 없이 끝나면 끊긴 것(SERVER_UNREACHABLE)으로 본다. 서버 스트림(7-2)도 이걸 거친다.
  */
-export async function* settle(events: AsyncIterable<ChatEvent>, status = 200) {
+export async function* settle<E extends { type: string }>(
+  events: AsyncIterable<E>,
+  status = 200,
+): AsyncGenerator<E> {
   for await (const event of events) {
-    if (event.type === 'error')
+    if (event.type === 'error') {
+      const { code, message } = event as unknown as { code: string; message: string }
       /* 스트림이 열린 뒤라 status 는 200 이다 — 화면은 code 로만 가른다 */
-      throw new ApiError(status, { code: event.code, message: event.message })
+      throw new ApiError(status, { code, message })
+    }
     yield event
     if (event.type === 'done') return
   }
@@ -154,12 +159,13 @@ async function* chunksOf(body: ReadableStream<Uint8Array>, signal: AbortSignal) 
   }
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+export const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null
 
-const isDayOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string'
+export const isDayOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string'
 
 /** 초안 한 항목. 아는 칸만 옮긴다 — 다음 질문에 그대로 돌려보내므로 모르는 칸을 싣지 않는다 */
-function toProposedTask(v: unknown): ProposedTask | null {
+export function toProposedTask(v: unknown): ProposedTask | null {
   if (!isRecord(v)) return null
   const { tempId, parentTempId, title, ownerId, start, due, priority } = v
   /* parentId 는 나중에 늘어난 칸이다 — 없으면 null 로 본다 */
@@ -210,20 +216,23 @@ export function toChatEvent({ event, data }: SseMessage, status = 200): ChatEven
 }
 
 /**
- * JSON 을 POST 하고 SSE 를 ChatEvent 로 읽는다. 챗봇과 리스크 AI 요약(api/risk.ts)이 같은 스트림 모양이라 같이 쓴다.
- * 끝맺음 판정은 하지 않는다 — settle 을 거친다
+ * POST 하고 SSE 덩어리를 응답 status 와 같이 낸다. 이벤트 모양은 부르는 쪽이 읽는다 —
+ * 챗봇 · 리스크 AI 요약은 postSse, 회의록(api/minutes.ts)은 MinutesEvent 로. input 이 undefined 면 본문 없이 보낸다
  */
-export async function* postSse(
+export async function* postSseMessages(
   path: string,
   input: unknown,
   signal: AbortSignal,
-): AsyncGenerator<ChatEvent> {
+): AsyncGenerator<{ message: SseMessage; status: number }> {
   let res: Response
   try {
     res = await fetch(`/api${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify(input),
+      headers:
+        input === undefined
+          ? { Accept: 'text/event-stream' }
+          : { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: input === undefined ? undefined : JSON.stringify(input),
       signal,
     })
   } catch {
@@ -239,8 +248,21 @@ export async function* postSse(
   }
   if (!res.body) throw unreachable(res.status)
 
-  for await (const message of parseSse(chunksOf(res.body, signal))) {
-    const event = toChatEvent(message, res.status)
+  for await (const message of parseSse(chunksOf(res.body, signal)))
+    yield { message, status: res.status }
+}
+
+/**
+ * JSON 을 POST 하고 SSE 를 ChatEvent 로 읽는다. 챗봇과 리스크 AI 요약(api/risk.ts)이 같은 스트림 모양이라 같이 쓴다.
+ * 끝맺음 판정은 하지 않는다 — settle 을 거친다
+ */
+export async function* postSse(
+  path: string,
+  input: unknown,
+  signal: AbortSignal,
+): AsyncGenerator<ChatEvent> {
+  for await (const { message, status } of postSseMessages(path, input, signal)) {
+    const event = toChatEvent(message, status)
     if (event) yield event
   }
 }

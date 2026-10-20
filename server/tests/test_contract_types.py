@@ -15,8 +15,12 @@ from httpx import AsyncClient
 
 DOMAIN_TS = Path(__file__).resolve().parents[2] / "web" / "src" / "types" / "domain.ts"
 
-_INTERFACE = re.compile(r"^export interface (\w+) \{$")
+_INTERFACE = re.compile(r"^export interface (\w+)(?: extends ([\w, ]+))? \{$")
 _FIELD = re.compile(r"^  (\w+)\??: (.+?)$")
+
+
+# interface 이름 → extends 한 이름들. FIELDS 에는 그 interface 가 직접 적은 필드만 있다
+EXTENDS: dict[str, list[str]] = {}
 
 
 def _declared_fields() -> dict[str, dict[str, bool]]:
@@ -31,6 +35,8 @@ def _declared_fields() -> dict[str, dict[str, bool]]:
         if head:
             name = head.group(1)
             found[name] = {}
+            if head.group(2):
+                EXTENDS[name] = [parent.strip() for parent in head.group(2).split(",")]
             continue
         if name is None:
             continue
@@ -41,6 +47,15 @@ def _declared_fields() -> dict[str, dict[str, bool]]:
 
 
 FIELDS = _declared_fields()
+
+
+def all_fields(name: str) -> dict[str, bool]:
+    """extends 한 interface 의 필드까지 합친다."""
+    merged: dict[str, bool] = {}
+    for parent in EXTENDS.get(name, []):
+        merged |= all_fields(parent)
+    return merged | FIELDS.get(name, {})
+
 
 Pick = Callable[[dict[str, Any]], list[dict[str, Any]]]
 
@@ -58,16 +73,25 @@ CASES: list[tuple[str, Pick]] = [
 # 파트가 늘린 필드 — docs/api/part.md '모양'. 프론트가 domain.ts 에 더하는 중이라 아직 없을 수 있다.
 # 어긋나면 계약 쪽이 기준이다. 둘 다 null 을 낸다(null = 프로젝트 공통)
 PART_ADDED: dict[str, set[str]] = {"Task": {"partId"}, "Thread": {"partId"}}
+# 회의록이 늘린 출처 — docs/api/minutes.md '게시판'(2026-10-20 고침).
+# 셋 다 null 을 낸다(손으로 만든 것)
+MINUTES_ADDED: dict[str, set[str]] = {
+    "Thread": {"minutesId"},
+    "Entry": {"minutesId"},
+    "Task": {"minutesId"},
+}
+
+
+def _added(name: str) -> set[str]:
+    return PART_ADDED.get(name, set()) | MINUTES_ADDED.get(name, set())
 
 
 def expected_keys(name: str) -> set[str]:
-    return set(FIELDS[name]) | PART_ADDED.get(name, set())
+    return set(FIELDS[name]) | _added(name)
 
 
 def nullable_keys(name: str) -> set[str]:
-    return {field for field, nullable in FIELDS[name].items() if nullable} | PART_ADDED.get(
-        name, set()
-    )
+    return {field for field, nullable in FIELDS[name].items() if nullable} | _added(name)
 
 
 @pytest.fixture
@@ -97,10 +121,16 @@ def test_null_only_where_domain_ts_allows(name: str, pick: Pick, snapshot: dict[
                 assert field in nullable, f"{name}.{field} 가 null 로 나갔다"
 
 
-@pytest.mark.parametrize("name", sorted(PART_ADDED))
-def test_part_fields_do_not_drift_from_domain_ts(name: str) -> None:
+ADDED = {
+    name: PART_ADDED.get(name, set()) | MINUTES_ADDED.get(name, set())
+    for name in sorted(set(PART_ADDED) | set(MINUTES_ADDED))
+}
+
+
+@pytest.mark.parametrize("name", sorted(ADDED))
+def test_added_fields_do_not_drift_from_domain_ts(name: str) -> None:
     """domain.ts 에 이미 들어왔으면 계약대로 `string | null` 이어야 한다."""
-    for field in PART_ADDED[name]:
+    for field in ADDED[name]:
         if field in FIELDS[name]:
             assert FIELDS[name][field], f"domain.ts 의 {name}.{field} 가 null 을 허용하지 않는다"
 
@@ -286,3 +316,83 @@ async def test_check_responses_match_contract(client: AsyncClient) -> None:
     assert {row["confirmedAt"] is None for row in rows} == {True, False}
     count = (await client.get("/api/checks/pending-count")).json()
     assert set(count) == CHECK_SHAPES["CheckPendingCount"]
+
+
+# 회의록 — docs/api/minutes.md '게시판' · '초안' · 'apply'(2026-10-20 고침).
+# 프론트가 domain.ts 에 더하는 중이라 아직 없을 수 있다. 어긋나면 계약 쪽이 기준이다.
+# `MinutesEvent` 는 union 이라 여기서 못 읽는다 — test_minutes 가 본다
+_PROPOSED_TASK = {
+    "tempId",
+    "parentTempId",
+    "parentId",
+    "title",
+    "ownerId",
+    "start",
+    "due",
+    "priority",
+}
+_ENTRY_BODY = {"kind", "text", "detail", "note", "ownerId", "ownerHint"}
+_MINUTES_ITEM = {"id", "projectId", "title", "meetingDate", "authorId", "createdAt", "updatedAt"}
+MINUTES_SHAPES: dict[str, set[str]] = {
+    "MinutesItem": _MINUTES_ITEM,
+    "Minutes": _MINUTES_ITEM | {"body", "summary"},
+    "MinutesInput": {"title", "meetingDate", "body"},
+    "MinutesDraft": {"meetingDate", "summary", "threads", "entries", "tasks"},
+    "ProposedThread": {
+        "tempId",
+        "title",
+        "description",
+        "options",
+        "ownerId",
+        "ownerHint",
+        "dueDate",
+        "entry",
+        "quote",
+    },
+    "ProposedEntryBody": _ENTRY_BODY,
+    "ProposedEntry": _ENTRY_BODY | {"tempId", "threadId", "quote"},
+    "ProposedMinutesTask": _PROPOSED_TASK | {"ownerHint", "threadTempIds", "threadIds", "quote"},
+    "MinutesApplyInput": {"summary", "threads", "entries", "tasks"},
+    "MinutesApplyResult": {
+        "threads",
+        "entries",
+        "updatedThreads",
+        "tasks",
+        "links",
+        "threadIdByTempId",
+        "taskIdByTempId",
+    },
+}
+MINUTES_NULLABLE: dict[str, set[str]] = {
+    "MinutesItem": {"meetingDate"},
+    "Minutes": {"meetingDate"},
+    "MinutesInput": {"meetingDate"},
+    "MinutesDraft": {"meetingDate"},
+    "ProposedThread": {"ownerId", "dueDate", "entry"},
+    "ProposedEntryBody": {"ownerId"},
+    "ProposedEntry": {"ownerId"},
+    "ProposedMinutesTask": {"parentTempId", "parentId", "ownerId", "start", "due"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(MINUTES_SHAPES))
+def test_minutes_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드 · null 자리가 minutes.md 와 같아야 한다."""
+    if name not in FIELDS:
+        return
+    declared = all_fields(name)
+    assert set(declared) == MINUTES_SHAPES[name], f"domain.ts 의 {name} 이 minutes.md 와 다르다"
+    nullable = {field for field, allowed in declared.items() if allowed}
+    assert nullable == MINUTES_NULLABLE.get(name, set())
+
+
+async def test_minutes_responses_match_contract(client: AsyncClient) -> None:
+    rows = (await client.get("/api/projects/p1/minutes")).json()
+    assert rows, "MinutesItem 을 볼 수 있는 줄이 시드에 없다"
+    for row in rows:
+        assert set(row) == MINUTES_SHAPES["MinutesItem"]
+    one = (await client.get(f"/api/minutes/{rows[0]['id']}")).json()
+    assert set(one) == MINUTES_SHAPES["Minutes"]
+    for field, value in one.items():
+        if value is None:
+            assert field in MINUTES_NULLABLE["Minutes"], f"Minutes.{field} 가 null"

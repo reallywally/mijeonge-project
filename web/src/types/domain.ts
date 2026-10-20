@@ -150,6 +150,8 @@ export interface Thread {
   /** 참조 — 결정을 같이 알아야 할 사람. 순서가 있다. 없으면 [] (docs/api/check.md) */
   ccIds: string[]
   createdAt: string
+  /** 출처 — 회의록 [AI 정리] 로 등록했으면 그 회의록. 손으로 만들었거나 회의록을 지웠으면 null */
+  minutesId: string | null
 }
 
 export interface Entry {
@@ -164,6 +166,8 @@ export interface Entry {
   note: string
   ownerId: string | null
   createdAt: string
+  /** 출처 회의록. 없으면 null */
+  minutesId: string | null
 }
 
 /** 목록 한 행에 필요한, 계산해서 얻는 값들 */
@@ -292,6 +296,8 @@ export interface Task {
   createdAt: string
   /** 댓글 수. 본문은 스냅샷에 없어 상세를 열 때 따로 받는다 */
   commentCount: number
+  /** 출처 회의록. 없으면 null */
+  minutesId: string | null
 }
 
 /** 작업 댓글 — GET /api/tasks/{taskId}/comments 는 오래된 것부터 낸다 */
@@ -666,4 +672,125 @@ export interface CheckPendingCount {
   total: number
   /** 대기가 하나라도 있는 프로젝트만 */
   byProject: Record<string, number>
+}
+
+/* 회의록 — 게시판에 남기고, 회의록 하나에서 [AI 정리] → 초안 → 사람이 고르고 [등록] (docs/api/minutes.md) */
+
+/** 목록 한 줄 — 본문 · 요약 없이 */
+export interface MinutesItem {
+  id: string
+  projectId: string
+  title: string
+  /** YYYY-MM-DD */
+  meetingDate: string | null
+  authorId: string
+  /** ISO 8601 UTC, Z */
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Minutes extends MinutesItem {
+  body: string
+  /** [등록] 때 초안의 요약으로 바뀐다. 없으면 '' */
+  summary: string
+}
+
+/** 쓰기 · 고치기. 고치기(PATCH)는 보낸 칸만 바꾼다 */
+export interface MinutesInput {
+  title: string
+  meetingDate: string | null
+  body: string
+}
+
+/** POST /minutes/{id}/draft 의 draft 이벤트. 서버가 들고 있지 않아 다시 정리하면 버린다 */
+export interface MinutesDraft {
+  /** 회의록에서 읽은 회의 날짜 YYYY-MM-DD. 못 읽으면 null — 날짜 기준이 오늘이었다는 표시 */
+  meetingDate: string | null
+  /** 회의 요약 서너 줄. 검토 화면 맨 위에 보이고, [등록] 때 회의록 요약으로 저장된다 */
+  summary: string
+  threads: ProposedThread[]
+  entries: ProposedEntry[]
+  tasks: ProposedMinutesTask[]
+}
+
+/** 새 안건 */
+export interface ProposedThread {
+  /** 이 초안 안에서만 쓰는 이름 — 'n1', 'n2' … */
+  tempId: string
+  title: string
+  /** 배경. 없으면 '' */
+  description: string
+  /** 후보 선택지. 없으면 [] */
+  options: string[]
+  ownerId: string | null
+  /** 회의록에서 담당을 부른 말("김 책임"). ownerId 를 못 정했을 때만, 없으면 '' */
+  ownerHint: string
+  /** 결정 기한 YYYY-MM-DD */
+  dueDate: string | null
+  /** 이 회의에서 정해졌거나 미뤄졌으면 그 이력. 등록만 된 안건이면 null */
+  entry: ProposedEntryBody | null
+  /** 근거 원문 — 회의록에서 그대로 옮긴 한두 문장 */
+  quote: string
+}
+
+/** 이미 있는 안건에 붙일 이력 */
+export interface ProposedEntry extends ProposedEntryBody {
+  /** 'e1', 'e2' … */
+  tempId: string
+  /** 그 프로젝트의 안건 */
+  threadId: string
+  quote: string
+}
+
+export interface ProposedEntryBody {
+  kind: 'decide' | 'defer' | 'refine'
+  /** 한 줄 — 결정이면 무엇으로, 미룸이면 무엇을 */
+  text: string
+  /** 조건별 상세. 없으면 [] */
+  detail: string[]
+  /** 왜 — 미룸이면 사유. 없으면 '' */
+  note: string
+  ownerId: string | null
+  ownerHint: string
+}
+
+/** 작업 — 챗봇의 ProposedTask 에 안건 연결 · 근거가 붙었다. tempId 는 't1', 't2' … */
+export interface ProposedMinutesTask extends ProposedTask {
+  ownerHint: string
+  /** 걸 안건 — 이 초안의 새 안건(tempId) · 이미 있는 안건(id). 둘 다 비면 안건 없이 */
+  threadTempIds: string[]
+  threadIds: string[]
+  quote: string
+}
+
+export type MinutesEvent =
+  /** 지금 하는 일 한 줄 — '기존 안건 찾는 중' · '멤버 확인 중' · '초안 만드는 중' */
+  | { type: 'tool'; name: string; label: string }
+  /** 초안. 꼭 한 번, done 보다 먼저 */
+  | { type: 'draft'; draft: MinutesDraft }
+  | { type: 'done' }
+  /** 스트림이 열린 뒤의 실패. 이것이 오면 draft · done 은 안 온다 */
+  | { type: 'error'; code: string; message: string }
+
+/** POST /minutes/{id}/apply — 화면에서 고르고 고친 것만. quote · ownerHint 는 실어 와도 서버가 버린다 */
+export interface MinutesApplyInput {
+  /** 회의록에 저장할 요약 — 초안의 summary 를 그대로(고쳐도 된다). 안 보내면 지금 요약 그대로 */
+  summary?: string
+  threads: ProposedThread[]
+  entries: ProposedEntry[]
+  tasks: ProposedMinutesTask[]
+}
+
+/** 201 응답 — 한 트랜잭션이라 하나라도 틀리면 아무것도 안 남는다. 만든 것에는 minutesId 가 붙어 있다 */
+export interface MinutesApplyResult {
+  /** 요청 순서 그대로 */
+  threads: Thread[]
+  /** 새 안건의 이력 + 기존 안건의 이력. 새 안건 것 먼저, 각각 요청 순서 */
+  entries: Entry[]
+  /** 이력 때문에 상태가 바뀐 기존 안건 */
+  updatedThreads: Thread[]
+  tasks: Task[]
+  links: TaskThreadLink[]
+  threadIdByTempId: Record<string, string>
+  taskIdByTempId: Record<string, string>
 }

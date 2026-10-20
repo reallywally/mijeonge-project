@@ -37,6 +37,8 @@ class TaskOut(Schema):
     created_at: Utc
     # 댓글 본문은 안 싣는다 — 목록 · 칸반이 개수만 찍고, 본문은 상세가 따로 받는다
     comment_count: int
+    # AI 정리로 등록한 회의록. 손으로 만든 것은 null (docs/api/minutes.md)
+    minutes_id: str | None = None
 
 
 class TaskLineIn(Schema):

@@ -161,6 +161,7 @@ describe('한 번에 등록 — 서버 갈래', () => {
       partId: null,
       createdAt: '2026-10-12T01:00:00Z',
       commentCount: 0,
+      minutesId: null,
     }
     const result: TaskBatchResult = { tasks: [task], taskIdByTempId: { t1: 'x1' } }
     const fake = serve(() => json(201, result))

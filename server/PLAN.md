@@ -221,6 +221,48 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 - [x] 시드 — 참조 t1 · t2 · t6, 요청 c1 ~ c4 새 표 그대로. `test_seed` 가 c1 ~ c4 를 받는 사람 규칙과 대조
 - [x] 검사 — `test_check.py` 다시 씀, 참조는 `test_thread_api.py`, `test_contract_types.py` · `test_read_api.py` 에 `ccIds` · 새 `CheckRequest`
 
+
+## 12단계 · 회의록 — 회의록 글 → 초안 → 고른 것만 등록
+
+계약은 `../docs/api/minutes.md`(합의 2026-10-19 · Q45 · Q46 닫힘, 녹음 Q47 은 2단계), 화면은 `../web/PLAN.md` 13단계다.
+1단계는 **글**만 받는다. 회의록 원문 · 요약은 남기지 않는다 — 남는 것은 안건 · 이력 · 작업뿐이다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 테이블 | **늘지 않는다.** 마이그레이션 없음. 계약의 '확장'(`minutes_file` · `minutes_file_id`)은 만들지 않는다 | 원문을 남기지 않기로 했다(Q46). 늘릴 때는 더하기만 하면 되게 계약이 자리를 비워 뒀다 |
+| 도구 루프 | 챗봇 것을 줄여 다시 쓴다 — 클라이언트 · `chat_model` · `chat_effort` · 분당 제한 · 503 · 거절 · 읽기 도구 넷(`run_tool`)이 같다. 내기 도구 `propose_minutes` 하나 | 같은 일을 두 벌 갖지 않는다. 글은 흘리지 않고 초안이 검사를 통과하면 바로 끝난다 |
+| 상한 | 차례 10번 · 검사 실패 5번(`MINUTES_DRAFT_FAILED`) · `minutes_max_tokens` 16,000 | 안건을 찾는 차례 몇 번에 초안을 고치는 차례 다섯 번이 들어가야 한다. 초안 하나에 수십 줄이 실려 챗봇 답보다 길다 |
+| 검사 | `services/minutes.py` 의 `minutes_problems` 하나를 `propose_minutes` 와 `apply` 가 같이 쓴다. 작업 줄은 `tasks/batch` 의 `task_problems` 그대로 | 챗봇의 `propose_tasks` ↔ `tasks/batch` 와 같다. Claude 가 낸 것이 [등록] 에서 다른 이유로 떨어지지 않는다 |
+| 등록 | 한 트랜잭션. 상태 전이는 `thread_service.apply_entry_to_thread`, 작업은 `task_service._insert_task`(발번 · 상위 파트 따르기 · 링크) | 기존 이력 · 일괄 등록과 같은 코드라 규칙이 갈라지지 않는다 |
+
+### 12-1 체크리스트
+
+- [x] `app/schemas/minutes.py` — `MinutesDraftInput`(앞뒤 공백 뗀 뒤 1 ~ 60,000자) · `MinutesDraft` · `ProposedThread` · `ProposedEntry(Body)` · `ProposedMinutesTask` · `MinutesApplyInput` · `MinutesApplyResult` · 이벤트 넷
+- [x] `app/services/minutes.py` — `normalize`(제목 · 글 공백, 후보 · 상세 빈 줄, `ownerId` 가 있으면 `ownerHint` 비움) · `shape_problems`(422) · `minutes_problems`(422 → 없는 안건 → 담당자 셋 → 상위 작업) · `apply_minutes`
+- [x] `app/services/minutes_draft.py` — 시스템 프롬프트(오늘 KST · 프로젝트 이름 · 멤버 id · 이름 · 파트 · 규칙) · `propose_minutes` 도구 · 루프. 회의록은 사용자 메시지 하나(캐시)
+- [x] `app/api/minutes.py` — `POST .../minutes/draft`(SSE) · `POST .../minutes/apply`(201), `main.py` 의 프로젝트 경계 목록에 등록
+- [x] `errors.py` — 422 의 자리 표기를 `threads.N.…` · `entries.N.…` 로 넓힘
+- [x] `tests/test_minutes.py` — apply(생성 순서 · 상태 전이 · 링크 · 발번 · 오류 코드 넷과 자리 · 하나 틀리면 아무것도 안 남음 · 담당자 그대로 두기 · Postgres) · 검사 함수 · draft(가짜 클라이언트 — 이벤트 · 고침 · 5번 실패 · 비었음 · 차례 상한 · 422 · 503 · 429 · 거절) · `test_contract_types.py` 에 새 타입
+- [ ] 평가 — 양식이 다른 회의록 서너 벌(표 · 개조식 · 대화록)로 실제 키를 돌려 본다. 7-3 평가셋 옆에 둔다
+
+### 2026-10-20 고침 — 회의록을 게시판으로 남긴다 (Q48)
+
+위 '테이블 — 늘지 않는다' 를 뒤집는다. 회의록을 쓰고 · 읽고 · 고치고 · 지우고, AI 정리는 저장된 회의록 하나에서 부른다. 등록한 줄에는 출처가 붙는다.
+
+- [x] 리비전 `0014_minutes` — `minutes`(id · project_id cascade · title · meeting_date · body · summary `''` · author_id · created_at · updated_at · seq Identity) · 인덱스 `(project_id, seq)`. `thread` · `entry` · `task` 에 `minutes_id` → minutes `ON DELETE SET NULL`(복합 FK 아님) + 인덱스. 기존 줄은 null. downgrade 도
+- [x] `app/models/minutes.py` · `MinutesItem` · `MinutesOut`(= `Minutes`) · `MinutesCreate`(= `MinutesInput`) · `MinutesPatch`(보낸 칸만, `title` · `body` 의 null 은 422). 제목 1 ~ 200 · 본문 1 ~ 60,000, 앞뒤 공백 뗀 뒤 세고 **뗀 값을 저장**. `MinutesDraftInput` 걷음
+- [x] CRUD — `GET · POST /api/projects/{projectId}/minutes`(목록은 회의 날짜 내림차순 null 맨 뒤 → seq 내림차순) · `GET · PATCH · DELETE /api/minutes/{minutesId}`. 고치기는 작성자만, 지우기는 작성자 · 프로젝트 관리자 · 시스템 관리자(댓글과 같은 `Scope.can_manage`). `require_scope` 에 `minutes_id` 갈래 → 남의 것 · 없는 것 404 `MINUTES_NOT_FOUND`. 지우기는 세 표의 `minutes_id` 를 먼저 비우고(세션에 올라 있는 줄까지) 지운다
+- [x] `POST /api/minutes/{minutesId}/draft` — 본문 없음. 사용자 메시지는 `제목: … / 회의 날짜: …(없으면 '(적혀 있지 않음)') / 본문`. 회의 날짜가 있으면 프롬프트의 날짜 규칙이 그 날 기준으로 바뀌고 초안의 `meetingDate` 를 그 값으로 덮는다
+- [x] `POST /api/minutes/{minutesId}/apply` — 회의록의 프로젝트에서 만든다. 새 안건 · 이력(새 · 기존 안건) · 작업에 `minutes_id`, 기존 안건 자체에는 안 붙임. `summary` 를 보내면(null 은 안 보낸 것) 앞뒤 공백 떼고 저장, **`updated_at` 은 그대로**(사람이 고친 때). 실패하면 요약도 안 남는다. 프로젝트 경로 둘은 걷음
+- [x] `ThreadOut` · `EntryOut` · `TaskOut` 에 `minutesId` — 스냅샷 · 쓰기 응답 · 검색에 실린다. 손으로 만든 것은 null
+- [x] 시드 `m1`(p1 · u1 · 2026-10-16 · 본문은 `MINUTES_EXAMPLE` 글자 그대로, `createdAt` · `updatedAt` 은 `2026-10-16T06:30:00Z`). `test_seed` 가 화면 픽스처 파일과 글자 대조
+- [x] 검사 — `test_minutes.py` 를 새 경로로 옮기고 CRUD · 권한(작성자 · 다른 멤버 · 프로젝트 관리자 · 시스템 관리자) · 지우면 출처만 빔 · 목록 순서 · draft 가 저장된 본문 · 날짜를 씀 · apply 출처 · 요약 · 남의 프로젝트 404 · Postgres(SET NULL · nulls last). `test_contract_types.py` 에 `MinutesItem` · `Minutes` · `MinutesInput` · `minutesId`, `test_read_api.py` 키 목록
+- [x] 개발 DB — `alembic upgrade head` 후 `m1` 한 줄만 넣음(시드는 안 돌림)
+
+**다음 (이 단계 밖)** — 1-2 `.docx` · `.pdf` 를 서버가 글로 뽑기, 계약의 '확장'(`minutes_file`), 2단계 녹음(Q47).
+
 ---
 
 ## 진행 상황
@@ -242,6 +284,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
 | 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 |
 | 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **11-1 끝남** (2026-10-16) — 리비전 `0012_check_request` · 네 경로 · `services/check.py`(보낼 때 부하 찍기, 기한 임박은 오늘(KST) + 3일 고정) · `require_scope` 의 `check_id` 갈래 · 시드 `c1` ~ `c4` · `tests/test_check.py`. API.md 네 줄 `구현`. **2026-10-19 고침 끝남** — 결정 알림으로 좁힘 · 참조(`thread_cc`) · 리비전 `0013_check_on_decision`. 2차(확인율 분석)는 기록이 쌓인 뒤 |
+| 12 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘. **12-1 끝남** (2026-10-19) — `POST .../minutes/draft`(SSE · `propose_minutes`, 챗봇 루프 재사용) · `POST .../minutes/apply`(한 트랜잭션) · 검사 함수 하나를 둘이 같이 씀 · 마이그레이션 없음. API.md 두 줄 `구현`. **2026-10-20 고침 끝남** (Q48) — 게시판(`minutes` · CRUD) · draft/apply 를 `/api/minutes/{id}/…` 로 · 출처 `minutesId` · 요약 저장 · 리비전 `0014_minutes` · 시드 `m1`. API.md 네 줄 `구현 (2026-10-20 고침)`. 다음은 평가 |
 
 ## 아직 안 정한 것
 

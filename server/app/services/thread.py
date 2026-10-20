@@ -43,6 +43,7 @@ def to_thread(row: Thread) -> ThreadOut:
         due_date=row.due_date,
         part_id=row.part_id,
         cc_ids=[cc.member_id for cc in row.cc],
+        minutes_id=row.minutes_id,
     )
 
 
@@ -57,6 +58,7 @@ def to_entry(row: Entry) -> EntryOut:
         note=row.note,
         owner_id=row.owner_id,
         created_at=row.created_at,
+        minutes_id=row.minutes_id,
     )
 
 

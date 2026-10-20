@@ -1,11 +1,14 @@
 """시드가 픽스처를 그대로 세우는지 본다 — 목업 화면과 대조할 수 있어야 한다."""
 
+import re
+from pathlib import Path
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CheckRequest, Entry, Task, TaskLine, Thread, ThreadCc
+from app.models import CheckRequest, Entry, Minutes, Task, TaskLine, Thread, ThreadCc
 from app.services.check import recipients_of
-from scripts.seed import seed
+from scripts.seed import MINUTES_EXAMPLE, seed
 
 
 async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
@@ -20,6 +23,7 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
     assert await count(TaskLine) == 7
     assert await count(CheckRequest) == 4
     assert await count(ThreadCc) == 4
+    assert await count(Minutes) == 1
 
 
 async def test_seed_is_repeatable(session: AsyncSession) -> None:
@@ -64,3 +68,24 @@ async def test_seed_checks_follow_the_recipient_rule(session: AsyncSession) -> N
         assert thread is not None
         expected = [r.recipient_id for r in rows if r.thread_id == thread_id]
         assert await recipients_of(session, thread, sender) == expected
+
+
+async def test_seed_minutes_m1(session: AsyncSession) -> None:
+    """회의록 m1 — minutes.md '시드 · 목업'. 본문은 화면의 예시 글 그대로, 출처를 단 줄은 없다."""
+    await seed(session)
+    m1 = await session.get(Minutes, "m1")
+    assert m1 is not None
+    assert (m1.project_id, m1.author_id, m1.title) == ("p1", "u1", "10월 셋째 주 주간 회의")
+    assert m1.meeting_date is not None and m1.meeting_date.isoformat() == "2026-10-16"
+    assert m1.summary == ""
+    fixture = (
+        Path(__file__).resolve().parents[2] / "web" / "src" / "fixtures" / "minutes.ts"
+    ).read_text(encoding="utf-8")
+    found = re.search(r"export const MINUTES_EXAMPLE = `(.*?)`\n", fixture, re.S)
+    assert found is not None, "web/src/fixtures/minutes.ts 에 MINUTES_EXAMPLE 이 없다"
+    assert m1.body == MINUTES_EXAMPLE == found.group(1)
+    for model in (Thread, Entry, Task):
+        sourced = await session.scalar(
+            select(func.count()).select_from(model).where(model.minutes_id.is_not(None))
+        )
+        assert sourced == 0

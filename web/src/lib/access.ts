@@ -22,11 +22,11 @@ export const canManageProject = (me: Me | null, projectId: string) =>
 export const canCreateProject = isSystemAdmin
 export const canManageAccounts = isSystemAdmin
 
-/** 댓글 고치기는 작성자만 */
+/** 댓글 고치기는 작성자만. 회의록도 같은 경계다 (docs/api/minutes.md) */
 export const canEditComment = (me: Me | null, comment: Pick<TaskComment, 'authorId'>) =>
   me !== null && comment.authorId === me.id
 
-/** 댓글 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자 */
+/** 댓글 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자. 회의록도 같은 경계다 */
 export const canDeleteComment = (
   me: Me | null,
   comment: Pick<TaskComment, 'authorId'>,

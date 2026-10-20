@@ -21,6 +21,7 @@ export const threads: Thread[] = [
     partId: 'pt1',
     ccIds: ['u1'],
     createdAt: '2026-09-08T00:30:00Z',
+    minutesId: null,
   },
   {
     id: 't2',
@@ -35,6 +36,7 @@ export const threads: Thread[] = [
     partId: 'pt1',
     ccIds: ['u2', 'u4'],
     createdAt: '2026-09-08T00:35:00Z',
+    minutesId: null,
   },
   {
     id: 't3',
@@ -50,6 +52,7 @@ export const threads: Thread[] = [
     partId: 'pt2',
     ccIds: [],
     createdAt: '2026-09-09T02:10:00Z',
+    minutesId: null,
   },
   {
     id: 't4',
@@ -64,6 +67,7 @@ export const threads: Thread[] = [
     partId: 'pt1',
     ccIds: [],
     createdAt: '2026-09-10T06:20:00Z',
+    minutesId: null,
   },
   // 시나리오 2 — 두 번 미뤄진 안건
   {
@@ -80,6 +84,7 @@ export const threads: Thread[] = [
     partId: 'pt3',
     ccIds: [],
     createdAt: '2026-09-07T00:10:00Z',
+    minutesId: null,
   },
   // 시나리오 3 — 한 번에 정해진 안건
   {
@@ -95,6 +100,7 @@ export const threads: Thread[] = [
     partId: null,
     ccIds: ['u2'],
     createdAt: '2026-09-14T01:00:00Z',
+    minutesId: null,
   },
   {
     id: 't7',
@@ -109,6 +115,7 @@ export const threads: Thread[] = [
     partId: 'pt2',
     ccIds: [],
     createdAt: '2026-09-12T05:40:00Z',
+    minutesId: null,
   },
   {
     id: 't8',
@@ -123,6 +130,7 @@ export const threads: Thread[] = [
     partId: 'pt2',
     ccIds: [],
     createdAt: '2026-09-12T05:45:00Z',
+    minutesId: null,
   },
   {
     id: 't9',
@@ -137,6 +145,7 @@ export const threads: Thread[] = [
     partId: null,
     ccIds: [],
     createdAt: '2026-09-15T00:20:00Z',
+    minutesId: null,
   },
   // 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
   {
@@ -152,6 +161,7 @@ export const threads: Thread[] = [
     partId: null,
     ccIds: [],
     createdAt: '2026-09-16T01:05:00Z',
+    minutesId: null,
   },
 ]
 
@@ -172,6 +182,7 @@ export const entries: Entry[] = [
     note: '기간계 업무 정의가 안 돼 in · out 을 정할 수 없다. 다음 주 월요일에 다시 본다.',
     ownerId: 'u4',
     createdAt: '2026-09-07T07:30:00Z',
+    minutesId: null,
   },
   // 시나리오 1 — 공유가 안 됐을 뿐 이미 정해져 있던 것
   {
@@ -183,6 +194,7 @@ export const entries: Entry[] = [
     note: 'PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.',
     ownerId: 'u3',
     createdAt: '2026-09-09T02:00:00Z',
+    minutesId: null,
   },
   // 시나리오 1 — 함께 보고 정한 것
   {
@@ -194,6 +206,7 @@ export const entries: Entry[] = [
     note: '',
     ownerId: 'u3',
     createdAt: '2026-09-10T06:05:00Z',
+    minutesId: null,
   },
   {
     id: 'e4',
@@ -204,6 +217,7 @@ export const entries: Entry[] = [
     note: '정보보안팀 확인이 먼저다. 다음 회의 후보로 올려 둔다.',
     ownerId: 'u1',
     createdAt: '2026-09-10T06:08:00Z',
+    minutesId: null,
   },
   // 시나리오 2 — 두 번째 미룸
   {
@@ -215,6 +229,7 @@ export const entries: Entry[] = [
     note: '두 번째 미룸이다. 다음에는 기간계 담당자를 회의에 부르기로 했다.',
     ownerId: 'u4',
     createdAt: '2026-09-14T07:10:00Z',
+    minutesId: null,
   },
   // 시나리오 3
   {
@@ -226,5 +241,6 @@ export const entries: Entry[] = [
     note: '일정을 미루면 오픈 일정이 밀린다는 데에 이견이 없었다.',
     ownerId: 'u1',
     createdAt: '2026-09-15T07:00:00Z',
+    minutesId: null,
   },
 ]

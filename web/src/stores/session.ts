@@ -4,6 +4,8 @@ import { useChatStore } from '@/stores/chat'
 import { useCheckStore } from '@/stores/check'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
+import { useMinutesStore } from '@/stores/minutes'
+import { useMinutesDraftStore } from '@/stores/minutesDraft'
 import { usePartStore } from '@/stores/part'
 import { useRiskStore } from '@/stores/risk'
 
@@ -18,6 +20,8 @@ export function clearSession() {
   usePartStore().clear()
   useRiskStore().clear()
   useCheckStore().clear()
+  useMinutesDraftStore().reset()
+  useMinutesStore().clear()
   useDataStore().clear()
   useAuthStore().clear()
 }

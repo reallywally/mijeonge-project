@@ -347,6 +347,7 @@ export const useTaskStore = defineStore('task', () => {
       partId,
       createdAt: nowIso(),
       commentCount: 0,
+      minutesId: null,
     })
     for (const threadId of input.threadIds) addLink(id, threadId)
     return id

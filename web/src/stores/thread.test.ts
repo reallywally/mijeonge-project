@@ -29,6 +29,7 @@ describe('안건 이력', () => {
       note: '',
       ownerId: null,
       createdAt: '2026-09-20T16:00:00Z',
+      minutesId: null,
     })
     expect(thread.threadDetail('t4')!.events[0].at).toBe('2026-09-21')
   })

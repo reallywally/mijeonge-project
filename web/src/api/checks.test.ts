@@ -35,6 +35,7 @@ function world(patch: Partial<Thread> = {}, extra: Partial<MockWorld> = {}): Moc
     partId: null,
     ccIds: [],
     createdAt: '2026-10-19T00:00:00Z',
+    minutesId: null,
     ...patch,
   }
   const entry: Entry = {
@@ -46,6 +47,7 @@ function world(patch: Partial<Thread> = {}, extra: Partial<MockWorld> = {}): Moc
     note: '',
     ownerId: null,
     createdAt: '2026-10-19T00:00:00Z',
+    minutesId: null,
   }
   return {
     threads: [...threads, thread],
