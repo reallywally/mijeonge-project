@@ -108,13 +108,14 @@ export interface Project {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 여덟 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 여덟 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
-| `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` |
-| `Entry` | `ownerId` |
-| `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` |
+| `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
+| `Entry` | `ownerId` · `minutesId` |
+| `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` · `minutesId` |
+| `MinutesItem` · `Minutes` | `meetingDate` (스냅샷 밖 — `GET /api/projects/{projectId}/minutes` 등으로만 나간다, `minutes.md`) |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
 | `CheckRequest` | `confirmedAt` (스냅샷 밖 — `GET /api/projects/{projectId}/checks` 로만 나간다, `check.md`) |
 
