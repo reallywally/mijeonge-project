@@ -74,8 +74,8 @@ export const useTaskStore = defineStore('task', () => {
   const fullPath = (task: Task) => [...ancestorTitles(task), task.title].join(' › ')
 
   /** 상위 작업 고르기 목록. 고르는 값은 이름이 아니라 id 다 */
-  const parentOptions = computed<{ id: string; label: string }[]>(() =>
-    tasks.value.map((t) => ({ id: t.id, label: fullPath(t) })),
+  const parentOptions = computed<{ id: string; key: string; label: string }[]>(() =>
+    tasks.value.map((t) => ({ id: t.id, key: t.key, label: fullPath(t) })),
   )
 
   const periodLabel = (task: Task) =>

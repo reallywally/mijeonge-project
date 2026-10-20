@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Check, Clock } from 'lucide-vue-next'
+import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +22,7 @@ import type { TaskPriority, TaskStatus } from '@/types/domain'
    아래 슬롯에는 상세의 읽기 전용 정보나 추가의 안내를 넣는다. */
 defineProps<{
   /** 고를 수 있는 상위 작업 — 상세에서는 자기와 자기 아래가 빠진다 */
-  parentChoices: { id: string; label: string }[]
+  parentChoices: { id: string; key: string; label: string }[]
   /** 상태 옆의 '완료' 버튼 — 이미 있는 작업에만 */
   showDone?: boolean
   /** '진행 중 · 12일째' — 이미 있는 작업에만 */
@@ -39,9 +40,6 @@ const data = useDataStore()
 const NONE = 'none'
 
 const ownerName = computed(() => data.memberName(ownerId.value))
-const parentTitle = computed(
-  () => data.allTasks.find((t) => t.id === parentId.value)?.title ?? null,
-)
 const periodHint = computed(() => periodProblem(start.value, due.value))
 
 /* 날짜는 다 고른 뒤(change)에만 올린다 — 글자를 치는 중의 반쪽 날짜를 올리지 않게 */
@@ -174,22 +172,7 @@ const ghost =
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">상위 작업</dt>
         <dd class="min-w-0 grow">
-          <Select
-            :model-value="parentId ?? NONE"
-            @update:model-value="(v) => (parentId = v === NONE ? null : String(v))"
-          >
-            <SelectTrigger :class="ghost" aria-label="상위 작업">
-              <span class="truncate" :class="parentTitle ? '' : 'text-muted-foreground'">
-                {{ parentTitle ?? '없음 (최상위)' }}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem :value="NONE">없음 (최상위 작업)</SelectItem>
-              <SelectItem v-for="o in parentChoices" :key="o.id" :value="o.id">
-                {{ o.label }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <ParentTaskPicker v-model="parentId" :choices="parentChoices" />
         </dd>
       </div>
     </dl>
