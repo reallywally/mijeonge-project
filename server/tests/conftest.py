@@ -26,7 +26,17 @@ from sqlalchemy.orm import Session
 from app.api.auth import get_login_limiter
 from app.db import get_session
 from app.main import app
-from app.models import Base, CheckRequest, Entry, Minutes, Task, TaskComment, TaskLog, Thread
+from app.models import (
+    Base,
+    CheckRequest,
+    Entry,
+    Minutes,
+    ProjectReport,
+    Task,
+    TaskComment,
+    TaskLog,
+    Thread,
+)
 from app.services import auth as auth_service
 from app.services.auth import COOKIE
 from scripts.seed import seed
@@ -37,7 +47,7 @@ ADMIN = "admin"
 AsMember = Callable[[str], Awaitable[httpx.AsyncClient]]
 
 # 등록 순서 열을 가진 것들. Postgres 에서는 Identity 가 채운다
-SEQ_MODELS = (Thread, Entry, Task, TaskComment, CheckRequest, Minutes, TaskLog)
+SEQ_MODELS = (Thread, Entry, Task, TaskComment, CheckRequest, Minutes, TaskLog, ProjectReport)
 
 
 @event.listens_for(Engine, "connect")

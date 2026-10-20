@@ -31,6 +31,7 @@ from app.models import (
     PartMember,
     Project,
     ProjectMember,
+    ProjectReport,
     RiskSetting,
     Task,
     TaskComment,
@@ -697,6 +698,7 @@ def minutes() -> list[Minutes]:
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        ProjectReport,
         CheckRequest,
         RiskSetting,
         TaskComment,

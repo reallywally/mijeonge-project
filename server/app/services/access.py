@@ -18,6 +18,7 @@ from app.models import (
     Part,
     Project,
     ProjectMember,
+    ProjectReport,
     Task,
     TaskComment,
     Thread,
@@ -52,6 +53,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "part_id": ("PART_NOT_FOUND", "파트를 찾을 수 없습니다."),
     "check_id": ("CHECK_NOT_FOUND", "확인 요청을 찾을 수 없습니다."),
     "minutes_id": ("MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
+    "report_id": ("REPORT_NOT_FOUND", "리포트를 찾을 수 없습니다."),
 }
 
 
@@ -70,6 +72,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             stmt = select(CheckRequest.project_id).where(CheckRequest.id == value)
         case "minutes_id":
             stmt = select(Minutes.project_id).where(Minutes.id == value)
+        case "report_id":
+            stmt = select(ProjectReport.project_id).where(ProjectReport.id == value)
         case "comment_id":
             stmt = (
                 select(Task.project_id)

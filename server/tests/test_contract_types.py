@@ -427,3 +427,117 @@ def test_task_status_since_in_snapshot(snapshot: dict[str, Any]) -> None:
     for task in snapshot["tasks"]:
         assert isinstance(task["statusChangedAt"], str) and task["statusChangedAt"].endswith("Z")
         assert isinstance(task["statusSinceBackfill"], bool)
+
+
+# 프로젝트 진행 리포트 — docs/api/report.md 'ProgressFacts' · '모양'. 집계를 서버가 하는 예외라
+# 계산된 타입이 응답으로 나간다. 화면 에이전트가 domain.ts 에 더하는 중이라 아직 없을 수 있다.
+# 어긋나면 계약 쪽이 기준이다. `ReportEvent` 는 union 이라 여기서 못 읽는다 — test_report 가 본다
+_REPORT_ITEM = {
+    "id",
+    "projectId",
+    "periodStart",
+    "periodEnd",
+    "createdBy",
+    "createdAt",
+    "doneRate",
+    "attentionCount",
+}
+REPORT_SHAPES: dict[str, set[str]] = {
+    "ProgressFacts": {
+        "periodStart",
+        "periodEnd",
+        "settings",
+        "progress",
+        "previous",
+        "decisions",
+        "attention",
+        "people",
+    },
+    "TaskAttention": {
+        "taskId",
+        "signals",
+        "statusDays",
+        "statusSinceBackfill",
+        "plannedDays",
+        "waitingOnTaskIds",
+        "blockingTaskIds",
+        "weight",
+        "score",
+    },
+    "PersonProgress": {
+        "memberId",
+        "doing",
+        "blocked",
+        "overdue",
+        "completed",
+        "attentionTaskIds",
+    },
+    "ReportItem": _REPORT_ITEM,
+    "Report": _REPORT_ITEM | {"facts", "body"},
+}
+REPORT_NULLABLE: dict[str, set[str]] = {
+    "ProgressFacts": {"previous"},
+    "TaskAttention": {"plannedDays"},
+    "PersonProgress": {"memberId"},
+}
+# 한 줄 안의 객체 — domain.ts 의 인라인 타입이라 위 파서가 못 읽는다. 키는 계약 그대로
+REPORT_INLINE: dict[str, set[str]] = {
+    "progress": {
+        "todo",
+        "doing",
+        "blocked",
+        "done",
+        "doneRate",
+        "completedTaskIds",
+        "startedTaskIds",
+        "createdTaskIds",
+    },
+    "previous": {"reportId", "periodEnd", "doneRate", "blocked"},
+    "decisions": {"decidedThreadIds", "deferredThreadIds", "riskyThreadIds"},
+    "weight": {"openChildren", "openLines", "totalLines", "threadCount", "priority"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(REPORT_SHAPES))
+def test_report_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드 · null 자리가 report.md 와 같아야 한다."""
+    if name not in FIELDS:
+        return
+    declared = all_fields(name)
+    assert set(declared) == REPORT_SHAPES[name], f"domain.ts 의 {name} 이 report.md 와 다르다"
+    nullable = {field for field, allowed in declared.items() if allowed}
+    assert nullable == REPORT_NULLABLE.get(name, set())
+
+
+async def test_report_responses_match_contract(client: AsyncClient) -> None:
+    from tests.test_chat import FakeClient, Turn, parse_sse
+    from tests.test_chat import use as use_fake
+
+    use_fake(FakeClient(Turn(texts=["글"])))
+    # 둘을 만들어 previous 가 찬 facts 도 본다
+    for _ in range(2):
+        events = parse_sse((await client.post("/api/projects/p1/reports")).text)
+    item = events[-1][1]["report"]
+    assert set(item) == REPORT_SHAPES["ReportItem"]
+    rows = (await client.get("/api/projects/p1/reports")).json()
+    assert all(set(row) == REPORT_SHAPES["ReportItem"] for row in rows)
+
+    one = (await client.get(f"/api/reports/{item['id']}")).json()
+    assert set(one) == REPORT_SHAPES["Report"]
+    facts = one["facts"]
+    assert set(facts) == REPORT_SHAPES["ProgressFacts"]
+    assert set(facts["settings"]) == RISK_SHAPES["RiskSettings"]
+    for key in ("progress", "previous", "decisions"):
+        assert set(facts[key]) == REPORT_INLINE[key]
+    assert facts["attention"] and facts["people"]
+    for row in facts["attention"]:
+        assert set(row) == REPORT_SHAPES["TaskAttention"]
+        assert set(row["weight"]) == REPORT_INLINE["weight"]
+    for row in facts["people"]:
+        assert set(row) == REPORT_SHAPES["PersonProgress"]
+    # null 은 계약이 허락한 자리에서만
+    for name, rows in (("TaskAttention", facts["attention"]), ("PersonProgress", facts["people"])):
+        for row in rows:
+            for field, value in row.items():
+                if value is None:
+                    assert field in REPORT_NULLABLE[name], f"{name}.{field} 가 null"

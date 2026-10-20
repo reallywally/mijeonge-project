@@ -12,6 +12,7 @@ from app.api import (
     minutes,
     part,
     project,
+    report,
     risk,
     search,
     task,
@@ -54,5 +55,6 @@ for scoped in (
     risk.router,
     check.router,
     minutes.router,
+    report.router,
 ):
     app.include_router(scoped, prefix="/api", dependencies=[Depends(require_scope)])

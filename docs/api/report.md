@@ -260,3 +260,23 @@ export type ReportEvent =
 - 매주 월요일 아침 자동 생성 · 알림
 - 챗봇 도구 `get_project_progress` — 같은 계산을 "이번 주 뭐가 늦어?" 에 쓴다
 - 기간 고르기(14일 · 한 달), 파트별 리포트
+
+## 구현에서 메운 것 (서버)
+
+계약이 말하지 않아 서버가 정한 것이다. 화면이 다르게 바라면 열린 질문으로 올린다.
+
+- **`doneRate`** — 소수 둘째 자리까지, 반은 올린다(1/8 → 0.13). 목업 `roundRate` 와 같다
+- **`completedTaskIds` · `startedTaskIds`** — `task_log` 에서 기간 안에 `done` · `doing` 이 된 줄이 있는 작업(지금 상태는 안 본다 — 기간 안에 시작해 끝낸 작업은 둘 다에 든다). **backfill 줄은 세지 않는다** — 바뀐 때가 아니라 '적어도 이때부터' 라서. 목업은 마지막 줄(`statusChangedAt`)만 알아 지금 상태가 같은 것만 센다 — 기록이 한 줄뿐인 시드에서는 같다
+- **기간 · 날 수** — `periodStart = 오늘 - 6일`(KST). 기록 · 이력 · 등록 시각은 KST 날짜로 바꿔 기간과 비교한다
+- **'시작일 지남'** — `start < 오늘`(오늘 시작은 아직 아니다). `waitingOnPredecessor` 의 '시작일이 dueSoonDays 안' 은 `start - 오늘 ≤ dueSoonDays`(지난 것 포함), 시작일이 없으면 안 낸다
+- **`longRunning`** — 계획이 있으면 `statusDays > plannedDays × 1.5`, 없으면 `> staleDays`. **넘어야** 한다(같으면 아님). `longBlocked` 도 같다
+- **`waitingOnTaskIds`** — 직접 건 선행 중 안 끝난 것. **`blockingTaskIds`** — 기다리는 쪽으로 몇 단계를 타되 **끝난 작업에서 멈춘다**(그 뒤 작업은 끝난 선행을 기다릴 뿐이다). 둘 다 등록 순
+- **`weight.openLines` · `totalLines`** — 체크 줄만 센다(불릿 빼고). `openChildren` 은 자손 전부 중 완료 아닌 것
+- **`people`** — 담당 작업(완료 포함)이 하나라도 있는 사람 · 담당자 없음. 순서는 손쓸 작업 수 내림차순 → 멤버 id, 담당자 없음은 맨 뒤(목업과 같다). `attentionTaskIds` 는 30개로 자른 뒤의 것
+- **`decisions`** — 안건 등록 순. 같은 안건에 decide 와 defer 가 다 있으면 양쪽에 든다
+- **`previous`** — 그 프로젝트의 마지막 리포트(`seq`). 지운 리포트는 없는 것이다
+- **넣는 근거** — Claude 는 멤버 · 파트를 **이름**으로만 본다(id 는 안 넣음). 작업마다 id · key · 제목 · 상태 · 담당 · 파트. `details` 의 하위 작업은 바로 아래 것만, 걸린 안건은 제목 · 상태 · 마지막 이력(`seq`). `decisions.risky` 는 등급 · 점수 · 신호 · 막힌 작업. 앞 리포트는 숫자와 글 전부
+- **근거 칩** — 넣어 준 작업(손쓸 작업 · 그 선행 / 기다리는 / 하위 작업 · 진척 목록 · 사람별 · 병목 안건의 막힌 작업)과 안건(정해진 · 미뤄진 · 병목 · details 의 걸린 안건)만
+- **작업 0개** — 키 · 분당 제한을 보지 않는다(Claude 를 안 부르니까). 그 밖은 계산을 먼저 하고 키(503) · 제한(429)을 본다 — 스트림 전이라 JSON 이다
+- **잘린 글** — `max_tokens` 로 끊기면 챗봇과 같은 한 줄(`(답이 길어 여기서 끊었습니다.)`)을 `delta` 로 흘리고 본문 끝에 붙여 저장한다. 거절은 `error`(`CHAT_REFUSED`) — 저장 안 함. 저장이 실패하면 `error`(`INTERNAL_ERROR`)
+- **고치기 없음** — `PATCH /api/reports/{id}` 는 405

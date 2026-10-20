@@ -195,8 +195,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET · POST | `/api/projects/{projectId}/reports` | 목록 · 만들기(본문 없음 — 계산 → `facts` → Claude 글 스트림 → 다 받으면 저장) | `ReportItem[]` · `text/event-stream` (`ReportEvent`) | 합의 |
-| GET · DELETE | `/api/reports/{reportId}` | 읽기 · 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | `Report` · 204 | 합의 |
+| GET · POST | `/api/projects/{projectId}/reports` | 목록 · 만들기(본문 없음 — 계산 → `facts` → Claude 글 스트림 → 다 받으면 저장) | `ReportItem[]` · `text/event-stream` (`ReportEvent`) | 구현 |
+| GET · DELETE | `/api/reports/{reportId}` | 읽기 · 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | `Report` · 204 | 구현 |
 
 ## 열린 질문
 
