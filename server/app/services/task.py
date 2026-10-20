@@ -5,7 +5,7 @@
 여기 둔다 — 변환을 두 벌 갖지 않는다.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +56,7 @@ def to_task(row: Task, comment_count: int) -> TaskOut:
         part_id=row.part_id,
         created_at=row.created_at,
         comment_count=comment_count,
+        minutes_id=row.minutes_id,
     )
 
 
@@ -224,7 +225,17 @@ def proposal_problems(tasks: Sequence[ProposedTask]) -> dict[str, str]:
         return {"tasks": "작업이 하나도 없습니다."}
     if len(tasks) > PROPOSAL_MAX:
         return {"tasks": f"작업은 한 번에 {PROPOSAL_MAX}개까지입니다."}
+    return task_problems(tasks)
 
+
+def task_problems(
+    tasks: Sequence[ProposedTask], *, taken: Collection[str] = frozenset()
+) -> dict[str, str]:
+    """작업 줄마다의 규칙 — 개수는 부르는 쪽이 본다. 회의록 초안도 이것을 같이 쓴다.
+
+    `taken` 은 같은 초안의 다른 줄(새 안건 · 이력)이 쓴 tempId 다.
+    겹치면 안 되지만 상위는 될 수 없다.
+    """
     problems: dict[str, str] = {}
     seen: set[str] = set()
     for index, item in enumerate(tasks):
@@ -233,6 +244,8 @@ def proposal_problems(tasks: Sequence[ProposedTask]) -> dict[str, str]:
             problems[f"{at}.tempId"] = "값을 입력해 주세요."
         elif item.temp_id in seen:
             problems[f"{at}.tempId"] = "앞의 작업과 tempId 가 겹칩니다."
+        elif item.temp_id in taken:
+            problems[f"{at}.tempId"] = "초안의 다른 줄과 tempId 가 겹칩니다."
         # 앞에 있는 것만 상위가 될 수 있다 — 자기 자신 · 뒤의 것을 가리키면 고리가 생길 수 있다
         if item.parent_temp_id is not None and item.parent_temp_id not in seen:
             problems[f"{at}.parentTempId"] = "상위 작업은 이 작업보다 앞에 있어야 합니다."

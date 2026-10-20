@@ -28,6 +28,8 @@ class ThreadOut(Schema):
     part_id: str | None = None
     # 참조 — thread_cc 행을 순서대로 편다. 없으면 [] (docs/api/check.md)
     cc_ids: list[str] = Field(default_factory=list)
+    # AI 정리로 등록한 회의록. 손으로 만든 것은 null (docs/api/minutes.md)
+    minutes_id: str | None = None
 
 
 class EntryOut(Schema):
@@ -42,6 +44,7 @@ class EntryOut(Schema):
     note: str
     owner_id: str | None
     created_at: Utc
+    minutes_id: str | None = None
 
 
 class ThreadCreate(Schema):

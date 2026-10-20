@@ -59,6 +59,10 @@ class Task(Base):
     priority: Mapped[str] = mapped_column(String(16), default="normal")
     # null 이면 프로젝트 공통. 계층과 떼어 둔다 — 상위의 파트를 바꿔도 하위는 그대로다
     part_id: Mapped[str | None] = mapped_column(String(36))
+    # AI 정리로 [등록] 했으면 그 회의록. 회의록을 지우면 비고 줄은 남는다 (docs/api/minutes.md)
+    minutes_id: Mapped[str | None] = mapped_column(
+        ForeignKey("minutes.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다

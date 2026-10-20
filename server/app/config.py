@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
     # thinking 을 끌 수 없어 그 몫까지 들어간다
     chat_max_tokens: int = 8000
+    # 회의록 초안은 도구 입력 하나에 안건 · 이력 · 작업 수십 줄이 실려 챗봇 답보다 길다
+    minutes_max_tokens: int = 16000
     chat_timeout_seconds: float = 120.0
     # IP 하나가 1분에 보낼 수 있는 질문 수
     chat_rate_per_minute: int = 10

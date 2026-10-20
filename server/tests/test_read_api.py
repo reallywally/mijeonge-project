@@ -20,6 +20,7 @@ THREAD_KEYS = {
     "createdAt",
     "partId",
     "ccIds",
+    "minutesId",
 }
 ENTRY_KEYS = {
     "id",
@@ -30,6 +31,7 @@ ENTRY_KEYS = {
     "note",
     "ownerId",
     "createdAt",
+    "minutesId",
 }
 TASK_KEYS = {
     "id",
@@ -46,6 +48,7 @@ TASK_KEYS = {
     "createdAt",
     "commentCount",
     "partId",
+    "minutesId",
 }
 
 

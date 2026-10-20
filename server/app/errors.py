@@ -65,9 +65,10 @@ _REASONS = {
     "too_long": "너무 많습니다.",
 }
 
-# 이 목록 아래의 칸은 몇 번째인지까지 짚는다 — `tasks.1.parentTempId` (API.md '한 번에 등록').
+# 이 목록 아래의 칸은 몇 번째인지까지 짚는다 — `tasks.1.parentTempId` (API.md '한 번에 등록'),
+# 회의록 등록의 `threads.0.entry.kind` · `entries.1.threadId` (docs/api/minutes.md).
 # 다른 자리는 지금처럼 마지막 이름만 쓴다
-_INDEXED = {("tasks",)}
+_INDEXED = {("tasks",), ("threads",), ("entries",)}
 
 _HTTP_CODES = {
     404: ("NOT_FOUND", "요청한 경로를 찾을 수 없습니다."),

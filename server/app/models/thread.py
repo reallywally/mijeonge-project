@@ -52,6 +52,10 @@ class Thread(Base):
     parent_thread_id: Mapped[str | None] = mapped_column(String(36))
     # null 이면 프로젝트 공통
     part_id: Mapped[str | None] = mapped_column(String(36))
+    # AI 정리로 [등록] 했으면 그 회의록. 회의록을 지우면 비고 줄은 남는다 (docs/api/minutes.md)
+    minutes_id: Mapped[str | None] = mapped_column(
+        ForeignKey("minutes.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다
@@ -122,6 +126,10 @@ class Entry(Base):
     # 왜 그렇게 됐는지
     note: Mapped[str] = mapped_column(Text, default="")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    # AI 정리로 [등록] 했으면 그 회의록. 회의록을 지우면 비고 줄은 남는다 (docs/api/minutes.md)
+    minutes_id: Mapped[str | None] = mapped_column(
+        ForeignKey("minutes.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다

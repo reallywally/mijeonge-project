@@ -26,6 +26,7 @@ from app.models import (
     Entry,
     EntryDetail,
     Member,
+    Minutes,
     Part,
     PartMember,
     Project,
@@ -553,6 +554,64 @@ async def checks(session: AsyncSession) -> list[CheckRequest]:
     ]
 
 
+# 회의록 — docs/api/minutes.md '시드 · 목업'. 본문은 화면의 예시 회의록
+# (`web/src/fixtures/minutes.ts` 의 MINUTES_EXAMPLE) 글자 그대로다. 출처를 단 줄은 없다.
+# 줄 끝의 `\` 는 긴 줄을 코드에서만 나눈 것이다 — 글에는 줄바꿈이 없다(test_seed 가 대조한다)
+MINUTES_EXAMPLE = """\
+[한화손보 차세대] 주간 회의록
+
+일시: 2026년 10월 16일(금) 14:00 ~ 15:00
+장소: 본사 7층 소회의실
+참석: 김서연, 박지훈, 이도현, 정하늘 / 기간계팀 최 선임(일부 참석)
+작성: 정하늘
+
+1. 지난 회의 후속
+- 개발 서버 우분투 설치, 개발자 계정 배포 끝남(이도현).
+
+2. 사내망 외부 모델 호출 허용 범위
+- 정보보안팀 회신이 아직 없어 이번 회의에서도 정하지 못함.
+- 다음 주 수요일 보안 검토 회의 결과를 보고 다시 논의하기로 함(담당 김서연).
+
+3. 운영 DB 구성
+- MySQL 로 정한 대로 운영 DB 도 같은 버전으로 구성.
+- 계정 · 권한은 이도현 님이 10월 21일까지 표로 만들어 공유하기로 함.
+
+4. 가상비서 대화 로그 보관 기간
+- 대화 로그에 고객 개인정보가 섞일 수 있어 보관 기간을 정해야 한다는 의견.
+- 후보는 30일 / 90일 / 1년. 법무 검토 의견을 받아 10월 30일까지 정하기로 함. 담당은 정하늘 님.
+- 정하늘 님이 다음 주 목요일까지 지금 쌓이고 있는 대화 로그 현황을 조사해 오기로 함.
+
+5. 기간계 테스트 데이터 마스킹
+- 통합 테스트에 쓸 기간계 데이터를 어디까지 가릴지 논의. \
+전 항목 마스킹 vs 주민번호 · 연락처만 마스킹.
+- 기간계팀 마스킹 기준 문서를 받은 뒤 다시 보기로 하고 이번에는 보류. \
+문서는 박지훈 님이 기간계팀에 요청해 둠.
+
+6. 기타
+- 통합 테스트 시나리오 초안은 최 선임이 10월 28일까지 공유해 주기로 함.
+
+다음 회의: 2026년 10월 23일(금) 14:00
+"""
+
+
+def minutes() -> list[Minutes]:
+    # 회의(14:00 ~ 15:00 KST)가 끝나고 적은 것으로 둔다
+    written = at("2026-10-16T06:30:00Z")
+    return [
+        Minutes(
+            id="m1",
+            project_id="p1",
+            title="10월 셋째 주 주간 회의",
+            meeting_date=d("2026-10-16"),
+            body=MINUTES_EXAMPLE,
+            summary="",
+            author_id="u1",
+            created_at=written,
+            updated_at=written,
+        )
+    ]
+
+
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
@@ -567,6 +626,7 @@ async def clear(session: AsyncSession) -> None:
         ThreadOption,
         ThreadCc,
         Thread,
+        Minutes,
         PartMember,
         Part,
         AuthSession,
@@ -602,7 +662,7 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in ("thread", "entry", "task", "task_comment", "check_request"):
+    for table in ("thread", "entry", "task", "task_comment", "check_request", "minutes"):
         await session.execute(
             text(
                 f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
@@ -631,6 +691,7 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(in_order(comments()))
     await session.flush()
     session.add_all(in_order(await checks(session)))
+    session.add_all(in_order(minutes()))
     await session.flush()
     await advance_identity(session)
     session.add_all(
@@ -654,6 +715,7 @@ async def run() -> None:
         "comment": len(comments()),
         "link": len(TASK_THREAD_LINKS),
         "check": len(CHECKS),
+        "minutes": len(minutes()),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")
