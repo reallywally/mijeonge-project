@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed } from 'lucide-vue-next'
 import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
+import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
 import ThreadDecisionPanel from '@/components/app/ThreadDecisionPanel.vue'
 import ThreadFields from '@/components/app/ThreadFields.vue'
@@ -109,9 +110,15 @@ function setPart(value: string | null) {
           >
             <template #under-title>
               <DialogTitle class="sr-only">{{ detail.thread.title }}</DialogTitle>
-              <DialogDescription class="text-xs text-muted-foreground">
-                {{ monthDay(detail.thread.createdAt) }} 등록 · 이력 {{ detail.events.length }}건
-              </DialogDescription>
+              <div class="flex flex-wrap items-center gap-2">
+                <DialogDescription class="text-xs text-muted-foreground">
+                  {{ monthDay(detail.thread.createdAt) }} 등록 · 이력 {{ detail.events.length }}건
+                </DialogDescription>
+                <MinutesSourceChip
+                  v-if="detail.thread.minutesId"
+                  :minutes-id="detail.thread.minutesId"
+                />
+              </div>
             </template>
 
             <ThreadDecisionPanel :detail="detail" @open-thread="(id) => emit('open-thread', id)" />
@@ -146,6 +153,7 @@ function setPart(value: string | null) {
                     <span v-if="e.superseded" class="text-xs text-muted-foreground"
                       >뒤의 결정으로 바뀜</span
                     >
+                    <MinutesSourceChip v-if="e.entry.minutesId" :minutes-id="e.entry.minutesId" />
                   </div>
 
                   <p

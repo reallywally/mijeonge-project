@@ -15,7 +15,7 @@ declare module 'vue-router' {
 }
 
 /* 목록 위에 뜨는 상세 팝업도 주소를 갖는다 — 새로고침과 뒤로가기가 살아 있어야 한다.
-   /tasks/new · /threads/new 는 각각 /:id 보다 먼저 둔다. */
+   /tasks/new · /threads/new · /minutes/new 는 각각 /:id 보다 먼저 둔다. */
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -99,6 +99,26 @@ const router = createRouter({
       path: '/checks',
       name: 'checks',
       component: () => import('@/views/ChecksView.vue'),
+    },
+    {
+      path: '/minutes',
+      name: 'minutes',
+      component: () => import('@/views/MinutesView.vue'),
+    },
+    {
+      path: '/minutes/new',
+      name: 'minutes-new',
+      component: () => import('@/views/MinutesEditView.vue'),
+    },
+    {
+      path: '/minutes/:minutesId/edit',
+      name: 'minutes-edit',
+      component: () => import('@/views/MinutesEditView.vue'),
+    },
+    {
+      path: '/minutes/:minutesId',
+      name: 'minutes-detail',
+      component: () => import('@/views/MinutesDetailView.vue'),
     },
   ],
 })

@@ -45,6 +45,7 @@ function mk(
     partId: PART_OF[id] ?? null,
     createdAt: '2026-09-04T00:20:00Z',
     commentCount: taskComments.filter((c) => c.taskId === id).length,
+    minutesId: null,
   }
 }
 

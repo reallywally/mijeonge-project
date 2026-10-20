@@ -191,6 +191,7 @@ export const useThreadStore = defineStore('thread', () => {
       state: 'queued',
       parentThreadId: null,
       createdAt: nowIso(),
+      minutesId: null,
     })
     return id
   }
@@ -261,6 +262,7 @@ export const useThreadStore = defineStore('thread', () => {
       note,
       ownerId,
       createdAt: nowIso(),
+      minutesId: null,
     })
 
     const thread = data.allThreads.find((t) => t.id === threadId)

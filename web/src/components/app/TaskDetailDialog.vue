@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
+import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
@@ -196,6 +197,9 @@ const threadChoices = computed(() => {
                 {{ detail.pathLabel }}
               </button>
             </DialogDescription>
+            <div v-if="detail.task.minutesId" class="flex min-w-0">
+              <MinutesSourceChip :minutes-id="detail.task.minutesId" />
+            </div>
           </header>
 
           <section class="flex flex-col gap-1.5">

@@ -133,6 +133,7 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       partId: inheritedPartId(undefined, parent),
       createdAt: nowIso(),
       commentCount: 0,
+      minutesId: null,
     }
     madeByTempId[t.tempId] = task
     return task

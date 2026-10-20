@@ -254,6 +254,69 @@
 
 **커밋** — ① 목업 화면 ② 서버 붙이기
 
+## 13단계 · 회의록 — '회의록' 메뉴
+
+회의록 글을 붙여넣으면 AI 가 **새 안건 · 기존 안건에 붙일 이력 · 작업** 초안을 내고, 사람이 고르고 고쳐 **[등록]** 해야 저장된다.
+계약은 `../docs/api/minutes.md`(합의 2026-10-19 · Q45 · Q46 닫힘, 녹음은 2단계 · Q47 보류), 서버 쪽은 `../server/PLAN.md` 12단계다.
+~~회의는 따로 관리하지 않는다 — 회의록 글 · 요약은 남기지 않고 남는 것은 안건 · 이력 · 작업뿐이다.~~ → **2026-10-20 고침(Q48)**: 회의록을 게시판으로 남긴다. 아래 '2026-10-20 고침' 이 지금 모양이다(13-1 은 그 전 기록).
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 자리 | 왼쪽 메뉴 확인 요청 다음 **'회의록'**(`/minutes`) — 챗봇 창이 아니다 | 회의록은 길고 검토할 줄이 많다. 2단계 녹음 업로드도 여기에 얹는다 |
+| 상태 | `stores/minutes.ts` — 글 · 단계(입력 · 정리 중 · 검토 · 등록함) · 받은 초안 · 고치는 사본(`form`) · 고른 줄 · 등록 결과 | 서버가 초안을 들고 있지 않다. 다시 정리하면 앞 초안 · 고친 값을 버린다 |
+| 수명 | 메모리에만. 화면을 떠나면 비우고(쓰던 게 있으면 먼저 묻는다), 프로젝트를 바꾸면 받는 중이면 끊고 초안만 버린다(글은 둔다) | 초안의 안건 · 담당자는 그 프로젝트의 것이다 |
+| 등록 결과 | 응답의 안건 · 이력 · 바뀐 안건 · 작업 · 링크를 데이터 스토어에 넣는다 — 목업 · 서버가 같은 길 | 목업 apply 는 데이터를 고치지 않고 결과만 낸다. 두 번 넣지 않게 |
+
+### 13-1 목업 (서버 갈래도 계약대로 붙임)
+
+- [x] `domain.ts` 에 `MinutesDraft` · `ProposedThread` · `ProposedEntry` · `ProposedEntryBody` · `ProposedMinutesTask` · `MinutesEvent` · `MinutesApplyInput` · `MinutesApplyResult` (계약 그대로)
+- [x] `src/fixtures/minutes.ts` — [예시 넣기] 글 `MINUTES_EXAMPLE`(10월 16일 주간 회의) · 고정 초안 `mockMinutesDraft`(p1 — 새 안건 n1 · n2(미룸) · t3 에 미룸 · 작업 셋: n1 에 · t2 에 · '최 선임' ownerHint 만) · 진행 줄 둘. quote 는 예시 글에서 글자 그대로(테스트가 대조)
+- [x] `src/api/minutes.ts` — `streamMinutesDraft(projectId, text, signal)` · `applyMinutes(projectId, input)`
+  - 스트림은 챗봇의 `settle`(제네릭으로 넓힘) · `postSseMessages`(챗봇 `postSse` 에서 뽑음)를 같이 쓰고 `toMinutesEvent` 로 읽는다. 초안 없이 `done` 이면 끊긴 것(`SERVER_UNREACHABLE`)
+  - 목업 draft — 프로젝트 · 글 길이(1 ~ 60,000, 앞뒤 공백 뗀 뒤)를 스트림 전에 보고 진행 줄 둘 → 초안 → done
+  - 목업 apply — 서버 '구현' 절과 같은 검사(422 가 먼저, 400 은 THREAD_NOT_FOUND → 안건 · 이력 · 작업 담당자 → TASK_PARENT_NOT_FOUND 의 첫 하나, 걸린 자리 전부) · 같은 생성 순서 · 같은 상태 전이. 안건 · 작업은 `provideMockWorld`(데이터 스토어)로 본다. 작업 키는 목업이면 데이터 스토어가 다시 센다(`addTaskBatch` 와 같다)
+- [x] `src/lib/minutes.ts` — 검사 규칙 `minutesApplyProblems`(목업 api) · 보낼 모양 `toMinutesApplyInput`(고른 줄만, 끈 새 안건의 `threadTempIds` 를 지움, 상위가 빠진 작업은 최상위로, 담당자를 고르면 `ownerHint` 를 비움) · 오류 detail → tempId · 정리 오류 한 줄
+- [x] `MinutesView.vue` + `components/app/MinutesReview.vue` · `OwnerSelect.vue`
+  - 입력 — 큰 글칸 · [파일 열기](.txt · .md, 다른 확장자는 한 줄로 거절) · [예시 넣기] · 글자 수 / 60,000 · [정리]. 쓴 글을 파일 · 예시로 바꿀 때는 묻는다
+  - 정리 중 — 글칸을 잠그고 진행 한 줄(`tool.label`, 처음엔 '회의록을 읽는 중') · [멈추기]
+  - 검토 — 요약 · 회의 날짜 안내 · 세 묶음. 줄마다 체크(기본 켬) · 제목 · 담당자 · 기한 · 종류 · 이력 내용을 고치고 근거는 흐리게. 끈 줄은 흐리게. 글칸은 낮게 남아 고쳐서 [다시 정리] 할 수 있다
+  - 새 안건을 끄면 걸린 작업에 '안건 연결이 빠집니다 — 제목', 켠 줄의 빈 제목 · 거꾸로 된 기간은 그 줄에 까닭을 띄우고 [등록] 을 막는다. 서버 detail 은 그 줄에 붙인다
+  - 결과 — '새 안건 N · 이력 N · 작업 N건을 등록했습니다' + 안건 칩(이력만 붙인 안건은 '이력 추가') · 작업 칩, 누르면 기존 상세 팝업. [새로 정리] 는 글까지 비운다
+- [x] 테스트 — api(픽스처 대조 · 목업 스트림 · 422 자리 · 400 순서 · 생성 순서 · 서버 SSE · 경로) · 스토어(정리 · 멈춤 · 다시 정리 · 프로젝트 전환 · 보낼 모양 · 등록 · 실패 자리) · 화면(입력 → 정리 → 체크 끄기 → 등록 → 칩, 연결 빠짐, 멈추기, ownerHint, 떠날 때 확인) (`api/minutes.test.ts` · `stores/minutes.test.ts` · `views/MinutesView.test.ts`)
+
+### 2026-10-20 고침 — 회의록 게시판 (Q48)
+
+계약 `../docs/api/minutes.md` 맨 위 '2026-10-20 고침'. 붙여넣은 글을 바로 정리하던 화면을 걷고, **저장된 회의록 하나에서 [AI 정리]** 한다.
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 화면 | `/minutes` 목록(`MinutesView`) · `/minutes/new` · `/minutes/:minutesId/edit`(`MinutesEditView`) · `/minutes/:minutesId` 상세(`MinutesDetailView`) — 검토는 상세 안에서 펼친다 | 계약 '화면' |
+| 스토어 | `stores/minutes.ts` = 게시판(목록 · 상세 byId · 쓰기 · 고치기 · 지우기 · 나온 것 세기), `stores/minutesDraft.ts` = [AI 정리](옛 `stores/minutes.ts` 의 초안 흐름에서 글 칸을 걷고 `minutesId` 를 받음) | 게시판은 오래 들고, 초안은 상세를 떠나면 버린다 — 수명이 달라 나눔 |
+| 권한 | 고치기 `canEditComment` · 지우기 `canDeleteComment`(`lib/access`) 그대로 — 버튼 숨김 · 목업 403 이 같은 함수 | 계약 '작업 댓글과 같은 경계' |
+| 나온 것 | `lib/minutes.ts` `minutesOutcome` — 스냅샷을 `minutesId` 로 거른다. 목록의 '나온 것' 수 · 상세 칩 · 지우기 확인의 N 이 같은 셈 | 따로 API 가 없다 |
+| 지우면 | 스토어가 데이터 스토어의 그 `minutesId` 를 `null` 로 — 목업 · 서버 같은 길(목업 api 는 회의록만 지운다) | 목업 apply 가 결과만 내고 스토어가 넣는 것과 같은 관례 |
+| 출처 칩 | `components/app/MinutesSourceChip.vue` — 안건 상세(안건 자신 · 이력 줄) · 작업 상세(제목 아래). 제목은 게시판 목록에서, 모르면 '회의록'. 처음 그릴 때 목록을 한 번 받는다 | 계약 '안건 상세 이력 · 작업 상세' |
+
+- [x] `domain.ts` — `MinutesItem` · `Minutes` · `MinutesInput`, `MinutesApplyInput.summary?`, `Thread` · `Entry` · `Task` 의 `minutesId`(픽스처 · 화면에서 만드는 줄 전부 `null`)
+- [x] `fixtures/minutes.ts` — 시드 `minutesRows`(m1 · p1 · u1 · `2026-10-16T06:30:00Z` · 본문 `MINUTES_EXAMPLE` · 요약 ''). `MINUTES_EXAMPLE` 은 서버 시드가 글자 그대로 복사하니 바꾸지 않는다
+- [x] `api/minutes.ts` — `fetchMinutesList` · `createMinutes` · `fetchMinutes` · `patchMinutes` · `deleteMinutes` · `streamMinutesDraft(minutesId, signal)`(본문 없는 POST) · `applyMinutes(minutesId, input)`
+  - 목업은 `mockDb().minutes` 에 둔다(`resetMockAuth` 가 되돌린다). 404 `MINUTES_NOT_FOUND`(남의 프로젝트도) · 403 `FORBIDDEN` · 422(`lib/minutes` `minutesInputProblems`)
+  - 서버 '구현 (2026-10-20 고침)' 에 맞춤 — title · body 는 앞뒤 공백 뗀 값을 저장, POST 의 meetingDate 가 빠지면 null, PATCH 의 title · body null 은 422 · meetingDate null 은 비우기 · 보낸 칸이 없으면 updatedAt 그대로, apply 의 summary null 은 안 보낸 것 · 60,000자 넘으면 422 `summary` · 실패하면 요약도 안 남음 · 요약 저장은 updatedAt 을 안 바꿈
+  - 목업 apply 는 만든 안건 · 이력 · 작업에 `minutesId` 를 달고(기존 안건 자체엔 안 단다) 요약을 저장한다
+- [x] 목록 — 회의 날짜 · 제목 · 작성자 · 나온 것 · 고친 날, 제목 찾기(조회 · 초기화), 10줄 페이징, [새 회의록]
+- [x] 쓰기 · 고치기 — 제목 · 회의 날짜 · 본문 · [파일 열기] · [예시 넣기] · 글자 수 · [취소] · [저장](고치기는 바뀐 칸만 PATCH). 쓰다 나가면 묻는다. 작성자가 아니면 고치기 주소에서 막는다
+- [x] 상세 — 메타 · [고치기](작성자) · [지우기](작성자 · 관리자, 확인 창 "여기서 나온 N건은 남습니다") · 요약 · 본문(줄바꿈 살림) · 이 회의록에서 나온 것(안건 · 이력 · 작업 칩, 없으면 "아직 정리하지 않았어요") · [AI 정리]/[다시 정리] → 검토 → [등록 N건] · [그만두기]. 등록하면 검토를 닫고 '등록했습니다' 한 줄 · 칩이 는다. 검토 중 떠나면 묻는다
+- [x] 검토의 요약은 고칠 수 있다 — [등록] 때 회의록 요약으로 저장된다
+- [x] 테스트 — api(게시판 정렬 · 쓰기 · 422 · 404 · 고치기/지우기 권한 · 서버 '구현' 맞춤 · apply 출처 · 요약 · 경로) · 스토어(게시판 · 권한 · 지우면 출처 null / 초안 · 등록 · 나온 것 · 요약) · 화면(목록 · 찾기 · 쓰기 · 고치기 · 권한 · AI 정리 → 등록 → 칩 · '회의록에서' 칩 · 지우기) (`api/minutes.test.ts` · `stores/minutes.test.ts` · `stores/minutesDraft.test.ts` · `views/MinutesView.test.ts`)
+
+### 13-2 서버에 붙이기 (서버 `구현` 뒤)
+
+- [ ] 서버 모드로 m1 을 [AI 정리] 해 세 묶음이 나오는지, 등록한 것이 다른 계정의 스냅샷에 출처(`minutesId`)와 같이 보이는지, 지우면 출처가 비는지 본다
+
+**커밋** — ① 목업 화면(서버 갈래 포함) ② 서버로 확인
+
 ---
 
 ## 진행 상황
@@ -273,6 +336,7 @@
 | 10 관리 화면 나누기 | **끝남** (2026-10-14) — 프로젝트 관리(정보 · 멤버) · 파트 관리(목록 + 상세, `?part=`) · 작업/안건 목록 `?part=` 거르기. 서버 · 계약 그대로 |
 | 11 결정 병목 리스크 | 계약 **합의** (2026-10-15) — '리스크' 메뉴 · 기준 바꾸기. **11-1 목업 끝남** (2026-10-15) · 11-2 는 서버 `구현` 뒤 · **11-3 AI 요약 끝남** (2026-10-15, 목업 · 서버 갈래 계약대로). Q36 · Q37 열림 |
 | 12 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **12-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-16) · **2026-10-19 고침 끝남**(Q42 ~ Q44, 결정 알림 · 참조) — 12-2 는 서버 `구현` 뒤 |
+| 13 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘 · Q47(녹음) 보류. **13-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-19) · **2026-10-20 고침 끝남**(Q48, 게시판 · 저장된 회의록에서 AI 정리 · 출처 `minutesId`). 13-2 는 서버로 한 번 돌려 보기 |
 
 ## 아직 안 정한 것
 
