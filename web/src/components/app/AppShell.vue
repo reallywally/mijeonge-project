@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import {
   ChevronDown,
   ChevronRight,
+  FileChartColumn,
   FolderClosed,
   KeyRound,
   ListChecks,
@@ -197,6 +198,14 @@ async function logout() {
           >
             <TriangleAlert class="size-4 shrink-0" />
             <span class="grow">리스크</span>
+          </RouterLink>
+          <RouterLink
+            to="/reports"
+            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
+            active-class="bg-accent font-medium text-accent-foreground"
+          >
+            <FileChartColumn class="size-4 shrink-0" />
+            <span class="grow">리포트</span>
           </RouterLink>
           <RouterLink
             to="/checks"

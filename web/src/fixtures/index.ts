@@ -9,3 +9,5 @@ export { mockRiskSummary, riskReports, RISK_AS_OF, RISK_SUMMARY_EMPTY } from './
 export type { MockRiskReport } from './risks'
 export { checkRequests } from './checks'
 export { MINUTES_EXAMPLE, minutesRows, mockMinutesDraft, mockMinutesTools } from './minutes'
+export { mockReportBody, REPORT_EMPTY } from './reports'
+export type { ReportBodyContext } from './reports'

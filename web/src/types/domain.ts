@@ -826,3 +826,127 @@ export interface MinutesApplyResult {
   threadIdByTempId: Record<string, string>
   taskIdByTempId: Record<string, string>
 }
+
+/* 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산하고(facts) Claude 가 손쓸 것을 쓴다. 저장한다 (docs/api/report.md) */
+
+export interface ProgressFacts {
+  /** 기간 — 둘 다 YYYY-MM-DD, KST. periodEnd 가 만든 날 */
+  periodStart: string
+  periodEnd: string
+  settings: RiskSettings
+
+  progress: {
+    /** 지금 상태별 작업 수 */
+    todo: number
+    doing: number
+    blocked: number
+    done: number
+    /** done / 전체, 소수 셋째 자리에서 반올림. 작업이 없으면 0 */
+    doneRate: number
+    /** 기간 안에 완료가 된 작업 (task_log) */
+    completedTaskIds: string[]
+    /** 기간 안에 진행 중이 된 작업 */
+    startedTaskIds: string[]
+    /** 기간 안에 등록된 작업 */
+    createdTaskIds: string[]
+  }
+
+  /** 바로 앞 리포트 — 없으면 null */
+  previous: { reportId: string; periodEnd: string; doneRate: number; blocked: number } | null
+
+  decisions: {
+    /** 기간 안에 decide · change 이력이 남은 안건 */
+    decidedThreadIds: string[]
+    /** 기간 안에 defer 이력이 남은 안건 */
+    deferredThreadIds: string[]
+    /** 지금 리스크 high · medium 안건 — DecisionRiskReport.threads 에서, 점수 순 10개까지 */
+    riskyThreadIds: string[]
+  }
+
+  /** 손쓸 작업. 한 작업에 신호가 여럿이면 다 싣는다 */
+  attention: TaskAttention[]
+
+  /** 사람별 — 담당 작업이 하나라도 있는 사람만, 담당자 없음은 memberId null */
+  people: PersonProgress[]
+}
+
+export type TaskAttentionSignal =
+  /** 이 작업이 기다리는 선행 작업이 안 끝났고, 이 작업의 시작일이 dueSoonDays 안이거나 지났다 */
+  | 'waitingOnPredecessor'
+  /** 이 작업을 기다리는 작업이 있는데 이 작업이 늦다 — 기한 지남 · 시작일 지났는데 해야 할 일 · 오래 걸림 중 하나 */
+  | 'lateBlocker'
+  /** 진행 중인 날 수가 계획(start ~ due)의 1.5배를 넘음. 계획이 없으면 staleDays 를 넘음 */
+  | 'longRunning'
+  /** 막힘인 날 수가 staleDays 를 넘음 */
+  | 'longBlocked'
+  /** 기한이 지났는데 완료가 아님 */
+  | 'overdue'
+  /** 시작일이 지났는데 해야 할 일 · 또는 기한이 dueSoonDays 안인데 해야 할 일 */
+  | 'notStarted'
+  /** 막힘인데 걸린 안건이 전부 결정됨 (risk.md 의 decidedButBlocked) */
+  | 'decidedButBlocked'
+
+export interface TaskAttention {
+  taskId: string
+  signals: TaskAttentionSignal[]
+  /** 지금 상태가 된 뒤 지난 날 수 (task_log). backfill 이면 '적어도' */
+  statusDays: number
+  statusSinceBackfill: boolean
+  /** start ~ due 의 날 수. 둘 중 하나라도 없으면 null */
+  plannedDays: number | null
+  /** 이 작업이 기다리는 안 끝난 선행 작업 */
+  waitingOnTaskIds: string[]
+  /** 이 작업을 기다리는 안 끝난 작업 — 이 작업이 늦으면 같이 밀린다 (몇 단계 건너도, 중복 없이) */
+  blockingTaskIds: string[]
+  /** 무게 — Claude 가 '어려운가' 를 판단하는 재료 */
+  weight: {
+    /** 완료 아닌 하위 작업 수 (자손 전부) */
+    openChildren: number
+    /** 본문 체크리스트 중 안 끝난 줄 · 전체 줄 */
+    openLines: number
+    totalLines: number
+    /** 걸린 안건 수 */
+    threadCount: number
+    priority: 'low' | 'normal' | 'high'
+  }
+  score: number
+}
+
+export interface PersonProgress {
+  memberId: string | null
+  doing: number
+  blocked: number
+  overdue: number
+  /** 기간 안에 끝낸 작업 수 */
+  completed: number
+  /** 이 사람 작업 중 attention 에 든 것 */
+  attentionTaskIds: string[]
+}
+
+/** 리포트 목록 한 줄 */
+export interface ReportItem {
+  id: string
+  projectId: string
+  periodStart: string
+  periodEnd: string
+  createdBy: string
+  createdAt: string
+  /** 목록에 찍을 숫자 — facts 에서 */
+  doneRate: number
+  attentionCount: number
+}
+
+export interface Report extends ReportItem {
+  facts: ProgressFacts
+  body: string
+}
+
+/** 만드는 스트림 */
+export type ReportEvent =
+  /** 계산이 끝났다 — 화면이 숫자 카드를 먼저 그린다 */
+  | { type: 'facts'; facts: ProgressFacts }
+  /** 글 조각 */
+  | { type: 'delta'; text: string }
+  /** 저장까지 끝. refs 는 본문의 근거 중 넣어 준 id 만 */
+  | { type: 'done'; report: ReportItem; refs: ChatRef[] }
+  | { type: 'error'; code: string; message: string }
