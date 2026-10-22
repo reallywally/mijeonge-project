@@ -59,19 +59,26 @@ Python 3.12 + FastAPI + Pydantic v2 + SQLAlchemy 2.0(async) + asyncpg + Alembic 
 - 맵핑은 링크 테이블 하나 — `task_thread_link`. 같은 프로젝트 안에서만 선다 (복합 FK · `API.md` Q13).
   "안건 상세에서는 맵핑 불가"는 **화면의 규칙이지 모델의 제약이 아니다**. 링크는 양쪽에서 읽는다
 
-### AI 챗봇 — Claude 를 부를 때
+### AI 챗봇 — LLM 을 부를 때
 
-계약은 `docs/api/chat.md`, 순서는 `server/PLAN.md` 7단계다.
+계약은 `docs/api/chat.md`, 순서는 `server/PLAN.md` 7단계, 공급자 경계는 15단계다.
 
-- `anthropic` SDK 의 **async 클라이언트**(`AsyncAnthropic`)만 쓴다. `requests` · `httpx` 로 API 를 직접 부르지 않는다.
-  SDK 사용법은 기억으로 쓰지 말고 `claude-api` 스킬을 먼저 불러 확인한다 — 모델 id · 파라미터가 자주 바뀐다
-- 모델 · effort 는 `config.py` 설정으로만 정한다. 코드에 모델 id 를 박지 않는다 (`API.md` Q25)
-- API 키는 `.env` 의 `ANTHROPIC_API_KEY` 로만 읽는다. 로그 · 오류 메시지 · 응답에 싣지 않는다.
-  키가 없어도 앱은 떠야 한다 — 채팅만 503 `CHAT_UNAVAILABLE`
+- **서비스는 `app/llm` 의 `LLMProvider` 만 본다** — `stream`(도구 없이 한 번) · `turn`(도구 루프 한 차례).
+  공급자 SDK(`anthropic` · `openai`)는 `app/llm` 밖에서 import 하지 않는다. 라우트는 `api/chat.get_llm` · `ready_llm` 으로 받는다
+- 공급자는 `.env` 의 `LLM_PROVIDER`(anthropic · openai · groq)로 고른다. Claude 는 `AnthropicProvider`,
+  GPT · Groq 는 `OpenAICompatProvider`(Chat Completions — Groq 는 base_url 만 다르다)
+- 각 SDK 의 **async 클라이언트**만 쓴다. `requests` · `httpx` 로 API 를 직접 부르지 않는다.
+  Claude SDK 사용법은 기억으로 쓰지 말고 `claude-api` 스킬을 먼저 불러 확인한다 — 모델 id · 파라미터가 자주 바뀐다
+- Claude 전용 기능(effort · 서버 쪽 대체 모델 · 캐시)은 `AnthropicProvider` 안에만 둔다. 서비스는 `UserMessage(cache=True)` 같은 표시만 단다
+- 모델 · effort 는 `config.py` 설정으로만 정한다. 코드에 모델 id 를 박지 않는다 (`API.md` Q25).
+  GPT · Groq 는 모델 기본값도 두지 않는다 — `OPENAI_MODEL` · `GROQ_MODEL` 을 꼭 적는다
+- API 키는 `.env` 의 `ANTHROPIC_API_KEY` · `OPENAI_API_KEY` · `GROQ_API_KEY` 로만 읽는다. 로그 · 오류 메시지 · 응답에 싣지 않는다.
+  고른 공급자의 키(· 모델)가 없어도 앱은 떠야 한다 — AI 경로만 503 `CHAT_UNAVAILABLE`
 - 도구는 `app/services/search.py` 의 함수를 감싼 것이다. **도구 안에서도 `project_id` 로 먼저 거른다** —
-  Claude 가 다른 프로젝트 id 를 넣어도 못 읽어야 한다
+  모델이 다른 프로젝트 id 를 넣어도 못 읽어야 한다
 - 루프 상한(6회) · `max_tokens` · 요청 크기 제한을 둔다. 끝없이 도는 루프는 돈이 샌다
-- **테스트는 Claude 를 부르지 않는다.** 가짜 클라이언트를 주입한다. 실제 호출은 `server/scripts/eval_chat.py` 로 사람이 돌린다
+- **테스트는 LLM 을 부르지 않는다.** 가짜 클라이언트(`tests/test_chat.py` 의 Claude 모양 · `tests/test_openai_compat.py` 의 OpenAI 모양)나
+  가짜 공급자(`tests/test_llm.py`)를 주입한다. 실제 호출은 `server/scripts/eval_chat.py` 로 사람이 돌린다
 
 ## 프론트와 소통하는 법
 

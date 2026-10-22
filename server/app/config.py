@@ -13,12 +13,20 @@ class Settings(BaseSettings):
     # 쿼리 로그는 필요할 때만 켠다
     sql_echo: bool = False
 
-    # 없어도 앱은 뜬다 — 채팅만 503 CHAT_UNAVAILABLE. SecretStr 이라 repr · 로그에 안 찍힌다
+    # AI 를 어느 공급자로 부를지. 고른 공급자의 키(와 모델)가 없으면 앱은 뜨고 AI 경로만 503 이다
+    llm_provider: Literal["anthropic", "openai", "groq"] = "anthropic"
+    # 키는 SecretStr 이라 repr · 로그에 안 찍힌다
     anthropic_api_key: SecretStr | None = None
-    # 모델 · effort 는 여기서만 바꾼다 (API.md Q25). Sonnet 5.5 는 effort 기본값이 high 라 명시한다
+    # 모델 · effort 는 여기서만 바꾼다 (API.md Q25). Sonnet 5.5 는 effort 기본값이 high 라 명시한다.
+    # chat_model · chat_effort 는 Claude 의 것이다
     chat_model: str = "claude-sonnet-5-5"
     chat_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
-    # thinking 을 끌 수 없어 그 몫까지 들어간다
+    # GPT · Groq 는 모델 id 를 꼭 적는다 — 기본값을 두지 않는다(바뀌는 이름을 코드가 짐작하지 않게)
+    openai_api_key: SecretStr | None = None
+    openai_model: str | None = None
+    groq_api_key: SecretStr | None = None
+    groq_model: str | None = None
+    # 공급자 공통. Claude 는 thinking 을 끌 수 없어 그 몫까지 들어간다
     chat_max_tokens: int = 8000
     # 회의록 초안은 도구 입력 하나에 안건 · 이력 · 작업 수십 줄이 실려 챗봇 답보다 길다
     minutes_max_tokens: int = 16000

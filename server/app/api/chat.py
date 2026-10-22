@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_session
 from app.errors import ApiError
-from app.llm import LLMProvider
+from app.llm import LLMProvider, openai_compat
 from app.llm.anthropic_provider import AnthropicProvider, make_client
 from app.schemas.chat import ChatEvent, ChatInput
 from app.schemas.minutes import MinutesEvent
@@ -24,11 +24,13 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 
 _client: AsyncAnthropic | None = None
 _client_built = False
+_other: LLMProvider | None = None
+_other_built = False
 _limiter = RateLimiter(settings.chat_rate_per_minute)
 
 
 def get_chat_client() -> AsyncAnthropic | None:
-    # 첫 요청에 한 번 만든다 — 키가 없으면 None 이고 앱은 그대로 뜬다
+    # Claude 클라이언트. 첫 요청에 한 번 만든다 — 키가 없으면 None 이고 앱은 그대로 뜬다
     global _client, _client_built
     if not _client_built:
         _client = make_client(settings)
@@ -44,7 +46,14 @@ def get_llm(
     client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
 ) -> LLMProvider | None:
     """AI 를 부르는 모든 경로(챗봇 · 회의록 초안 · 리스크 요약 · 선행 관계 · 리포트)가 받는다."""
-    return AnthropicProvider(client, settings) if client is not None else None
+    if settings.llm_provider == "anthropic":
+        return AnthropicProvider(client, settings) if client is not None else None
+    # GPT · Groq — 첫 요청에 한 번 만든다. 키 · 모델이 없으면 None 이고 AI 경로만 503 이다
+    global _other, _other_built
+    if not _other_built:
+        _other = openai_compat.make_provider(settings)
+        _other_built = True
+    return _other
 
 
 def ready_llm(request: Request, llm: LLMProvider | None, limiter: RateLimiter) -> LLMProvider:
