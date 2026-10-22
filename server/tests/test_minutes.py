@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import settings
+from app.llm.anthropic_provider import AnthropicProvider
 from app.main import app
 from app.models import Entry, Member, Minutes, Task, TaskThreadLink, Thread
 from app.schemas.minutes import ProposedEntry, ProposedMinutesTask, ProposedThread
@@ -903,7 +904,7 @@ async def run(
     return [
         event
         async for event in minutes_draft.draft(
-            fake,  # type: ignore[arg-type]
+            AnthropicProvider(fake, settings),  # type: ignore[arg-type]
             session,
             settings,
             context,

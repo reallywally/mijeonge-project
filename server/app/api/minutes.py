@@ -1,13 +1,12 @@
 from typing import Annotated
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.chat import get_chat_client, get_rate_limiter, sse_response
+from app.api.chat import get_llm, get_rate_limiter, ready_llm, sse_response
 from app.api.deps import ProjectScope, Session
 from app.config import settings
-from app.errors import ApiError
+from app.llm import LLMProvider
 from app.schemas.minutes import (
     MinutesApplyInput,
     MinutesApplyResult,
@@ -69,20 +68,14 @@ async def draft_minutes(
     request: Request,
     scope: ProjectScope,
     session: Session,
-    client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
+    llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
     """저장된 회의록 → 초안. 본문을 받지 않고 저장하지 않는다.
 
     챗봇과 같은 클라이언트 · 분당 제한 · SSE 다.
     """
-    if client is None:
-        raise ApiError(503, "CHAT_UNAVAILABLE", "AI 챗봇이 아직 설정되지 않았습니다.")
-    ip = request.client.host if request.client else "unknown"
-    if not limiter.allow(ip):
-        raise ApiError(
-            429, "CHAT_RATE_LIMITED", "질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요."
-        )
+    ready = ready_llm(request, llm, limiter)
     minutes = await minutes_service.load_minutes(session, minutes_id)
     # build_context 가 rollback 해 ORM 객체가 만료된다 — 그 전에 떠 둔다
     source = minutes_draft.MinutesSource(
@@ -91,7 +84,7 @@ async def draft_minutes(
     project_name = (await project_service.load_project(session, scope.project_id)).name
     context = await minutes_draft.build_context(session, scope.project_id, project_name)
     return sse_response(
-        minutes_draft.draft(client, session, settings, context, source, today=today_kst())
+        minutes_draft.draft(ready, session, settings, context, source, today=today_kst())
     )
 
 

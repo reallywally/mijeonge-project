@@ -21,9 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import settings
+from app.llm.anthropic_provider import FALLBACK_BETA
 from app.main import app
 from app.models import ProjectMember, Task, TaskDependency, TaskLog
-from app.services import chat as chat_service
 from app.services import dependency_suggest
 from app.services.ratelimit import RateLimiter
 from scripts.demo_task_log import apply_demo
@@ -438,7 +438,7 @@ async def test_one_call_without_tools_on_chat_settings(client: httpx.AsyncClient
     assert call["model"] == settings.chat_model
     assert call["max_tokens"] == settings.chat_max_tokens
     assert call["output_config"] == {"effort": settings.chat_effort}
-    assert call["betas"] == [chat_service.FALLBACK_BETA]
+    assert call["betas"] == [FALLBACK_BETA]
     assert "tools" not in call and "thinking" not in call
     assert "한화손보 차세대" in call["system"]
 

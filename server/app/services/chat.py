@@ -5,21 +5,20 @@ from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from contextlib import aclosing
 from typing import Any, cast
 
-from anthropic import AnthropicError, AsyncAnthropic
-from anthropic.types.beta import (
-    BetaMessage,
-    BetaMessageParam,
-    BetaTextBlockParam,
-    BetaToolParam,
-    BetaToolResultBlockParam,
-    BetaToolUseBlock,
-)
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import Settings
 from app.errors import ApiError
-from app.llm.anthropic_provider import FALLBACK_BETA, to_llm_error
+from app.llm import (
+    AssistantMessage,
+    LLMError,
+    LLMProvider,
+    Message,
+    Reply,
+    ToolResult,
+    ToolSpec,
+    UserMessage,
+)
 from app.schemas.chat import (
     ChatEvent,
     ChatMessage,
@@ -173,7 +172,7 @@ PROPOSED = (
 
 _DATE_OR_NULL = {"type": ["string", "null"], "description": "YYYY-MM-DD. 말하지 않았으면 null"}
 
-TOOLS: list[BetaToolParam] = [
+TOOLS: list[ToolSpec] = [
     {
         "name": "search_threads",
         "description": (
@@ -565,28 +564,25 @@ def _content(message: ChatMessage, mentions: dict[str, dict[str, str]]) -> str:
     return f"{message.text}\n\n{mention_note(keys, mentions)}"
 
 
-def _to_params(
+def _to_messages(
     messages: Sequence[ChatMessage], mentions: dict[str, dict[str, str]] | None = None
-) -> list[BetaMessageParam]:
+) -> list[Message]:
     found = mentions or {}
-    params: list[BetaMessageParam] = [
-        {"role": m.role, "content": _content(m, found)} for m in messages
+    history: list[Message] = [
+        UserMessage(_content(m, found))
+        if m.role == "user"
+        else AssistantMessage(_content(m, found))
+        for m in messages
     ]
     # 대화는 질문으로 시작해야 한다 — 화면이 앞을 잘라도 assistant 가 먼저 오면 떼어 낸다
-    while params and params[0]["role"] != "user":
-        params.pop(0)
-    return params
-
-
-def _api_error_event(exc: AnthropicError) -> ErrorEvent:
-    error = to_llm_error(exc)
-    return ErrorEvent(code=error.code, message=error.message)
+    while history and not isinstance(history[0], UserMessage):
+        history.pop(0)
+    return history
 
 
 async def answer(
-    client: AsyncAnthropic,
+    llm: LLMProvider,
     session: AsyncSession,
-    settings: Settings,
     project_id: str,
     project_name: str,
     messages: Sequence[ChatMessage],
@@ -600,9 +596,7 @@ async def answer(
     proposal: ProposalEvent | None = None
     try:
         # 일찍 끝나도 안쪽 루프(열린 스트림)를 바로 닫는다
-        async with aclosing(
-            _loop(client, session, settings, project_id, project_name, messages)
-        ) as events:
+        async with aclosing(_loop(llm, session, project_id, project_name, messages)) as events:
             async for event in events:
                 if isinstance(event, ProposalEvent):
                     proposal = event
@@ -612,8 +606,8 @@ async def answer(
                     return
                 if isinstance(event, DeltaEvent):
                     written.append(event.text)
-    except AnthropicError as exc:
-        yield _api_error_event(exc)
+    except LLMError as exc:
+        yield ErrorEvent(code=exc.code, message=exc.message)
         return
     except Exception:
         log.exception("채팅 처리 중 오류")
@@ -625,14 +619,13 @@ async def answer(
 
 
 async def _loop(
-    client: AsyncAnthropic,
+    llm: LLMProvider,
     session: AsyncSession,
-    settings: Settings,
     project_id: str,
     project_name: str,
     messages: Sequence[ChatMessage],
 ) -> AsyncGenerator[ChatEvent, None]:
-    history = _to_params(messages, await find_mentions(session, project_id, messages))
+    history = _to_messages(messages, await find_mentions(session, project_id, messages))
     today = today_kst()
     system = SYSTEM_PROMPT.format(
         project_name=project_name, today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})"
@@ -640,52 +633,42 @@ async def _loop(
     wrote = False
 
     for round_no in range(1, MAX_ROUNDS + 1):
-        final: BetaMessage
+        reply: Reply | None = None
         started = False
-        async with client.beta.messages.stream(
-            model=settings.chat_model,
-            max_tokens=settings.chat_max_tokens,
-            system=system,
-            messages=history,
-            tools=TOOLS,
-            # Sonnet 5.5 는 강제 호출(any · tool)이 400 이다 — 프롬프트로 도구를 쓰게 한다
-            tool_choice={"type": "auto"},
-            # thinking 은 넘기지 않는다 — Sonnet 5.5 는 끌 수 없다(disabled 는 400)
-            output_config={"effort": settings.chat_effort},
-            fallbacks="default",
-            betas=[FALLBACK_BETA],
-        ) as stream:
-            async for chunk in stream:
-                if chunk.type != "text" or not chunk.text:
-                    continue
-                if not started and wrote:
-                    # 앞 차례에 쓴 글과 붙지 않게 한 줄 띄운다
-                    yield DeltaEvent(text="\n\n")
-                started = True
-                yield DeltaEvent(text=chunk.text)
-            final = await stream.get_final_message()
+        async for event in llm.turn(system=system, messages=history, tools=TOOLS):
+            if isinstance(event, Reply):
+                reply = event
+                continue
+            if not event.text:
+                continue
+            if not started and wrote:
+                # 앞 차례에 쓴 글과 붙지 않게 한 줄 띄운다
+                yield DeltaEvent(text="\n\n")
+            started = True
+            yield DeltaEvent(text=event.text)
+        assert reply is not None, "공급자는 차례마다 Reply 로 끝난다"
         wrote = wrote or started
 
-        match final.stop_reason:
-            case "refusal":
+        match reply.stop:
+            case "refused":
                 yield ErrorEvent(
                     code="CHAT_REFUSED",
                     message="이 질문에는 답할 수 없습니다. 질문을 바꿔 다시 물어 주세요.",
                 )
                 return
-            case "max_tokens" | "model_context_window_exceeded":
+            case "max_tokens":
                 yield DeltaEvent(text=TRUNCATED)
                 return
-            case "pause_turn":
-                # 서버 쪽에서 멈춘 차례 — 그대로 이어 붙여 다시 부른다
-                history.append(final.to_param())
+            case "paused":
+                # 공급자 쪽에서 멈춘 차례 — 그대로 이어 붙여 다시 부른다
+                history.append(reply.message)
                 continue
             case "tool_use":
                 pass
             case _:
                 return
 
-        calls = [block for block in final.content if isinstance(block, BetaToolUseBlock)]
+        calls = reply.message.calls
         if not calls:
             return
         if round_no == MAX_ROUNDS:
@@ -694,8 +677,8 @@ async def _loop(
                 yield DeltaEvent(text=("\n\n" if wrote else "") + GAVE_UP)
             return
 
-        history.append(final.to_param())
-        results: list[BetaToolResultBlockParam | BetaTextBlockParam] = []
+        history.append(reply.message)
+        results: list[ToolResult] = []
         for call in calls:
             if call.name in _TOOL_NAMES:
                 name = cast(ToolName, call.name)
@@ -706,15 +689,7 @@ async def _loop(
                     yield ProposalEvent(proposal=proposal)
             else:
                 content, is_error = await run_tool(session, project_id, call.name, call.input)
-            results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": call.id,
-                    "content": content,
-                    "is_error": is_error,
-                }
-            )
-        if round_no == MAX_ROUNDS - 1:
-            # 다음이 마지막 차례다 — 찾은 것으로 마무리하게 한다
-            results.append({"type": "text", "text": WRAP_UP})
-        history.append({"role": "user", "content": results})
+            results.append(ToolResult(call_id=call.id, content=content, is_error=is_error))
+        # 다음이 마지막 차례면 찾은 것으로 마무리하게 한다
+        wrap_up = WRAP_UP if round_no == MAX_ROUNDS - 1 else ""
+        history.append(UserMessage(wrap_up, results=results))

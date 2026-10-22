@@ -330,7 +330,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 ### 15-1 체크리스트
 
 - [x] 1차 (2026-10-22) — `app/llm`(`base.py` · `anthropic_provider.py`) · 한 번 부르는 셋(리스크 요약 · 리포트 · 선행 관계 제안)을 `LLMProvider` 로. `risk_summary.one_shot` · `api/chat.ready_client` 를 걷고 `get_llm` · `ready_llm` 로. `FALLBACK_BETA` · `make_client` · 오류 접기를 `app/llm/anthropic_provider.py` 로 옮김. 검사 `tests/test_llm.py`(SDK 와 무관한 가짜 공급자로 세 서비스 · stop · 오류 접기)
-- [ ] 2차 — 도구 루프(`minutes_draft` · `chat`)를 옮긴다. `LLMProvider` 에 도구 · 대화 이력 · `tool_use` · `pause_turn` 을 더한다
+- [x] 2차 (2026-10-22) — 도구 루프(`chat` · `minutes_draft`)를 옮김. `LLMProvider.turn` — 대화(`UserMessage` · `AssistantMessage`) · 도구(`ToolSpec` · `ToolCall` · `ToolResult`) · 멈춘 이유에 `tool_use` · `paused`. 답의 원본은 `AssistantMessage.native` 로 들고 다닌다(Claude 의 thinking 서명). 회의록 캐시는 `UserMessage(cache=True)` 표시로. 챗봇 · 회의록 경로도 `get_llm` · `ready_llm`. 이제 `app/services` 에 `anthropic` import 가 없다. 검사 `tests/test_llm.py` 에 도구 루프 · paused · 메시지 변환
 - [ ] 3차 — `OpenAICompatProvider` · `config.py` 의 `llm_provider` · 공급자별 키 · 기능별 모델. 공급자를 바꿔 프롬프트 품질을 평가셋으로 확인
 
 ---
@@ -357,7 +357,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 12 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘. **12-1 끝남** (2026-10-19) — `POST .../minutes/draft`(SSE · `propose_minutes`, 챗봇 루프 재사용) · `POST .../minutes/apply`(한 트랜잭션) · 검사 함수 하나를 둘이 같이 씀 · 마이그레이션 없음. API.md 두 줄 `구현`. **2026-10-20 고침 끝남** (Q48) — 게시판(`minutes` · CRUD) · draft/apply 를 `/api/minutes/{id}/…` 로 · 출처 `minutesId` · 요약 저장 · 리비전 `0014_minutes` · 시드 `m1`. API.md 네 줄 `구현 (2026-10-20 고침)`. 다음은 평가 |
 | 13 선행 작업 · 작업 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **13-1 끝남** (2026-10-20) — 리비전 `0015_task_flow`(backfill 포함) · 선행 PUT · DELETE · 검사 함수 하나 · `task_log` 를 모든 길에서 · `Task.statusChangedAt` · `statusSinceBackfill` · AI 제안(JSON, 리스크 요약 틀 재사용) · 시드 · `scripts/demo_task_log.py`. API.md 두 줄 `구현`. 다음은 14 리포트 |
 | 14 프로젝트 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
-| 15 LLM 공급자 분리 | **1차 끝남** (2026-10-22) — `app/llm` 의 `LLMProvider` · `AnthropicProvider`, 한 번 부르는 서비스 셋을 옮김. 동작 · 계약은 그대로. 다음은 2차(도구 루프) |
+| 15 LLM 공급자 분리 | **1차 · 2차 끝남** (2026-10-22) — `app/llm` 의 `LLMProvider` · `AnthropicProvider`, AI 를 부르는 서비스 다섯을 모두 옮김. 동작 · 계약은 그대로. 다음은 3차(OpenAI 호환 공급자 · 설정으로 고르기) |
 
 ## 아직 안 정한 것
 

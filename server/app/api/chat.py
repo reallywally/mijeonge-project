@@ -43,15 +43,12 @@ def get_rate_limiter() -> RateLimiter:
 def get_llm(
     client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
 ) -> LLMProvider | None:
-    """도구 없이 한 번 부르는 것(리스크 요약 · 선행 관계 제안 · 리포트)이 받는 공급자."""
+    """AI 를 부르는 모든 경로(챗봇 · 회의록 초안 · 리스크 요약 · 선행 관계 · 리포트)가 받는다."""
     return AnthropicProvider(client, settings) if client is not None else None
 
 
 def ready_llm(request: Request, llm: LLMProvider | None, limiter: RateLimiter) -> LLMProvider:
-    """도구 없이 한 번 부르는 것의 문턱 — 키 없음 503, 제한 429.
-
-    챗봇과 같은 제한기라 서로의 횟수를 같이 먹는다.
-    """
+    """AI 를 부르기 전의 문턱 — 키 없음 503, 제한 429. 모든 경로가 제한기 하나를 같이 먹는다."""
     if llm is None:
         raise ApiError(503, "CHAT_UNAVAILABLE", "AI 챗봇이 아직 설정되지 않았습니다.")
     ip = request.client.host if request.client else "unknown"
@@ -94,19 +91,12 @@ async def chat(
     payload: ChatInput,
     request: Request,
     session: Session,
-    client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
+    llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
     """저장된 안건 · 작업을 근거로 답한다. 스트림 전 실패는 JSON, 뒤 실패는 error 이벤트다."""
     project = await project_service.load_project(session, project_id)
-    if client is None:
-        raise ApiError(503, "CHAT_UNAVAILABLE", "AI 챗봇이 아직 설정되지 않았습니다.")
-    ip = request.client.host if request.client else "unknown"
-    if not limiter.allow(ip):
-        raise ApiError(
-            429, "CHAT_RATE_LIMITED", "질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요."
-        )
-
+    ready = ready_llm(request, llm, limiter)
     return sse_response(
-        chat_service.answer(client, session, settings, project.id, project.name, payload.messages)
+        chat_service.answer(ready, session, project.id, project.name, payload.messages)
     )
