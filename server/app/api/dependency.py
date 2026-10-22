@@ -1,11 +1,10 @@
 from typing import Annotated
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, Request
 
-from app.api.chat import get_chat_client, get_rate_limiter, ready_client
+from app.api.chat import get_llm, get_rate_limiter, ready_llm
 from app.api.deps import ProjectScope, Session
-from app.config import settings
+from app.llm import LLMProvider
 from app.schemas.task import DependencySuggestionsOut, TaskDependencyOut
 from app.services import dependency as dependency_service
 from app.services import dependency_suggest
@@ -36,12 +35,10 @@ async def suggest_dependencies(
     request: Request,
     scope: ProjectScope,
     session: Session,
-    client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
+    llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> DependencySuggestionsOut:
     """[AI 선행 관계 찾기]. 저장하지 않는다 — 화면이 줄마다 [적용](= PUT) 한다. 응답은 JSON 이다."""
-    ready = ready_client(request, client, limiter)
+    ready = ready_llm(request, llm, limiter)
     project_name = (await project_service.load_project(session, scope.project_id)).name
-    return await dependency_suggest.suggest(
-        session, ready, settings, scope.project_id, project_name
-    )
+    return await dependency_suggest.suggest(session, ready, scope.project_id, project_name)

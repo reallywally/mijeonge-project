@@ -5,13 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from contextlib import aclosing
 from typing import Any, cast
 
-from anthropic import (
-    AnthropicError,
-    APIConnectionError,
-    APIStatusError,
-    AsyncAnthropic,
-    RateLimitError,
-)
+from anthropic import AnthropicError, AsyncAnthropic
 from anthropic.types.beta import (
     BetaMessage,
     BetaMessageParam,
@@ -25,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.errors import ApiError
+from app.llm.anthropic_provider import FALLBACK_BETA, to_llm_error
 from app.schemas.chat import (
     ChatEvent,
     ChatMessage,
@@ -56,8 +51,6 @@ log = logging.getLogger(__name__)
 
 # Claude 를 부르는 횟수의 상한. 끝없이 도는 루프는 돈이 샌다
 MAX_ROUNDS = 6
-# 거절에 대비해 서버 쪽 대체 모델을 켠다 — fallbacks 는 이 베타가 있어야 받는다
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 WEEKDAYS = "월화수목금토일"
 
@@ -369,13 +362,6 @@ TOOLS: list[BetaToolParam] = [
 _TOOL_NAMES: frozenset[str] = frozenset(tool["name"] for tool in TOOLS)
 
 
-def make_client(settings: Settings) -> AsyncAnthropic | None:
-    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
-    if not key.strip():
-        return None
-    return AsyncAnthropic(api_key=key, timeout=settings.chat_timeout_seconds)
-
-
 def extract_refs(text: str) -> list[ChatRef]:
     """본문에 실제로 나온 근거만, 처음 나온 순서대로 한 번씩."""
     seen: dict[tuple[str, str], ChatRef] = {}
@@ -593,22 +579,8 @@ def _to_params(
 
 
 def _api_error_event(exc: AnthropicError) -> ErrorEvent:
-    if isinstance(exc, RateLimitError):
-        return ErrorEvent(
-            code="CHAT_RATE_LIMITED",
-            message="지금 질문이 많아 답하지 못했습니다. 잠시 뒤에 다시 물어 주세요.",
-        )
-    if isinstance(exc, APIStatusError):
-        # 키 · 요청 내용은 싣지 않는다. 상태만 로그에 남긴다
-        log.warning("Claude API 오류 status=%s request_id=%s", exc.status_code, exc.request_id)
-    elif isinstance(exc, APIConnectionError):
-        log.warning("Claude API 에 닿지 않음: %s", type(exc).__name__)
-    else:
-        log.warning("Claude SDK 오류: %s", type(exc).__name__)
-    return ErrorEvent(
-        code="CHAT_UNAVAILABLE",
-        message="AI 가 지금 응답하지 않습니다. 잠시 뒤에 다시 물어 주세요.",
-    )
+    error = to_llm_error(exc)
+    return ErrorEvent(code=error.code, message=error.message)
 
 
 async def answer(

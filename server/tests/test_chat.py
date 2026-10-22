@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import Settings, settings
+from app.llm.anthropic_provider import make_client
 from app.main import app
 from app.services import chat as chat_service
 from app.services.ratelimit import RateLimiter
@@ -352,13 +353,13 @@ async def test_no_key_is_503(client: httpx.AsyncClient) -> None:
 @pytest.mark.parametrize("key", [None, "", "   "])
 def test_no_key_builds_no_client(key: str | None) -> None:
     fresh = Settings(_env_file=None, anthropic_api_key=key)  # type: ignore[call-arg]
-    assert chat_service.make_client(fresh) is None
+    assert make_client(fresh) is None
 
 
 def test_key_does_not_leak_into_repr() -> None:
     fresh = Settings(_env_file=None, anthropic_api_key="sk-ant-비밀")  # type: ignore[call-arg]
     assert "sk-ant-비밀" not in repr(fresh)
-    assert chat_service.make_client(fresh) is not None
+    assert make_client(fresh) is not None
 
 
 async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:

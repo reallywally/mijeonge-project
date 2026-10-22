@@ -313,6 +313,26 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 - [x] 개발 DB — `alembic upgrade head`(시드는 안 돌림). 실제 키로 p1 리포트 한 편을 만들어 봤다
 - [ ] 평가 — '먼저 손쓸 것' 이 attention 순서 · 숫자를 지키는지, 지어낸 근거가 없는지 몇 번 돌려 본다. 7-3 평가셋 옆에 둔다
 
+## 15단계 · LLM 공급자 분리 — Claude · GPT · Groq 를 설정으로 고른다
+
+서비스는 `app/llm` 의 `LLMProvider` 만 본다. 공급자 SDK(`anthropic` · `openai`)는 `app/llm` 밖으로 새지 않는다.
+API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 경계 | `LLMProvider.stream(system, user_text)` → `TextDelta…` · `Finished(stop)`. 멈춘 이유는 `end` · `max_tokens` · `refused` 셋으로 접는다. SDK 오류는 `LLMError(code, message)` — code 는 `CHAT_RATE_LIMITED` · `CHAT_UNAVAILABLE` 그대로 | 공급자마다 이름이 다른 stop · 오류를 서비스가 몰라도 되게 |
+| Claude 전용 기능 | effort · 서버 쪽 대체 모델(`fallbacks`) · 프롬프트 캐시는 `AnthropicProvider` 안에만 둔다 | 다른 공급자에는 없다 — 있으면 쓰고 없으면 건너뛴다 |
+| 주입 | `api/chat.get_llm` — 지금은 `get_chat_client` 위에 `AnthropicProvider` 를 씌운다 | 기존 가짜 클라이언트 검사를 그대로 두고 동작이 안 바뀐 것을 확인한다 |
+| GPT · Groq | `OpenAICompatProvider` 하나 — Groq 는 OpenAI 호환이라 `base_url` 만 다르다 | 어댑터 하나로 둘 |
+
+### 15-1 체크리스트
+
+- [x] 1차 (2026-10-22) — `app/llm`(`base.py` · `anthropic_provider.py`) · 한 번 부르는 셋(리스크 요약 · 리포트 · 선행 관계 제안)을 `LLMProvider` 로. `risk_summary.one_shot` · `api/chat.ready_client` 를 걷고 `get_llm` · `ready_llm` 로. `FALLBACK_BETA` · `make_client` · 오류 접기를 `app/llm/anthropic_provider.py` 로 옮김. 검사 `tests/test_llm.py`(SDK 와 무관한 가짜 공급자로 세 서비스 · stop · 오류 접기)
+- [ ] 2차 — 도구 루프(`minutes_draft` · `chat`)를 옮긴다. `LLMProvider` 에 도구 · 대화 이력 · `tool_use` · `pause_turn` 을 더한다
+- [ ] 3차 — `OpenAICompatProvider` · `config.py` 의 `llm_provider` · 공급자별 키 · 기능별 모델. 공급자를 바꿔 프롬프트 품질을 평가셋으로 확인
+
 ---
 
 ## 진행 상황
@@ -337,6 +357,7 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 | 12 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘. **12-1 끝남** (2026-10-19) — `POST .../minutes/draft`(SSE · `propose_minutes`, 챗봇 루프 재사용) · `POST .../minutes/apply`(한 트랜잭션) · 검사 함수 하나를 둘이 같이 씀 · 마이그레이션 없음. API.md 두 줄 `구현`. **2026-10-20 고침 끝남** (Q48) — 게시판(`minutes` · CRUD) · draft/apply 를 `/api/minutes/{id}/…` 로 · 출처 `minutesId` · 요약 저장 · 리비전 `0014_minutes` · 시드 `m1`. API.md 네 줄 `구현 (2026-10-20 고침)`. 다음은 평가 |
 | 13 선행 작업 · 작업 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **13-1 끝남** (2026-10-20) — 리비전 `0015_task_flow`(backfill 포함) · 선행 PUT · DELETE · 검사 함수 하나 · `task_log` 를 모든 길에서 · `Task.statusChangedAt` · `statusSinceBackfill` · AI 제안(JSON, 리스크 요약 틀 재사용) · 시드 · `scripts/demo_task_log.py`. API.md 두 줄 `구현`. 다음은 14 리포트 |
 | 14 프로젝트 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
+| 15 LLM 공급자 분리 | **1차 끝남** (2026-10-22) — `app/llm` 의 `LLMProvider` · `AnthropicProvider`, 한 번 부르는 서비스 셋을 옮김. 동작 · 계약은 그대로. 다음은 2차(도구 루프) |
 
 ## 아직 안 정한 것
 

@@ -30,6 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.llm.anthropic_provider import FALLBACK_BETA
 from app.models import Member, Part, PartMember
 from app.schemas.minutes import (
     MINUTES_ENTRIES_MAX,
@@ -46,7 +47,7 @@ from app.schemas.minutes import (
 from app.services import access
 from app.services import chat as chat_service
 from app.services import minutes as minutes_service
-from app.services.chat import FALLBACK_BETA, WEEKDAYS
+from app.services.chat import WEEKDAYS
 
 log = logging.getLogger(__name__)
 

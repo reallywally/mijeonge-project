@@ -1,12 +1,11 @@
 from typing import Annotated
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.chat import get_chat_client, get_rate_limiter, ready_client, sse_response
+from app.api.chat import get_llm, get_rate_limiter, ready_llm, sse_response
 from app.api.deps import ProjectScope, Session
-from app.config import settings
+from app.llm import LLMProvider
 from app.schemas.report import Report, ReportItem
 from app.services import project as project_service
 from app.services import report as report_service
@@ -33,7 +32,7 @@ async def create_report(
     request: Request,
     scope: ProjectScope,
     session: Session,
-    client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
+    llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
     """본문 없음. 계산 → facts → Claude 글 → 다 받으면 저장 → done. 스트림 전 실패는 JSON 이다.
@@ -48,12 +47,11 @@ async def create_report(
         return sse_response(
             report_service.empty(session, scope.project_id, scope.actor.id, prepared.facts)
         )
-    ready = ready_client(request, client, limiter)
+    ready = ready_llm(request, llm, limiter)
     return sse_response(
         report_service.write(
             ready,
             session,
-            settings,
             project_id=scope.project_id,
             project_name=project_name,
             actor_id=scope.actor.id,

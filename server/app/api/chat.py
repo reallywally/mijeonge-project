@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_session
 from app.errors import ApiError
+from app.llm import LLMProvider
+from app.llm.anthropic_provider import AnthropicProvider, make_client
 from app.schemas.chat import ChatEvent, ChatInput
 from app.schemas.minutes import MinutesEvent
 from app.schemas.report import ReportEvent
@@ -29,7 +31,7 @@ def get_chat_client() -> AsyncAnthropic | None:
     # 첫 요청에 한 번 만든다 — 키가 없으면 None 이고 앱은 그대로 뜬다
     global _client, _client_built
     if not _client_built:
-        _client = chat_service.make_client(settings)
+        _client = make_client(settings)
         _client_built = True
     return _client
 
@@ -38,21 +40,26 @@ def get_rate_limiter() -> RateLimiter:
     return _limiter
 
 
-def ready_client(
-    request: Request, client: AsyncAnthropic | None, limiter: RateLimiter
-) -> AsyncAnthropic:
-    """도구 없이 한 번 부르는 것(리스크 요약 · 선행 관계 제안)의 문턱 — 키 없음 503, 제한 429.
+def get_llm(
+    client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
+) -> LLMProvider | None:
+    """도구 없이 한 번 부르는 것(리스크 요약 · 선행 관계 제안 · 리포트)이 받는 공급자."""
+    return AnthropicProvider(client, settings) if client is not None else None
 
-    챗봇과 같은 클라이언트 · 같은 제한기라 서로의 횟수를 같이 먹는다.
+
+def ready_llm(request: Request, llm: LLMProvider | None, limiter: RateLimiter) -> LLMProvider:
+    """도구 없이 한 번 부르는 것의 문턱 — 키 없음 503, 제한 429.
+
+    챗봇과 같은 제한기라 서로의 횟수를 같이 먹는다.
     """
-    if client is None:
+    if llm is None:
         raise ApiError(503, "CHAT_UNAVAILABLE", "AI 챗봇이 아직 설정되지 않았습니다.")
     ip = request.client.host if request.client else "unknown"
     if not limiter.allow(ip):
         raise ApiError(
             429, "CHAT_RATE_LIMITED", "질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요."
         )
-    return client
+    return llm
 
 
 def _sse(event: ChatEvent | MinutesEvent | ReportEvent) -> str:
