@@ -10,18 +10,15 @@ import logging
 import re
 from typing import Any
 
-from anthropic import AnthropicError, AsyncAnthropic
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import Settings
 from app.errors import ApiError
+from app.llm import Finished, LLMError, LLMProvider
 from app.models import Task, TaskDependency, TaskThreadLink, Thread
 from app.schemas.task import DependencySuggestionOut, DependencySuggestionsOut
 from app.services import dependency as dependency_service
-from app.services.chat import _api_error_event
-from app.services.risk_summary import one_shot
 
 log = logging.getLogger(__name__)
 
@@ -168,28 +165,27 @@ def parse(text: str) -> list[_Item]:
         raise failed() from exc
 
 
-async def ask(
-    client: AsyncAnthropic, settings: Settings, project_name: str, payload: dict[str, Any]
-) -> str:
-    """한 번 부르고 답 글을 돌려준다. SDK 오류는 챗봇과 같은 코드(429 · 503)로 바꾼다."""
+async def ask(llm: LLMProvider, project_name: str, payload: dict[str, Any]) -> str:
+    """한 번 부르고 답 글을 돌려준다. 공급자 오류는 챗봇과 같은 코드(429 · 503)로 바꾼다."""
+    written: list[str] = []
     try:
-        async with client.beta.messages.stream(
-            **one_shot(settings, system_prompt(project_name), user_message(payload))
-        ) as stream:
-            final = await stream.get_final_message()
-    except AnthropicError as exc:
-        event = _api_error_event(exc)
-        status = 429 if event.code == "CHAT_RATE_LIMITED" else 503
-        raise ApiError(status, event.code, event.message) from exc
-    if final.stop_reason == "refusal":
-        raise failed()
-    return "".join(block.text for block in final.content if block.type == "text")
+        async for event in llm.stream(
+            system=system_prompt(project_name), user_text=user_message(payload)
+        ):
+            if isinstance(event, Finished):
+                if event.stop == "refused":
+                    raise failed()
+                continue
+            written.append(event.text)
+    except LLMError as exc:
+        status = 429 if exc.code == "CHAT_RATE_LIMITED" else 503
+        raise ApiError(status, exc.code, exc.message) from exc
+    return "".join(written)
 
 
 async def suggest(
     session: AsyncSession,
-    client: AsyncAnthropic,
-    settings: Settings,
+    llm: LLMProvider,
     project_id: str,
     project_name: str,
 ) -> DependencySuggestionsOut:
@@ -198,7 +194,7 @@ async def suggest(
     if len(payload["tasks"]) < 2:
         return DependencySuggestionsOut(suggestions=[], truncated=truncated)
 
-    items = parse(await ask(client, settings, project_name, payload))
+    items = parse(await ask(llm, project_name, payload))
 
     sent_keys = [row["key"] for row in payload["tasks"]]
     found = await session.execute(

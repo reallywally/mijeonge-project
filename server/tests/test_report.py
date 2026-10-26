@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import chat as chat_api
 from app.api import report as report_api
 from app.config import settings
+from app.llm.anthropic_provider import FALLBACK_BETA, AnthropicProvider
 from app.main import app
 from app.models import Entry, Member, ProjectReport, Task
 from app.services import chat as chat_service
@@ -197,9 +198,8 @@ async def test_stopped_stream_is_not_saved(
     prepared = await report_service.prepare(session, "p1", today=TODAY)
     fake = FakeClient(Turn(texts=["하나", "둘", "셋"]))
     stream = report_service.write(
-        fake,  # type: ignore[arg-type]
+        AnthropicProvider(fake, settings),  # type: ignore[arg-type]
         session,
-        settings,
         project_id="p1",
         project_name="한화손보 차세대",
         actor_id="u1",
@@ -246,7 +246,7 @@ async def test_one_call_without_tools_on_chat_settings(client: httpx.AsyncClient
     assert call["model"] == settings.chat_model
     assert call["max_tokens"] == settings.chat_max_tokens
     assert call["output_config"] == {"effort": settings.chat_effort}
-    assert call["betas"] == [chat_service.FALLBACK_BETA]
+    assert call["betas"] == [FALLBACK_BETA]
     assert "tools" not in call and "tool_choice" not in call and "thinking" not in call
     system = call["system"]
     assert "한화손보 차세대" in system and "2026-10-20 (화)" in system

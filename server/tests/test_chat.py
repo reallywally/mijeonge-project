@@ -3,7 +3,8 @@
 **Claude 를 부르지 않는다.** `get_chat_client` 를 가짜 클라이언트로 바꿔 끼운다 — 가짜는
 `client.beta.messages.stream(...)` 의 모양만 흉내 내고, 정해 둔 차례
 (글자 조각 · 도구 호출 · stop_reason)를 차례대로 내준다. 마지막 메시지는 SDK 의 진짜
-`BetaMessage` 라 `to_param()` 까지 실제 코드가 돈다.
+`BetaMessage` 라 `to_param()` 까지 실제 코드가 돈다. 서비스는 `AnthropicProvider` 가 감싼 것을
+받으니, 검사가 SDK 요청의 모양까지 그대로 본다.
 """
 
 import json
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import Settings, settings
+from app.llm.anthropic_provider import AnthropicProvider, make_client
 from app.main import app
 from app.services import chat as chat_service
 from app.services.ratelimit import RateLimiter
@@ -135,9 +137,8 @@ async def run(session: AsyncSession, fake: FakeClient, project_id: str = "p1") -
     return [
         event
         async for event in chat_service.answer(
-            fake,  # type: ignore[arg-type]
+            AnthropicProvider(fake, settings),  # type: ignore[arg-type]
             session,
-            settings,
             project_id,
             "한화손보 차세대",
             [chat_service.ChatMessage(role="user", text="서버 OS 뭐로 하기로 했지?")],
@@ -352,13 +353,13 @@ async def test_no_key_is_503(client: httpx.AsyncClient) -> None:
 @pytest.mark.parametrize("key", [None, "", "   "])
 def test_no_key_builds_no_client(key: str | None) -> None:
     fresh = Settings(_env_file=None, anthropic_api_key=key)  # type: ignore[call-arg]
-    assert chat_service.make_client(fresh) is None
+    assert make_client(fresh) is None
 
 
 def test_key_does_not_leak_into_repr() -> None:
     fresh = Settings(_env_file=None, anthropic_api_key="sk-ant-비밀")  # type: ignore[call-arg]
     assert "sk-ant-비밀" not in repr(fresh)
-    assert chat_service.make_client(fresh) is not None
+    assert make_client(fresh) is not None
 
 
 async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:
@@ -429,7 +430,8 @@ async def test_leading_assistant_is_dropped(session: AsyncSession) -> None:
         chat_service.ChatMessage(role="assistant", text="앞에서 잘린 답"),
         chat_service.ChatMessage(role="user", text="질문"),
     ]
-    async for _ in chat_service.answer(fake, session, settings, "p1", "p1", messages):  # type: ignore[arg-type]
+    llm = AnthropicProvider(fake, settings)  # type: ignore[arg-type]
+    async for _ in chat_service.answer(llm, session, "p1", "p1", messages):
         pass
     assert fake.calls[0]["messages"] == [{"role": "user", "content": "질문"}]
 

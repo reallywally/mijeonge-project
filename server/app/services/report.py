@@ -11,12 +11,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from anthropic import AnthropicError, AsyncAnthropic
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import Settings
 from app.errors import not_found
+from app.llm import Finished, LLMError, LLMProvider
 from app.models import (
     Entry,
     Member,
@@ -41,8 +40,7 @@ from app.schemas.report import (
 from app.schemas.risk import DecisionRiskReport
 from app.services import progress as progress_service
 from app.services.access import Scope, forbidden
-from app.services.chat import TRUNCATED, WEEKDAYS, _api_error_event, extract_refs
-from app.services.risk_summary import one_shot
+from app.services.chat import TRUNCATED, WEEKDAYS, extract_refs
 from app.time import KST, as_utc, now
 
 log = logging.getLogger(__name__)
@@ -458,9 +456,8 @@ async def empty(
 
 
 async def write(
-    client: AsyncAnthropic,
+    llm: LLMProvider,
     session: AsyncSession,
-    settings: Settings,
     *,
     project_id: str,
     project_name: str,
@@ -476,32 +473,32 @@ async def write(
     assert context is not None, "작업이 없으면 empty 를 부른다"
     yield ReportFactsEvent(facts=facts)
     written: list[str] = []
+    finished = Finished("end")
     try:
-        async with client.beta.messages.stream(
-            **one_shot(settings, system_prompt(project_name, today), user_message(context))
-        ) as stream:
-            async for chunk in stream:
-                if chunk.type != "text" or not chunk.text:
-                    continue
-                written.append(chunk.text)
-                yield DeltaEvent(text=chunk.text)
-            final = await stream.get_final_message()
-    except AnthropicError as exc:
-        yield _api_error_event(exc)
+        async for event in llm.stream(
+            system=system_prompt(project_name, today), user_text=user_message(context)
+        ):
+            if isinstance(event, Finished):
+                finished = event
+                continue
+            written.append(event.text)
+            yield DeltaEvent(text=event.text)
+    except LLMError as exc:
+        yield ErrorEvent(code=exc.code, message=exc.message)
         return
     except Exception:
         log.exception("리포트를 쓰는 중 오류")
         yield ErrorEvent(code="INTERNAL_ERROR", message="서버에서 오류가 발생했습니다.")
         return
 
-    match final.stop_reason:
-        case "refusal":
+    match finished.stop:
+        case "refused":
             yield ErrorEvent(
                 code="CHAT_REFUSED",
                 message="이 리포트는 쓸 수 없습니다. 잠시 뒤에 다시 만들어 주세요.",
             )
             return
-        case "max_tokens" | "model_context_window_exceeded":
+        case "max_tokens":
             # 잘린 글도 그대로 남긴다 — 잘렸다는 한 줄을 붙여서
             written.append(TRUNCATED)
             yield DeltaEvent(text=TRUNCATED)

@@ -1,12 +1,11 @@
 from typing import Annotated
 
-from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.chat import get_chat_client, get_rate_limiter, ready_client, sse_response
+from app.api.chat import get_llm, get_rate_limiter, ready_llm, sse_response
 from app.api.deps import ProjectAdmin, ProjectScope, Session
-from app.config import settings
+from app.llm import LLMProvider
 from app.schemas.risk import DecisionRiskReport, RiskSettings, RiskSummaryInput
 from app.services import project as project_service
 from app.services import risk as risk_service
@@ -35,18 +34,18 @@ async def summarize_risks(
     request: Request,
     scope: ProjectScope,
     session: Session,
-    client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
+    llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
     """[AI 요약]. 챗봇과 같은 클라이언트 · 분당 제한 · SSE 다. 스트림 전 실패는 JSON 이다."""
-    ready = ready_client(request, client, limiter)
+    ready = ready_llm(request, llm, limiter)
     # 이름은 먼저 떠 둔다 — 근거를 모은 뒤 rollback 이 ORM 객체를 만료시킨다
     project_name = (await project_service.load_project(session, scope.project_id)).name
     today = today_kst()
     context = await risk_summary.build_context(session, scope.project_id, payload, today=today)
     if context is None:
         return sse_response(risk_summary.nothing())
-    return sse_response(risk_summary.summarize(ready, settings, project_name, context, today=today))
+    return sse_response(risk_summary.summarize(ready, project_name, context, today=today))
 
 
 @router.get("/projects/{project_id}/risk-settings")

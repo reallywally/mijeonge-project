@@ -16,20 +16,12 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, cast
 
-from anthropic import AnthropicError, AsyncAnthropic
-from anthropic.types.beta import (
-    BetaMessage,
-    BetaMessageParam,
-    BetaTextBlockParam,
-    BetaToolParam,
-    BetaToolResultBlockParam,
-    BetaToolUseBlock,
-)
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.llm import LLMError, LLMProvider, Message, Reply, ToolResult, ToolSpec, UserMessage
 from app.models import Member, Part, PartMember
 from app.schemas.minutes import (
     MINUTES_ENTRIES_MAX,
@@ -46,7 +38,7 @@ from app.schemas.minutes import (
 from app.services import access
 from app.services import chat as chat_service
 from app.services import minutes as minutes_service
-from app.services.chat import FALLBACK_BETA, WEEKDAYS
+from app.services.chat import WEEKDAYS
 
 log = logging.getLogger(__name__)
 
@@ -129,7 +121,7 @@ _ENTRY_FIELDS: dict[str, Any] = {
 }
 _ENTRY_REQUIRED = ["kind", "text", "detail", "note", "owner_id", "owner_hint"]
 
-PROPOSE_TOOL: BetaToolParam = {
+PROPOSE_TOOL: ToolSpec = {
     "name": "propose_minutes",
     "description": (
         "회의록 초안을 화면에 낸다. 저장하지 않는다 — 사람이 고르고 고쳐 [등록] 을 누른다. "
@@ -259,7 +251,7 @@ PROPOSE_TOOL: BetaToolParam = {
 }
 
 # 읽기 도구는 챗봇의 정의 그대로다 — 설명을 두 벌 갖지 않는다
-TOOLS: list[BetaToolParam] = [
+TOOLS: list[ToolSpec] = [
     *(tool for tool in chat_service.TOOLS if tool["name"] in READ_TOOLS),
     PROPOSE_TOOL,
 ]
@@ -426,7 +418,7 @@ def _error(code: str, message: str) -> MinutesErrorEvent:
 
 
 async def draft(
-    client: AsyncAnthropic,
+    llm: LLMProvider,
     session: AsyncSession,
     settings: Settings,
     context: MinutesContext,
@@ -439,14 +431,13 @@ async def draft(
     error 가 오면 draft · done 은 안 온다.
     """
     try:
-        async with aclosing(_loop(client, session, settings, context, source, today)) as events:
+        async with aclosing(_loop(llm, session, settings, context, source, today)) as events:
             async for event in events:
                 yield event
                 if isinstance(event, MinutesErrorEvent | MinutesDoneEvent):
                     return
-    except AnthropicError as exc:
-        failed = chat_service._api_error_event(exc)
-        yield _error(failed.code, failed.message)
+    except LLMError as exc:
+        yield _error(exc.code, exc.message)
         return
     except Exception:
         log.exception("회의록 정리 중 오류")
@@ -457,7 +448,7 @@ async def draft(
 
 
 async def _loop(
-    client: AsyncAnthropic,
+    llm: LLMProvider,
     session: AsyncSession,
     settings: Settings,
     context: MinutesContext,
@@ -466,58 +457,43 @@ async def _loop(
 ) -> AsyncGenerator[MinutesEvent, None]:
     system = system_prompt(context, today, source.meeting_date)
     # 회의록은 차례마다 다시 실려 간다 — 캐시해 두면 두 번째 차례부터 싸다
-    first: BetaTextBlockParam = {
-        "type": "text",
-        "text": user_message(source),
-        "cache_control": {"type": "ephemeral"},
-    }
-    history: list[BetaMessageParam] = [{"role": "user", "content": [first]}]
+    history: list[Message] = [UserMessage(user_message(source), cache=True)]
     failures = 0
 
     for round_no in range(1, MAX_ROUNDS + 1):
-        final: BetaMessage
-        async with client.beta.messages.stream(
-            model=settings.chat_model,
-            max_tokens=settings.minutes_max_tokens,
-            system=system,
-            messages=history,
-            tools=TOOLS,
-            # 챗봇과 같은 이유로 auto — Sonnet 5.5 는 강제 호출이 400 이다.
-            # thinking 도 넘기지 않는다
-            tool_choice={"type": "auto"},
-            output_config={"effort": settings.chat_effort},
-            fallbacks="default",
-            betas=[FALLBACK_BETA],
-        ) as stream:
-            # 글은 화면에 흘리지 않는다 — 초안만 낸다
-            async for _ in stream:
-                pass
-            final = await stream.get_final_message()
+        reply: Reply | None = None
+        # 글은 화면에 흘리지 않는다 — 초안만 낸다
+        async for event in llm.turn(
+            system=system, messages=history, tools=TOOLS, max_tokens=settings.minutes_max_tokens
+        ):
+            if isinstance(event, Reply):
+                reply = event
+        assert reply is not None, "공급자는 차례마다 Reply 로 끝난다"
 
-        match final.stop_reason:
-            case "refusal":
+        match reply.stop:
+            case "refused":
                 yield _error("CHAT_REFUSED", REFUSED_MESSAGE)
                 return
-            case "max_tokens" | "model_context_window_exceeded":
+            case "max_tokens":
                 # 초안 도구의 입력이 잘렸다 — 다시 불러도 같은 자리에서 잘린다
                 yield _error("MINUTES_DRAFT_FAILED", TOO_LONG_MESSAGE)
                 return
-            case "pause_turn":
-                history.append(final.to_param())
+            case "paused":
+                history.append(reply.message)
                 continue
 
-        calls = [block for block in final.content if isinstance(block, BetaToolUseBlock)]
-        history.append(final.to_param())
+        calls = reply.message.calls
+        history.append(reply.message)
         if not calls:
             # 초안 없이 글로 끝냈다 — 한 번 고칠 기회로 세고 초안을 내라고 한다
             failures += 1
             if failures >= MAX_FAILURES:
                 yield _error("MINUTES_DRAFT_FAILED", FAILED_MESSAGE)
                 return
-            history.append({"role": "user", "content": NUDGE})
+            history.append(UserMessage(NUDGE))
             continue
 
-        results: list[BetaToolResultBlockParam | BetaTextBlockParam] = []
+        results: list[ToolResult] = []
         for call in calls:
             if call.name in _TOOL_NAMES:
                 name = cast(MinutesToolName, call.name)
@@ -550,14 +526,6 @@ async def _loop(
                     json.dumps({"error": f"없는 도구다: {call.name}"}, ensure_ascii=False),
                     True,
                 )
-            results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": call.id,
-                    "content": content,
-                    "is_error": is_error,
-                }
-            )
-        if round_no == MAX_ROUNDS - 1:
-            results.append({"type": "text", "text": WRAP_UP})
-        history.append({"role": "user", "content": results})
+            results.append(ToolResult(call_id=call.id, content=content, is_error=is_error))
+        wrap_up = WRAP_UP if round_no == MAX_ROUNDS - 1 else ""
+        history.append(UserMessage(wrap_up, results=results))
