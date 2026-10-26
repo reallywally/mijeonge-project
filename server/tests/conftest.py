@@ -23,7 +23,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session
 
+from app.api import chat as chat_api
 from app.api.auth import get_login_limiter
+from app.config import settings
 from app.db import get_session
 from app.main import app
 from app.models import (
@@ -102,6 +104,21 @@ async def session() -> AsyncGenerator[AsyncSession, None]:
 def _fresh_login_limiter() -> None:
     # 로그인 횟수 제한은 프로세스 하나에 하나다 — 앞 검사의 시도가 뒤로 넘어오지 않게
     get_login_limiter().reset()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """검사는 실제 LLM 을 부르지 않는다 — 개발용 `.env` 의 공급자 · 키를 검사가 물려받지 않게.
+
+    공급자는 가짜 클라이언트를 끼우는 Claude 쪽으로 두고 키는 모두 비운다. 가짜를 안 끼운
+    검사가 AI 경로를 부르면 실제 호출 대신 503 이다. 만들어 둔 클라이언트도 비운다.
+    """
+    monkeypatch.setattr(settings, "llm_provider", "anthropic")
+    for key in ("anthropic_api_key", "openai_api_key", "groq_api_key"):
+        monkeypatch.setattr(settings, key, None)
+    for name, value in (("_client", None), ("_client_built", False), ("_other", None)):
+        monkeypatch.setattr(chat_api, name, value)
+    monkeypatch.setattr(chat_api, "_other_built", False)
 
 
 def _new_client(cookie: str | None = None) -> httpx.AsyncClient:
