@@ -8,6 +8,7 @@ import { visibleInMyParts } from '@/lib/part'
 import { mergeSignals, sortAttention, testPeriodLabel, worstStatus } from '@/lib/testcase'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
+import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import type {
   TestCase,
@@ -58,6 +59,7 @@ export const useTestStore = defineStore('test', () => {
   const data = useDataStore()
   const auth = useAuthStore()
   const partStore = usePartStore()
+  const history = useHistoryStore()
 
   const rows = ref<TestCase[]>([])
   /** rows 가 어느 프로젝트 것인가 — 프로젝트를 바꾼 사이 옛 목록을 그리지 않는다 */
@@ -322,6 +324,8 @@ export const useTestStore = defineStore('test', () => {
       toastError(e)
       void load()
       return false
+    } finally {
+      history.touched('test', testId)
     }
   }
 
@@ -331,8 +335,8 @@ export const useTestStore = defineStore('test', () => {
     return patch(testId, { start: both ? start : null, due: both ? due : null })
   }
 
-  /** 응답을 기다리는 쓰기 — 상태 · 태그 · 기준. 실패하면 알리고 false */
-  async function run(fn: () => Promise<TestCase | void>): Promise<boolean> {
+  /** 응답을 기다리는 쓰기 — 상태 · 태그 · 기준. 실패하면 알리고 false. 끝나면 이력 칸에 알린다 */
+  async function run(testId: string, fn: () => Promise<TestCase | void>): Promise<boolean> {
     try {
       const res = await fn()
       if (res) put(res)
@@ -340,22 +344,24 @@ export const useTestStore = defineStore('test', () => {
     } catch (e) {
       toastError(e)
       return false
+    } finally {
+      history.touched('test', testId)
     }
   }
 
   const setStatus = (testId: string, input: TestStatusInput) =>
-    run(() => api.setTestStatus(testId, input))
+    run(testId, () => api.setTestStatus(testId, input))
 
-  const addRef = (testId: string, ref: TestRef) => run(() => api.putTestRef(testId, ref))
+  const addRef = (testId: string, ref: TestRef) => run(testId, () => api.putTestRef(testId, ref))
 
   /** 떼기는 204 라 다시 받는다 — 기준(basis)이 새로 찍혀 신호가 바뀔 수 있다 */
   const removeRef = (testId: string, ref: TestRef) =>
-    run(async () => {
+    run(testId, async () => {
       await api.deleteTestRef(testId, ref)
       return api.fetchTest(testId)
     })
 
-  const confirmBasis = (testId: string) => run(() => api.confirmTestBasis(testId))
+  const confirmBasis = (testId: string) => run(testId, () => api.confirmTestBasis(testId))
 
   async function remove(testId: string): Promise<boolean> {
     try {

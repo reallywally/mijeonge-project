@@ -316,6 +316,31 @@ export interface TaskComment {
   editedAt: string | null
 }
 
+/** 칸 하나의 바뀜 (docs/api/history.md) */
+export interface HistoryChange {
+  /** '칸' 표의 이름 — created · status · ownerId · lineDone · taskRef … */
+  field: string
+  /** 바뀌기 전 값. 없던 값(담당자 없음 · 기간 미정 · 새로 건 태그)은 null */
+  from: string | number | boolean | null
+  /** 바뀐 뒤 값. 비운 값 · 뗀 태그는 null */
+  to: string | number | boolean | null
+  /** 무엇에 대한 바뀜인지 한 줄 — 체크한 본문 줄의 글. 없으면 '' */
+  subject: string
+}
+
+/** 이력 한 줄 = 요청 하나. GET /api/tasks/{taskId}/history · /api/tests/{testId}/history 가 seq 오름차순으로 낸다 */
+export interface HistoryEntry {
+  id: string
+  /** ISO 8601 UTC, Z */
+  changedAt: string
+  /** 바꾼 사람. backfill 이면 null */
+  changedBy: string | null
+  /** 마이그레이션이 넣은 '등록' 줄이면 true — 등록한 사람을 모른다 */
+  backfilled: boolean
+  /** 비지 않는다 */
+  changes: HistoryChange[]
+}
+
 /** POST /api/tasks/{taskId}/comments — 서버가 body 를 trim 하고 빈 값은 거절한다. 작성자는 로그인한 사람이다 */
 export interface TaskCommentInput {
   body: string

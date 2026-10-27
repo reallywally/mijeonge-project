@@ -11,7 +11,9 @@ import {
   taskDependencies,
   taskThreadLinks,
   tasks,
+  taskHistory,
   testCases,
+  testHistory,
   threads,
 } from '@/fixtures'
 import type { MockAccount, MockProjectGrant, MockTestCase } from '@/fixtures'
@@ -19,6 +21,7 @@ import { canManageProject, canSeeProject } from '@/lib/access'
 import type {
   CheckRequest,
   Entry,
+  HistoryEntry,
   Me,
   Member,
   MemberAccount,
@@ -35,7 +38,7 @@ import type {
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · parts · comments · tasks · dependencies · risk · checks · minutes · reports · tests 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks · dependencies · risk · checks · minutes · reports · tests · history 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -62,6 +65,10 @@ interface MockDb {
   testSeq: number
   /** 프로젝트별 다음 테스트 번호 — 지운 번호를 다시 쓰지 않는다 */
   nextTestNo: Record<string, number>
+  /** 변경 이력 — 작업 · 테스트 id 마다 등록 순서대로 */
+  taskHistory: Record<string, HistoryEntry[]>
+  testHistory: Record<string, HistoryEntry[]>
+  historySeq: number
 }
 
 const fresh = (): MockDb => ({
@@ -80,6 +87,9 @@ const fresh = (): MockDb => ({
   tests: structuredClone(testCases),
   testSeq: 0,
   nextTestNo: {},
+  taskHistory: structuredClone(taskHistory),
+  testHistory: structuredClone(testHistory),
+  historySeq: 0,
 })
 
 let db = fresh()
@@ -94,6 +104,9 @@ function readSession(): string | null {
     return memorySession
   }
 }
+
+/** 지금 로그인한 사람의 id — 없으면 null. 목업 이력의 '바꾼 사람' 처럼 거절하지 않고 적기만 하는 자리가 쓴다 */
+export const mockSessionMemberId = () => readSession()
 
 export function writeMockSession(memberId: string | null) {
   memorySession = memberId

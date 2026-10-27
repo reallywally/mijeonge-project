@@ -9,11 +9,13 @@ import {
   type SseMessage,
 } from '@/api/chat'
 import { id, mockError, request, unreachable } from '@/api/client'
+import { recordMockHistory } from '@/api/history'
 import { forbidden, later, mockDb, mockWorld, requireMe, requireProject } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import { mockMinutesDraft, mockMinutesTools, projects } from '@/fixtures'
 import { canDeleteComment, canEditComment, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
+import { change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
 import { inheritedPartId } from '@/lib/part'
 import type {
@@ -480,6 +482,9 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     const threadIds = [...t.threadTempIds.map((tempId) => threadIdByTempId[tempId]), ...t.threadIds]
     for (const threadId of new Set(threadIds)) links.push({ taskId: tasks[i].id, threadId })
   })
+
+  /* 등록 때 함께 건 안건은 created 에 든 것으로 본다 — 따로 줄을 안 만든다 */
+  for (const t of tasks) recordMockHistory('task', t.id, [change('created', null, null)])
 
   /* 안 보냈거나 null 이면 지금 요약 그대로. 요약은 사람이 고친 것이 아니라 updatedAt 은 그대로 */
   if (input.summary != null) minutes.summary = input.summary.trim()

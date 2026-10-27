@@ -330,3 +330,39 @@ describe('작업 · 안건 상세의 태그한 테스트', () => {
     expect(text('[data-tagged-test="tc4"]')).toContain('HW-T4')
   })
 })
+
+describe('테스트 상세 — 변경 이력', () => {
+  const entries = () => $$('[data-history-entry]').map((e) => e.textContent!.replace(/\s+/g, ' '))
+
+  it('펼치면 부르고, 실패 줄은 상태 · 실패한 단계 · 결과 메모를 한 줄에 — 긴 글은 펼친다', async () => {
+    await mountAt('/tests/tc7')
+    expect(entries()).toEqual([])
+    await click($('[data-history-toggle]'))
+    const [fail, created] = entries()
+    expect(fail).toContain('김서연')
+    expect(fail).toContain('상태: 테스트 중 → 실패')
+    expect(fail).toContain('실패한 단계: 없음 → 2단계')
+    expect(fail).toContain('결과 메모: 없음 → 관리 화면 주소를 직접 치면 열린다.')
+    expect(created).toContain('등록')
+
+    /* 긴 결과 메모는 줄여 보이다가 펼친다 */
+    await click(button('실패'))
+    await type('textarea[aria-label="실패 메모"]', '가'.repeat(80))
+    await click(button('실패로 남기기'))
+    expect(entries()[0]).toContain('상태: 실패 (다시 고름)')
+    expect(entries()[0]).toContain(`${'가'.repeat(60)}…`)
+    await click($('[data-history-more]'))
+    expect(entries()[0]).toContain('가'.repeat(80))
+  })
+
+  it('펼친 채로 단계 · 태그를 바꾸면 다시 부른다', async () => {
+    await mountAt('/tests/tc1')
+    await click($('[data-history-toggle]'))
+    expect(entries()).toHaveLength(1)
+    await useTestStore().patch('tc1', { steps: [{ action: '연다', expected: '' }] })
+    await useTestStore().addRef('tc1', { kind: 'task', id: 'k4' })
+    await flushPromises()
+    expect(entries()[0]).toContain('작업 태그 걸기: HW-4')
+    expect(entries()[1]).toContain('단계 고침 (0 → 1개)')
+  })
+})

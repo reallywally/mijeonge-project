@@ -1,10 +1,12 @@
 import { id, mockError, request } from '@/api/client'
+import { recordMockHistory } from '@/api/history'
 import { forbidden, later, mockDb, mockWorld, requireMe, requireProject } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import { projects } from '@/fixtures'
 import type { MockTestCase } from '@/fixtures'
 import { canDeleteComment, canSeeProject } from '@/lib/access'
 import { kstToday, nowIso } from '@/lib/date'
+import { change, diffChanges, stepsChanged } from '@/lib/history'
 import { DEFAULT_RISK_SETTINGS } from '@/lib/risk'
 import {
   TEST_REF_MAX,
@@ -238,6 +240,7 @@ const mock = {
       basisSeq: latestSeq(refs),
     }
     db.tests.push(row)
+    recordMockHistory('test', row.id, [change('created', null, null)])
     return toCase(row)
   },
   patch(testId: string, patch: TestPatch): TestCase {
@@ -253,19 +256,25 @@ const mock = {
     if (patch.ownerId !== undefined) checkOwner(row.projectId, patch.ownerId, row.ownerId)
     if (patch.partId !== undefined) checkPart(row.projectId, patch.partId, row.partId)
 
+    /* 이력 — 보낸 칸 가운데 값이 바뀐 것만. 단계는 개수만 남긴다 */
+    const nextSteps = patch.steps?.map((s) => ({ action: s.action.trim(), expected: s.expected }))
+    const changes = diffChanges(row, { ...patch, title: trimmed(patch.title) }, 'test', ['steps'])
+    if (nextSteps && stepsChanged(row.steps, nextSteps))
+      changes.push(change('steps', row.steps.length, nextSteps.length))
+
     if (patch.title !== undefined) row.title = trimmed(patch.title)!
     if (patch.parentId !== undefined) row.parentId = patch.parentId
     if (patch.purpose !== undefined) row.purpose = patch.purpose
     if (patch.precondition !== undefined) row.precondition = patch.precondition
     if (patch.testData !== undefined) row.testData = patch.testData
-    if (patch.steps !== undefined)
-      row.steps = patch.steps.map((s) => ({ action: s.action.trim(), expected: s.expected }))
+    if (nextSteps !== undefined) row.steps = nextSteps
     if (patch.start !== undefined) row.start = patch.start
     if (patch.due !== undefined) row.due = patch.due
     if (patch.ownerId !== undefined) row.ownerId = patch.ownerId
     if (patch.partId !== undefined) row.partId = patch.partId
     /* 키를 하나라도 보내면 기준을 새로 찍는다(값이 같아도). 빈 {} 는 그대로 */
     if (Object.keys(patch).length > 0) row.basisSeq = latestSeq(row.refs)
+    recordMockHistory('test', row.id, changes)
     return toCase(row)
   },
   remove(testId: string) {
@@ -288,13 +297,23 @@ const mock = {
       )
     const problems = testStatusProblem(input.status, input.note, input.failedStep, row.steps.length)
     if (Object.keys(problems).length > 0) throw invalid(problems)
-    /* 같은 상태로 다시 보내도 시각 · 사람을 새로 찍는다(덮어쓴다) */
+    /* 같은 상태로 다시 보내도 시각 · 사람을 새로 찍는다(덮어쓴다) — 이력에도 status 가 남는다 */
+    const before = { status: row.status, failedStep: row.failedStep, resultNote: row.resultNote }
     row.status = input.status
     row.statusChangedAt = nowIso()
     row.statusChangedBy = me.id
     row.failedStep = input.status === 'fail' ? (input.failedStep ?? null) : null
     row.resultNote =
       input.status === 'fail' || input.status === 'blocked' ? (input.note ?? '').trim() : ''
+    const note = (v: string) => v || null
+    recordMockHistory('test', row.id, [
+      change('status', before.status, row.status),
+      ...diffChanges(
+        { failedStep: before.failedStep, resultNote: note(before.resultNote) },
+        { failedStep: row.failedStep, resultNote: note(row.resultNote) },
+        'test',
+      ),
+    ])
     return toCase(row)
   },
   putRef(testId: string, ref: TestRef): TestCase {
@@ -305,6 +324,7 @@ const mock = {
     if (row.refs.length >= TEST_REF_MAX) throw refLimit()
     row.refs = sortRefs([...row.refs, ref])
     row.basisSeq = latestSeq(row.refs)
+    recordMockHistory('test', row.id, [change(`${ref.kind}Ref`, null, ref.id)])
     return toCase(row)
   },
   deleteRef(testId: string, ref: TestRef) {
@@ -314,10 +334,12 @@ const mock = {
     if (next.length === row.refs.length) return
     row.refs = next
     row.basisSeq = latestSeq(row.refs)
+    recordMockHistory('test', row.id, [change(`${ref.kind}Ref`, ref.id, null)])
   },
   basis(testId: string): TestCase {
     const row = requireTest(requireMe(), testId)
     row.basisSeq = latestSeq(row.refs)
+    recordMockHistory('test', row.id, [change('basis', null, null)])
     return toCase(row)
   },
 }

@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, Clock, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
+import HistorySection from '@/components/app/HistorySection.vue'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
 import PartField from '@/components/app/PartField.vue'
@@ -454,6 +455,11 @@ const area =
               </div>
             </div>
           </section>
+
+          <template v-if="test">
+            <div class="h-px bg-border" />
+            <HistorySection kind="test" :target-id="test.id" />
+          </template>
 
           <div v-if="isNew" class="flex justify-end gap-2">
             <Button variant="outline" @click="open = false">취소</Button>
