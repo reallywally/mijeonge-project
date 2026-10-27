@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
+import TaggedTests from '@/components/app/TaggedTests.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
 import TaskDependencies from '@/components/app/TaskDependencies.vue'
@@ -307,6 +308,8 @@ const threadChoices = computed(() => {
             @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
             @open-thread="(id) => emit('open-thread', id)"
           />
+
+          <TaggedTests kind="task" :ref-id="detail.task.id" />
 
           <div class="h-px bg-border" />
           <TaskComments :task-id="detail.task.id" />

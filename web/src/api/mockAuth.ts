@@ -11,9 +11,10 @@ import {
   taskDependencies,
   taskThreadLinks,
   tasks,
+  testCases,
   threads,
 } from '@/fixtures'
-import type { MockAccount, MockProjectGrant } from '@/fixtures'
+import type { MockAccount, MockProjectGrant, MockTestCase } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
 import type {
   CheckRequest,
@@ -34,7 +35,7 @@ import type {
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · parts · comments · tasks · dependencies · risk · checks · minutes · reports 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks · dependencies · risk · checks · minutes · reports · tests 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -56,6 +57,11 @@ interface MockDb {
   /** 프로젝트 진행 리포트 — 배열 순서가 seq 순서다. 시드는 없다 */
   reports: Report[]
   reportSeq: number
+  /** 테스트 — 배열 순서가 seq 순서다 */
+  tests: MockTestCase[]
+  testSeq: number
+  /** 프로젝트별 다음 테스트 번호 — 지운 번호를 다시 쓰지 않는다 */
+  nextTestNo: Record<string, number>
 }
 
 const fresh = (): MockDb => ({
@@ -71,6 +77,9 @@ const fresh = (): MockDb => ({
   minutesSeq: 0,
   reports: [],
   reportSeq: 0,
+  tests: structuredClone(testCases),
+  testSeq: 0,
+  nextTestNo: {},
 })
 
 let db = fresh()

@@ -950,3 +950,125 @@ export type ReportEvent =
   /** 저장까지 끝. refs 는 본문의 근거 중 넣어 준 id 만 */
   | { type: 'done'; report: ReportItem; refs: ChatRef[] }
   | { type: 'error'; code: string; message: string }
+
+/* ── 테스트 (docs/api/test.md) — 작업과 따로 둔다. 스냅샷에 싣지 않고 프로젝트 단위로 받는다 ── */
+
+export type TestStatus = 'draft' | 'ready' | 'testing' | 'pass' | 'fail' | 'blocked'
+export type TestLevel = 'functional' | 'integration' | 'acceptance'
+export type TestSignal =
+  | 'longRunning' // 오래 걸림
+  | 'overdue' // 기간 지남
+  | 'notStarted' // 시작 안 함
+  | 'longBlocked' // 오래 막힘
+  | 'failedIdle' // 실패 그대로
+  | 'basisChanged' // 기준 바뀜
+
+/** 단계 — 행동 ↔ 기대 결과 짝. 배열 순서가 단계 순서다(1부터 센다) */
+export interface TestStep {
+  action: string
+  /** 중간 단계는 '' 일 수 있다 */
+  expected: string
+}
+
+/** 참조 태그 */
+export interface TestRef {
+  kind: 'task' | 'thread'
+  id: string
+}
+
+export interface TestCase {
+  id: string
+  projectId: string
+  /** HW-T12 */
+  key: string
+  title: string
+  parentId: string | null
+  purpose: string
+  precondition: string
+  testData: string
+  steps: TestStep[]
+  refs: TestRef[]
+  status: TestStatus
+  /** 지금 상태가 된 시각. ISO 8601 UTC, Z */
+  statusChangedAt: string
+  /** 지금 상태로 바꾼 사람. 멤버가 지워졌으면 null */
+  statusChangedBy: string | null
+  /** 오늘(KST) − statusChangedAt 의 날짜(KST). 오늘 바뀌었으면 0 */
+  statusDays: number
+  /** status 가 fail 일 때 몇 번째 단계였나(1부터). 그 밖엔 null */
+  failedStep: number | null
+  /** fail · blocked 의 메모. 그 밖엔 '' */
+  resultNote: string
+  level: TestLevel | null
+  /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
+  start: string | null
+  due: string | null
+  ownerId: string | null
+  partId: string | null
+  /** 규칙이 붙인 신호. 하위가 있는 테스트(묶음)는 늘 [] */
+  signals: TestSignal[]
+  /** 기준 바뀜의 근거 — basis 뒤로 닿는 안건에 생긴 decide · change Entry 의 id, 오래된 것부터. 없으면 [] */
+  changedEntryIds: string[]
+  createdBy: string | null
+  createdAt: string
+}
+
+/** POST /api/projects/{projectId}/tests — status 는 받지 않는다(늘 draft 로 들어간다) */
+export interface TestInput {
+  title: string
+  parentId?: string | null
+  purpose?: string
+  precondition?: string
+  testData?: string
+  steps?: TestStep[]
+  /** 작업 · 안건 상세의 [테스트 추가] 가 미리 채운다 */
+  refs?: TestRef[]
+  level?: TestLevel | null
+  start?: string | null
+  due?: string | null
+  ownerId?: string | null
+  /** 안 보내면 상위 테스트의 파트를 따른다(작업과 같다) */
+  partId?: string | null
+}
+
+/** PATCH /api/tests/{testId} — 보낸 키만 바꾼다. status · refs 는 여기서 안 바꾼다 */
+export interface TestPatch {
+  title?: string
+  parentId?: string | null
+  purpose?: string
+  precondition?: string
+  testData?: string
+  /** 보내면 단계 전체를 이것으로 바꾼다(순서 · 짝을 한 번에) */
+  steps?: TestStep[]
+  level?: TestLevel | null
+  start?: string | null
+  due?: string | null
+  ownerId?: string | null
+  partId?: string | null
+}
+
+/** POST /api/tests/{testId}/status */
+export interface TestStatusInput {
+  status: TestStatus
+  /** status 가 fail 일 때만. 1 ~ 단계 수 */
+  failedStep?: number | null
+  /** fail · blocked 면 필수(앞뒤 공백을 뗀 뒤 비면 안 된다). 그 밖엔 보내도 버린다 */
+  note?: string
+}
+
+/** 테스트 목록 · 간트 한 줄 — 화면이 계산해서 얻는 값. 묶음의 상태 · 신호는 하위에서 모은다 */
+export interface TestRow {
+  test: TestCase
+  /** 하위가 있는 테스트 */
+  isGroup: boolean
+  /** 묶음이면 하위 중 가장 나쁜 것, 아니면 자기 상태 */
+  status: TestStatus
+  /** 묶음이면 하위 신호를 모은 것(계약 표 순서), 아니면 자기 신호 */
+  signals: TestSignal[]
+  ownerName: string | null
+  /** 로그인 시나리오 · 하위 3건 / 또는 '최상위 테스트' */
+  pathLabel: string
+  /** 10/8 ~ 10/10 또는 '' */
+  periodLabel: string
+  childCount: number
+}
