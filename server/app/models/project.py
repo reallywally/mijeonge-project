@@ -33,6 +33,10 @@ class Project(Base):
     last_task_no: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0", default=0
     )
+    # 다음에 줄 테스트 번호 — 'HW-T12' 의 12. 작업 번호와 같은 수법으로 한 문장에 잠가 올린다
+    next_test_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1", default=1
+    )
 
 
 class Member(Base):

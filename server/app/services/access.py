@@ -21,6 +21,7 @@ from app.models import (
     ProjectReport,
     Task,
     TaskComment,
+    TestCase,
     Thread,
 )
 from app.services.auth import Actor
@@ -54,6 +55,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "check_id": ("CHECK_NOT_FOUND", "확인 요청을 찾을 수 없습니다."),
     "minutes_id": ("MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
     "report_id": ("REPORT_NOT_FOUND", "리포트를 찾을 수 없습니다."),
+    "test_id": ("TEST_NOT_FOUND", "테스트를 찾을 수 없습니다."),
 }
 
 
@@ -74,6 +76,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             stmt = select(Minutes.project_id).where(Minutes.id == value)
         case "report_id":
             stmt = select(ProjectReport.project_id).where(ProjectReport.id == value)
+        case "test_id":
+            stmt = select(TestCase.project_id).where(TestCase.id == value)
         case "comment_id":
             stmt = (
                 select(Task.project_id)

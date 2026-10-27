@@ -336,6 +336,35 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 - [ ] 평가 — 공급자를 바꿔 챗봇 · 회의록 초안 · 리포트를 실제 키로 돌려 본다. 프롬프트는 Sonnet 에 맞춰 다듬어져 있다 — 작은 모델은 도구를 엉뚱하게 부르거나 JSON 모양(선행 관계 제안)을 틀릴 수 있다
 - [ ] 나중에 — 기능별로 공급자를 고르기(예: 챗봇은 Claude, 요약은 Groq). 지금은 하나를 모두가 같이 쓴다. GPT 추론 모델의 `reasoning_effort` 도 아직 안 싣는다
 
+## 16단계 · 테스트 — 기능 · 시나리오 테스트를 작업과 따로 두고 지금의 상황을 보인다
+
+계약은 `../docs/api/test.md`(합의 2026-10-27 · Q53 ~ Q58 닫힘), 기획은 `../docs/test-proposal.md`, 화면은 `../web/PLAN.md` 16단계다.
+**1단계는 AI 없이** — 쓰기 · 상태 · 태그 · 며칠째 · 신호 · 기준 바뀜. AI 셋과 챗봇 도구는 2단계에서 계약을 더한 뒤다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 테이블 | `test_case` · `test_step` · `test_ref` 셋 + `project.next_test_no`. 작업 테이블에 섞지 않는다 (Q55) | 진척 · 리스크 · 리포트 · 스냅샷에 처음부터 안 섞인다 |
+| 셈 | `services/test.py` 의 `signals` · `status_days` · `_build` — 목록을 몇 번의 select(테스트 · 단계 · 태그 · 링크 · Entry · 묶음 · 기준)로 읽고 파이썬에서 센다. `today` 는 라우트가 넘긴다 | 리스크 · 리포트와 같은 틀. 나중의 챗봇 도구가 같은 함수를 부른다 |
+| 문턱값 | 리스크 기준(`RiskSettings`)의 `staleDays`, 기간은 리포트와 같은 `plannedDays × 1.5`(정수 비교) | 기준이 두 벌이면 화면마다 다른 말을 한다 |
+| 기준 바뀜 | `basis_seq` 하나 — 만들 때 · PATCH · 태그 걸기/떼기 · `POST .../basis` 에서 다시 찍는다. 시각이 아니라 Entry `seq` 로 본다 (Q15) | 늦게 넣으면 그 앞 기준은 되살릴 수 없다 |
+| 경계 | `require_scope` 에 `test_id` 갈래(404 `TEST_NOT_FOUND`). 지우기는 만든 사람 · `scope.can_manage` | 회의록 · 리포트와 같은 경계 |
+
+### 16-1 체크리스트 (1단계, AI 없이)
+
+- [x] 리비전 `0017_test_case` — `project.next_test_no`(기본 1) · `test_case`(복합 FK 상위 · 파트, CHECK 다섯, `(project_id, seq)` 인덱스) · `test_step`(cascade, `(test_id, sort_order)` 유니크) · `test_ref`(대리 키 `id`, 작업 · 안건 중 정확히 하나, 복합 FK 셋 cascade). downgrade 도. 시드 `clear` · `advance_identity` 에 더함
+- [x] `app/models/test.py` · `app/schemas/test.py`(camelCase alias) · `app/services/test.py` · `app/api/test.py` — 엔드포인트 아홉. 422 `detail` 은 `steps.2.action` · `refs.0.kind` 까지 짚는다(`errors.py` 의 `_INDEXED`)
+- [x] 시드 HW-T1 ~ T8 — 목업 `web/src/fixtures/tests.ts` 를 그대로(id `tc1` ~ `tc8`). 고른 태그 · `basis_seq` 는 계약의 '구현에서 메운 것'
+- [x] 검사 — `tests/test_test.py`(CRUD · 검사 오류 코드 전부 · 권한 · 다른 프로젝트 404 · 상태 규칙 · 신호 여섯과 경계값 · 기준 설정을 바꾸면 신호가 바뀜 · 기준 바뀜이 PATCH · basis · 태그로 지워짐 · 태그한 작업으로 닿는 안건 · 키 발번 · 작업 · 안건을 지우면 태그만 빠짐 · 목록 쿼리 수가 테스트 수에 안 늘어남) · `test_contract_types.py` 의 테스트 모양
+- [ ] `API.md` 의 엔드포인트 줄을 `구현` 으로 — 프론트 에이전트와 겹치지 않게 이번에는 안 건드렸다
+- [ ] 개발 DB — `alembic upgrade head` 와 시드는 사람이 돌린다
+
+### 16-2 그 다음 (계약을 먼저 더한다)
+
+- [ ] AI 테스트 검토 · 빠진 테스트 찾기(+ 한 번에 추가) · 바뀐 자리 설명 — `docs/api/test.md` '나중'
+- [ ] 챗봇 도구 `get_tests` · `get_test`, 근거 칩 `[[test:ID]]`
+
 ---
 
 ## 진행 상황
@@ -361,6 +390,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 13 선행 작업 · 작업 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **13-1 끝남** (2026-10-20) — 리비전 `0015_task_flow`(backfill 포함) · 선행 PUT · DELETE · 검사 함수 하나 · `task_log` 를 모든 길에서 · `Task.statusChangedAt` · `statusSinceBackfill` · AI 제안(JSON, 리스크 요약 틀 재사용) · 시드 · `scripts/demo_task_log.py`. API.md 두 줄 `구현`. 다음은 14 리포트 |
 | 14 프로젝트 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
 | 15 LLM 공급자 분리 | **1차 ~ 3차 끝남** (2026-10-22) — `app/llm` 의 `LLMProvider` · `AnthropicProvider` · `OpenAICompatProvider`, AI 를 부르는 서비스 다섯을 모두 옮김. `LLM_PROVIDER` 로 Claude · GPT · Groq 를 고른다. 동작 · 계약은 그대로. 다음은 실제 키로 평가 |
+| 16 테스트 | 계약 **합의** (2026-10-27) — `docs/api/test.md` · Q53 ~ Q58 닫힘. **16-1 끝남** (2026-10-27) — 리비전 `0017_test_case` · 엔드포인트 아홉 · `services/test.py`(며칠째 · 신호 여섯 · 기준 바뀜, 리스크 기준 그대로) · `require_scope` 의 `test_id` 갈래 · 시드 HW-T1 ~ T8(목업과 같은 줄) · `tests/test_test.py`. 다음은 API.md `구현` 표시와 2단계(AI) |
 
 ## 아직 안 정한 것
 

@@ -541,3 +541,90 @@ async def test_report_responses_match_contract(client: AsyncClient) -> None:
             for field, value in row.items():
                 if value is None:
                     assert field in REPORT_NULLABLE[name], f"{name}.{field} 가 null"
+
+
+# 테스트 — docs/api/test.md '모양' · '요청'(1단계). 집계(statusDays · signals · changedEntryIds)를
+# 서버가 하는 예외라 계산된 값이 응답에 실린다. 어긋나면 계약 쪽이 기준이다.
+# null 이 나가는 자리는 TestCase 의 아홉뿐이다
+_TEST_EDITABLE = {
+    "title",
+    "parentId",
+    "purpose",
+    "precondition",
+    "testData",
+    "steps",
+    "level",
+    "start",
+    "due",
+    "ownerId",
+    "partId",
+}
+TEST_SHAPES: dict[str, set[str]] = {
+    "TestStep": {"action", "expected"},
+    "TestRef": {"kind", "id"},
+    "TestCase": {
+        "id",
+        "projectId",
+        "key",
+        "title",
+        "parentId",
+        "purpose",
+        "precondition",
+        "testData",
+        "steps",
+        "refs",
+        "status",
+        "statusChangedAt",
+        "statusChangedBy",
+        "statusDays",
+        "failedStep",
+        "resultNote",
+        "level",
+        "start",
+        "due",
+        "ownerId",
+        "partId",
+        "signals",
+        "changedEntryIds",
+        "createdBy",
+        "createdAt",
+    },
+    "TestInput": _TEST_EDITABLE | {"refs"},
+    "TestPatch": _TEST_EDITABLE,
+    "TestStatusInput": {"status", "failedStep", "note"},
+}
+_TEST_EDITABLE_NULLABLE = {"parentId", "level", "start", "due", "ownerId", "partId"}
+TEST_NULLABLE: dict[str, set[str]] = {
+    "TestCase": _TEST_EDITABLE_NULLABLE | {"statusChangedBy", "failedStep", "createdBy"},
+    "TestInput": _TEST_EDITABLE_NULLABLE,
+    "TestPatch": _TEST_EDITABLE_NULLABLE,
+    "TestStatusInput": {"failedStep"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(TEST_SHAPES))
+def test_test_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드 · null 자리가 test.md 와 같아야 한다."""
+    if name not in FIELDS:
+        return
+    declared = all_fields(name)
+    assert set(declared) == TEST_SHAPES[name], f"domain.ts 의 {name} 이 test.md 와 다르다"
+    nullable = {field for field, allowed in declared.items() if allowed}
+    assert nullable == TEST_NULLABLE.get(name, set())
+
+
+async def test_test_responses_match_contract(client: AsyncClient) -> None:
+    rows = (await client.get("/api/projects/p1/tests")).json()
+    assert rows, "TestCase 를 볼 수 있는 줄이 시드에 없다"
+    for row in rows:
+        assert set(row) == TEST_SHAPES["TestCase"]
+        for field, value in row.items():
+            if value is None:
+                assert field in TEST_NULLABLE["TestCase"], f"TestCase.{field} 가 null"
+        assert all(set(step) == TEST_SHAPES["TestStep"] for step in row["steps"])
+        assert all(set(ref) == TEST_SHAPES["TestRef"] for ref in row["refs"])
+    # null 로 나가 보는 줄이 시드에 있다 — 담당 · 바꾼 사람 · 만든 사람은 시드가 다 채웠다
+    nulls = {field for row in rows for field, value in row.items() if value is None}
+    assert nulls == TEST_NULLABLE["TestCase"] - {"ownerId", "statusChangedBy", "createdBy"}
+    one = (await client.get(f"/api/tests/{rows[0]['id']}")).json()
+    assert one == rows[0]

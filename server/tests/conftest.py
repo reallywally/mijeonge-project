@@ -37,6 +37,7 @@ from app.models import (
     Task,
     TaskComment,
     TaskLog,
+    TestCase,
     Thread,
 )
 from app.services import auth as auth_service
@@ -49,7 +50,17 @@ ADMIN = "admin"
 AsMember = Callable[[str], Awaitable[httpx.AsyncClient]]
 
 # 등록 순서 열을 가진 것들. Postgres 에서는 Identity 가 채운다
-SEQ_MODELS = (Thread, Entry, Task, TaskComment, CheckRequest, Minutes, TaskLog, ProjectReport)
+SEQ_MODELS = (
+    Thread,
+    Entry,
+    Task,
+    TaskComment,
+    CheckRequest,
+    Minutes,
+    TaskLog,
+    ProjectReport,
+    TestCase,
+)
 
 
 @event.listens_for(Engine, "connect")

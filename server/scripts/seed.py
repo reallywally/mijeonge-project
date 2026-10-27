@@ -10,6 +10,7 @@ id 도 픽스처의 값(`p1` · `u3` · `k4` …)을 그대로 쓴다 — 목업
 """
 
 import asyncio
+from dataclasses import dataclass, field
 from datetime import date
 from functools import cache
 from typing import Protocol
@@ -39,6 +40,9 @@ from app.models import (
     TaskLine,
     TaskLog,
     TaskThreadLink,
+    TestCase,
+    TestRef,
+    TestStep,
     Thread,
     ThreadCc,
     ThreadOption,
@@ -57,7 +61,14 @@ def d(day: str | None) -> date | None:
 def projects() -> list[Project]:
     # last_task_no 는 픽스처가 이미 써 버린 마지막 번호다 — 다음 작업이 HW-23 · PAS-3 로 나온다
     return [
-        Project(id="p1", name="한화손보 차세대", task_key_prefix="HW", last_task_no=22),
+        Project(
+            id="p1",
+            name="한화손보 차세대",
+            task_key_prefix="HW",
+            last_task_no=22,
+            # 시드 테스트가 HW-T1 ~ T8 을 썼다 — 다음은 HW-T9
+            next_test_no=9,
+        ),
         Project(id="p2", name="삼성생명 PAS", task_key_prefix="PAS", last_task_no=2),
         Project(id="p3", name="경영지원 파트", task_key_prefix="MG", last_task_no=0),
     ]
@@ -695,9 +706,204 @@ def minutes() -> list[Minutes]:
     ]
 
 
+# 테스트 — docs/api/test.md '시드 · 목업' 표. 값은 `web/src/fixtures/tests.ts` 그대로다.
+# 오늘을 2026-10-15 로 두면 표의 신호가 나온다.
+# 담당 = 바꾼 사람 = 만든 사람, 바뀐 시각은 그날 12:00 KST.
+# 태그 — T2 ↔ 작업 k4(t1 · t2 에 걸려 있다), T3 ↔ 안건 t3, T4 ↔ 안건 t2, T6 ↔ 작업 k21.
+# basis_seq 는 서버 규칙(닿는 안건의 Entry seq 최댓값)이다 — T4 만 결정 e3(seq 3) 앞인 2 로 둬서
+# '기준 바뀜' 이 난다. 시드에 change 줄이 없어 decide 줄로 대신한다(목업과 같다)
+TEST_CREATED = "2026-09-30T01:00:00Z"
+
+
+def noon(day: str) -> str:
+    return f"{day}T03:00:00Z"
+
+
+@dataclass
+class SeedTest:
+    title: str
+    owner: str
+    status: str
+    changed_at: str = TEST_CREATED
+    parent: str | None = None
+    purpose: str = ""
+    precondition: str = ""
+    test_data: str = ""
+    steps: list[tuple[str, str]] = field(default_factory=list)
+    refs: list[tuple[str, str]] = field(default_factory=list)
+    failed_step: int | None = None
+    note: str = ""
+    level: str | None = "functional"
+    start: str | None = None
+    due: str | None = None
+    part: str | None = None
+    basis: int | None = None
+
+
+SEED_TESTS: list[SeedTest] = [
+    SeedTest(
+        "로그인 시나리오",
+        "u2",
+        "draft",
+        level="acceptance",
+        purpose="사내 계정으로 들어오는 길을 처음부터 끝까지 따라간다.",
+    ),
+    SeedTest(
+        "올바른 계정으로 로그인",
+        "u2",
+        "pass",
+        noon("2026-10-10"),
+        parent="tc1",
+        start="2026-10-08",
+        due="2026-10-10",
+        purpose="발급받은 계정으로 들어갈 수 있는지 본다.",
+        precondition="개발 서버가 떠 있고 계정이 발급돼 있다.",
+        test_data="dev01 / 발급 메일의 임시 비밀번호",
+        steps=[
+            ("로그인 화면을 연다", ""),
+            ("dev01 과 임시 비밀번호를 넣고 [로그인]", "대시보드가 열리고 이름이 보인다"),
+        ],
+        refs=[("task", "k4")],
+        # k4 로 닿는 t1 · t2 의 최댓값 e3
+        basis=3,
+    ),
+    SeedTest(
+        "비밀번호 5회 틀림 잠금",
+        "u2",
+        "testing",
+        noon("2026-10-03"),
+        parent="tc1",
+        start="2026-10-06",
+        due="2026-10-08",
+        purpose="비밀번호를 거푸 틀리면 계정이 잠기는지 본다.",
+        steps=[
+            ("틀린 비밀번호로 네 번 로그인한다", "매번 남은 횟수가 보인다"),
+            ("다섯 번째로 틀린다", "계정이 잠겼다는 안내가 뜬다"),
+        ],
+        refs=[("thread", "t3")],
+        # t3 에는 미룸 e4 뿐이다
+        basis=4,
+    ),
+    SeedTest(
+        "비밀번호 변경 주기",
+        "u4",
+        "ready",
+        noon("2026-10-01"),
+        parent="tc1",
+        start="2026-10-13",
+        due="2026-10-17",
+        purpose="정해 둔 주기가 지난 계정은 비밀번호를 바꾸게 하는지 본다.",
+        steps=[("주기가 지난 계정으로 로그인한다", "비밀번호 바꾸기 화면으로 간다")],
+        refs=[("thread", "t2")],
+        # 테스트를 쓸 때 본 기준 뒤로 t2 에 결정 e3(seq 3) 이 생겼다
+        basis=2,
+    ),
+    SeedTest(
+        "계정 배포 시나리오",
+        "u3",
+        "draft",
+        level="integration",
+        part="pt1",
+        purpose="개발자 계정을 만들어 나눠 주고 권한을 거르는 흐름.",
+    ),
+    SeedTest(
+        "개발자 계정 일괄 생성",
+        "u3",
+        "blocked",
+        noon("2026-10-02"),
+        parent="tc5",
+        note="DB 설치(HW-20)가 안 끝나 계정을 만들 DB 가 없다.",
+        level="integration",
+        part="pt1",
+        steps=[
+            ("계정 목록 파일을 올린다", ""),
+            ("[한 번에 만들기]", "네 계정이 모두 만들어지고 메일이 나간다"),
+        ],
+        refs=[("task", "k21")],
+    ),
+    SeedTest(
+        "권한 없는 계정 접근 차단",
+        "u1",
+        "fail",
+        noon("2026-10-05"),
+        parent="tc5",
+        failed_step=2,
+        note="관리 화면 주소를 직접 치면 열린다.",
+        start="2026-10-14",
+        due="2026-10-20",
+        part="pt1",
+        steps=[
+            ("일반 계정으로 로그인한다", ""),
+            ("관리 화면 주소를 직접 연다", "권한이 없다는 화면이 뜬다"),
+        ],
+    ),
+    SeedTest(
+        "계정 목록 내려받기",
+        "u4",
+        "testing",
+        noon("2026-10-14"),
+        parent="tc5",
+        level=None,
+        part="pt1",
+        steps=[("[계정 목록 내려받기]", "모든 계정이 담긴 CSV 가 받아진다")],
+    ),
+]
+
+
+def test_cases() -> list[TestCase]:
+    """HW-T1 ~ T8, id 는 tc1 ~ tc8. 상위가 늘 앞에 있다."""
+    return [
+        TestCase(
+            id=f"tc{no}",
+            project_id="p1",
+            key=f"HW-T{no}",
+            title=row.title,
+            purpose=row.purpose,
+            precondition=row.precondition,
+            test_data=row.test_data,
+            parent_id=row.parent,
+            status=row.status,
+            status_changed_at=at(row.changed_at),
+            status_changed_by=row.owner,
+            failed_step=row.failed_step,
+            result_note=row.note,
+            level=row.level,
+            start=d(row.start),
+            due=d(row.due),
+            owner_id=row.owner,
+            part_id=row.part,
+            basis_seq=row.basis,
+            created_by=row.owner,
+            created_at=at(TEST_CREATED),
+            steps=[
+                TestStep(id=f"tc{no}s{i}", sort_order=i, action=action, expected=expected)
+                for i, (action, expected) in enumerate(row.steps)
+            ],
+        )
+        for no, row in enumerate(SEED_TESTS, start=1)
+    ]
+
+
+def test_refs() -> list[TestRef]:
+    return [
+        TestRef(
+            id=f"tc{no}r{i}",
+            test_id=f"tc{no}",
+            project_id="p1",
+            task_id=target if kind == "task" else None,
+            thread_id=target if kind == "thread" else None,
+        )
+        for no, row in enumerate(SEED_TESTS, start=1)
+        for i, (kind, target) in enumerate(row.refs)
+    ]
+
+
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        TestRef,
+        TestStep,
+        TestCase,
         ProjectReport,
         CheckRequest,
         RiskSetting,
@@ -756,6 +962,7 @@ async def advance_identity(session: AsyncSession) -> None:
         "check_request",
         "minutes",
         "task_log",
+        "test_case",
     ):
         await session.execute(
             text(
@@ -789,10 +996,16 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(in_order(await checks(session)))
     session.add_all(in_order(minutes()))
     await session.flush()
-    await advance_identity(session)
     session.add_all(
         [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
     )
+    # 상위가 먼저 들어가야 복합 FK 가 선다 — 한 줄씩 넣는다
+    for row in in_order(test_cases()):
+        session.add(row)
+        await session.flush()
+    session.add_all(test_refs())
+    await session.flush()
+    await advance_identity(session)
     await session.commit()
 
 
@@ -814,6 +1027,7 @@ async def run() -> None:
         "task_log": len(task_logs()),
         "check": len(CHECKS),
         "minutes": len(minutes()),
+        "test": len(SEED_TESTS),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")
