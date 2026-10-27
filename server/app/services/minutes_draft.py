@@ -93,7 +93,8 @@ propose_minutes 로 낸다. 너는 아무것도 저장하지 못한다 — 사�
    말하지 않은 기한은 채우지 않는다(null). 작업 우선순위는 말하지 않았으면 normal
 10. summary 는 회의 요약 서너 줄. 한국어로 짧게
 11. temp_id 는 새 안건 n1, n2 …, 이력 e1, e2 …, 작업 t1, t2 … — 초안 안에서 서로 다르다.
-    작업의 상위는 같은 초안의 앞 작업(parent_temp_id)이다. 이미 있는 작업 밑에 붙일 때만 parent_id
+    작업은 평평한 목록이다 — 상위 · 하위로 묶지 않는다.
+    이미 있는 작업과 이어진 일이면 related_id 에 그 작업 id 를 둔다. 아니면 null
 12. 개수: 새 안건 {threads_max}개 · 이력 {entries_max}개 · 작업 {tasks_max}개까지
 13. 정리할 것이 하나도 없으면 threads · entries · tasks 를 모두 빈 배열로 해서
     propose_minutes 를 부른다
@@ -198,18 +199,14 @@ PROPOSE_TOOL: ToolSpec = {
             "tasks": {
                 "type": "array",
                 "maxItems": MINUTES_TASKS_MAX,
-                "description": "누가 하기로 한 일. 배열 순서가 등록 순서, 상위가 하위보다 앞",
+                "description": "누가 하기로 한 일. 배열 순서가 등록 순서. 평평한 목록",
                 "items": {
                     "type": "object",
                     "properties": {
                         "temp_id": {"type": "string", "description": "t1, t2 …"},
-                        "parent_temp_id": {
+                        "related_id": {
                             "type": ["string", "null"],
-                            "description": "상위 작업의 temp_id — 앞 항목만. 없으면 null",
-                        },
-                        "parent_id": {
-                            "type": ["string", "null"],
-                            "description": "이미 있는 작업 밑에 붙일 때 그 id. 아니면 null",
+                            "description": "이 일과 이어진 이미 있는 작업의 id. 아니면 null",
                         },
                         "title": {"type": "string"},
                         "owner_id": _OWNER,
@@ -231,8 +228,7 @@ PROPOSE_TOOL: ToolSpec = {
                     },
                     "required": [
                         "temp_id",
-                        "parent_temp_id",
-                        "parent_id",
+                        "related_id",
                         "title",
                         "owner_id",
                         "owner_hint",

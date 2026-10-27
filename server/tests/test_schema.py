@@ -15,7 +15,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Base, Task, TaskThreadLink, Thread
+from app.models import Base, Task, TaskRelation, TaskThreadLink, Thread
+from app.time import now
 from scripts.seed import seed
 
 
@@ -52,13 +53,22 @@ async def test_link_cannot_cross_projects(session: AsyncSession) -> None:
     await session.rollback()
 
 
-async def test_parent_cannot_live_in_another_project(session: AsyncSession) -> None:
-    """부모가 다른 프로젝트면 화면에 에러가 안 뜨고 계층만 조용히 틀어진다 (API.md Q16)."""
+async def test_relation_cannot_cross_projects(session: AsyncSession) -> None:
+    """연관 작업도 같은 프로젝트에서만 선다 — 서비스만이 아니라 DB 가 막는다 (Q61)."""
     await seed(session)
 
-    other = await session.get(Task, "x2")
-    assert other is not None
-    other.parent_id = "k1"  # k1 은 p1, x2 는 p2
+    session.add(
+        TaskRelation(task_id="x2", related_id="k1", project_id="p2", created_at=now())
+    )  # k1 은 p1, x2 는 p2
+    with pytest.raises(IntegrityError):
+        await session.flush()
+    await session.rollback()
+
+
+async def test_relation_cannot_point_at_itself(session: AsyncSession) -> None:
+    await seed(session)
+
+    session.add(TaskRelation(task_id="k1", related_id="k1", project_id="p1", created_at=now()))
     with pytest.raises(IntegrityError):
         await session.flush()
     await session.rollback()

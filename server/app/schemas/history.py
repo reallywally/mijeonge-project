@@ -2,8 +2,9 @@ from pydantic import Field
 
 from app.schemas.base import Schema, Utc
 
-# bool 을 int 보다 앞에 둔다 — 검사 결과가 true/false 로 그대로 나가게
-HistoryValue = bool | int | str | None
+# bool 을 int 보다 앞에 둔다 — 검사 결과가 true/false 로 그대로 나가게.
+# list[str] 는 연관 작업(`relatedIds`) 칸만 (Q61)
+HistoryValue = bool | int | str | list[str] | None
 
 
 class HistoryChange(Schema):

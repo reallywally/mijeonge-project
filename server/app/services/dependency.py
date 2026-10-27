@@ -1,7 +1,7 @@
 """선행 작업 — 걸기 · 떼기와 그 검사 (docs/api/task-flow.md '선행 작업').
 
 검사는 `check` 하나다 — 사람이 거는 PUT 과 AI 제안(`services/dependency_suggest.py`)이 같이 쓴다.
-프로젝트의 계층 · 선행 관계를 한 번 읽어 메모리에서 본다 — 제안 수십 개를 거를 때
+프로젝트의 작업 · 선행 관계를 한 번 읽어 메모리에서 본다 — 제안 수십 개를 거를 때
 줄마다 DB 를 다시 읽지 않고, 앞에서 받아들인 제안까지 그래프에 얹어 순환을 본다.
 """
 
@@ -24,9 +24,9 @@ DEPENDENCY_MAX = 20
 
 @dataclass
 class DependencyGraph:
-    """한 프로젝트의 계층(parent) · 선행 관계(task → 선행들)."""
+    """한 프로젝트의 작업 id · 선행 관계(task → 선행들). 계층은 없다 (Q61)."""
 
-    parents: dict[str, str | None]
+    task_ids: set[str]
     depends_on: dict[str, set[str]] = field(default_factory=dict)
 
     def has(self, task_id: str, depends_on_id: str) -> bool:
@@ -34,15 +34,6 @@ class DependencyGraph:
 
     def add(self, task_id: str, depends_on_id: str) -> None:
         self.depends_on.setdefault(task_id, set()).add(depends_on_id)
-
-    def ancestors(self, task_id: str) -> set[str]:
-        found: set[str] = set()
-        walker = self.parents.get(task_id)
-        # 이미 망가진 계층(고리)을 만나도 멈춘다
-        while walker is not None and walker not in found:
-            found.add(walker)
-            walker = self.parents.get(walker)
-        return found
 
     def waits_for(self, start: str, target: str) -> bool:
         """`start` 가 선행을 몇 단계 타고 가서 `target` 을 기다리는가."""
@@ -59,10 +50,8 @@ class DependencyGraph:
 
 
 async def load_graph(session: AsyncSession, project_id: str) -> DependencyGraph:
-    rows = await session.execute(
-        select(Task.id, Task.parent_id).where(Task.project_id == project_id)
-    )
-    graph = DependencyGraph(parents=dict(rows.tuples().all()))
+    rows = await session.scalars(select(Task.id).where(Task.project_id == project_id))
+    graph = DependencyGraph(task_ids=set(rows.all()))
     edges = await session.execute(
         select(TaskDependency.task_id, TaskDependency.depends_on_id).where(
             TaskDependency.project_id == project_id
@@ -76,20 +65,12 @@ async def load_graph(session: AsyncSession, project_id: str) -> DependencyGraph:
 def check(graph: DependencyGraph, task_id: str, depends_on_id: str) -> None:
     """`task_id` 가 `depends_on_id` 를 기다리게 해도 되는가. 이미 걸린 것은 부르는 쪽이 먼저 거른다.
 
-    순서가 계약이다 — 같은 프로젝트(404) → 상하위(400) → 순환(409) → 개수(400).
+    순서가 계약이다 — 같은 프로젝트(404) → 자기(400) → 순환(409) → 개수(400).
     """
-    if task_id not in graph.parents or depends_on_id not in graph.parents:
+    if task_id not in graph.task_ids or depends_on_id not in graph.task_ids:
         raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
-    # 하위 작업은 상위의 일부라 선후가 아니다
-    if (
-        depends_on_id == task_id
-        or depends_on_id in graph.ancestors(task_id)
-        or task_id in graph.ancestors(depends_on_id)
-    ):
-        raise bad_request(
-            "TASK_DEPENDENCY_HIERARCHY",
-            "자기 자신이나 상위 · 하위 작업은 선행 작업으로 둘 수 없습니다.",
-        )
+    if depends_on_id == task_id:
+        raise bad_request("TASK_DEPENDENCY_SELF", "자기 자신은 선행 작업으로 둘 수 없습니다.")
     if graph.waits_for(depends_on_id, task_id):
         raise ApiError(
             409,

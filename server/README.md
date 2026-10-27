@@ -44,7 +44,7 @@ uv run python -m scripts.create_admin --email a@b.com --name 홍길동   # 비�
 | 프로젝트 스냅샷 | `GET /api/projects/{projectId}/snapshot` |
 | 작업 등록 | `POST /api/projects/{projectId}/tasks` |
 | 작업 일괄 등록 (챗봇 초안) | `POST /api/projects/{projectId}/tasks/batch` (한 트랜잭션 · `tempId` → id · `taskIdByTempId`) |
-| 작업 수정 | `PATCH /api/tasks/{taskId}` (상태 · 담당자 · 기간 · 상위 작업을 하나로 받는다) |
+| 작업 수정 | `PATCH /api/tasks/{taskId}` (상태 · 담당자 · 기간 · 연관 작업을 하나로 받는다) |
 | 작업 본문 줄 토글 | `PATCH /api/tasks/{taskId}/lines/{lineId}` |
 | 작업 ↔ 안건 | `PUT` · `DELETE /api/tasks/{taskId}/threads/{threadId}` |
 | 작업 댓글 목록 · 등록 | `GET` · `POST /api/tasks/{taskId}/comments` (등록 순 · 오래된 것 먼저) |

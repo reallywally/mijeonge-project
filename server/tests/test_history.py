@@ -114,7 +114,7 @@ async def test_patch_writes_changed_fields_in_table_order(client: httpx.AsyncCli
             "body": [{"kind": "check", "text": "계정 넷", "done": False, "level": 0}],
             "due": "2026-09-20",
             "start": None,
-            "parentId": "k1",
+            "relatedIds": ["k1", "k4"],
             "partId": None,
             "ownerId": "u3",
             "priority": "high",
@@ -132,7 +132,7 @@ async def test_patch_writes_changed_fields_in_table_order(client: httpx.AsyncCli
         ch("priority", "normal", "high"),
         ch("ownerId", "u1", "u3"),
         ch("partId", "pt1", None),
-        ch("parentId", "k4", "k1"),
+        ch("relatedIds", ["k4"], ["k4", "k1"]),
         ch("start", "2026-09-12", None),
         ch("due", "2026-09-15", "2026-09-20"),
         ch("body", None, None),
@@ -234,9 +234,22 @@ async def test_changed_by_is_the_requester(client: httpx.AsyncClient, as_member:
     assert (await history(client, "tasks/k21"))[-1]["changedBy"] == "u2"
 
 
+async def test_related_ids_change_is_one_field(client: httpx.AsyncClient) -> None:
+    """연관 작업은 id 배열 전 · 후로 (Q61). 같은 집합을 다른 순서 · 중복으로 보내면 안 남는다."""
+    await client.patch("/api/tasks/k20", json={"relatedIds": ["k4", "k19"]})
+    assert await last_changes(client, "tasks/k20") == [ch("relatedIds", ["k4"], ["k4", "k19"])]
+
+    before = await history(client, "tasks/k20")
+    await client.patch("/api/tasks/k20", json={"relatedIds": ["k19", "k4", "k19"]})
+    assert await history(client, "tasks/k20") == before
+
+    await client.patch("/api/tasks/k20", json={"relatedIds": []})
+    assert await last_changes(client, "tasks/k20") == [ch("relatedIds", ["k4", "k19"], [])]
+
+
 async def test_failed_write_leaves_no_line(client: httpx.AsyncClient) -> None:
     before = await history(client, "tasks/k4")
-    res = await client.patch("/api/tasks/k4", json={"title": "x", "parentId": "k19"})
+    res = await client.patch("/api/tasks/k4", json={"title": "x", "relatedIds": ["k4"]})
     assert res.status_code == 400
     assert await history(client, "tasks/k4") == before
 

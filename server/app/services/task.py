@@ -19,6 +19,7 @@ from app.models import (
     TaskComment,
     TaskLine,
     TaskLog,
+    TaskRelation,
     TaskThreadLink,
     Thread,
     new_id,
@@ -58,7 +59,7 @@ def to_task(row: Task, comment_count: int, since: StatusSince) -> TaskOut:
         project_id=row.project_id,
         key=row.key,
         title=row.title,
-        parent_id=row.parent_id,
+        related_ids=row.related_ids,
         body=[TaskLineOut.model_validate(line) for line in row.lines],
         status=row.status,
         owner_id=row.owner_id,
@@ -178,56 +179,63 @@ async def _next_key(session: AsyncSession, project: Project) -> str:
     return f"{project.task_key_prefix}-{bumped.scalar_one()}"
 
 
-async def _guard_parent(
-    session: AsyncSession, project_id: str, task_id: str | None, parent_id: str | None
-) -> None:
-    """고리 금지 — 자기 자신이나 자손을 부모로 두면 조상을 타고 올라갈 때 돌아 나온다.
+async def _found_tasks(session: AsyncSession, project_id: str, ids: Collection[str]) -> set[str]:
+    """그 프로젝트에 있는 작업 id 만. 다른 프로젝트의 작업도 '없다' 로 본다."""
+    if not ids:
+        return set()
+    rows = await session.scalars(
+        select(Task.id).where(Task.project_id == project_id, Task.id.in_(set(ids)))
+    )
+    return set(rows.all())
 
-    등록할 때는 아직 id 가 없어(`task_id=None`) 고리가 생길 수 없고, 상위 작업이 있는지만 본다.
+
+async def _replace_related(session: AsyncSession, task: Task, related_ids: list[str]) -> None:
+    """연관 작업을 통째로 갈아끼운다 (Q61). 중복은 스키마가 이미 뺐다.
+
+    그대로 남는 줄은 행을 지켜 건 시각(= 순서)이 안 흔들린다. 새로 건 것은 뒤에 붙는다 —
+    한 번에 건 것끼리는 시각이 같아 id 순이다(읽을 때의 order_by 와 같게 맞춘다).
     """
-    if parent_id is None:
-        return
-    if parent_id == task_id:
-        raise bad_request("TASK_PARENT_SELF", "작업을 자기 자신의 상위로 둘 수 없습니다.")
-
-    parent = await session.execute(select(Task).where(Task.id == parent_id))
-    found = parent.scalar_one_or_none()
-    if found is None:
-        raise bad_request("TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.")
-    if found.project_id != project_id:
-        raise bad_request("TASK_PARENT_OTHER_PROJECT", "상위 작업이 다른 프로젝트에 있습니다.")
-
-    seen: set[str] = set()
-    walker: str | None = found.parent_id
-    while walker is not None:
-        if walker == task_id:
-            raise bad_request("TASK_PARENT_DESCENDANT", "하위 작업을 상위로 둘 수 없습니다.")
-        if walker in seen:  # 이미 망가진 데이터를 만나도 여기서 멈춘다
-            return
-        seen.add(walker)
-        walker = await session.scalar(select(Task.parent_id).where(Task.id == walker))
+    if task.id in related_ids:
+        raise bad_request("TASK_RELATED_SELF", "자기 자신은 연관 작업으로 걸 수 없습니다.")
+    found = await _found_tasks(session, task.project_id, related_ids)
+    if any(related_id not in found for related_id in related_ids):
+        raise bad_request("TASK_RELATED_NOT_FOUND", "연관 작업을 찾을 수 없습니다.")
+    wanted = set(related_ids)
+    kept = [relation for relation in task.relations if relation.related_id in wanted]
+    have = {relation.related_id for relation in kept}
+    at = now()
+    added = [
+        TaskRelation(
+            task_id=task.id, related_id=related_id, project_id=task.project_id, created_at=at
+        )
+        for related_id in sorted(wanted - have)
+    ]
+    task.relations = kept + added
 
 
 async def _insert_task(
-    session: AsyncSession, project: Project, payload: TaskCreate, actor_id: str | None
+    session: AsyncSession,
+    project: Project,
+    payload: TaskCreate,
+    actor_id: str | None,
+    related_id: str | None = None,
 ) -> Task:
     """작업 하나를 넣는다 — 상태 기록 첫 줄(`null → 상태`) · 이력 '등록' 줄까지.
     커밋하지 않는다 — 일괄 등록 · 회의록 apply 가 여럿을 한 트랜잭션에 묶는다."""
-    await _guard_parent(session, project.id, None, payload.parent_id)
-    part_id = await _part_for_new_task(session, project.id, payload)
+    # 안 보내거나 null 이면 공통 — 상위를 따르는 규칙은 없어졌다 (Q61)
+    await part_service.guard_part(session, project.id, payload.part_id)
 
     task = Task(
         id=new_id(),
         project_id=project.id,
         key=await _next_key(session, project),
         title=payload.title,
-        parent_id=payload.parent_id,
         status=payload.status,
         owner_id=payload.owner_id,
         start=payload.start,
         due=payload.due,
         priority=payload.priority,
-        part_id=part_id,
+        part_id=payload.part_id,
         created_at=now(),
         # 화면이 보낸 줄 id 는 화면 안에서만 쓰던 값이다 — 서버가 새로 붙인다
         lines=[
@@ -241,7 +249,18 @@ async def _insert_task(
             )
             for order, line in enumerate(payload.body)
         ],
+        relations=[],
     )
+    if related_id is not None:
+        # 초안의 relatedId — 새 작업 → 그 작업 한 줄. 있는지는 부르는 쪽이 이미 봤다
+        task.relations = [
+            TaskRelation(
+                task_id=task.id,
+                related_id=related_id,
+                project_id=project.id,
+                created_at=task.created_at,
+            )
+        ]
     session.add(task)
     await session.flush()
     record_status(session, task, None, actor_id, task.created_at)
@@ -251,21 +270,6 @@ async def _insert_task(
     for thread_id in dict.fromkeys(payload.thread_ids):
         await _attach_thread(session, task, thread_id)
     return task
-
-
-async def _part_for_new_task(
-    session: AsyncSession, project_id: str, payload: TaskCreate
-) -> str | None:
-    """새 작업의 파트. **키를 안 보냈으면 상위 작업의 파트를 따른다**(최상위면 null) —
-    null 을 보낸 것(공통)과 가른다. 따라온 파트도 새로 다는 것이라 보관이면 400 이다."""
-    if "part_id" in payload.model_fields_set:
-        part_id = payload.part_id
-    elif payload.parent_id is not None:
-        part_id = await session.scalar(select(Task.part_id).where(Task.id == payload.parent_id))
-    else:
-        part_id = None
-    await part_service.guard_part(session, project_id, part_id)
-    return part_id
 
 
 async def _guard_owner(session: AsyncSession, project_id: str, owner_id: str | None) -> None:
@@ -310,8 +314,8 @@ def task_problems(
 ) -> dict[str, str]:
     """작업 줄마다의 규칙 — 개수는 부르는 쪽이 본다. 회의록 초안도 이것을 같이 쓴다.
 
-    `taken` 은 같은 초안의 다른 줄(새 안건 · 이력)이 쓴 tempId 다.
-    겹치면 안 되지만 상위는 될 수 없다.
+    `taken` 은 같은 초안의 다른 줄(새 안건 · 이력)이 쓴 tempId 다. 겹치면 안 된다.
+    초안은 평평해서(Q61) 줄끼리 가리키는 칸이 없다.
     """
     problems: dict[str, str] = {}
     seen: set[str] = set()
@@ -323,11 +327,6 @@ def task_problems(
             problems[f"{at}.tempId"] = "앞의 작업과 tempId 가 겹칩니다."
         elif item.temp_id in taken:
             problems[f"{at}.tempId"] = "초안의 다른 줄과 tempId 가 겹칩니다."
-        # 앞에 있는 것만 상위가 될 수 있다 — 자기 자신 · 뒤의 것을 가리키면 고리가 생길 수 있다
-        if item.parent_temp_id is not None and item.parent_temp_id not in seen:
-            problems[f"{at}.parentTempId"] = "상위 작업은 이 작업보다 앞에 있어야 합니다."
-        if item.parent_temp_id is not None and item.parent_id is not None:
-            problems[f"{at}.parentId"] = "상위는 parentTempId 와 parentId 중 하나만 둡니다."
         if not item.title.strip():
             problems[f"{at}.title"] = "제목을 입력해 주세요."
         if item.start is not None and item.due is not None and item.start > item.due:
@@ -351,24 +350,19 @@ async def missing_owners(
     }
 
 
-async def missing_parents(
+RELATED_MISSING = "연관 작업을 찾을 수 없습니다."
+
+
+async def missing_related(
     session: AsyncSession, project_id: str, tasks: Sequence[ProposedTask]
 ) -> dict[str, str]:
-    """`parentId` 가 그 프로젝트의 작업이 아닌 자리. 다른 프로젝트의 작업도 '없다' 로 본다."""
-    wanted = {item.parent_id for item in tasks if item.parent_id is not None}
-    if not wanted:
-        return {}
-    found = set(
-        (
-            await session.scalars(
-                select(Task.id).where(Task.project_id == project_id, Task.id.in_(wanted))
-            )
-        ).all()
-    )
+    """`relatedId` 가 그 프로젝트의 작업이 아닌 자리. 다른 프로젝트의 작업도 '없다' 로 본다."""
+    wanted = {item.related_id for item in tasks if item.related_id is not None}
+    found = await _found_tasks(session, project_id, wanted)
     return {
-        f"tasks.{index}.parentId": "상위 작업을 찾을 수 없습니다."
+        f"tasks.{index}.relatedId": RELATED_MISSING
         for index, item in enumerate(tasks)
-        if item.parent_id is not None and item.parent_id not in found
+        if item.related_id is not None and item.related_id not in found
     }
 
 
@@ -383,32 +377,27 @@ async def create_tasks(
     missing = await missing_owners(session, project.id, payload.tasks)
     if missing:
         raise ApiError(400, "TASK_OWNER_NOT_FOUND", "담당자를 찾을 수 없습니다.", missing)
-    orphans = await missing_parents(session, project.id, payload.tasks)
+    orphans = await missing_related(session, project.id, payload.tasks)
     if orphans:
-        raise ApiError(400, "TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.", orphans)
+        raise ApiError(400, "TASK_RELATED_NOT_FOUND", RELATED_MISSING, orphans)
     await _guard_batch_parts(session, project.id, payload.tasks)
 
     id_by_temp: dict[str, str] = {}
     created: list[Task] = []
     try:
-        # 배열 순서대로 넣는다 — 번호가 그 순서로 나가고, 상위가 늘 먼저 들어가 있다
+        # 배열 순서대로 넣는다 — 번호가 그 순서로 나간다
         for item in payload.tasks:
             fields = {
                 "title": item.title.strip(),
-                "parent_id": (
-                    id_by_temp[item.parent_temp_id]
-                    if item.parent_temp_id is not None
-                    else item.parent_id
-                ),
                 "owner_id": item.owner_id,
                 "start": item.start,
                 "due": item.due,
                 "priority": item.priority,
+                "part_id": item.part_id,
             }
-            # 보낸 줄만 partId 를 넘긴다 — 안 보낸 줄은 앞의 상위를 따른다
-            if "part_id" in item.model_fields_set:
-                fields["part_id"] = item.part_id
-            task = await _insert_task(session, project, TaskCreate.model_validate(fields), actor_id)
+            task = await _insert_task(
+                session, project, TaskCreate.model_validate(fields), actor_id, item.related_id
+            )
             id_by_temp[item.temp_id] = task.id
             created.append(task)
         await session.commit()
@@ -427,10 +416,10 @@ async def _guard_batch_parts(
 ) -> None:
     """일괄 등록이 보낸 `partId` 를 넣기 전에 다 본다 — 몇 번째 줄인지 `tasks.1.partId` 로 짚는다.
 
-    안 보낸 줄은 앞의 줄(또는 공통)을 따르니 따로 볼 것이 없다.
+    안 보낸 줄 · null 은 공통이라 볼 것이 없다.
     """
     for index, item in enumerate(tasks):
-        if "part_id" in item.model_fields_set:
+        if item.part_id is not None:
             await part_service.guard_part(
                 session, project_id, item.part_id, field=f"tasks.{index}.partId"
             )
@@ -444,15 +433,15 @@ async def patch_task(
     snapshot = _history_fields(task)
     body_before = _body_shape(task.lines)
     # exclude_unset — 안 보낸 것과 null 로 보낸 것을 가른다. ownerId: null 은 담당자 지우기다
-    changes = payload.model_dump(exclude_unset=True, exclude={"body"})
+    changes = payload.model_dump(exclude_unset=True, exclude={"body", "related_ids"})
     if "body" in payload.model_fields_set:
         _replace_body(task, payload.body)
-    if "parent_id" in changes:
-        await _guard_parent(session, task.project_id, task.id, changes["parent_id"])
+    if "related_ids" in payload.model_fields_set:
+        await _replace_related(session, task, payload.related_ids)
     # 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다 — 프로젝트에서 빠진 사람이어도
     if "owner_id" in changes and changes["owner_id"] != task.owner_id:
         await _guard_owner(session, task.project_id, changes["owner_id"])
-    # 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다. 하위 작업은 따라 바뀌지 않는다
+    # 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다
     if "part_id" in changes and changes["part_id"] != task.part_id:
         await part_service.guard_part(session, task.project_id, changes["part_id"])
     for field, value in changes.items():
@@ -479,7 +468,8 @@ def _history_fields(task: Task) -> list[tuple[str, object]]:
         ("priority", task.priority),
         ("ownerId", task.owner_id),
         ("partId", task.part_id),
-        ("parentId", task.parent_id),
+        # 건 순서의 id 목록 — 남는 줄은 순서를 지키므로 같은 집합이면 같은 목록이다
+        ("relatedIds", task.related_ids),
         ("start", task.start),
         ("due", task.due),
     ]

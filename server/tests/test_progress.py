@@ -18,6 +18,7 @@ from app.models import (
     TaskDependency,
     TaskLine,
     TaskLog,
+    TaskRelation,
     TaskThreadLink,
     Thread,
 )
@@ -44,7 +45,7 @@ def add_task(
     *,
     start: str | None = None,
     due: str | None = None,
-    parent: str | None = None,
+    related: str | None = None,
     owner: str | None = None,
     created: str = "2026-10-01T00:00:00Z",
     since: str | None = None,
@@ -59,7 +60,6 @@ def add_task(
             project_id=P,
             key=f"MG-{next(_numbers)}",
             title=f"작업 {id_}",
-            parent_id=parent,
             status=status,
             owner_id=owner,
             start=date.fromisoformat(start) if start else None,
@@ -77,6 +77,11 @@ def add_task(
                     task_id=id_, kind="bullet", text="메모", done=False, level=0, sort_order=99
                 )
             ],
+            relations=[
+                TaskRelation(task_id=id_, related_id=related, project_id=P, created_at=at(created))
+            ]
+            if related is not None
+            else [],
         )
     )
     session.add(
@@ -343,14 +348,14 @@ async def test_attention_keeps_thirty(db: AsyncSession) -> None:
 
 
 async def test_weight(db: AsyncSession) -> None:
+    """작업 계층을 걷었다 (Q61) — 연관 작업은 무게에 안 든다. openChildren 도 없다."""
     add_task(db, "top", "doing", due="2026-10-19", priority="high", checks=(True, False, False))
-    add_task(db, "child", parent="top")
-    add_task(db, "grandchild", parent="child")
-    add_task(db, "done_child", "done", parent="top")
+    add_task(db, "near", related="top")
     found = await facts(db)
     w = attention(found)["top"].weight
-    assert (w.open_children, w.open_lines, w.total_lines, w.priority) == (2, 2, 3, "high")
+    assert (w.open_lines, w.total_lines, w.priority) == (2, 3, "high")
     assert w.thread_count == 0
+    assert "openChildren" not in w.model_dump(by_alias=True)
 
 
 # --- 진척 · 결정 · 사람 · 앞 리포트 -------------------------------------------------------

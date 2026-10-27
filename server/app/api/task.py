@@ -40,7 +40,7 @@ async def create_tasks(
 async def patch_task(
     task_id: str, payload: TaskPatch, scope: ProjectScope, session: Session
 ) -> TaskOut:
-    """부분 수정 — 상태 · 담당자 · 기간 · 상위 작업이 다 이 하나로 들어온다."""
+    """부분 수정 — 상태 · 담당자 · 기간 · 연관 작업이 다 이 하나로 들어온다."""
     return await task_service.patch_task(session, task_id, payload, scope.actor.id)
 
 

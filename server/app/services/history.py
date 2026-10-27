@@ -25,6 +25,9 @@ def _value(value: object) -> HistoryValue:
         return value.isoformat()
     if value is None or isinstance(value, bool | int | str):
         return value
+    # 연관 작업 id 목록 — 건 순서 그대로 (Q61)
+    if isinstance(value, list | tuple) and all(isinstance(item, str) for item in value):
+        return list(value)
     raise TypeError(f"이력에 남길 수 없는 값입니다: {type(value).__name__}")
 
 

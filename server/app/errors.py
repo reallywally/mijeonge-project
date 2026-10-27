@@ -65,7 +65,7 @@ _REASONS = {
     "too_long": "너무 많습니다.",
 }
 
-# 이 목록 아래의 칸은 몇 번째인지까지 짚는다 — `tasks.1.parentTempId` (API.md '한 번에 등록'),
+# 이 목록 아래의 칸은 몇 번째인지까지 짚는다 — `tasks.1.relatedId` (API.md '한 번에 등록'),
 # 회의록 등록의 `threads.0.entry.kind` · `entries.1.threadId` (docs/api/minutes.md),
 # 테스트의 `refs.0.kind` (docs/api/test.md).
 # 다른 자리는 지금처럼 마지막 이름만 쓴다
