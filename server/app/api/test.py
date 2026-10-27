@@ -30,8 +30,12 @@ async def get_test(test_id: str, session: Session) -> TestCaseOut:
 
 
 @router.patch("/tests/{test_id}")
-async def patch_test(test_id: str, payload: TestPatch, session: Session) -> TestCaseOut:
-    return await test_service.patch_test(session, test_id, payload, today=today_kst())
+async def patch_test(
+    test_id: str, payload: TestPatch, scope: ProjectScope, session: Session
+) -> TestCaseOut:
+    return await test_service.patch_test(
+        session, test_id, payload, scope.actor.id, today=today_kst()
+    )
 
 
 @router.delete("/tests/{test_id}", status_code=204)
@@ -50,16 +54,22 @@ async def set_status(
 
 
 @router.put("/tests/{test_id}/refs/{kind}/{ref_id}")
-async def put_ref(test_id: str, kind: TestRefKind, ref_id: str, session: Session) -> TestCaseOut:
-    return await test_service.put_ref(session, test_id, kind, ref_id, today=today_kst())
+async def put_ref(
+    test_id: str, kind: TestRefKind, ref_id: str, scope: ProjectScope, session: Session
+) -> TestCaseOut:
+    return await test_service.put_ref(
+        session, test_id, kind, ref_id, scope.actor.id, today=today_kst()
+    )
 
 
 @router.delete("/tests/{test_id}/refs/{kind}/{ref_id}", status_code=204)
-async def delete_ref(test_id: str, kind: TestRefKind, ref_id: str, session: Session) -> None:
-    await test_service.delete_ref(session, test_id, kind, ref_id)
+async def delete_ref(
+    test_id: str, kind: TestRefKind, ref_id: str, scope: ProjectScope, session: Session
+) -> None:
+    await test_service.delete_ref(session, test_id, kind, ref_id, scope.actor.id)
 
 
 @router.post("/tests/{test_id}/basis")
-async def confirm_basis(test_id: str, session: Session) -> TestCaseOut:
+async def confirm_basis(test_id: str, scope: ProjectScope, session: Session) -> TestCaseOut:
     """'그대로 맞다' — 기준(basis_seq)을 지금으로."""
-    return await test_service.confirm_basis(session, test_id, today=today_kst())
+    return await test_service.confirm_basis(session, test_id, scope.actor.id, today=today_kst())

@@ -366,6 +366,33 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 - [ ] AI 테스트 검토 · 빠진 테스트 찾기(+ 한 번에 추가) · 바뀐 자리 설명 — `docs/api/test.md` '나중'
 - [ ] 챗봇 도구 `get_tests` · `get_test`, 근거 칩 `[[test:ID]]`
 
+## 17단계 · 변경 이력 — 작업 · 테스트를 누가 언제 무엇을 바꿨나
+
+계약은 `../docs/api/history.md`(합의 2026-10-27 · Q59 닫힘), 화면은 `../web/PLAN.md` 17단계다.
+**보이기 위한 기록**이다 — 셈(N일째 · 리포트)은 `task_log` · `status_changed_at` 이 그대로 한다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 테이블 | `task_history` · `test_history` 따로 — 복합 FK cascade, `seq` Identity, `changes` jsonb(`HistoryChange[]` camelCase 그대로), `backfilled` | 작업 · 테스트의 복합 FK 규칙을 그대로 쓴다. 칸이 늘어도 열을 안 늘린다 |
+| 남기는 곳 | `services/history.py` 의 `record_task` · `record_test` · `diff` · `change` 하나 — 쓰기 서비스가 부른다. 칸이 없으면 줄을 안 만든다 | 줄 모양 · '안 바뀐 것은 안 남김' 규칙이 한 곳에 있다 |
+| 비교 | 저장된 값으로, 칸 순서는 계약 표의 순서. 본문 · 단계는 (글 · 종류 · 체크 · 들여쓰기) · (행동 · 기대) 목록을 순서째 | 같은 값 저장 · 줄 id 만 다른 본문이 이력을 덮지 않게 |
+| 바꾼 사람 | 요청한 사람 — actor 를 안 받던 라우트(줄 체크 · 링크 · 선행 떼기 · 테스트 고치기 · 태그 · 기준 확인)가 `ProjectScope` 를 받는다 | 권한 · 응답은 그대로, 누가만 더 안다 |
+| 읽기 | `api/history.py` 의 GET 둘, 존재 검사는 `services/history.py` 가 따로 — `services/task.py` 를 부르면 import 고리 | 경계는 `require_scope` 가 경로 이름으로 이미 본다 |
+
+### 17-1 체크리스트
+
+- [x] 리비전 `0019_history` — 테이블 둘 · `(task_id|test_id, seq)` 인덱스 + 지난 작업 · 테스트마다 등록 한 줄(`backfilled`, 바꾼 사람 null, 등록 시각, 원래의 seq 순). Postgres 는 시퀀스를 민다. downgrade 도. Postgres 에서 올리고 · 내리고 · 다시 올려 확인
+- [x] `models/task.py` 의 `TaskHistory` · `models/test.py` 의 `TestHistory` · `schemas/history.py`(`HistoryChange` · `HistoryEntry`, `from` 은 alias)
+- [x] 남기기 — 작업: `_insert_task`(등록 · 일괄 · 회의록 apply) · `patch_task` · `set_line_done` · `link_thread` · `unlink_thread` · 선행 PUT · DELETE. 테스트: 만들기 · 고치기 · 상태(같은 상태도) · 태그 걸기 · 떼기 · 기준 확인
+- [x] `GET /api/tasks/{taskId}/history` · `GET /api/tests/{testId}/history` — seq 오름차순, 404 `TASK_NOT_FOUND` · `TEST_NOT_FOUND`
+- [x] 시드 — 작업 · 테스트마다 등록 한 줄 + 시연 둘(`k20` · HW-T7). id · 시각 · 사람은 계약 '구현에서 메운 것 (서버)'. `clear` · `advance_identity` · 검사의 `SEQ_MODELS` 에 더함
+- [x] 검사 — `tests/test_history.py`(칸마다 · 안 바뀐 값 · 빈 PATCH · 본문 네 가지와 순서 · 같은 상태 재전송 · 상태의 실패 단계 · 메모 · 태그 · 링크 · 선행의 새로/있던 것만 · 바꾼 사람 · 실패한 요청 · seq 순서 · 404 · 401 · cascade · 마이그레이션 backfill) · `test_contract_types.py` 의 이력 모양
+- [x] `API.md` 두 줄 `구현`
+- [ ] 개발 DB — `alembic upgrade head` 와 시드는 사람이 돌린다
+- [ ] 나중 — 본문 줄 단위 비교(계약 '긴 글'), 챗봇이 이력을 읽는 도구
+
 ---
 
 ## 진행 상황
@@ -392,6 +419,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 14 프로젝트 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
 | 15 LLM 공급자 분리 | **1차 ~ 3차 끝남** (2026-10-22) — `app/llm` 의 `LLMProvider` · `AnthropicProvider` · `OpenAICompatProvider`, AI 를 부르는 서비스 다섯을 모두 옮김. `LLM_PROVIDER` 로 Claude · GPT · Groq 를 고른다. 동작 · 계약은 그대로. 다음은 실제 키로 평가 |
 | 16 테스트 | 계약 **합의** (2026-10-27) — `docs/api/test.md` · Q53 ~ Q58 닫힘. **16-1 끝남** (2026-10-27) — 리비전 `0017_test_case` · 엔드포인트 아홉 · `services/test.py`(며칠째 · 신호 여섯 · 기준 바뀜, 리스크 기준 그대로) · `require_scope` 의 `test_id` 갈래 · 시드 HW-T1 ~ T8(목업과 같은 줄) · `tests/test_test.py`. 다음은 API.md `구현` 표시와 2단계(AI) |
+| 17 변경 이력 | 계약 **합의** (2026-10-27) — `docs/api/history.md` · Q59 닫힘. **17-1 끝남** (2026-10-27) — 리비전 `0019_history`(backfill 포함) · `services/history.py` 한 곳에서 남김 · 작업 · 테스트의 쓰기 길 전부 · GET 둘 · 시드 등록 줄 + 시연 둘 · `tests/test_history.py`. API.md 두 줄 `구현`. 개발 DB 올리기는 사람이 |
 
 ## 아직 안 정한 것
 

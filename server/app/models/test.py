@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -13,10 +14,12 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_id
+from app.models.task import HISTORY_CHANGES
 
 TEST_STATUSES = ("draft", "ready", "testing", "pass", "fail", "blocked")
 
@@ -24,7 +27,8 @@ TEST_STATUSES = ("draft", "ready", "testing", "pass", "fail", "blocked")
 class TestCase(Base):
     """기능 · 시나리오 테스트 하나 — 작업과 따로 둔다 (docs/api/test.md · Q55).
 
-    상태 이력은 없다 — 마지막으로 바뀐 때 · 누가만 남는다 (Q54).
+    상태 기록(셈의 근거)은 없다 — 마지막으로 바뀐 때 · 누가만 남는다 (Q54).
+    덮어쓴 앞 값은 화면용 변경 이력(`TestHistory`)에 남는다 (Q59).
     """
 
     # 이름이 Test 로 시작해도 pytest 가 검사 클래스로 줍지 않게
@@ -122,3 +126,32 @@ class TestRef(Base):
     project_id: Mapped[str] = mapped_column(String(36))
     task_id: Mapped[str | None] = mapped_column(String(36))
     thread_id: Mapped[str | None] = mapped_column(String(36))
+
+
+class TestHistory(Base):
+    """테스트 변경 이력 한 줄 = 요청 하나 (docs/api/history.md · Q59). `TaskHistory` 와 같은 모양.
+
+    셈(며칠째 · 신호)에는 쓰지 않는다 — 지금 상태의 시각은 `status_changed_at` 이 정답이다.
+    """
+
+    __test__ = False
+    __tablename__ = "test_history"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["test_id", "project_id"],
+            ["test_case.id", "test_case.project_id"],
+            ondelete="CASCADE",
+        ),
+        Index("ix_test_history_test_id_seq", "test_id", "seq"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36))
+    test_id: Mapped[str] = mapped_column(String(36))
+    # backfill 은 누가 했는지 모른다. 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    changed_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # changed_at 으로 세우지 않는다 (Q15)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    changes: Mapped[list[dict[str, object]]] = mapped_column(HISTORY_CHANGES)
+    backfilled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

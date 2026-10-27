@@ -36,8 +36,10 @@ from app.models import (
     ProjectReport,
     Task,
     TaskComment,
+    TaskHistory,
     TaskLog,
     TestCase,
+    TestHistory,
     Thread,
 )
 from app.services import auth as auth_service
@@ -60,6 +62,8 @@ SEQ_MODELS = (
     TaskLog,
     ProjectReport,
     TestCase,
+    TaskHistory,
+    TestHistory,
 )
 
 

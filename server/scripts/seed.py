@@ -37,10 +37,12 @@ from app.models import (
     Task,
     TaskComment,
     TaskDependency,
+    TaskHistory,
     TaskLine,
     TaskLog,
     TaskThreadLink,
     TestCase,
+    TestHistory,
     TestRef,
     TestStep,
     Thread,
@@ -572,6 +574,43 @@ def task_logs() -> list[TaskLog]:
     return rows
 
 
+# 변경 이력 시연 — docs/api/history.md '시드 · 목업'. 목업 web/src/fixtures 가 같은 값을 둔다
+CREATED_CHANGES: list[dict[str, str | int | bool | None]] = [
+    {"field": "created", "from": None, "to": None, "subject": ""}
+]
+
+
+def task_histories() -> list[TaskHistory]:
+    """작업마다 '등록' 한 줄(등록 시각 · 담당자, 담당 없으면 null) + k20 의 상태 바뀜 하나.
+
+    k20 의 줄은 task_log 시연 줄(DEMO_STATUS_CHANGES)과 같은 때 · 같은 사람이다.
+    """
+    rows = [
+        TaskHistory(
+            id=f"th-{task.id}-1",
+            project_id=task.project_id,
+            task_id=task.id,
+            changed_by=task.owner_id,
+            changed_at=task.created_at,
+            changes=CREATED_CHANGES,
+            backfilled=False,
+        )
+        for task in tasks()
+    ]
+    rows.append(
+        TaskHistory(
+            id="th-k20-2",
+            project_id="p1",
+            task_id="k20",
+            changed_by="u3",
+            changed_at=at("2026-10-08T00:00:00Z"),
+            changes=[{"field": "status", "from": "todo", "to": "doing", "subject": ""}],
+            backfilled=False,
+        )
+    )
+    return rows
+
+
 def comments() -> list[TaskComment]:
     """`fixtures/comments.ts` — 작업마다 오래된 것부터."""
     rows = [
@@ -878,6 +917,42 @@ def test_cases() -> list[TestCase]:
     ]
 
 
+# HW-T7(tc7) 이 fail 이 된 줄 — 그 테스트의 바뀐 시각 · 담당(= 바꾼 사람)
+T7 = SEED_TESTS[6]
+
+
+def test_histories() -> list[TestHistory]:
+    """테스트마다 '등록' 한 줄(등록 시각 · 만든 사람) + HW-T7 의 testing → fail 하나."""
+    rows = [
+        TestHistory(
+            id=f"sh-tc{no}-1",
+            project_id="p1",
+            test_id=f"tc{no}",
+            changed_by=row.owner,
+            changed_at=at(TEST_CREATED),
+            changes=CREATED_CHANGES,
+            backfilled=False,
+        )
+        for no, row in enumerate(SEED_TESTS, start=1)
+    ]
+    rows.append(
+        TestHistory(
+            id="sh-tc7-2",
+            project_id="p1",
+            test_id="tc7",
+            changed_by=T7.owner,
+            changed_at=at(T7.changed_at),
+            changes=[
+                {"field": "status", "from": "testing", "to": "fail", "subject": ""},
+                {"field": "failedStep", "from": None, "to": T7.failed_step, "subject": ""},
+                {"field": "resultNote", "from": None, "to": T7.note, "subject": ""},
+            ],
+            backfilled=False,
+        )
+    )
+    return rows
+
+
 def test_refs() -> list[TestRef]:
     return [
         TestRef(
@@ -895,6 +970,7 @@ def test_refs() -> list[TestRef]:
 async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
+        TestHistory,
         TestRef,
         TestStep,
         TestCase,
@@ -904,6 +980,7 @@ async def clear(session: AsyncSession) -> None:
         TaskComment,
         TaskThreadLink,
         TaskDependency,
+        TaskHistory,
         TaskLog,
         TaskLine,
         Task,
@@ -957,6 +1034,8 @@ async def advance_identity(session: AsyncSession) -> None:
         "minutes",
         "task_log",
         "test_case",
+        "task_history",
+        "test_history",
     ):
         await session.execute(
             text(
@@ -998,6 +1077,8 @@ async def seed(session: AsyncSession) -> None:
         session.add(row)
         await session.flush()
     session.add_all(test_refs())
+    session.add_all(in_order(task_histories()))
+    session.add_all(in_order(test_histories()))
     await session.flush()
     await advance_identity(session)
     await session.commit()
@@ -1022,6 +1103,8 @@ async def run() -> None:
         "check": len(CHECKS),
         "minutes": len(minutes()),
         "test": len(SEED_TESTS),
+        "task_history": len(task_histories()),
+        "test_history": len(test_histories()),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")

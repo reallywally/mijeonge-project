@@ -31,6 +31,7 @@ from app.schemas.test import (
     TestStepOut,
 )
 from app.services import access
+from app.services import history as history_service
 from app.services import part as part_service
 from app.services import project as project_service
 from app.services import risk as risk_service
@@ -453,16 +454,52 @@ async def create_test(
     )
     session.add(test)
     await session.flush()
+    # 같이 건 태그는 '등록' 에 든 것으로 본다 — 작업의 threadIds 와 같다
+    history_service.record_test(session, test, history_service.created(), actor_id, at)
     session.add_all([_ref_row(test, ref.kind, ref.id) for ref in refs])
     test.basis_seq = await _current_basis(session, test.id)
     await session.commit()
     return await _one(session, test, today)
 
 
+def _text_fields(test: TestCase) -> list[tuple[str, object]]:
+    """PATCH 가 남기는 글 칸 — 계약 '칸' 표의 순서. 단계는 그 뒤, 나머지는 `_plan_fields`."""
+    return [
+        ("title", test.title),
+        ("purpose", test.purpose),
+        ("precondition", test.precondition),
+        ("testData", test.test_data),
+    ]
+
+
+def _plan_fields(test: TestCase) -> list[tuple[str, object]]:
+    return [
+        ("parentId", test.parent_id),
+        ("ownerId", test.owner_id),
+        ("partId", test.part_id),
+        ("start", test.start),
+        ("due", test.due),
+    ]
+
+
+def _steps_shape(test: TestCase) -> list[tuple[str, str]]:
+    return [(step.action, step.expected) for step in test.steps]
+
+
+def _diff_fields(
+    before: list[tuple[str, object]], after: list[tuple[str, object]]
+) -> list[history_service.Change]:
+    now_values = dict(after)
+    return history_service.diff((field, old, now_values[field]) for field, old in before)
+
+
 async def patch_test(
-    session: AsyncSession, test_id: str, payload: TestPatch, *, today: date
+    session: AsyncSession, test_id: str, payload: TestPatch, actor_id: str, *, today: date
 ) -> TestCaseOut:
     test = await load_test(session, test_id)
+    texts_before = _text_fields(test)
+    plan_before = _plan_fields(test)
+    steps_before = _steps_shape(test)
     sent = payload.model_fields_set
     changes = payload.model_dump(exclude_unset=True, exclude={"steps"})
     _guard_period(changes.get("start", test.start), changes.get("due", test.due))
@@ -477,6 +514,12 @@ async def patch_test(
         setattr(test, field, value)
     if "steps" in sent:
         _replace_steps(test, payload.steps)
+    changed = _diff_fields(texts_before, _text_fields(test))
+    # 단계는 바뀌었다는 것과 개수만 남긴다 (docs/api/history.md '긴 글')
+    if _steps_shape(test) != steps_before:
+        changed.append(history_service.change("steps", len(steps_before), len(test.steps)))
+    changed += _diff_fields(plan_before, _plan_fields(test))
+    history_service.record_test(session, test, changed, actor_id, now())
     # 고쳤다는 것은 지금 기준으로 다시 봤다는 뜻이다
     if sent:
         test.basis_seq = await _current_basis(session, test.id)
@@ -508,17 +551,37 @@ async def set_status(
     note = payload.note.strip()
     if payload.status in WITH_NOTE and not note:
         raise _invalid("note", "값을 입력해 주세요.")
+    result_note = note if payload.status in WITH_NOTE else ""
+    # 상태는 같은 값이어도 남긴다 — 며칠째가 다시 0 이 된 까닭이다. 메모의 빈 값은 null 로 남긴다
+    changed = [history_service.change("status", test.status, payload.status)]
+    changed += history_service.diff(
+        [
+            ("failedStep", test.failed_step, failed_step),
+            ("resultNote", test.result_note or None, result_note or None),
+        ]
+    )
     test.status = payload.status
     test.status_changed_at = now()
     test.status_changed_by = actor_id
     test.failed_step = failed_step
-    test.result_note = note if payload.status in WITH_NOTE else ""
+    test.result_note = result_note
+    history_service.record_test(session, test, changed, actor_id, test.status_changed_at)
     await session.commit()
     return await _one(session, test, today)
 
 
+def _ref_field(kind: TestRefKind) -> str:
+    return "taskRef" if kind == "task" else "threadRef"
+
+
 async def put_ref(
-    session: AsyncSession, test_id: str, kind: TestRefKind, target_id: str, *, today: date
+    session: AsyncSession,
+    test_id: str,
+    kind: TestRefKind,
+    target_id: str,
+    actor_id: str,
+    *,
+    today: date,
 ) -> TestCaseOut:
     """멱등 — 이미 걸려 있으면 아무것도 바꾸지 않는다(기준도 그대로)."""
     test = await load_test(session, test_id)
@@ -534,13 +597,15 @@ async def put_ref(
         if (count or 0) >= REFS_MAX:
             raise _ref_limit()
         session.add(_ref_row(test, kind, target_id))
+        tagged = [history_service.change(_ref_field(kind), None, target_id)]
+        history_service.record_test(session, test, tagged, actor_id, now())
         test.basis_seq = await _current_basis(session, test.id)
         await session.commit()
     return await _one(session, test, today)
 
 
 async def delete_ref(
-    session: AsyncSession, test_id: str, kind: TestRefKind, target_id: str
+    session: AsyncSession, test_id: str, kind: TestRefKind, target_id: str, actor_id: str
 ) -> None:
     """멱등 — 없는 태그도 성공이다."""
     test = await load_test(session, test_id)
@@ -552,13 +617,22 @@ async def delete_ref(
         return
     await session.delete(found)
     await session.flush()
+    history_service.record_test(
+        session, test, [history_service.change(_ref_field(kind), target_id, None)], actor_id, now()
+    )
     test.basis_seq = await _current_basis(session, test.id)
     await session.commit()
 
 
-async def confirm_basis(session: AsyncSession, test_id: str, *, today: date) -> TestCaseOut:
-    """'그대로 맞다' — 지금까지의 결정을 보고 테스트가 맞다고 확인했다."""
+async def confirm_basis(
+    session: AsyncSession, test_id: str, actor_id: str, *, today: date
+) -> TestCaseOut:
+    """'그대로 맞다' — 지금까지의 결정을 보고 테스트가 맞다고 확인했다.
+    기준 값이 그대로여도 확인한 일 자체를 남긴다."""
     test = await load_test(session, test_id)
     test.basis_seq = await _current_basis(session, test.id)
+    history_service.record_test(
+        session, test, [history_service.change("basis", None, None)], actor_id, now()
+    )
     await session.commit()
     return await _one(session, test, today)

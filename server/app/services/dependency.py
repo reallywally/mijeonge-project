@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, bad_request, not_found
 from app.models import Task, TaskDependency
 from app.schemas.task import TaskDependencyOut
+from app.services import history as history_service
 from app.services.task import load_task
 from app.time import now
 
@@ -109,25 +110,43 @@ async def put_dependency(
     graph = await load_graph(session, task.project_id)
     if not graph.has(task_id, depends_on_id):
         check(graph, task_id, depends_on_id)
+        at = now()
         session.add(
             TaskDependency(
                 task_id=task_id,
                 depends_on_id=depends_on_id,
                 project_id=task.project_id,
                 created_by=actor_id,
-                created_at=now(),
+                created_at=at,
             )
+        )
+        # 이력은 뒤 작업에 남긴다 (docs/api/history.md)
+        history_service.record_task(
+            session, task, [history_service.change("dependsOn", None, depends_on_id)], actor_id, at
         )
         await session.commit()
     return TaskDependencyOut(task_id=task_id, depends_on_id=depends_on_id)
 
 
-async def delete_dependency(session: AsyncSession, task_id: str, depends_on_id: str) -> None:
-    """멱등 — 없는 관계 · 모르는 선행 id 도 204 다. 작업 링크 떼기와 같다."""
-    await load_task(session, task_id)
+async def delete_dependency(
+    session: AsyncSession, task_id: str, depends_on_id: str, actor_id: str
+) -> None:
+    """멱등 — 없는 관계 · 모르는 선행 id 도 204 다. 작업 링크 떼기와 같다.
+    이력은 있던 관계를 뗄 때만 남긴다."""
+    task = await load_task(session, task_id)
+    found = await session.scalar(
+        select(TaskDependency.depends_on_id).where(
+            TaskDependency.task_id == task_id, TaskDependency.depends_on_id == depends_on_id
+        )
+    )
+    if found is None:
+        return
     await session.execute(
         delete(TaskDependency).where(
             TaskDependency.task_id == task_id, TaskDependency.depends_on_id == depends_on_id
         )
+    )
+    history_service.record_task(
+        session, task, [history_service.change("dependsOn", depends_on_id, None)], actor_id, now()
     )
     await session.commit()

@@ -626,3 +626,44 @@ async def test_test_responses_match_contract(client: AsyncClient) -> None:
     assert nulls == TEST_NULLABLE["TestCase"] - {"ownerId", "statusChangedBy", "createdBy"}
     one = (await client.get(f"/api/tests/{rows[0]['id']}")).json()
     assert one == rows[0]
+
+
+# 변경 이력 — docs/api/history.md '모양'. 프론트가 domain.ts 에 더하는 중이라 아직 없을 수 있다.
+# 어긋나면 계약 쪽이 기준이다. null 은 from · to · changedBy 에서만 나간다
+HISTORY_SHAPES: dict[str, set[str]] = {
+    "HistoryChange": {"field", "from", "to", "subject"},
+    "HistoryEntry": {"id", "changedAt", "changedBy", "backfilled", "changes"},
+}
+HISTORY_NULLABLE: dict[str, set[str]] = {
+    "HistoryChange": {"from", "to"},
+    "HistoryEntry": {"changedBy"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(HISTORY_SHAPES))
+def test_history_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    if name not in FIELDS:
+        return
+    declared = all_fields(name)
+    assert set(declared) == HISTORY_SHAPES[name], f"domain.ts 의 {name} 이 history.md 와 다르다"
+    nullable = {field for field, allowed in declared.items() if allowed}
+    assert nullable == HISTORY_NULLABLE[name]
+
+
+async def test_history_responses_match_contract(client: AsyncClient) -> None:
+    # 시드의 k1 은 담당이 없어 changedBy 가 null, HW-T7 은 from · to 에 null 과 숫자가 있다
+    rows = [
+        *(await client.get("/api/tasks/k1/history")).json(),
+        *(await client.get("/api/tasks/k20/history")).json(),
+        *(await client.get("/api/tests/tc7/history")).json(),
+    ]
+    nulls: dict[str, set[str]] = {"HistoryEntry": set(), "HistoryChange": set()}
+    for row in rows:
+        assert set(row) == HISTORY_SHAPES["HistoryEntry"]
+        assert row["changedAt"].endswith("Z") and row["changes"]
+        nulls["HistoryEntry"] |= {k for k, v in row.items() if v is None}
+        for change in row["changes"]:
+            assert set(change) == HISTORY_SHAPES["HistoryChange"]
+            assert isinstance(change["subject"], str)
+            nulls["HistoryChange"] |= {k for k, v in change.items() if v is None}
+    assert nulls == HISTORY_NULLABLE
