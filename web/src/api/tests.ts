@@ -229,7 +229,6 @@ const mock = {
       statusChangedBy: me.id,
       failedStep: null,
       resultNote: '',
-      level: input.level ?? null,
       start: input.start ?? null,
       due: input.due ?? null,
       ownerId: input.ownerId ?? null,
@@ -261,7 +260,6 @@ const mock = {
     if (patch.testData !== undefined) row.testData = patch.testData
     if (patch.steps !== undefined)
       row.steps = patch.steps.map((s) => ({ action: s.action.trim(), expected: s.expected }))
-    if (patch.level !== undefined) row.level = patch.level
     if (patch.start !== undefined) row.start = patch.start
     if (patch.due !== undefined) row.due = patch.due
     if (patch.ownerId !== undefined) row.ownerId = patch.ownerId

@@ -545,7 +545,7 @@ async def test_report_responses_match_contract(client: AsyncClient) -> None:
 
 # 테스트 — docs/api/test.md '모양' · '요청'(1단계). 집계(statusDays · signals · changedEntryIds)를
 # 서버가 하는 예외라 계산된 값이 응답에 실린다. 어긋나면 계약 쪽이 기준이다.
-# null 이 나가는 자리는 TestCase 의 아홉뿐이다
+# null 이 나가는 자리는 TestCase 의 여덟뿐이다. 레벨은 걷었다(2026-10-27 고침)
 _TEST_EDITABLE = {
     "title",
     "parentId",
@@ -553,7 +553,6 @@ _TEST_EDITABLE = {
     "precondition",
     "testData",
     "steps",
-    "level",
     "start",
     "due",
     "ownerId",
@@ -579,7 +578,6 @@ TEST_SHAPES: dict[str, set[str]] = {
         "statusDays",
         "failedStep",
         "resultNote",
-        "level",
         "start",
         "due",
         "ownerId",
@@ -593,7 +591,7 @@ TEST_SHAPES: dict[str, set[str]] = {
     "TestPatch": _TEST_EDITABLE,
     "TestStatusInput": {"status", "failedStep", "note"},
 }
-_TEST_EDITABLE_NULLABLE = {"parentId", "level", "start", "due", "ownerId", "partId"}
+_TEST_EDITABLE_NULLABLE = {"parentId", "start", "due", "ownerId", "partId"}
 TEST_NULLABLE: dict[str, set[str]] = {
     "TestCase": _TEST_EDITABLE_NULLABLE | {"statusChangedBy", "failedStep", "createdBy"},
     "TestInput": _TEST_EDITABLE_NULLABLE,

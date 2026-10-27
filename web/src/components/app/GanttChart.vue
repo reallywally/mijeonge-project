@@ -378,7 +378,7 @@ function showToday() {
   color: var(--muted-foreground);
 }
 
-/* 테스트 상태 — 통과는 완료처럼 채우고, 실패 · 막힘은 destructive, 작성 중 · 준비됨은 흐리게 */
+/* 테스트 상태 — 성공은 완료처럼 채우고, 실패 · 막힘은 destructive, 작성 중 · 준비됨은 흐리게 */
 .tg-root .tg-badge-pass {
   background: var(--primary);
   color: var(--primary-foreground);
@@ -418,7 +418,7 @@ function showToday() {
   --dhx-gantt-link-handle-background: var(--background);
 }
 
-/* 막대 — 완료 · 통과는 채우고, 진행 중 · 테스트 중은 테두리, 해야 할 일은 옅게, 묶음은 자식들의 기간 */
+/* 막대 — 완료 · 성공은 채우고, 진행 중 · 테스트 중은 테두리, 해야 할 일은 옅게, 묶음은 자식들의 기간 */
 .tg-root .gantt_task_line.tg-bar {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ChevronRight, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
+import { ChevronRight, Clock, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
@@ -21,12 +21,12 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { monthDay } from '@/lib/date'
-import { TEST_LEVEL_OPTIONS, testFieldProblems } from '@/lib/testcase'
+import { TEST_STATUS_OPTIONS, testFieldProblems } from '@/lib/testcase'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
-import type { TestLevel, TestRef, TestStatusInput, TestStep } from '@/types/domain'
+import type { TestRef, TestStatus, TestStatusInput, TestStep } from '@/types/domain'
 
 /* 테스트 상세 · 추가 — 작업 상세와 따로 만든 팝업이다(입력 항목이 다르다, Q55).
    상세(testId)는 보는 자리가 곧 고치는 자리라 칸을 벗어나면 그 값만 바로 들어간다.
@@ -61,7 +61,6 @@ const title = ref('')
 const purpose = ref('')
 const precondition = ref('')
 const testData = ref('')
-const level = ref<TestLevel | null>(null)
 const ownerId = ref<string | null>(null)
 const partId = ref<string | null>(null)
 const parentId = ref<string | null>(null)
@@ -90,7 +89,6 @@ function fill() {
     purpose.value = t.purpose
     precondition.value = t.precondition
     testData.value = t.testData
-    level.value = t.level
     ownerId.value = t.ownerId
     partId.value = t.partId
     parentId.value = t.parentId
@@ -103,7 +101,6 @@ function fill() {
     purpose.value = ''
     precondition.value = ''
     testData.value = ''
-    level.value = null
     ownerId.value = null
     parentId.value = props.initialParentId ?? null
     partId.value = partForChild(parentId.value)
@@ -150,12 +147,6 @@ function commitText(key: TextKey) {
   if (!t) return
   const value = textRefs[key].value
   if (value !== t[key]) void testStore.patch(t.id, { [key]: value })
-}
-
-function setLevel(value: string) {
-  level.value = value === 'none' ? null : (value as TestLevel)
-  if (test.value && level.value !== test.value.level)
-    void testStore.patch(test.value.id, { level: level.value })
 }
 
 watch(ownerId, (v) => {
@@ -218,6 +209,13 @@ function setStatus(input: TestStatusInput) {
   if (test.value) void testStore.setStatus(test.value.id, input)
 }
 
+/* 위쪽 상태 칸 — 작업 상세의 상태 고르기처럼 고른다. 막힘 · 실패는 상태 칸(아래)이 메모를 받은 뒤 보낸다.
+   고르기는 보낸 뒤 받은 상태를 보이므로, 메모를 받는 동안은 지금 상태 그대로 선다 */
+const statusSection = ref<{ pick: (s: TestStatus) => void } | null>(null)
+function pickStatus(value: unknown) {
+  statusSection.value?.pick(value as TestStatus)
+}
+
 /* 기준 바뀜 — 태그로 닿는 안건에 테스트를 확인한 뒤 생긴 결정 줄. 안건 이력처럼 보인다 */
 const changedEntries = computed(() =>
   (test.value?.changedEntryIds ?? []).map((id) => {
@@ -263,7 +261,6 @@ async function create() {
     testData: testData.value,
     steps: sent,
     refs: refs.value,
-    level: level.value,
     start: start.value || null,
     due: due.value || null,
     ownerId: ownerId.value,
@@ -396,6 +393,7 @@ const area =
 
           <TestStatusSection
             v-if="row"
+            ref="statusSection"
             :row="row"
             @set="setStatus"
             @open-test="(id) => emit('open-test', id)"
@@ -470,13 +468,33 @@ const area =
           class="flex w-[340px] shrink-0 flex-col gap-4 border-l border-border bg-muted/50 px-4 pt-4 pb-6"
         >
           <div v-if="row" class="flex flex-col gap-1.5">
-            <div class="flex items-center gap-2">
+            <!-- 묶음은 직접 돌리지 않는다 — 고르기 대신 하위에서 모은 상태 -->
+            <div v-if="row.isGroup" class="flex items-center gap-2">
               <TestStatusBadge :status="row.status" />
-              <span v-if="!row.isGroup" class="text-xs text-muted-foreground" data-test-status-days>
-                {{ row.test.statusDays === 0 ? '오늘부터' : `${row.test.statusDays}일째` }}
-              </span>
-              <span v-else class="text-xs text-muted-foreground">하위에서 모은 상태</span>
+              <span class="text-xs text-muted-foreground">하위에서 모은 상태</span>
             </div>
+            <template v-else>
+              <Select :model-value="row.test.status" @update:model-value="pickStatus">
+                <SelectTrigger
+                  class="h-8 w-full bg-background text-xs font-medium"
+                  aria-label="상태"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="o in TEST_STATUS_OPTIONS" :key="o.value" :value="o.value">
+                    {{ o.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p
+                class="flex items-center gap-1.5 px-0.5 text-xs text-muted-foreground"
+                data-test-status-days
+              >
+                <Clock class="size-3" />
+                {{ row.test.statusDays === 0 ? '오늘부터' : `${row.test.statusDays}일째` }}
+              </p>
+            </template>
           </div>
           <div v-else class="flex items-center gap-2">
             <TestStatusBadge status="draft" />
@@ -484,26 +502,6 @@ const area =
           </div>
 
           <dl class="flex flex-col gap-0.5">
-            <div class="flex min-h-9 items-center gap-2">
-              <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">레벨</dt>
-              <dd class="min-w-0 grow">
-                <Select
-                  :model-value="level ?? 'none'"
-                  @update:model-value="(v) => setLevel(String(v))"
-                >
-                  <SelectTrigger :class="ghost" aria-label="레벨">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">정하지 않음</SelectItem>
-                    <SelectItem v-for="o in TEST_LEVEL_OPTIONS" :key="o.value" :value="o.value">
-                      {{ o.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </dd>
-            </div>
-
             <div class="flex min-h-9 items-center gap-2">
               <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">담당자</dt>
               <dd class="min-w-0 grow">

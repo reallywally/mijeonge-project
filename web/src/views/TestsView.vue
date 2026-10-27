@@ -38,7 +38,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { kstToday } from '@/lib/date'
-import { dueLeftLabel, testLevelLabel, testStatusLabel } from '@/lib/testcase'
+import { dueLeftLabel, testStatusLabel } from '@/lib/testcase'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { matchesNowCard, TEST_NOW_CARDS, useTestStore } from '@/stores/test'
@@ -184,7 +184,7 @@ const STRIPE: Record<TestStatus, string> = {
 const barLegend = [
   { label: '묶음 · 하위 테스트의 기간', bar: 'h-2 rounded-full bg-border' },
   { label: '테스트 중', bar: 'h-4 rounded-sm border border-primary bg-secondary' },
-  { label: '통과', bar: 'h-4 rounded-sm bg-primary' },
+  { label: '성공', bar: 'h-4 rounded-sm bg-primary' },
   { label: '실패 · 막힘', bar: 'h-4 rounded-sm bg-destructive' },
   {
     label: '기간 지남 · 오래 걸림',
@@ -557,9 +557,6 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                   <TableHead class="h-10 w-[150px] text-xs font-medium text-muted-foreground"
                     >태그</TableHead
                   >
-                  <TableHead class="h-10 w-[48px] text-xs font-medium text-muted-foreground"
-                    >레벨</TableHead
-                  >
                   <TableHead class="h-10 w-[88px] text-xs font-medium text-muted-foreground"
                     >상태</TableHead
                   >
@@ -629,9 +626,6 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                     </span>
                     <span v-else class="text-sm text-muted-foreground">—</span>
                   </TableCell>
-                  <TableCell class="text-xs text-muted-foreground">{{
-                    testLevelLabel(row.test.level) || '—'
-                  }}</TableCell>
                   <TableCell><TestStatusBadge :status="row.status" /></TableCell>
                   <TableCell class="text-xs text-muted-foreground">{{ daysLabel(row) }}</TableCell>
                   <TableCell><TestSignalChips :signals="row.signals" :max="2" /></TableCell>
@@ -650,7 +644,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                 </TableRow>
                 <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
                   <TableCell
-                    colspan="9"
+                    colspan="8"
                     class="h-[110px] text-center text-sm text-muted-foreground"
                   >
                     {{

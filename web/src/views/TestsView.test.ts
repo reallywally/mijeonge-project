@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
+import { Select } from '@/components/ui/select'
 import { useAuthStore } from '@/stores/auth'
 import { useTestStore } from '@/stores/test'
 import TasksView from './TasksView.vue'
@@ -167,16 +168,16 @@ describe("테스트 화면 — '지금'", () => {
 })
 
 describe('테스트 상세', () => {
-  it('줄을 누르면 주소가 붙고 상태 · N일째가 보인다. [통과] 로 바꾼다', async () => {
+  it('줄을 누르면 주소가 붙고 상태 · N일째가 보인다. [성공] 으로 바꾼다', async () => {
     await mountAt('/tests')
     await click($('[data-test-row="tc3"]'))
     expect(window.location.pathname).toBe('/tests/tc3')
     expect(popupText()).toContain('비밀번호 5회 틀림 잠금')
     expect(text('[data-test-since]')).toBe('테스트 중 · 12일째')
 
-    await click(button('통과'))
+    await click(button('성공'))
     expect(useTestStore().byId.tc3.status).toBe('pass')
-    expect(text('[data-test-since]')).toBe('통과 · 오늘부터')
+    expect(text('[data-test-since]')).toBe('성공 · 오늘부터')
   })
 
   it('실패는 메모가 있어야 하고 단계 번호를 받는다', async () => {
@@ -193,11 +194,38 @@ describe('테스트 상세', () => {
     expect(text('[data-test-result-note]')).toBe('빈 파일이 받아진다')
   })
 
+  it('결과 버튼은 [성공] · [실패] 둘 — 나머지는 상태 칸에서 고르고, 막힘은 메모를 받은 뒤 보낸다', async () => {
+    const { w } = await mountAt('/tests/tc8')
+    for (const gone of ['테스트 시작', '다시 시작', '막힘', '준비됨', '통과'])
+      expect(button(gone), gone).toBeUndefined()
+    const status = () =>
+      w
+        .findAllComponents(Select)
+        .find((s) => s.props('modelValue') === useTestStore().byId.tc8.status)!
+
+    status().vm.$emit('update:modelValue', 'ready')
+    await flushPromises()
+    expect(useTestStore().byId.tc8.status).toBe('ready')
+
+    status().vm.$emit('update:modelValue', 'blocked')
+    await flushPromises()
+    /* 메모를 받기 전에는 보내지 않는다 */
+    expect(useTestStore().byId.tc8.status).toBe('ready')
+    await type('textarea[aria-label="막힘 메모"]', '내려받기 권한이 없다')
+    await click(button('막힘으로 남기기'))
+    expect(useTestStore().byId.tc8).toMatchObject({
+      status: 'blocked',
+      resultNote: '내려받기 권한이 없다',
+    })
+    expect(text('[data-test-status-days]')).toBe('오늘부터')
+  })
+
   it('묶음은 버튼 대신 하위 요약을 보인다', async () => {
     await mountAt('/tests/tc5')
     expect(text('[data-test-group-summary]')).toContain('실패')
     expect($$('[data-test-child]').map((r) => r.dataset.testChild)).toEqual(['tc6', 'tc7', 'tc8'])
-    expect(button('테스트 시작')).toBeUndefined()
+    expect(button('성공')).toBeUndefined()
+    expect(document.body.querySelector('[aria-label="상태"]')).toBeNull()
   })
 
   it('기준 바뀜이면 바뀐 결정 줄을 보이고 [그대로 맞다] 로 푼다', async () => {

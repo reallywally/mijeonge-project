@@ -1,6 +1,9 @@
 # 테스트 — 합의 (2026-10-27)
 
 > 기획은 `docs/test-proposal.md`, 결정은 `docs/api/decisions.md` Q53 ~ Q58.
+> **2026-10-27 고침 (사용자)** — 레벨을 걷었다(화면 · API · DB, 리비전 `0018_test_drop_level`). 상세의 결과 버튼은 **[성공] · [실패]** 둘이고,
+> 작성 중 · 준비됨 · 테스트 중 · 막힘은 상태 칸에서 고른다. 화면 말 '통과' 는 **'성공'** 이다(값은 그대로 `pass`).
+>
 > 순서는 `server/PLAN.md` 16단계 · `web/PLAN.md` 16단계. **이 문서는 1단계(AI 없이)의 계약이다** —
 > AI 셋(검토 · 빠진 테스트 찾기 · 바뀐 자리 설명)과 챗봇 도구는 끝의 '나중' 에 테두리만 두고, 시작할 때 이 문서를 고친다.
 
@@ -14,7 +17,7 @@
 | 따로 둔다 | 테이블 `test_case` · 경로 `/api/.../tests` · 화면 '테스트' 메뉴. 스냅샷에 싣지 않는다 (Q55) | 진척 · 리스크 · 리포트 · 작업 간트에 처음부터 섞이지 않는다. 스냅샷은 작업 · 안건 화면의 것이다 |
 | 작업 · 안건과는 | **참조 태그** — 테스트 하나에 작업 · 안건 0 ~ 20개 (Q56) | 테스트는 작업에 매달리지 않는다. 작업이 지워지면 그 태그만 빠진다 |
 | 묶음 | **상위 테스트** `parentId` — 작업의 상위 작업과 같은 규칙(같은 프로젝트 · 고리 금지) | 간트가 계층 트리로 보인다 |
-| 상태 | `draft` 작성 중 · `ready` 준비됨 · `testing` 테스트 중 · `pass` 통과 · `fail` 실패 · `blocked` 막힘. **이력은 없다** — 마지막으로 바뀐 때 · 누가만 남는다 (Q54) | 반복해서 돌리지 않는다. 지금이 보이면 된다 |
+| 상태 | `draft` 작성 중 · `ready` 준비됨 · `testing` 테스트 중 · `pass` 성공 · `fail` 실패 · `blocked` 막힘. **이력은 없다** — 마지막으로 바뀐 때 · 누가만 남는다 (Q54) | 반복해서 돌리지 않는다. 지금이 보이면 된다 |
 | 며칠째 · 신호 | **서버가 센다** — `statusDays` · `signals`. 문턱값은 그 프로젝트의 리스크 기준(`RiskSettings`) | 리스크 · 리포트처럼 집계를 서버가 하는 예외다. 같은 셈을 나중의 챗봇 도구 · AI 가 쓴다 |
 | 쓰는 사람 | 그 프로젝트 멤버 누구나 쓰고 · 고치고 · 상태를 바꾼다. **지우기만** 만든 사람 · 프로젝트 관리자 · 시스템 관리자 (Q53) | 회의록 · 리포트와 같은 경계 |
 
@@ -35,7 +38,6 @@ test_case
   status_changed_by  → member, null 가능
   failed_step      int, null 가능          -- status = 'fail' 일 때만 값이 있다
   result_note      text not null default '' -- status 가 'fail' · 'blocked' 일 때만 비어 있지 않다
-  level            'functional' | 'integration' | 'acceptance', null 가능
   start · due      date, null 가능
   owner_id → member · part_id (복합 FK, 작업과 같게)   null 가능
   basis_seq        bigint, null 가능
@@ -64,7 +66,6 @@ test_ref
 
 ```ts
 export type TestStatus = 'draft' | 'ready' | 'testing' | 'pass' | 'fail' | 'blocked'
-export type TestLevel = 'functional' | 'integration' | 'acceptance'
 export type TestSignal =
   | 'longRunning' // 오래 걸림
   | 'overdue' // 기간 지남
@@ -109,7 +110,6 @@ export interface TestCase {
   failedStep: number | null
   /** fail · blocked 의 메모. 그 밖엔 '' */
   resultNote: string
-  level: TestLevel | null
   /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
   start: string | null
   due: string | null
@@ -124,7 +124,7 @@ export interface TestCase {
 }
 ```
 
-- **`null` 이 나가는 자리**는 위 타입에 `| null` 로 적은 아홉뿐이다(`parentId` · `statusChangedBy` · `failedStep` · `level` · `start` · `due` · `ownerId` · `partId` · `createdBy`). 나머지 빈 값은 `''` · `[]` (Q17 과 같은 규칙)
+- **`null` 이 나가는 자리**는 위 타입에 `| null` 로 적은 여덟뿐이다(`parentId` · `statusChangedBy` · `failedStep` · `start` · `due` · `ownerId` · `partId` · `createdBy`). 나머지 빈 값은 `''` · `[]` (Q17 과 같은 규칙)
 - `refs` 는 `kind` (task 먼저) → 그 작업 · 안건의 `seq` 순. `steps` 는 단계 순
 
 ### 요청
@@ -140,7 +140,6 @@ export interface TestInput {
   steps?: TestStep[]
   /** 작업 · 안건 상세의 [테스트 추가] 가 미리 채운다 */
   refs?: TestRef[]
-  level?: TestLevel | null
   start?: string | null
   due?: string | null
   ownerId?: string | null
@@ -157,7 +156,6 @@ export interface TestPatch {
   testData?: string
   /** 보내면 단계 전체를 이것으로 바꾼다(순서 · 짝을 한 번에) */
   steps?: TestStep[]
-  level?: TestLevel | null
   start?: string | null
   due?: string | null
   ownerId?: string | null
@@ -257,14 +255,14 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 
 - **왼쪽 메뉴 '테스트'** (`/tests`) — 보기 **[목록 \| 간트]**(`?view=gantt`), [내 파트 \| 전체], 제목 · 담당자 거르기
   - **맨 위 '지금'** — 숫자 카드(테스트 중 · 오래 걸림 · 기간 지남 · 막힘 · 실패 · 기준 바뀜, 누르면 거른다) · **지금 테스트 중** 표(담당 · N일째 · 남은 / 지난 날) · **손쓸 테스트** 표(신호가 붙은 것 — 기간 지남 · 오래 막힘 · 오래 걸림 순, 같으면 N일째가 긴 것부터)
-  - **목록** — 키 · 제목 · 경로(상위 테스트) · 태그 칩 · 레벨 · 상태 · N일째 · 신호 칩 · 기간 · 담당
+  - **목록** — 키 · 제목 · 경로(상위 테스트) · 태그 칩 · 상태 · N일째 · 신호 칩 · 기간 · 담당
   - **간트** — 작업 간트(`TaskGantt`)를 테스트에도 쓴다. 왼쪽 묶음 트리(키 · 제목 · 상태 배지), 막대는 테스트 기간, 끌어서 기간 바꾸기(= `PATCH`), 줄 [+] 로 그 묶음 아래 추가. 선행 화살표는 없다
   - **묶음의 상태** — 하위 상태 중 가장 나쁜 것: `fail` > `blocked` > `testing` > `draft` · `ready` > `pass`. 묶음의 신호는 하위 신호를 모은 것
 - **테스트 상세** — 작업 상세와 따로 만든 팝업(`/tests/:id`), 추가는 `/tests/new`(작업 · 안건 상세에서 오면 `?task=` · `?thread=` 로 태그를 미리 채운다)
-  - 위: 키 · 제목 · 상태(N일째) · 레벨 · 담당자 · 파트 · 상위 테스트 · 기간
+  - 위: 키 · 제목 · 상태(N일째, 고르기) · 담당자 · 파트 · 상위 테스트 · 기간
   - 태그 칩 — 작업 번호 · 안건 제목으로 찾아 건다. 누르면 그 작업 · 안건 상세
   - 목적 · 사전조건 · 테스트 데이터 · **단계 표**(`#` · 행동 · 기대 결과, 줄 추가 · 끌어 순서 · 지우기)
-  - **상태 바꾸기** — [테스트 시작] · [통과] · [실패] · [막힘] (실패 · 막힘은 메모, 실패는 단계 번호도). 묶음이면 버튼 대신 하위 요약
+  - **상태 바꾸기** — 결과 버튼은 **[성공] · [실패]** 둘(실패는 메모 · 단계 번호). 작성 중 · 준비됨 · 테스트 중 · 막힘은 위 **상태 칸에서 고른다**(작업 상세의 상태 고르기와 같은 방식, 막힘을 고르면 메모를 받는다). 묶음이면 버튼 · 고르기 대신 하위 요약
   - 기준 바뀜이면 `changedEntryIds` 의 Entry 를 안건 이력처럼 보이고 [그대로 맞다](= `POST .../basis`)
 - **작업 상세 · 안건 상세** — '이 작업(안건)을 태그한 테스트' 를 읽기 전용 칩(상태 색)으로, [테스트 추가]
 
@@ -302,7 +300,7 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 - 만들 때 같은 태그를 여러 번 보내면 하나로 친다. 20개는 겹친 것을 뺀 수로 센다. `PUT` 으로 이미 있는 태그를 다시 거는 것은 20개여도 된다
 - `statusDays` 는 0 아래로 내려가지 않는다(바뀐 날이 오늘보다 뒤인 데이터)
 
-**시드** (`server/scripts/seed.py` 의 `SEED_TESTS`) — **목업 `web/src/fixtures/tests.ts` 와 같은 줄**이다(id `tc1` ~ `tc8` · 글자 · 담당 · 파트 · 레벨 · 시각 · 단계). 단계 id `tc2s0` 꼴 · 태그 id `tc2r0` 꼴은 서버만 쓴다. p1 의 `next_test_no` 는 9
+**시드** (`server/scripts/seed.py` 의 `SEED_TESTS`) — **목업 `web/src/fixtures/tests.ts` 와 같은 줄**이다(id `tc1` ~ `tc8` · 글자 · 담당 · 파트 · 시각 · 단계). 단계 id `tc2s0` 꼴 · 태그 id `tc2r0` 꼴은 서버만 쓴다. p1 의 `next_test_no` 는 9
 - 바뀐 시각은 표의 날 12:00 KST(`03:00Z`), 묶음 · `createdAt` 은 `2026-09-30T01:00:00Z`. 담당 = 바꾼 사람 = 만든 사람
 - **T2** — 작업 `k4`(개발 환경 설정 — `t1` · `t2` 에 걸려 있다) 태그, `basis_seq = 3`(닿는 안건의 최댓값 `e3`) → `changedEntryIds = []`. 태그한 작업으로 안건에 닿지만 바뀐 것이 없는 줄
 - **T3** — 안건 `t3`(미룸 `e4` 만 있다) 태그, `basis_seq = 4` → `[]`
@@ -314,7 +312,7 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 
 계약이 말하지 않아 화면이 정한 것이다.
 
-- **[준비됨] 버튼** — 작성 중일 때만 보인다. 계약의 네 버튼([테스트 시작] · [통과] · [실패] · [막힘])만으로는 준비됨으로 갈 길이 없다
+- ~~**[준비됨] 버튼**~~ — 2026-10-27 고침으로 걷었다. 준비됨은 상태 칸에서 고른다
 - **묶음 막대의 기간** — 하위 테스트 기간을 덮는 범위로 그린다. 묶음 자기 `start` · `due` 는 간트에서 쓰지 않는다(작업 간트의 상위 막대와 같은 성격). 막대는 시작 · 기한이 둘 다 있을 때만 선다
 - **묶음 상태에서 작성 중 · 준비됨이 섞이면** '작성 중' 으로 보인다
 - **'지금' 의 카드 · 표는 묶음이 아닌 테스트만 센다** — 묶음까지 세면 같은 테스트가 두 번 든다. 테스트 중 · 막힘 · 실패 카드는 상태로, 나머지는 신호로 센다. 묶음 신호는 하위 신호를 겹치지 않게 모은 목록

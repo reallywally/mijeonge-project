@@ -119,7 +119,8 @@ async def test_seed_status_days_and_details(client: httpx.AsyncClient) -> None:
         "expected": "대시보드가 열리고 이름이 보인다",
     }
     assert rows["HW-T7"]["statusChangedBy"] == "u1" and rows["HW-T8"]["partId"] == "pt1"
-    assert rows["HW-T8"]["level"] is None and rows["HW-T1"]["level"] == "acceptance"
+    # 레벨은 걷었다 (2026-10-27 고침)
+    assert not any("level" in row for row in rows.values())
     assert rows["HW-T2"]["parentId"] == "tc1"
 
 
@@ -177,7 +178,7 @@ async def test_create_minimal(client: httpx.AsyncClient) -> None:
         [],
     )
     assert body["purpose"] == body["precondition"] == body["testData"] == body["resultNote"] == ""
-    for key in ("parentId", "failedStep", "level", "start", "due", "ownerId", "partId"):
+    for key in ("parentId", "failedStep", "start", "due", "ownerId", "partId"):
         assert body[key] is None
     assert body["createdAt"].endswith("Z") and body["statusChangedAt"] == body["createdAt"]
     assert await one(client, body["id"]) == body
@@ -216,6 +217,7 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
                 {"kind": "task", "id": "k4"},
                 {"kind": "task", "id": "k4"},
             ],
+            # 걷은 칸 — 옛 화면이 보내도 오류 없이 버린다
             "level": "integration",
             "start": "2026-10-16",
             "due": "2026-10-20",
@@ -234,8 +236,8 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
         {"kind": "task", "id": "k21"},
         {"kind": "thread", "id": "t3"},
     ]
-    assert (body["level"], body["start"], body["due"], body["ownerId"]) == (
-        "integration",
+    assert "level" not in body
+    assert (body["start"], body["due"], body["ownerId"]) == (
         "2026-10-16",
         "2026-10-20",
         "u3",
@@ -252,12 +254,12 @@ async def test_part_null_means_common_even_under_a_parent(client: httpx.AsyncCli
 async def test_patch_changes_only_what_was_sent(client: httpx.AsyncClient) -> None:
     res = await client.patch(
         "/api/tests/tc3",
-        json={"title": " 잠금 5회 ", "level": None, "due": "2026-10-09", "status": "pass"},
+        json={"title": " 잠금 5회 ", "level": "unit", "due": "2026-10-09", "status": "pass"},
     )
     assert res.status_code == 200
     body = res.json()
     assert body["title"] == "잠금 5회"
-    assert body["level"] is None
+    assert "level" not in body
     assert (body["start"], body["due"]) == ("2026-10-06", "2026-10-09")
     # 상태 · 태그는 PATCH 로 안 바뀐다
     assert body["status"] == "testing" and body["refs"] == [{"kind": "thread", "id": "t3"}]
@@ -315,7 +317,6 @@ async def test_get_missing_is_404(client: httpx.AsyncClient) -> None:
         ({"title": "t", "steps": [{"action": "a"}] * 51}, "steps"),
         ({"title": "t", "steps": [{"action": "a"}, {"action": "b"}, {"action": "  "}]}, None),
         ({"title": "t", "steps": [{"action": "a", "expected": "가" * 4001}]}, "steps.0.expected"),
-        ({"title": "t", "level": "unit"}, "level"),
         ({"title": "t", "start": "2026-10-20", "due": "2026-10-19"}, "due"),
         ({"title": "t", "refs": [{"kind": "label", "id": "x"}]}, "refs.0.kind"),
     ],

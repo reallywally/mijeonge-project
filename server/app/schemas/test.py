@@ -6,7 +6,6 @@ from pydantic import Field, StringConstraints
 from app.schemas.base import Schema, Utc
 
 TestStatus = Literal["draft", "ready", "testing", "pass", "fail", "blocked"]
-TestLevel = Literal["functional", "integration", "acceptance"]
 # 순서가 곧 signals 배열의 순서다 (계약의 신호 표)
 TestSignal = Literal[
     "longRunning", "overdue", "notStarted", "longBlocked", "failedIdle", "basisChanged"
@@ -65,7 +64,6 @@ class TestCaseOut(Schema):
     status_days: int
     failed_step: int | None
     result_note: str
-    level: str | None
     start: date | None
     due: date | None
     owner_id: str | None
@@ -87,7 +85,6 @@ class TestCreate(Schema):
     steps: TestSteps = []
     # 개수(20) 는 400 `TEST_REF_LIMIT` 이라 서비스가 본다
     refs: list[TestRefIn] = []
-    level: TestLevel | None = None
     start: date | None = None
     due: date | None = None
     owner_id: str | None = None
@@ -108,7 +105,6 @@ class TestPatch(Schema):
     precondition: TestText = ""
     test_data: TestText = ""
     steps: TestSteps = []
-    level: TestLevel | None = None
     start: date | None = None
     due: date | None = None
     owner_id: str | None = None

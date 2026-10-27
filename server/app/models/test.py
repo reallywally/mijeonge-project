@@ -19,7 +19,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, new_id
 
 TEST_STATUSES = ("draft", "ready", "testing", "pass", "fail", "blocked")
-TEST_LEVELS = ("functional", "integration", "acceptance")
 
 
 class TestCase(Base):
@@ -33,7 +32,6 @@ class TestCase(Base):
     __tablename__ = "test_case"
     __table_args__ = (
         CheckConstraint(f"status in {TEST_STATUSES}", name="status"),
-        CheckConstraint(f"level is null or level in {TEST_LEVELS}", name="level"),
         CheckConstraint("parent_id is null or parent_id <> id", name="parent_not_self"),
         # 서비스가 지키는 규칙의 안전망 — 실패 단계 · 메모가 다른 상태에 남지 않게
         CheckConstraint(
@@ -64,7 +62,6 @@ class TestCase(Base):
     status_changed_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     failed_step: Mapped[int | None] = mapped_column(Integer)
     result_note: Mapped[str] = mapped_column(Text, default="", server_default="")
-    level: Mapped[str | None] = mapped_column(String(16))
     start: Mapped[date | None] = mapped_column(Date)
     due: Mapped[date | None] = mapped_column(Date)
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))

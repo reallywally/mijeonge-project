@@ -41,7 +41,6 @@ function mk(
     statusChangedBy: owner,
     failedStep: null,
     resultNote: '',
-    level: 'functional',
     start: null,
     due: null,
     ownerId: owner,
@@ -56,7 +55,6 @@ function mk(
 export const testCases: MockTestCase[] = [
   mk(1, '로그인 시나리오', 'u2', {
     status: 'draft',
-    level: 'acceptance',
     purpose: '사내 계정으로 들어오는 길을 처음부터 끝까지 따라간다.',
   }),
   mk(2, '올바른 계정으로 로그인', 'u2', {
@@ -107,7 +105,6 @@ export const testCases: MockTestCase[] = [
   }),
   mk(5, '계정 배포 시나리오', 'u3', {
     status: 'draft',
-    level: 'integration',
     partId: 'pt1',
     purpose: '개발자 계정을 만들어 나눠 주고 권한을 거르는 흐름.',
   }),
@@ -116,7 +113,6 @@ export const testCases: MockTestCase[] = [
     status: 'blocked',
     statusChangedAt: noon('2026-10-02'),
     resultNote: 'DB 설치(HW-20)가 안 끝나 계정을 만들 DB 가 없다.',
-    level: 'integration',
     partId: 'pt1',
     steps: [
       { action: '계정 목록 파일을 올린다', expected: '' },
@@ -142,7 +138,6 @@ export const testCases: MockTestCase[] = [
     parentId: 'tc5',
     status: 'testing',
     statusChangedAt: noon('2026-10-14'),
-    level: null,
     partId: 'pt1',
     steps: [{ action: '[계정 목록 내려받기]', expected: '모든 계정이 담긴 CSV 가 받아진다' }],
   }),

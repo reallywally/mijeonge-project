@@ -733,7 +733,6 @@ class SeedTest:
     refs: list[tuple[str, str]] = field(default_factory=list)
     failed_step: int | None = None
     note: str = ""
-    level: str | None = "functional"
     start: str | None = None
     due: str | None = None
     part: str | None = None
@@ -745,7 +744,6 @@ SEED_TESTS: list[SeedTest] = [
         "로그인 시나리오",
         "u2",
         "draft",
-        level="acceptance",
         purpose="사내 계정으로 들어오는 길을 처음부터 끝까지 따라간다.",
     ),
     SeedTest(
@@ -802,7 +800,6 @@ SEED_TESTS: list[SeedTest] = [
         "계정 배포 시나리오",
         "u3",
         "draft",
-        level="integration",
         part="pt1",
         purpose="개발자 계정을 만들어 나눠 주고 권한을 거르는 흐름.",
     ),
@@ -813,7 +810,6 @@ SEED_TESTS: list[SeedTest] = [
         noon("2026-10-02"),
         parent="tc5",
         note="DB 설치(HW-20)가 안 끝나 계정을 만들 DB 가 없다.",
-        level="integration",
         part="pt1",
         steps=[
             ("계정 목록 파일을 올린다", ""),
@@ -843,7 +839,6 @@ SEED_TESTS: list[SeedTest] = [
         "testing",
         noon("2026-10-14"),
         parent="tc5",
-        level=None,
         part="pt1",
         steps=[("[계정 목록 내려받기]", "모든 계정이 담긴 CSV 가 받아진다")],
     ),
@@ -867,7 +862,6 @@ def test_cases() -> list[TestCase]:
             status_changed_by=row.owner,
             failed_step=row.failed_step,
             result_note=row.note,
-            level=row.level,
             start=d(row.start),
             due=d(row.due),
             owner_id=row.owner,

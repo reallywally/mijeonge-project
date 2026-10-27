@@ -954,7 +954,6 @@ export type ReportEvent =
 /* ── 테스트 (docs/api/test.md) — 작업과 따로 둔다. 스냅샷에 싣지 않고 프로젝트 단위로 받는다 ── */
 
 export type TestStatus = 'draft' | 'ready' | 'testing' | 'pass' | 'fail' | 'blocked'
-export type TestLevel = 'functional' | 'integration' | 'acceptance'
 export type TestSignal =
   | 'longRunning' // 오래 걸림
   | 'overdue' // 기간 지남
@@ -999,7 +998,6 @@ export interface TestCase {
   failedStep: number | null
   /** fail · blocked 의 메모. 그 밖엔 '' */
   resultNote: string
-  level: TestLevel | null
   /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
   start: string | null
   due: string | null
@@ -1023,7 +1021,6 @@ export interface TestInput {
   steps?: TestStep[]
   /** 작업 · 안건 상세의 [테스트 추가] 가 미리 채운다 */
   refs?: TestRef[]
-  level?: TestLevel | null
   start?: string | null
   due?: string | null
   ownerId?: string | null
@@ -1040,7 +1037,6 @@ export interface TestPatch {
   testData?: string
   /** 보내면 단계 전체를 이것으로 바꾼다(순서 · 짝을 한 번에) */
   steps?: TestStep[]
-  level?: TestLevel | null
   start?: string | null
   due?: string | null
   ownerId?: string | null

@@ -33,7 +33,7 @@ describe('신호 — 서버와 같은 셈(목업이 쓴다)', () => {
     expect(testSignals({ ...open, statusDays: 8 }, TODAY, 7)).toEqual(['longRunning'])
   })
 
-  it('기간 지남 · 시작 안 함 — 오늘과 견준다, 통과면 기간이 지나도 아님', () => {
+  it('기간 지남 · 시작 안 함 — 오늘과 견준다, 성공이면 기간이 지나도 아님', () => {
     expect(testSignals({ ...base, due: '2026-10-14' }, TODAY, 7)).toEqual(['overdue'])
     expect(testSignals({ ...base, due: '2026-10-15' }, TODAY, 7)).toEqual([])
     expect(testSignals({ ...base, status: 'pass', due: '2026-10-01' }, TODAY, 7)).toEqual([])
@@ -68,7 +68,7 @@ describe('신호 — 서버와 같은 셈(목업이 쓴다)', () => {
 })
 
 describe('묶음 · 손쓸 테스트', () => {
-  it('묶음의 상태는 하위 중 가장 나쁜 것 — 실패 > 막힘 > 테스트 중 > 작성 중 · 준비됨 > 통과', () => {
+  it('묶음의 상태는 하위 중 가장 나쁜 것 — 실패 > 막힘 > 테스트 중 > 작성 중 · 준비됨 > 성공', () => {
     expect(worstStatus(['pass', 'testing', 'ready'])).toBe('testing')
     expect(worstStatus(['blocked', 'fail', 'testing'])).toBe('fail')
     expect(worstStatus(['pass', 'blocked'])).toBe('blocked')

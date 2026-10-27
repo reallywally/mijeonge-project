@@ -357,6 +357,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 - [x] `app/models/test.py` · `app/schemas/test.py`(camelCase alias) · `app/services/test.py` · `app/api/test.py` — 엔드포인트 아홉. 422 `detail` 은 `steps.2.action` · `refs.0.kind` 까지 짚는다(`errors.py` 의 `_INDEXED`)
 - [x] 시드 HW-T1 ~ T8 — 목업 `web/src/fixtures/tests.ts` 를 그대로(id `tc1` ~ `tc8`). 고른 태그 · `basis_seq` 는 계약의 '구현에서 메운 것'
 - [x] 검사 — `tests/test_test.py`(CRUD · 검사 오류 코드 전부 · 권한 · 다른 프로젝트 404 · 상태 규칙 · 신호 여섯과 경계값 · 기준 설정을 바꾸면 신호가 바뀜 · 기준 바뀜이 PATCH · basis · 태그로 지워짐 · 태그한 작업으로 닿는 안건 · 키 발번 · 작업 · 안건을 지우면 태그만 빠짐 · 목록 쿼리 수가 테스트 수에 안 늘어남) · `test_contract_types.py` 의 테스트 모양
+- [x] 2026-10-27 고침 — 레벨을 걷었다(사용자 결정). 리비전 `0018_test_drop_level`(batch 로 CHECK · 열 지우기, downgrade 는 null 가능 열로만 되살림 — 값은 안 돌아온다) · 모델 · 스키마 · 시드 · 검사에서 `level` 을 뺐다. 요청에 `level` 이 와도 버린다(`Schema` 는 extra 를 따로 정하지 않아 Pydantic 기본 `ignore`)
 - [ ] `API.md` 의 엔드포인트 줄을 `구현` 으로 — 프론트 에이전트와 겹치지 않게 이번에는 안 건드렸다
 - [ ] 개발 DB — `alembic upgrade head` 와 시드는 사람이 돌린다
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { Ban, Check, Clock, Play, ThumbsUp, X } from 'lucide-vue-next'
+import { computed, nextTick, ref, watch } from 'vue'
+import { Clock, ThumbsUp, X } from 'lucide-vue-next'
 import TestSignalChips from '@/components/app/TestSignalChips.vue'
 import TestStatusBadge from '@/components/app/TestStatusBadge.vue'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,8 @@ import { useDataStore } from '@/stores/data'
 import { useTestStore } from '@/stores/test'
 import type { TestRow, TestStatus, TestStatusInput } from '@/types/domain'
 
-/* 상태 바꾸기 — [테스트 시작] · [통과] · [실패] · [막힘]. 실패 · 막힘은 메모를 받고, 실패는 몇 번째 단계였는지도.
+/* 상태 바꾸기 — 결과 버튼은 [성공] · [실패] 둘이다. 작성 중 · 준비됨 · 테스트 중 · 막힘은 상세 위쪽 상태 칸에서 고르고,
+   그 칸이 pick 을 부른다. 실패 · 막힘은 여기서 메모를 받고, 실패는 몇 번째 단계였는지도 받은 뒤 보낸다.
    이력은 없다 — 지금 상태 · N일째 · 누가 바꿨는지만 보이고 다시 돌리면 덮어쓴다 (Q54).
    묶음은 직접 돌리지 않는다 — 버튼 대신 하위 요약을 보인다 */
 const props = defineProps<{ row: TestRow }>()
@@ -55,9 +56,22 @@ function ask(status: 'fail' | 'blocked') {
   problem.value = ''
 }
 
-function send(status: TestStatus) {
+const form = ref<HTMLElement | null>(null)
+
+/** 상태 칸 · 버튼이 고른 상태 — 실패 · 막힘은 메모 칸을 열고, 그 밖은 바로 보낸다 */
+async function pick(status: TestStatus) {
+  if (status === 'fail' || status === 'blocked') {
+    ask(status)
+    await nextTick()
+    form.value?.scrollIntoView?.({ block: 'nearest' })
+    form.value?.querySelector('textarea')?.focus()
+    return
+  }
+  asking.value = null
   emit('set', { status })
 }
+
+defineExpose({ pick })
 
 function submit() {
   const status = asking.value
@@ -158,34 +172,22 @@ const childCounts = computed(() => {
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
-        <Button v-if="test.status === 'draft'" variant="outline" size="sm" @click="send('ready')">
-          <Check class="size-3.5" />
-          준비됨
-        </Button>
-        <Button
-          :variant="test.status === 'testing' ? 'outline' : 'default'"
-          size="sm"
-          @click="send('testing')"
-        >
-          <Play class="size-3.5" />
-          {{ test.status === 'testing' ? '다시 시작' : '테스트 시작' }}
-        </Button>
-        <Button variant="outline" size="sm" @click="send('pass')">
+        <Button variant="outline" size="sm" @click="pick('pass')">
           <ThumbsUp class="size-3.5" />
-          통과
+          성공
         </Button>
-        <Button variant="outline" size="sm" @click="ask('fail')">
+        <Button variant="outline" size="sm" @click="pick('fail')">
           <X class="size-3.5" />
           실패
         </Button>
-        <Button variant="outline" size="sm" @click="ask('blocked')">
-          <Ban class="size-3.5" />
-          막힘
-        </Button>
+        <span class="text-xs text-muted-foreground"
+          >작성 중 · 준비됨 · 테스트 중 · 막힘은 위 상태 칸에서 고릅니다</span
+        >
       </div>
 
       <div
         v-if="asking"
+        ref="form"
         class="flex flex-col gap-2 rounded-md border border-border bg-muted/50 p-3"
         data-test-status-form
       >

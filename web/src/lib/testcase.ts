@@ -1,5 +1,5 @@
 import { localDay, slashDay } from '@/lib/date'
-import type { TestCase, TestLevel, TestSignal, TestStatus, TestStep } from '@/types/domain'
+import type { TestCase, TestSignal, TestStatus, TestStep } from '@/types/domain'
 
 /* 테스트 (docs/api/test.md). 며칠째 · 신호는 서버가 센다 — 여기의 testSignals 는 목업 api 만 쓴다.
    묶음의 상태 · 신호 모으기, '지금' 의 정렬 · 화면 말은 화면이 정할 몫이라 여기 한 벌로 둔다 */
@@ -9,22 +9,13 @@ export const TEST_STATUS_OPTIONS: { value: TestStatus; label: string }[] = [
   { value: 'draft', label: '작성 중' },
   { value: 'ready', label: '준비됨' },
   { value: 'testing', label: '테스트 중' },
-  { value: 'pass', label: '통과' },
+  { value: 'pass', label: '성공' },
   { value: 'fail', label: '실패' },
   { value: 'blocked', label: '막힘' },
 ]
 
-export const TEST_LEVEL_OPTIONS: { value: TestLevel; label: string }[] = [
-  { value: 'functional', label: '기능' },
-  { value: 'integration', label: '통합' },
-  { value: 'acceptance', label: '인수' },
-]
-
 export const testStatusLabel = (status: TestStatus) =>
   TEST_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? ''
-
-export const testLevelLabel = (level: TestLevel | null) =>
-  level ? (TEST_LEVEL_OPTIONS.find((o) => o.value === level)?.label ?? '') : ''
 
 /** 계약 표의 순서 — 서버가 이 순서로 내고, 묶음에서 모을 때도 이 순서로 둔다 */
 export const TEST_SIGNALS: TestSignal[] = [
@@ -45,7 +36,7 @@ export const TEST_SIGNAL_LABEL: Record<TestSignal, string> = {
   basisChanged: '기준 바뀜',
 }
 
-/** 묶음의 상태 — 하위 중 가장 나쁜 것: 실패 > 막힘 > 테스트 중 > 작성 중 · 준비됨 > 통과 */
+/** 묶음의 상태 — 하위 중 가장 나쁜 것: 실패 > 막힘 > 테스트 중 > 작성 중 · 준비됨 > 성공 */
 const BADNESS: Record<TestStatus, number> = {
   fail: 0,
   blocked: 1,
