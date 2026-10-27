@@ -20,7 +20,7 @@ router = APIRouter(tags=["dependency"])
 async def put_dependency(
     task_id: str, depends_on_id: str, scope: ProjectScope, session: Session
 ) -> TaskDependencyOut:
-    """멱등. 자기 · 상위 ↔ 하위 400, 순환 409, 20개까지."""
+    """멱등. 자기 400, 순환 409, 20개까지."""
     return await dependency_service.put_dependency(session, task_id, depends_on_id, scope.actor.id)
 
 

@@ -24,8 +24,10 @@ const props = withDefaults(
     hint: string
     /** 막대 끝에서 끌어 화살표를 거는가 — 선행이 있는 작업만 */
     linkable?: boolean
+    /** 그리드의 + 열(그 줄 아래에 하나 더) — 계층이 있는 테스트만. 평평한 작업은 머리의 '작업 추가' 를 쓴다 */
+    addable?: boolean
   }>(),
-  { links: () => [], linkable: false },
+  { links: () => [], linkable: false, addable: true },
 )
 const emit = defineEmits<{
   (e: 'open', id: string): void
@@ -126,7 +128,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
     },
     { name: 'status', label: '상태', width: 104, template: statusCell },
     { name: 'owner', label: '담당자', width: 64, align: 'center', template: ownerCell },
-    { name: 'add', label: '', width: 44 },
+    ...(props.addable ? [{ name: 'add', label: '', width: 44 }] : []),
   ]
   applyScale(g)
 

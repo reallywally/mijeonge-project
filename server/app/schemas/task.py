@@ -1,7 +1,8 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import StringConstraints
+from pydantic import AfterValidator, StringConstraints
+from pydantic_core import PydanticCustomError
 
 from app.schemas.base import Schema, Utc
 
@@ -9,6 +10,19 @@ from app.schemas.base import Schema, Utc
 TaskStatusIn = Literal["todo", "doing", "blocked", "done"]
 TaskPriorityIn = Literal["low", "normal", "high"]
 TaskLineKindIn = Literal["check", "bullet"]
+# 한 작업이 걸 수 있는 연관 작업 수 — 중복을 뺀 뒤 센다 (Q61)
+RELATED_MAX = 20
+
+
+def _unique_related(ids: list[str]) -> list[str]:
+    """중복은 한 번으로 친다(처음 나온 순서). 뺀 뒤에도 넘치면 422 `relatedIds`."""
+    unique = list(dict.fromkeys(ids))
+    if len(unique) > RELATED_MAX:
+        raise PydanticCustomError("too_long", f"연관 작업은 {RELATED_MAX}개까지입니다.")
+    return unique
+
+
+RelatedIds = Annotated[list[str], AfterValidator(_unique_related)]
 
 
 class TaskLineOut(Schema):
@@ -24,7 +38,8 @@ class TaskOut(Schema):
     project_id: str
     key: str
     title: str
-    parent_id: str | None
+    # 이 작업이 건 연관 작업 — 건 순서(created_at → related_id). 한 방향이다 (Q61)
+    related_ids: list[str]
     body: list[TaskLineOut]
     status: str
     owner_id: str | None
@@ -63,10 +78,9 @@ class TaskLinePatchIn(TaskLineIn):
 
 
 class TaskCreate(Schema):
-    """`domain.ts` 의 TaskInput. key 는 서버가 발번한다."""
+    """`domain.ts` 의 TaskInput. key 는 서버가 발번한다. 연관 작업은 등록 뒤 상세에서 건다 (Q61)."""
 
     title: str
-    parent_id: str | None = None
     body: list[TaskLineIn] = []
     status: TaskStatusIn = "todo"
     owner_id: str | None = None
@@ -74,8 +88,7 @@ class TaskCreate(Schema):
     due: date | None = None
     priority: TaskPriorityIn = "normal"
     thread_ids: list[str] = []
-    # **키를 안 보내면 상위 작업의 파트를 따른다**(최상위면 null). null 을 보내면 공통 —
-    # 둘을 가르려고 서비스가 `model_fields_set` 으로 읽는다 (docs/api/part.md)
+    # 안 보내거나 null 이면 공통 (Q61 — 상위를 따르는 규칙은 없어졌다)
     part_id: str | None = None
 
 
@@ -84,14 +97,15 @@ class TaskPatch(Schema):
     `{"ownerId": null}`(담당자 지우기)이 무시되면 화면이 조용히 안 먹는다."""
 
     title: str | None = None
-    parent_id: str | None = None
+    # 보내면 통째로 갈아끼운다(exclude_unset 으로 가른다). null 은 422 — 빈 값은 [] 다
+    related_ids: RelatedIds = []
     status: TaskStatusIn | None = None
     owner_id: str | None = None
     # 한쪽만 채우는 것도 받는다. '둘 다 있을 때만'은 간트 화면의 규칙이지 모델의 제약이 아니다
     start: date | None = None
     due: date | None = None
     priority: TaskPriorityIn | None = None
-    # null 로 보내면 공통. 하위 작업은 따라 바뀌지 않는다
+    # null 로 보내면 공통
     part_id: str | None = None
     # 보내면 본문을 통째로 갈아끼운다. 기본값은 '안 보냄' 표시일 뿐이고(exclude_unset 으로 가른다),
     # 본문의 빈 값은 [] 라 null 은 타입에서 422 로 걸린다 (API.md '빈 값은 null 이 아니다')
@@ -105,13 +119,13 @@ PROPOSAL_MAX = 20
 class ProposedTask(Schema):
     """챗봇 초안의 한 줄 — `domain.ts` 의 ProposedTask. 일괄 등록도 이것을 그대로 받는다.
 
-    검사 규칙(개수 · tempId · 상위 순서 · 빈 제목 · 기간)은 여기 두지 않는다 — 몇 번째의 어느 칸인지
-    `tasks.1.parentTempId` 로 짚어야 해서 `services/task.py` 의 `proposal_problems` 가 본다."""
+    검사 규칙(개수 · tempId · 빈 제목 · 기간)은 여기 두지 않는다 — 몇 번째의 어느 칸인지
+    `tasks.1.title` 로 짚어야 해서 `services/task.py` 의 `proposal_problems` 가 본다.
+    초안은 평평하다 — 초안 안끼리의 묶음은 없다 (Q61)."""
 
     temp_id: str
-    parent_temp_id: str | None = None
-    # 이미 있는 작업 밑에 붙일 때 그 작업의 id. parent_temp_id 와 같이 쓰지 않는다
-    parent_id: str | None = None
+    # 이미 있는 작업과 관련된 초안이면 그 작업 id — 등록하면 새 작업이 그 작업을 연관으로 건다
+    related_id: str | None = None
     title: str
     owner_id: str | None = None
     start: date | None = None
@@ -121,7 +135,7 @@ class ProposedTask(Schema):
 
 class BatchTaskIn(ProposedTask):
     """일괄 등록의 한 줄 — 초안에 `partId` 를 더한 것. 초안(`ProposedTask`) 자체에는 두지 않는다 —
-    챗봇이 내는 모양(`proposal` 이벤트)이 그대로 남게. 안 보내면 상위(앞의 줄)의 파트를 따른다."""
+    챗봇이 내는 모양(`proposal` 이벤트)이 그대로 남게. 안 보내면 공통이다."""
 
     part_id: str | None = None
 

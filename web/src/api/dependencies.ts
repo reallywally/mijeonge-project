@@ -25,11 +25,10 @@ const mock = {
     const first = world.tasks.find((t) => t.id === dependsOnId)
     if (!first || first.projectId !== task.projectId)
       throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
-    /* 이미 걸린 관계는 검사 없이 그대로 (멱등) — 상위를 바꿔 지금은 상하위가 된 관계라도. 서버와 같다 */
+    /* 이미 걸린 관계는 검사 없이 그대로 (멱등). 서버와 같다 */
     if (world.taskDependencies.some((d) => d.taskId === taskId && d.dependsOnId === dependsOnId))
       return { taskId, dependsOnId }
-    const own = world.tasks.filter((t) => t.projectId === task.projectId)
-    const problem = dependencyProblem(own, world.taskDependencies, taskId, dependsOnId)
+    const problem = dependencyProblem(world.taskDependencies, taskId, dependsOnId)
     if (problem) {
       const { status, code, message } = DEPENDENCY_ERRORS[problem]
       throw mockError(status, code, message)
@@ -55,7 +54,7 @@ const mock = {
         open.has(s.taskId) &&
         open.has(s.dependsOnId) &&
         !graph.some((d) => d.taskId === s.taskId && d.dependsOnId === s.dependsOnId) &&
-        dependencyProblem(own, graph, s.taskId, s.dependsOnId) === null
+        dependencyProblem(graph, s.taskId, s.dependsOnId) === null
       if (ok) graph.push({ taskId: s.taskId, dependsOnId: s.dependsOnId })
       return ok
     })
@@ -63,7 +62,7 @@ const mock = {
   },
 }
 
-/** 선행 작업 걸기 (멱등). 상하위 400 · 순환 409 · 20개 넘음 400 · 다른 프로젝트 404 */
+/** 선행 작업 걸기 (멱등). 자기 400 · 순환 409 · 20개 넘음 400 · 다른 프로젝트 404 */
 export const putTaskDependency = (taskId: string, dependsOnId: string) =>
   isMockMode()
     ? later(() => mock.put(taskId, dependsOnId))

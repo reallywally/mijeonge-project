@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CalendarDays, CornerDownRight, ListTree, Sparkles, TriangleAlert } from 'lucide-vue-next'
+import { CalendarDays, Link2, ListTree, Sparkles, TriangleAlert } from 'lucide-vue-next'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import { Badge } from '@/components/ui/badge'
@@ -42,10 +42,9 @@ const noteLabel = (kind: ProposedEntryBody['kind']) => (kind === 'defer' ? '사�
 const existing = (threadId: string) => threadStore.rows.find((r) => r.thread.id === threadId)
 const newTitle = (tempId: string) =>
   form.value.threads.find((t) => t.tempId === tempId)?.title || '제목 없는 새 안건'
-const parentLabel = (parentTempId: string | null, parentId: string | null) => {
-  if (parentTempId) return form.value.tasks.find((t) => t.tempId === parentTempId)?.title ?? ''
-  const parent = parentId ? data.allTasks.find((t) => t.id === parentId) : null
-  return parent ? `${parent.key} ${parent.title}` : (parentId ?? '')
+const relatedLabel = (relatedId: string) => {
+  const task = data.allTasks.find((t) => t.id === relatedId)
+  return task ? `${task.key} ${task.title}` : relatedId
 }
 
 /* 끈 줄은 흐리게 — 체크는 흐리지 않아야 다시 켤 자리가 보인다 */
@@ -294,19 +293,14 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
               v-if="
                 t.threadTempIds.length > 0 ||
                 t.threadIds.length > 0 ||
-                t.parentTempId ||
-                t.parentId ||
+                t.relatedId ||
                 t.priority !== 'normal'
               "
               class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
             >
-              <span
-                v-if="t.parentTempId || t.parentId"
-                class="inline-flex items-center gap-1"
-                :class="minutes.losesParent(t.tempId) ? 'line-through' : ''"
-              >
-                <CornerDownRight class="size-3" />
-                {{ parentLabel(t.parentTempId, t.parentId) }} 밑
+              <span v-if="t.relatedId" class="inline-flex items-center gap-1" data-minutes-related>
+                <Link2 class="size-3" />
+                연관: {{ relatedLabel(t.relatedId) }}
               </span>
               <span
                 v-for="tempId in t.threadTempIds"
@@ -339,13 +333,6 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
             >
               <TriangleAlert class="size-3.5 shrink-0" />
               안건 연결이 빠집니다 — {{ minutes.droppedThreads(t.tempId).join(', ') }}
-            </p>
-            <p
-              v-if="minutes.picked[t.tempId] && minutes.losesParent(t.tempId)"
-              class="flex items-center gap-1.5 text-xs text-destructive"
-            >
-              <TriangleAlert class="size-3.5 shrink-0" />
-              상위 작업을 빼서 최상위 작업으로 들어갑니다
             </p>
             <blockquote
               class="border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted-foreground opacity-80"

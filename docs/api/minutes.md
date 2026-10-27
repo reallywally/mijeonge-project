@@ -99,7 +99,7 @@ export interface ProposedMinutesTask extends ProposedTask {
 }
 ```
 
-- `ProposedTask` 는 `chat.md` 의 그것 그대로다(`tempId` · `parentTempId` · `parentId` · `title` · `ownerId` · `start` · `due` · `priority`). 작업 `tempId` 는 `t1`, `t2` …
+- `ProposedTask` 는 `chat.md` 의 그것 그대로다(`tempId` · `relatedId` · `title` · `ownerId` · `start` · `due` · `priority` — 2026-10-27 에 `parentTempId` · `parentId` 를 `relatedId` 로 바꿨다, Q61). 작업 `tempId` 는 `t1`, `t2` …
 - 세 종류의 `tempId` 는 초안 전체에서 서로 다르다(접두사 `n` · `e` · `t`)
 - `kind` 는 화면이 이력에 쓰는 셋뿐이다. `change` · `split` 은 내지 않는다 — 결정을 바꾼 것도 `decide` 다
 
@@ -111,7 +111,7 @@ export interface ProposedMinutesTask extends ProposedTask {
 - `title` · `text` 는 앞뒤 공백을 떼고 비지 않는다. `options` · `detail` 의 빈 줄은 뺀다
 - `ownerId` 는 기존 안건 등록 · 이력 · 작업과 같은 담당자 검사를 받는다. `ownerHint` 는 `ownerId` 가 null 일 때만 채운다
 - `threadId` · `threadIds` 는 그 프로젝트의 안건, `threadTempIds` 는 이 초안의 새 안건
-- 작업 규칙은 `tasks/batch` 그대로 — `parentTempId` 는 자기보다 앞의 작업, `parentId` 와 같이 쓰지 않는다, `start ≤ due`
+- 작업 규칙은 `tasks/batch` 그대로 — 평평한 목록(초안 안끼리의 상위 · 하위 없음), `relatedId` 는 그 프로젝트의 이미 있는 작업, `start ≤ due`
 - 한 안건에 이력은 **하나**까지(같은 `threadId` 둘 금지). 새 안건과 기존 안건이 같은 것을 가리키면 Claude 가 기존 쪽으로 낸다 — 서버는 막지 못한다
 
 ## 게시판 — `Minutes`
@@ -234,11 +234,11 @@ export interface MinutesApplyResult {
 ```
 
 - 만든 안건 · 이력(새 안건의 것 · 기존 안건의 것 모두) · 작업에 **`minutesId` = 그 회의록**. 기존 안건 자체에는 붙이지 않는다
-- 만드는 순서: 새 안건(`queued`, 파트는 공통 `null`) → 그 이력 → 기존 안건의 이력 → 작업(`todo`, 본문 `[]`, `key` 배열 순 발번) → 작업 ↔ 안건 링크
+- 만드는 순서: 새 안건(`queued`, 파트는 공통 `null`) → 그 이력 → 기존 안건의 이력 → 작업(`todo`, 본문 `[]`, 파트는 공통 `null`, `key` 배열 순 발번, `relatedId` 가 있으면 새 작업 → 그 작업 연관 한 줄) → 작업 ↔ 안건 링크
 - 이력이 상태를 바꾸는 규칙은 `POST /api/threads/{threadId}/entries` 와 같다 — `decide` 면 `decided`, 그 밖은 `queued` 면 `open`
 - 이력의 `createdAt` 은 등록하는 지금이다(회의 날짜가 아니다) — 다른 이력과 같은 규칙
 - 화면이 새 안건을 빼면 그 `tempId` 를 가리키는 `threadTempIds` 도 화면이 지우고 보낸다. 남아 있으면 422
-- 오류: 404 `MINUTES_NOT_FOUND` · 422 `VALIDATION_ERROR`(`detail` 은 `threads.N.title` · `entries.N.threadId` · `tasks.N.threadTempIds.0` 처럼 자리를 짚는다 — `tasks/batch` 의 표기를 넓힌다) · 400 `THREAD_NOT_FOUND`(`entries.N.threadId` · `tasks.N.threadIds.M`) · 400 `THREAD_OWNER_NOT_FOUND` · `ENTRY_OWNER_NOT_FOUND` · `TASK_OWNER_NOT_FOUND`(그 자리의 `….ownerId`, 기존 등록 · 이력과 같은 코드 · 같은 경계) · 400 `TASK_PARENT_NOT_FOUND`
+- 오류: 404 `MINUTES_NOT_FOUND` · 422 `VALIDATION_ERROR`(`detail` 은 `threads.N.title` · `entries.N.threadId` · `tasks.N.threadTempIds.0` 처럼 자리를 짚는다 — `tasks/batch` 의 표기를 넓힌다) · 400 `THREAD_NOT_FOUND`(`entries.N.threadId` · `tasks.N.threadIds.M`) · 400 `THREAD_OWNER_NOT_FOUND` · `ENTRY_OWNER_NOT_FOUND` · `TASK_OWNER_NOT_FOUND`(그 자리의 `….ownerId`, 기존 등록 · 이력과 같은 코드 · 같은 경계) · 400 `TASK_RELATED_NOT_FOUND`(`tasks.N.relatedId`)
 - 하나라도 틀리면 아무것도 안 남는다. 발번한 작업 번호도 되돌린다
 
 ### 구현 (2026-10-19, 서버)
@@ -246,9 +246,9 @@ export interface MinutesApplyResult {
 계약이 비워 둔 자리는 이렇게 정했다. 화면이 불편하면 새 Q 로 다시 연다.
 
 - 셋 다 0개인 `apply` 는 422, `detail` 자리는 **`요청`**(어느 묶음의 자리가 아니라서 — 오류 처리기가 요청 전체에 쓰는 이름). 개수 초과는 `threads` · `entries` · `tasks`
-- 400 이 여럿 걸리면 **하나만** 낸다 — 순서는 `THREAD_NOT_FOUND` → `THREAD_OWNER_NOT_FOUND` → `ENTRY_OWNER_NOT_FOUND` → `TASK_OWNER_NOT_FOUND` → `TASK_PARENT_NOT_FOUND`(422 가 늘 먼저). `detail` 에는 그 코드에 걸린 자리를 다 싣는다. `propose_minutes` 는 전부를 한 번에 Claude 에게 돌려준다
+- 400 이 여럿 걸리면 **하나만** 낸다 — 순서는 `THREAD_NOT_FOUND` → `THREAD_OWNER_NOT_FOUND` → `ENTRY_OWNER_NOT_FOUND` → `TASK_OWNER_NOT_FOUND` → `TASK_RELATED_NOT_FOUND`(422 가 늘 먼저). `detail` 에는 그 코드에 걸린 자리를 다 싣는다. `propose_minutes` 는 전부를 한 번에 Claude 에게 돌려준다
 - `ownerHint` 는 `ownerId` 가 있으면 **오류가 아니라 비운다**(초안에서도) — `apply` 는 어차피 버린다
-- `tempId` 는 세 묶음 전체에서 겹치면 422(`….tempId`). 접두사(`n` · `e` · `t`)는 검사하지 않는다 — Claude 에게 프롬프트로만 시킨다. 새 안건의 `tempId` 를 작업의 `parentTempId` 로 쓰면 422
+- `tempId` 는 세 묶음 전체에서 겹치면 422(`….tempId`). 접두사(`n` · `e` · `t`)는 검사하지 않는다 — Claude 에게 프롬프트로만 시킨다.
 - 이력의 담당자는 그 안건 담당자를 그대로 적으면 검사하지 않는다(`POST .../entries` 와 같은 경계). 새 안건의 이력도 그 새 안건의 담당자와 같으면 같다
 - `updatedThreads` 는 이력 때문에 **상태나 담당자**가 바뀐 기존 안건이다 — `decide` 가 이미 정해진 안건의 담당자만 바꿀 때도 실린다
 - 한 작업의 `threadTempIds` · `threadIds` 가 같은 안건을 두 번 가리키면 링크는 하나다

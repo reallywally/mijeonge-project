@@ -56,7 +56,7 @@ class ThreadCreate(Schema):
     # 받은 순서대로 저장한다. 빈 줄 거르기는 화면 몫이다
     options: list[str] = []
     due_date: date | None = None
-    # 안 보내면 공통(null)이다 — 작업과 달리 따를 상위가 없다
+    # 안 보내면 공통(null)이다
     part_id: str | None = None
     # 개수는 겹친 것을 합치기 전에 센다 — 오류 detail 의 자리(`ccIds.1`)가 보낸 배열을 짚는다
     cc_ids: list[str] = Field(default=[], max_length=CC_MAX)

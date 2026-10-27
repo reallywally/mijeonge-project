@@ -21,10 +21,10 @@ export interface GanttItem {
   start_date?: Date
   end_date?: Date
   unscheduled?: boolean
-  /** 자식이 있는 묶음 작업 — 막대가 자식들의 기간이 되고 끌 수 없다 */
+  /** 자식이 있는 묶음(테스트) — 막대가 자식들의 기간이 되고 끌 수 없다 */
   type?: 'project'
   open: boolean
-  /** '내 파트' 에서 보이는 작업의 조상이라 선 것 — 흐리게 그린다 */
+  /** '내 파트' 에서 보이는 테스트의 조상이라 선 것 — 흐리게 그린다 */
   context?: boolean
   /** 기간 지남 · 오래 걸림 — 막대 테두리를 세운다(테스트) */
   late?: boolean
@@ -36,17 +36,8 @@ export const dueToEnd = (due: string) => shiftDays(dayToDate(due), 1)
 /** 막대를 놓은 자리를 다시 우리 날짜로 — 끝에서 하루를 뺀다 */
 export const endToDue = (end: Date) => isoDay(shiftDays(end, -1))
 
-/**
- * 묶음인지 · 부모가 누구인지는 **건네받은 행 안에서** 본다 — '내 파트' 로 거르면 자식이 다 빠진 묶음이
- * 생기는데, 그것을 묶음으로 두면 자식 없는 project 막대가 기간 없이 선다. 부모가 빠졌으면 최상위로 올린다.
- */
-export function toGanttItems(
-  rows: TaskRow[],
-  statusLabel: (s: TaskStatus) => string,
-  isContext: (taskId: string) => boolean = () => false,
-): GanttItem[] {
-  const ids = new Set(rows.map((r) => r.task.id))
-  const parents = new Set(rows.map((r) => r.task.parentId).filter((id) => id !== null))
+/** 작업은 평평하다(Q61) — 모두 뿌리('0') 아래 한 줄씩 선다. 묶음 막대는 테스트에만 있다 */
+export function toGanttItems(rows: TaskRow[], statusLabel: (s: TaskStatus) => string): GanttItem[] {
   return rows.map((row) => {
     const task = row.task
     const scheduled = task.start !== null && task.due !== null
@@ -54,13 +45,11 @@ export function toGanttItems(
       id: task.id,
       text: task.title,
       key: task.key,
-      parent: task.parentId !== null && ids.has(task.parentId) ? task.parentId : '0',
+      parent: '0',
       status: task.status,
       statusLabel: statusLabel(task.status),
       ownerName: row.ownerName,
       open: true,
-      ...(isContext(task.id) ? { context: true } : {}),
-      ...(parents.has(task.id) ? { type: 'project' as const } : {}),
       ...(scheduled
         ? { start_date: dayToDate(task.start!), end_date: dueToEnd(task.due!) }
         : { unscheduled: true }),
@@ -76,7 +65,9 @@ export function weekLabel(start: Date) {
 }
 
 /**
- * 테스트 행을 간트로 — 막대는 테스트 기간이다. 묶음 · 부모는 작업과 같이 건네받은 행 안에서 본다.
+ * 테스트 행을 간트로 — 막대는 테스트 기간이다. 묶음인지 · 부모가 누구인지는 **건네받은 행 안에서** 본다 —
+ * '내 파트' 로 거르면 자식이 다 빠진 묶음이 생기는데, 그것을 묶음으로 두면 자식 없는 project 막대가 기간 없이 선다.
+ * 부모가 빠졌으면 최상위로 올린다.
  * 묶음 줄의 상태는 하위에서 모은 것(row.status)이다
  */
 export function toTestGanttItems(

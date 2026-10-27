@@ -17,24 +17,14 @@ describe('작업 목록', () => {
     expect(task.rows.map((r) => r.task.key)).toEqual(['PAS-1', 'PAS-2'])
   })
 
-  it('계층을 펼치지 않는 대신 경로를 글로 적는다', () => {
+  it('계층 없이 한 줄씩 — 건 연관 작업의 키를 제목 아래 글로 적는다', () => {
     const task = useTaskStore()
     const row = (key: string) => task.rows.find((r) => r.task.key === key)!
 
-    expect(row('HW-8').pathLabel).toBe('개발 › AI Biz › 가상비서')
-    expect(row('HW-5').pathLabel).toBe('최상위 작업 · 하위 3건')
-    expect(row('HW-2').pathLabel).toBe('설계')
-  })
-
-  it('상위 작업을 고르는 자리는 자기까지 포함한 경로를 적는다', () => {
-    const task = useTaskStore()
-    const label = (key: string) =>
-      task.parentOptions.find((o) => o.id === task.rows.find((r) => r.task.key === key)!.task.id)!
-        .label
-
-    expect(label('HW-8')).toBe('개발 › AI Biz › 가상비서 › tool01')
-    expect(label('HW-1')).toBe('설계')
-    expect(task.parentOptions).toHaveLength(22)
+    expect(row('HW-8').relatedLabel).toBe('연관 HW-7')
+    expect(row('HW-1').relatedLabel).toBe('')
+    /* 한 방향 — HW-7 을 건 작업이 있어도 HW-7 쪽에는 안 적힌다 */
+    expect(row('HW-7').relatedLabel).toBe('연관 HW-6')
   })
 
   it('기간이 둘 다 없는 작업만 기간 미정이다', () => {
@@ -76,11 +66,10 @@ describe('작업 상세', () => {
     expect(detail.threads.map((t) => t.deferCount)).toEqual([2])
   })
 
-  it('하위 작업과 끝난 수를 센다', () => {
+  it('건 연관 작업이 건 순서로 따라온다 — 한 방향이라 걸린 쪽에는 없다', () => {
     const task = useTaskStore()
-    const detail = task.taskDetail('k4')!
-    expect(detail.children.map((c) => c.task.key)).toEqual(['HW-19', 'HW-20', 'HW-21', 'HW-22'])
-    expect(detail.doneChildCount).toBe(1)
+    expect(task.taskDetail('k20')!.related.map((r) => r.task.key)).toEqual(['HW-4'])
+    expect(task.taskDetail('k4')!.related).toEqual([])
   })
 
   it('아직 못 정한 안건은 마지막 기록과 그 날짜를 보여준다', () => {
@@ -118,7 +107,6 @@ describe('맵핑', () => {
 describe('작업 추가', () => {
   const input = (title: string) => ({
     title,
-    parentId: null,
     body: [],
     status: 'todo' as const,
     ownerId: null,
@@ -202,5 +190,66 @@ describe('기간 바꾸기', () => {
     expect(task.undatedCount).toBe(1)
     task.setPeriod('k18', '2026-09-28', '2026-10-02')
     expect(task.undatedCount).toBe(0)
+  })
+})
+
+describe('연관 작업', () => {
+  const keys = (task: ReturnType<typeof useTaskStore>, id: string) =>
+    task.taskDetail(id)!.related.map((r) => r.task.key)
+
+  it('더 걸 수 있는 것은 같은 프로젝트에서 자기 · 이미 건 것을 뺀 것이다', () => {
+    const task = useTaskStore()
+    const ids = task.relatedOptionsFor('k20').map((t) => t.id)
+    expect(ids).not.toContain('k20')
+    expect(ids).not.toContain('k4')
+    expect(ids).not.toContain('x1')
+    expect(ids).toHaveLength(20)
+  })
+
+  it('통째로 갈아끼운다 — 중복은 한 번, [] 는 비우기', () => {
+    const task = useTaskStore()
+    task.setRelated('k20', ['k19', 'k21', 'k19'])
+    expect(task.taskDetail('k20')!.task.relatedIds).toEqual(['k19', 'k21'])
+    expect(keys(task, 'k20')).toEqual(['HW-19', 'HW-21'])
+
+    task.setRelated('k20', [])
+    expect(keys(task, 'k20')).toEqual([])
+  })
+
+  it('여럿을 더 걸면 건 순서 뒤에 붙고, 하나씩 뗀다', () => {
+    const task = useTaskStore()
+    task.addRelated('k20', ['k19', 'k4', 'k21'])
+    expect(keys(task, 'k20')).toEqual(['HW-4', 'HW-19', 'HW-21'])
+
+    task.removeRelated('k20', 'k4')
+    expect(keys(task, 'k20')).toEqual(['HW-19', 'HW-21'])
+  })
+
+  it('자기 자신 · 다른 프로젝트의 작업 · 20개 넘게는 받지 않는다 (목업도 서버처럼)', () => {
+    const task = useTaskStore()
+    task.setRelated('k20', ['k20'])
+    task.setRelated('k20', ['x1'])
+    task.setRelated(
+      'k20',
+      task.tasks.filter((t) => t.id !== 'k20').map((t) => t.id),
+    )
+    expect(task.taskDetail('k20')!.task.relatedIds).toEqual(['k4'])
+  })
+
+  it('새 작업은 연관 없이, 파트를 안 보내면 공통으로 선다', async () => {
+    const task = useTaskStore()
+    const id = await task.addTask({
+      title: '새 작업',
+      body: [],
+      status: 'todo',
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal',
+      threadIds: [],
+    })
+    const made = task.taskDetail(id!)!.task
+    expect(made.relatedIds).toEqual([])
+    expect(made.partId).toBeNull()
   })
 })

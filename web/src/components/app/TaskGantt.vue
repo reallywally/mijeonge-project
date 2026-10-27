@@ -7,23 +7,16 @@ import { DEPENDENCY_ERRORS, dependencyProblem } from '@/lib/dependency'
 import { linkToDependency, rangeLabel, toGanttItems, toGanttLinks } from '@/lib/gantt'
 import type { GanttLink } from '@/lib/gantt'
 import { taskStatusLabel } from '@/lib/task'
-import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 
-/* 작업 간트차트 — 목록이 평평한 게시판인 자리에서 이쪽은 계층 트리다. 그리기는 GanttChart 가 하고
+/* 작업 간트차트 — 작업은 평평하게 한 줄씩 선다(Q61). 그리기는 GanttChart 가 하고
    여기는 작업 스토어를 잇는다: 끌어 놓은 기간과 끌어 건 선행 관계를 스토어에 넣으면 스토어가 다시 그린다 */
-const emit = defineEmits<{
-  (e: 'open-task', id: string): void
-  (e: 'add-task', parentId: string | null): void
-}>()
+const emit = defineEmits<{ (e: 'open-task', id: string): void }>()
 
 const taskStore = useTaskStore()
-const partStore = usePartStore()
 
-/* [내 파트 | 전체] 로 거른 것. '내 파트' 여도 보이는 작업의 조상은 서 있어 트리가 끊기지 않는다 */
-const items = computed(() =>
-  toGanttItems(taskStore.visibleRows, taskStatusLabel, partStore.isContextTask),
-)
+/* [내 파트 | 전체] 로 거른 것 — 평평하게 한 줄씩 */
+const items = computed(() => toGanttItems(taskStore.visibleRows, taskStatusLabel))
 const period = computed(() => rangeLabel(taskStore.visibleRows))
 /* 선행 관계 — 선행의 끝 → 뒤 작업의 시작. 한쪽이 거르기로 빠졌으면 그리지 않는다 */
 const links = computed(() => toGanttLinks(taskStore.dependencies, items.value))
@@ -35,12 +28,7 @@ function onLinkAdd(link: Link) {
     toast.error('앞 작업 막대의 오른쪽 끝에서 뒤 작업 막대의 왼쪽 끝으로 끌어 겁니다.')
     return
   }
-  const problem = dependencyProblem(
-    taskStore.tasks,
-    taskStore.dependencies,
-    dep.taskId,
-    dep.dependsOnId,
-  )
+  const problem = dependencyProblem(taskStore.dependencies, dep.taskId, dep.dependsOnId)
   if (problem) {
     toast.error(DEPENDENCY_ERRORS[problem].message)
     return
@@ -71,8 +59,8 @@ function confirmUnlink(id: string) {
     title-label="작업"
     hint="막대를 끌거나 늘리면 기간이 바뀝니다. 막대 끝에서 다른 막대로 끌면 선행 작업이 걸리고, 화살표를 누르면 뗍니다."
     linkable
+    :addable="false"
     @open="(id) => emit('open-task', id)"
-    @add="(parentId) => emit('add-task', parentId)"
     @move="(id, start, due) => taskStore.setPeriod(id, start, due)"
     @link-add="onLinkAdd"
     @link-click="confirmUnlink"

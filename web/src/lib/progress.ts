@@ -152,24 +152,6 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
   const dependents = new Map<string, string[]>()
   for (const d of deps)
     dependents.set(d.dependsOnId, [...(dependents.get(d.dependsOnId) ?? []), d.taskId])
-  const children = new Map<string, string[]>()
-  for (const t of tasks)
-    if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t.id])
-
-  const openDescendants = (taskId: string) => {
-    let n = 0
-    const seen = new Set<string>()
-    const stack = [...(children.get(taskId) ?? [])]
-    while (stack.length > 0) {
-      const cur = stack.pop()!
-      if (seen.has(cur)) continue
-      seen.add(cur)
-      if (byId.get(cur)?.status !== 'done') n += 1
-      stack.push(...(children.get(cur) ?? []))
-    }
-    return n
-  }
-
   /* ── 진척 ── */
   const count = { todo: 0, doing: 0, blocked: 0, done: 0 }
   for (const t of tasks) count[t.status] += 1
@@ -238,7 +220,6 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
       waitingOnTaskIds,
       blockingTaskIds,
       weight: {
-        openChildren: openDescendants(t.id),
         openLines: checks.filter((l) => !l.done).length,
         totalLines: checks.length,
         threadCount: linkedThreads.get(t.id)?.length ?? 0,

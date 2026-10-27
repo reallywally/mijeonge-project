@@ -73,8 +73,7 @@ def old_entry(temp_id: str, thread_id: str, kind: str, text: str, **extra: Any) 
 def task(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
     return {
         "tempId": temp_id,
-        "parentTempId": None,
-        "parentId": None,
+        "relatedId": None,
         "title": title,
         "ownerId": None,
         "start": None,
@@ -117,8 +116,8 @@ FULL = minutes(
     ],
     tasks=[
         task("t1", "백업 스크립트 작성", ownerId="u3", threadTempIds=["n1"], threadIds=["t4"]),
-        task("t2", "보존 기간 비교표", parentTempId="t1", due="2026-10-24"),
-        task("t3", "환경 설정 하위 정리", parentId="k4", ownerHint="누군가"),
+        task("t2", "보존 기간 비교표", due="2026-10-24"),
+        task("t3", "환경 설정 남은 일 정리", relatedId="k4", ownerHint="누군가"),
     ],
 )
 
@@ -175,16 +174,16 @@ async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncS
     assert updated["t4"]["state"] == "open"
     assert updated["t7"]["state"] == "decided" and updated["t7"]["ownerId"] == "u2"
 
-    # 작업 — 배열 순서대로 발번(p1 은 HW-22 까지 썼다), todo · 본문 [] · 상위는 tempId 를 풀어서
+    # 작업 — 배열 순서대로 발번(p1 은 HW-22 까지 썼다), todo · 본문 [] · relatedId 는 연관 한 줄
     tasks = out["tasks"]
     ids = out["taskIdByTempId"]
     assert [t["key"] for t in tasks] == ["HW-23", "HW-24", "HW-25"]
     assert ids == {"t1": tasks[0]["id"], "t2": tasks[1]["id"], "t3": tasks[2]["id"]}
-    assert [t["parentId"] for t in tasks] == [None, ids["t1"], "k4"]
+    assert [t["relatedIds"] for t in tasks] == [[], [], ["k4"]]
     assert all(t["status"] == "todo" and t["body"] == [] for t in tasks)
     assert tasks[1]["due"] == "2026-10-24"
-    # 파트는 상위를 따른다 — k4 는 인프라(pt1), 최상위는 공통
-    assert [t["partId"] for t in tasks] == [None, None, "pt1"]
+    # 파트는 늘 공통 — 연관 작업(k4 는 인프라)을 따르지 않는다 (Q61)
+    assert [t["partId"] for t in tasks] == [None, None, None]
 
     # 링크 — 새 안건(tempId) · 기존 안건(id) 둘 다
     assert out["links"] == [
@@ -308,13 +307,6 @@ async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
             "tasks.0.tempId",
         ),
         (minutes(tasks=[task("t1", "가", threadTempIds=["n9"])]), "tasks.0.threadTempIds.0"),
-        # 새 안건 tempId 는 작업의 상위가 될 수 없다
-        (
-            minutes(threads=[new_thread("n1", "가")], tasks=[task("t1", "나", parentTempId="n1")]),
-            "tasks.0.parentTempId",
-        ),
-        (minutes(tasks=[task("t1", "가", parentTempId="t1")]), "tasks.0.parentTempId"),
-        (minutes(tasks=[task("t1", "가", parentTempId="t0", parentId="k1")]), "tasks.0.parentId"),
         (minutes(tasks=[task("t1", "가", start="2026-10-20", due="2026-10-19")]), "tasks.0.due"),
         # 타입 오류도 자리를 짚는다 — change · split 은 받지 않는다
         (minutes(entries=[old_entry("e1", "t4", "change", "가")]), "entries.0.kind"),
@@ -372,9 +364,9 @@ async def test_rule_violation_is_422_with_position(
             "tasks.0.ownerId",
         ),
         (
-            minutes(tasks=[task("t1", "가", parentId="x1")]),
-            "TASK_PARENT_NOT_FOUND",
-            "tasks.0.parentId",
+            minutes(tasks=[task("t1", "가", relatedId="x1")]),
+            "TASK_RELATED_NOT_FOUND",
+            "tasks.0.relatedId",
         ),
     ],
 )
@@ -552,7 +544,7 @@ def test_shape_problems_points_every_place() -> None:
 
 
 async def test_minutes_problems_in_order(session: AsyncSession) -> None:
-    """등록은 첫 것을, 초안 도구는 전부를 쓴다 — 422 → 없는 안건 → 담당자 → 상위 작업."""
+    """등록은 첫 것을, 초안 도구는 전부를 쓴다 — 422 → 없는 안건 → 담당자 → 연관 작업."""
     await seed(session)
     bad = minutes(
         threads=[
@@ -562,7 +554,7 @@ async def test_minutes_problems_in_order(session: AsyncSession) -> None:
             old_entry("e1", "t10", "defer", "가"),
             old_entry("e2", "t4", "defer", "나", ownerId="없음"),
         ],
-        tasks=[task("t1", "가", ownerId="없음", parentId="없음", threadIds=["없음"])],
+        tasks=[task("t1", "가", ownerId="없음", relatedId="없음", threadIds=["없음"])],
     )
     found = await minutes_service.minutes_problems(session, "p1", *rows(bad))
     assert [(e.status_code, e.code) for e in found] == [
@@ -571,7 +563,7 @@ async def test_minutes_problems_in_order(session: AsyncSession) -> None:
         (400, "THREAD_OWNER_NOT_FOUND"),
         (400, "ENTRY_OWNER_NOT_FOUND"),
         (400, "TASK_OWNER_NOT_FOUND"),
-        (400, "TASK_PARENT_NOT_FOUND"),
+        (400, "TASK_RELATED_NOT_FOUND"),
     ]
     assert found[1].detail == {
         "entries.0.threadId": "안건을 찾을 수 없습니다.",
@@ -867,8 +859,7 @@ PROPOSED: dict[str, Any] = {
     "tasks": [
         {
             "temp_id": "t1",
-            "parent_temp_id": None,
-            "parent_id": None,
+            "related_id": None,
             "title": "검색 tool 만들기",
             "owner_id": "u2",
             "owner_hint": "",

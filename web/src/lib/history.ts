@@ -24,6 +24,8 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'priority',
     'ownerId',
     'partId',
+    'relatedIds',
+    /* 작업 계층은 2026-10-27 걷었다(Q61) — 지난 이력 줄에만 있어 읽기는 둔다 */
     'parentId',
     'start',
     'due',
@@ -88,11 +90,23 @@ export function diffChanges(
   const out: HistoryChange[] = []
   for (const [field, raw] of Object.entries(next)) {
     if (raw === undefined || skip.includes(field)) continue
-    const from = (b[field] ?? null) as Value
-    const to = raw as Value
-    if (from !== to) out.push(change(field, from, to))
+    /* 배열은 떠서 담는다 — 스토어의 반응형 배열을 그대로 두면 나중 수정이 이력까지 바꾼다 */
+    const from = plain((b[field] ?? null) as Value)
+    const to = plain(raw as Value)
+    if (!sameValue(from, to)) out.push(change(field, from, to))
   }
   return orderChanges(out, kind)
+}
+
+const plain = (v: Value): Value => (Array.isArray(v) ? [...v] : v)
+
+/** 배열 칸(relatedIds)은 같은 집합이면 같다 — 순서만 바뀐 것은 남기지 않는다(서버와 같다) */
+function sameValue(a: Value, b: Value) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const set = new Set(a)
+    return set.size === new Set(b).size && b.every((v) => set.has(v))
+  }
+  return a === b
 }
 
 /** 본문이 바뀌었나 — 줄 글 · 종류 · 체크 · 들여쓰기 · 순서. 줄 id 는 안 본다(서버가 다시 붙인다) */
@@ -153,6 +167,7 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
     priority: '우선순위',
     ownerId: '담당자',
     partId: '파트',
+    relatedIds: '연관 작업',
     parentId: '상위 작업',
     start: '시작 날짜',
     due: '기한',
@@ -176,7 +191,7 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
 
 const LONG_FIELDS = new Set(['content', 'purpose', 'precondition', 'testData', 'resultNote'])
 
-const str = (v: Value) => (v === null ? '' : String(v))
+const str = (v: Value) => (v === null ? '' : Array.isArray(v) ? v.join(', ') : String(v))
 
 /** 값 하나를 화면 말로 — null 의 뜻은 칸마다 다르다 */
 function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNames): string {
@@ -194,6 +209,10 @@ function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNam
       return v === null ? '없음' : name(names.member(str(v)))
     case 'partId':
       return v === null ? '공통' : name(names.part(str(v)))
+    case 'relatedIds': {
+      const ids = Array.isArray(v) ? v : []
+      return ids.length === 0 ? '없음' : ids.map((id) => name(names.task(id))).join(', ')
+    }
     case 'parentId':
       if (v === null) return kind === 'task' ? '최상위 작업' : '최상위 테스트'
       return name(kind === 'task' ? names.task(str(v)) : names.test(str(v)))

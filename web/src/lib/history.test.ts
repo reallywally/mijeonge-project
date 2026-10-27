@@ -51,6 +51,15 @@ describe('칸 비교', () => {
     expect(diffChanges({ title: '설계' }, { title: '설계', due: undefined }, 'task')).toEqual([])
   })
 
+  it('연관 작업(배열)은 같은 집합이면 안 바뀐 것 — 순서만 바뀐 것은 남기지 않는다', () => {
+    const before = { relatedIds: ['k4', 'k19'] }
+    expect(diffChanges(before, { relatedIds: ['k19', 'k4'] }, 'task')).toEqual([])
+    expect(diffChanges(before, { relatedIds: ['k4'], partId: 'pt1' }, 'task')).toEqual([
+      change('partId', null, 'pt1'),
+      change('relatedIds', ['k4', 'k19'], ['k4']),
+    ])
+  })
+
   it('테스트는 테스트 칸 표 순서 — 상태 다음에 결과 메모, 지난 줄의 실패 단계는 그 사이', () => {
     expect(
       orderChanges(
@@ -105,6 +114,12 @@ describe('화면 말', () => {
       to: '김철수',
     })
     expect(task(change('partId', 'pt1', null))).toMatchObject({ from: '인프라', to: '공통' })
+    expect(task(change('relatedIds', [], ['k4', 'k19']))).toMatchObject({
+      label: '연관 작업',
+      from: '없음',
+      to: 'HW-4, HW-19',
+    })
+    /* 작업 계층을 걷기 전(Q61)의 지난 줄도 그대로 읽는다 */
     expect(task(change('parentId', null, 'k4'))).toMatchObject({
       label: '상위 작업',
       from: '최상위 작업',
@@ -126,6 +141,7 @@ describe('화면 말', () => {
   it("지금 없는(지운) 사람 · 작업 · 안건은 '(삭제됨)'", () => {
     expect(task(change('ownerId', 'u9', 'u1')).from).toBe(MISSING)
     expect(task(change('parentId', 'k99', null)).from).toBe(MISSING)
+    expect(task(change('relatedIds', ['k4', 'k99'], ['k4'])).from).toBe(`HW-4, ${MISSING}`)
     expect(task(change('thread', null, 't99')).value).toBe(MISSING)
   })
 

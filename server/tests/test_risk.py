@@ -12,7 +12,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Entry, Member, Task, TaskThreadLink, Thread
+from app.models import Entry, Member, Task, TaskRelation, TaskThreadLink, Thread
 from app.schemas.risk import DecisionRiskReport, ThreadRisk
 from app.services import risk as risk_service
 from app.time import at, today_kst
@@ -71,7 +71,7 @@ async def add_task(
     id_: str,
     *,
     status: str = "todo",
-    parent: str | None = None,
+    related: str | None = None,
     due: date | None = None,
     owner: str | None = "u2",
     project: str = "p3",
@@ -82,11 +82,17 @@ async def add_task(
             project_id=project,
             key=f"MG-{id_}",
             title=f"작업 {id_}",
-            parent_id=parent,
             status=status,
             owner_id=owner,
             due=due,
             created_at=at(FRESH),
+            relations=[
+                TaskRelation(
+                    task_id=id_, related_id=related, project_id=project, created_at=at(FRESH)
+                )
+            ]
+            if related is not None
+            else [],
         )
     )
     await s.flush()
@@ -248,14 +254,13 @@ async def test_stale_counts_from_last_entry(db: AsyncSession) -> None:
 # --- 막는 작업 · 연쇄 -----------------------------------------------------------------
 
 
-async def test_blocking_counts_chain_without_duplicates(db: AsyncSession) -> None:
-    """막힌 상위와 막힌 하위가 둘 다 걸려도 하위는 한 번만 센다. 완료는 안 센다."""
+async def test_blocking_counts_blocked_tasks_only(db: AsyncSession) -> None:
+    """연쇄 영향은 막힌 연결 작업 그 자체만 — 연관 작업으로 퍼지지 않는다 (Q61)."""
     await add_thread(db, "a", due=day(10))
     await add_task(db, "q1", status="blocked")
-    await add_task(db, "q2", status="blocked", parent="q1")
-    await add_task(db, "q3", status="todo", parent="q2")
-    await add_task(db, "q4", status="done", parent="q1")
-    await add_task(db, "q5", status="doing", parent="q4")  # 완료 밑이라도 완료가 아니면 센다
+    await add_task(db, "q2", status="blocked", related="q1")
+    await add_task(db, "q3", status="todo", related="q2")  # 연관만 — 안 센다
+    await add_task(db, "q4", status="blocked", related="q1")  # 막혔어도 안 걸렸으면 안 센다
     await add_task(db, "w1", status="doing")
     await link(db, "q1", "a")
     await link(db, "q2", "a")
@@ -264,24 +269,10 @@ async def test_blocking_counts_chain_without_duplicates(db: AsyncSession) -> Non
     assert found is not None
     assert found.blocked_task_ids == ["q1", "q2"]
     assert found.waiting_task_ids == ["w1"]
-    assert found.impact_task_count == 4  # q1 · q2 · q3 · q5
+    assert found.impact_task_count == 2  # q1 · q2
     assert found.signals == ["blocking"]
-    assert found.score == 3 + 3  # 연쇄 가산은 3 에서 멈춘다
-    assert found.level == "high"
-
-
-async def test_impact_survives_a_parent_cycle(db: AsyncSession) -> None:
-    """고리는 작업 서비스가 막지만, DB 에 들어와 버린 고리에도 계산이 멈춘다."""
-    await add_thread(db, "a", due=day(10))
-    await add_task(db, "q1", status="blocked")
-    await add_task(db, "q2", parent="q1")
-    task = await db.get(Task, "q1")
-    assert task is not None
-    task.parent_id = "q2"
-    await db.flush()
-    await link(db, "q1", "a")
-    found = await one(db, "a")
-    assert found is not None and found.impact_task_count == 2
+    assert found.score == 3 + 2  # 막힌 두 작업만 가산
+    assert found.level == "medium"
 
 
 async def test_decision_after_task_due(db: AsyncSession) -> None:
@@ -403,7 +394,7 @@ async def test_owner_loads(db: AsyncSession) -> None:
     await add_thread(db, "b", owner="u1", due=day(10))
     await add_thread(db, "c", owner="u2", due=day(10))  # 신호 없음 — 그래도 openThreads 다
     await add_task(db, "q1", status="blocked", owner="u3")
-    await add_task(db, "q2", status="todo", parent="q1", owner=None)
+    await add_task(db, "q2", status="todo", related="q1", owner=None)
     await link(db, "q1", "a")
     await link(db, "q1", "b")
     owners = [
@@ -411,7 +402,7 @@ async def test_owner_loads(db: AsyncSession) -> None:
         for o in (await report(db)).owners
     ]
     assert owners == [
-        ("u1", 2, 1, 0, 2),
+        ("u1", 2, 1, 0, 1),
         ("u2", 1, 0, 0, 0),
         ("u3", 0, 0, 1, 0),
     ]

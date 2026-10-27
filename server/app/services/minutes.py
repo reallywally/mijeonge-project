@@ -229,7 +229,7 @@ async def minutes_problems(
 ) -> list[ApiError]:
     """걸린 것을 오류 하나씩으로 — 등록은 첫 것을 내고, 초안 도구는 다 모아 Claude 에게 돌려준다.
 
-    순서는 422 → 없는 안건 → 담당자(안건 · 이력 · 작업) → 없는 상위 작업. 읽기만 한다.
+    순서는 422 → 없는 안건 → 담당자(안건 · 이력 · 작업) → 없는 연관 작업. 읽기만 한다.
     """
     found: list[ApiError] = []
     shape = shape_problems(threads, entries, tasks)
@@ -299,11 +299,9 @@ async def minutes_problems(
     if task_owners:
         found.append(ApiError(400, "TASK_OWNER_NOT_FOUND", OWNER_MISSING, task_owners))
 
-    orphans = await task_service.missing_parents(session, project_id, tasks)
+    orphans = await task_service.missing_related(session, project_id, tasks)
     if orphans:
-        found.append(
-            ApiError(400, "TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.", orphans)
-        )
+        found.append(ApiError(400, "TASK_RELATED_NOT_FOUND", task_service.RELATED_MISSING, orphans))
     return found
 
 
@@ -410,26 +408,22 @@ async def _insert(
     task_ids: dict[str, str] = {}
     created_tasks: list[Task] = []
     links: list[TaskThreadLinkOut] = []
-    # 배열 순서대로 넣는다 — 번호가 그 순서로 나가고, 상위가 늘 먼저 들어가 있다
+    # 배열 순서대로 넣는다 — 번호가 그 순서로 나간다
     for row in tasks:
         linked = list(
             dict.fromkeys([thread_ids[temp_id] for temp_id in row.thread_temp_ids] + row.thread_ids)
         )
         fields = {
             "title": row.title,
-            "parent_id": (
-                task_ids[row.parent_temp_id] if row.parent_temp_id is not None else row.parent_id
-            ),
             "owner_id": row.owner_id,
             "start": row.start,
             "due": row.due,
             "priority": row.priority,
             "thread_ids": linked,
         }
-        # partId 는 안 보낸다 — 상위 작업의 파트를 따르고, 최상위면 공통이다
-        # 상태 기록 첫 줄도 여기서 남는다 — 등록과 같은 함수다
+        # partId 는 안 보낸다 — 공통이다. 상태 기록 첫 줄도 여기서 남는다 — 등록과 같은 함수다
         task = await task_service._insert_task(
-            session, project, TaskCreate.model_validate(fields), actor_id
+            session, project, TaskCreate.model_validate(fields), actor_id, row.related_id
         )
         task.minutes_id = minutes_id
         task_ids[row.temp_id] = task.id

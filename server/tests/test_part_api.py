@@ -268,51 +268,44 @@ async def test_leaving_project_leaves_its_parts(client: httpx.AsyncClient) -> No
     assert {"partId": other, "memberId": "u3"} in (await snapshot(client, "p2"))["partMembers"]
 
 
-# --- 작업 등록의 상속 ----------------------------------------------------------------
+# --- 작업 등록의 파트 — 상위를 따르는 규칙은 없어졌다 (Q61) -----------------------------
 
 
-async def test_task_inherits_parent_part_when_key_is_missing(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/projects/p1/tasks", json={"title": "tool05", "parentId": "k7"})
+async def test_task_without_part_key_is_common(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/projects/p1/tasks", json={"title": "tool05"})
     assert res.status_code == 201
-    assert res.json()["partId"] == "pt2"
+    assert res.json()["partId"] is None
 
 
 async def test_task_null_part_is_common(client: httpx.AsyncClient) -> None:
-    res = await client.post(
-        "/api/projects/p1/tasks", json={"title": "공통 일", "parentId": "k7", "partId": None}
-    )
+    res = await client.post("/api/projects/p1/tasks", json={"title": "공통 일", "partId": None})
     assert res.status_code == 201
     assert res.json()["partId"] is None
 
 
 async def test_task_explicit_part_wins(client: httpx.AsyncClient) -> None:
     res = await client.post(
-        "/api/projects/p1/tasks", json={"title": "서버 붙이기", "parentId": "k7", "partId": "pt1"}
+        "/api/projects/p1/tasks", json={"title": "서버 붙이기", "partId": "pt1"}
     )
     assert res.status_code == 201
     assert res.json()["partId"] == "pt1"
 
 
-async def test_top_level_task_without_key_is_common(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/projects/p1/tasks", json={"title": "최상위"})
-    assert res.json()["partId"] is None
-
-
-async def test_batch_follows_the_same_rule_in_order(client: httpx.AsyncClient) -> None:
+async def test_batch_part_is_per_line(client: httpx.AsyncClient) -> None:
+    """연관 작업(relatedId)의 파트도 따르지 않는다 — 안 보낸 줄은 공통."""
     res = await client.post(
         "/api/projects/p1/tasks/batch",
         json={
             "tasks": [
                 item("t1", "인프라 묶음", partId="pt1"),
-                item("t2", "따라감", parentTempId="t1"),
-                item("t3", "공통으로", parentTempId="t1", partId=None),
-                item("t4", "손자도 따라감", parentTempId="t2"),
-                item("t5", "최상위"),
+                item("t2", "안 보냄"),
+                item("t3", "공통으로", partId=None),
+                item("t4", "AI 쪽 연관", relatedId="k7"),
             ]
         },
     )
     assert res.status_code == 201, res.json()
-    assert [t["partId"] for t in res.json()["tasks"]] == ["pt1", "pt1", None, "pt1", None]
+    assert [t["partId"] for t in res.json()["tasks"]] == ["pt1", None, None, None]
 
 
 async def test_batch_with_foreign_part_leaves_nothing(client: httpx.AsyncClient) -> None:
@@ -328,7 +321,7 @@ async def test_batch_with_foreign_part_leaves_nothing(client: httpx.AsyncClient)
     assert len((await snapshot(client))["tasks"]) == before
 
 
-async def test_patch_task_part_does_not_move_children(client: httpx.AsyncClient) -> None:
+async def test_patch_task_part_does_not_move_related(client: httpx.AsyncClient) -> None:
     res = await client.patch("/api/tasks/k6", json={"partId": None})
     assert res.status_code == 200 and res.json()["partId"] is None
     assert await task_part(client, "k7") == "pt2"
@@ -365,8 +358,7 @@ async def test_archived_part_cannot_be_newly_attached(client: httpx.AsyncClient)
         ("PATCH", "/api/tasks/k5", {"partId": "pt1"}),
         ("POST", "/api/projects/p1/threads", {"title": "x", "partId": "pt1"}),
         ("PATCH", "/api/threads/t6", {"partId": "pt1"}),
-        # 상위를 따라오는 것도 새로 다는 것이다
-        ("POST", "/api/projects/p1/tasks", {"title": "x", "parentId": "k4"}),
+        ("POST", "/api/projects/p1/tasks/batch", {"tasks": [item("t1", "x", partId="pt1")]}),
     ]:
         res = await client.request(method, url, json=body)
         assert res.status_code == 400, (method, url)

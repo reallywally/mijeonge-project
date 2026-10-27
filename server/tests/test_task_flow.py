@@ -112,22 +112,28 @@ async def test_task_outside_my_projects_is_404(
     assert row is not None and row.created_by == "u3"
 
 
+async def test_self_is_400(client: httpx.AsyncClient) -> None:
+    res = await client.put(dep("k20", "k20"))
+    assert res.status_code == 400
+    assert res.json() == {
+        "code": "TASK_DEPENDENCY_SELF",
+        "message": "자기 자신은 선행 작업으로 둘 수 없습니다.",
+    }
+
+
 @pytest.mark.parametrize(
     ("task_id", "depends_on_id"),
     [
-        ("k20", "k20"),  # 자기 자신
-        ("k20", "k4"),  # 상위
-        ("k4", "k20"),  # 하위
-        ("k8", "k5"),  # 몇 단계 위의 조상
-        ("k5", "k8"),  # 몇 단계 아래의 자손
+        ("k20", "k4"),  # 연관 작업(예전 상위)
+        ("k4", "k21"),  # 예전 하위
     ],
 )
-async def test_hierarchy_is_400(
+async def test_related_tasks_can_depend_on_each_other(
     client: httpx.AsyncClient, task_id: str, depends_on_id: str
 ) -> None:
+    """계층을 걷었다 (Q61) — 연관 작업은 선후를 막지 않는다."""
     res = await client.put(dep(task_id, depends_on_id))
-    assert res.status_code == 400
-    assert res.json()["code"] == "TASK_DEPENDENCY_HIERARCHY"
+    assert res.status_code == 200, res.text
 
 
 @pytest.mark.parametrize(
@@ -382,7 +388,7 @@ async def test_suggestions_are_filtered(client: httpx.AsyncClient) -> None:
     fake = answer(
         ("HW-18", "HW-17", "챗봇 다음에 산출 API"),  # 남는다
         ("HW-21", "HW-20", "이미 있다"),
-        ("HW-20", "HW-4", "상위"),
+        ("HW-20", "HW-20", "자기 자신"),
         ("HW-19", "HW-21", "완료 작업은 넣지 않았다"),
         ("HW-18", "HW-17", "겹친다"),
         ("HW-20", "HW-22", "순환"),
@@ -418,7 +424,7 @@ async def test_context_has_open_tasks_and_existing_edges_by_key(
     # 기한 이른 순 → 등록 순, 기한 없는 것은 뒤
     assert keys[0] == "HW-20" and keys[-1] == "HW-18"
     hw20 = next(row for row in data["tasks"] if row["key"] == "HW-20")
-    assert hw20["parent"] == "HW-4" and hw20["start"] == "2026-09-10"
+    assert hw20["related"] == ["HW-4"] and hw20["start"] == "2026-09-10"
     hw4 = next(row for row in data["tasks"] if row["key"] == "HW-4")
     assert len(hw4["body"]) <= dependency_suggest.BODY_LINES and hw4["threads"]
     # 완료(HW-19)가 낀 관계는 싣지 않는다

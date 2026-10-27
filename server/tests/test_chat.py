@@ -517,11 +517,11 @@ async def test_search_tools_stay_in_project(pg_session: AsyncSession) -> None:
 
 DRAFT = {
     "tasks": [
-        {"temp_id": "t1", "parent_temp_id": None, "title": "간담회 준비", "owner_id": None,
+        {"temp_id": "t1", "related_id": None, "title": "간담회 준비", "owner_id": None,
          "start": None, "due": None, "priority": "normal"},
-        {"temp_id": "t2", "parent_temp_id": "t1", "title": "일정 체크", "owner_id": "u1",
+        {"temp_id": "t2", "related_id": None, "title": "일정 체크", "owner_id": "u1",
          "start": None, "due": "2026-10-16", "priority": "normal"},
-        {"temp_id": "t3", "parent_temp_id": "t1", "title": "준비물 체크", "owner_id": "u2",
+        {"temp_id": "t3", "related_id": None, "title": "준비물 체크", "owner_id": "u2",
          "start": None, "due": None, "priority": "normal"},
     ]
 }  # fmt: skip
@@ -560,8 +560,7 @@ async def test_propose_tasks_emits_one_proposal_before_done(client: httpx.AsyncC
     # 화면 계약대로 camelCase · 날짜는 YYYY-MM-DD
     assert proposal["tasks"][1] == {
         "tempId": "t2",
-        "parentTempId": "t1",
-        "parentId": None,
+        "relatedId": None,
         "title": "일정 체크",
         "ownerId": "u1",
         "start": None,
@@ -584,8 +583,8 @@ async def test_bad_draft_goes_back_as_tool_error(session: AsyncSession) -> None:
     await seed(session)
     bad = {
         "tasks": [
-            DRAFT["tasks"][1],  # 상위 t1 이 앞에 없다
-            DRAFT["tasks"][0] | {"title": "  "},
+            DRAFT["tasks"][1] | {"temp_id": "t1"},
+            DRAFT["tasks"][0] | {"title": "  "},  # tempId 가 앞과 겹친다
             DRAFT["tasks"][2] | {"owner_id": "없음"},
         ]
     }
@@ -600,7 +599,7 @@ async def test_bad_draft_goes_back_as_tool_error(session: AsyncSession) -> None:
     assert result["is_error"] is True
     problems = json.loads(result["content"])["problems"]
     # 일괄 등록과 같은 검사 — 같은 자리 이름으로 짚는다
-    assert set(problems) == {"tasks.0.parentTempId", "tasks.1.title"}
+    assert set(problems) == {"tasks.1.tempId", "tasks.1.title"}
 
 
 async def test_unknown_owner_goes_back_as_tool_error(session: AsyncSession) -> None:
@@ -652,9 +651,9 @@ async def test_past_proposal_is_written_after_the_answer(client: httpx.AsyncClie
     fake = FakeClient(Turn(texts=["답"]))
     use(fake)
     tasks = [
-        {"tempId": "t1", "parentTempId": None, "title": "간담회 준비", "ownerId": None,
+        {"tempId": "t1", "relatedId": None, "title": "간담회 준비", "ownerId": None,
          "start": None, "due": None, "priority": "normal"},
-        {"tempId": "t2", "parentTempId": "t1", "title": "일정 체크", "ownerId": "u1",
+        {"tempId": "t2", "relatedId": None, "title": "일정 체크", "ownerId": "u1",
          "start": None, "due": "2026-10-16", "priority": "normal"},
     ]  # fmt: skip
     messages = [
@@ -762,40 +761,56 @@ async def test_get_task_takes_a_key(session: AsyncSession) -> None:
     assert is_error
 
 
-# --- 이미 있는 작업 밑에 하위 작업 초안 ---------------------------------------
+# --- 이미 있는 작업과 이어진 작업 초안 (Q61) ---------------------------------
 
 
-async def test_get_task_lists_children(session: AsyncSession) -> None:
+async def test_get_task_lists_related_both_ways(session: AsyncSession) -> None:
+    """related 는 이 작업이 건 것, relatedBy 는 이 작업을 건 것 — children 을 대신한다."""
     await seed(session)
     content, is_error = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "HW-1"})
     assert not is_error
-    children = json.loads(content)["children"]
-    assert [c["key"] for c in children] == ["HW-2", "HW-3"]
-    assert set(children[0]) == {"id", "key", "title", "status"}
+    doc = json.loads(content)
+    assert "children" not in doc
+    assert doc["related"] == []
+    assert [c["key"] for c in doc["relatedBy"]] == ["HW-2", "HW-3"]
+    assert set(doc["relatedBy"][0]) == {"id", "key", "title", "status"}
+
+    content, _ = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "HW-2"})
+    doc = json.loads(content)
+    assert [c["key"] for c in doc["related"]] == ["HW-1"] and doc["relatedBy"] == []
+    assert doc["task"]["relatedIds"] == ["k1"]
 
 
-async def test_proposal_under_an_existing_task(session: AsyncSession) -> None:
+async def test_get_task_related_stays_in_the_project(session: AsyncSession) -> None:
+    """도구 안에서도 project_id 로 거른다 — 다른 프로젝트 작업은 이름조차 안 보인다."""
+    await seed(session)
+    content, is_error = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "x2"})
+    assert is_error and json.loads(content) == {"error": "작업을 찾을 수 없습니다."}
+
+
+async def test_proposal_related_to_an_existing_task(session: AsyncSession) -> None:
     await seed(session)
     draft = {
         "tasks": [
-            {"temp_id": "t1", "parent_id": "k1", "title": "화면 설계"},
-            {"temp_id": "t2", "parent_temp_id": "t1", "title": "목록 화면"},
+            {"temp_id": "t1", "related_id": "k1", "title": "화면 설계"},
+            {"temp_id": "t2", "title": "목록 화면"},
         ]
     }
     content, is_error, proposal = await chat_service.check_proposal(session, "p1", draft)
     assert not is_error, content
-    assert proposal is not None and proposal.tasks[0].parent_id == "k1"
+    assert proposal is not None
+    assert [t.related_id for t in proposal.tasks] == ["k1", None]
 
 
 @pytest.mark.parametrize(
     ("item", "where"),
     [
         # 다른 프로젝트의 작업 · 없는 작업
-        ({"temp_id": "t1", "parent_id": "x1", "title": "가"}, "tasks.0.parentId"),
-        ({"temp_id": "t1", "parent_id": "nope", "title": "가"}, "tasks.0.parentId"),
+        ({"temp_id": "t1", "related_id": "x1", "title": "가"}, "tasks.0.relatedId"),
+        ({"temp_id": "t1", "related_id": "nope", "title": "가"}, "tasks.0.relatedId"),
     ],
 )
-async def test_proposal_parent_must_be_in_this_project(
+async def test_proposal_related_must_be_in_this_project(
     session: AsyncSession, item: dict[str, Any], where: str
 ) -> None:
     await seed(session)
@@ -803,27 +818,22 @@ async def test_proposal_parent_must_be_in_this_project(
         session, "p1", {"tasks": [item]}
     )
     assert is_error and proposal is None
-    assert where in json.loads(content)["problems"]
+    assert json.loads(content)["problems"] == {where: "연관 작업을 찾을 수 없습니다."}
 
 
-async def test_proposal_cannot_have_two_parents(session: AsyncSession) -> None:
-    await seed(session)
-    draft = {
-        "tasks": [
-            {"temp_id": "t1", "title": "가"},
-            {"temp_id": "t2", "parent_temp_id": "t1", "parent_id": "k1", "title": "나"},
-        ]
-    }
-    content, is_error, _ = await chat_service.check_proposal(session, "p1", draft)
-    assert is_error
-    assert "tasks.1.parentId" in json.loads(content)["problems"]
-
-
-def test_proposal_note_carries_parent_id() -> None:
+def test_proposal_note_carries_related_id() -> None:
     proposal = chat_service.ChatProposal.model_validate(
-        {"tasks": [{"tempId": "t1", "parentId": "k1", "title": "화면 설계"}], "status": "pending"}
+        {"tasks": [{"tempId": "t1", "relatedId": "k1", "title": "화면 설계"}], "status": "pending"}
     )
-    assert '"parent_id": "k1"' in chat_service.proposal_note(proposal)
+    note = chat_service.proposal_note(proposal)
+    assert '"related_id": "k1"' in note and "parent" not in note
+
+
+def test_propose_tool_schema_is_flat() -> None:
+    tool = next(t for t in chat_service.TOOLS if t["name"] == "propose_tasks")
+    item = tool["input_schema"]["properties"]["tasks"]["items"]
+    assert "related_id" in item["properties"] and "related_id" in item["required"]
+    assert not any("parent" in name for name in item["properties"])
 
 
 # --- 작업 전체 목록 · 비슷한 작업 쌍 ------------------------------------------
@@ -839,18 +849,19 @@ async def test_list_tasks_gives_every_task_in_order(session: AsyncSession) -> No
     assert keys[:3] == ["HW-1", "HW-2", "HW-3"]
     assert not any(k.startswith("PAS-") for k in keys)  # 이 프로젝트만
     by_key = {t["key"]: t for t in listed["tasks"]}
-    assert by_key["HW-2"]["parentKey"] == "HW-1" and by_key["HW-1"]["parentKey"] is None
-    assert set(by_key["HW-1"]) == {"id", "key", "title", "status", "parentKey", "owner"}
+    assert by_key["HW-2"]["relatedKeys"] == ["HW-1"] and by_key["HW-1"]["relatedKeys"] == []
+    assert set(by_key["HW-1"]) == {"id", "key", "title", "status", "relatedKeys", "owner"}
     assert any(t["owner"] == "김서연" for t in listed["tasks"])
 
 
-async def test_list_tasks_by_status_keeps_parent_keys(session: AsyncSession) -> None:
+async def test_list_tasks_by_status_keeps_related_keys(session: AsyncSession) -> None:
     await seed(session)
     content, _ = await chat_service.run_tool(session, "p1", "list_tasks", {"status": "todo"})
     tasks = json.loads(content)["tasks"]
     assert tasks and all(t["status"] == "todo" for t in tasks)
-    # 상위가 todo 가 아니어도 상위 키는 보인다
-    assert any(t["parentKey"] is not None for t in tasks)
+    # 연관 작업이 todo 가 아니어도 키는 보인다 — HW-21(todo) → HW-4(doing)
+    by_key = {t["key"]: t for t in tasks}
+    assert by_key["HW-21"]["relatedKeys"] == ["HW-4"]
 
 
 async def test_list_tasks_is_capped(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -866,7 +877,7 @@ def test_new_tools_have_labels() -> None:
 
 
 async def test_similar_tasks_pairs_and_relations(pg_session: AsyncSession) -> None:
-    """Postgres 에서만 — HW-1 '설계' 와 HW-2 '데이터 설계' 는 상위 ↔ 하위, HW-2 · HW-3 은 형제다."""
+    """Postgres 에서만 — HW-2 '데이터 설계' 가 HW-1 '설계' 를 연관으로 걸었다."""
     content, is_error = await chat_service.run_tool(pg_session, "p1", "find_similar_tasks", {})
     assert not is_error, content
     pairs = json.loads(content)
@@ -875,7 +886,10 @@ async def test_similar_tasks_pairs_and_relations(pg_session: AsyncSession) -> No
     assert scores == sorted(scores, reverse=True)
     assert all(p["score"] >= 0.3 for p in pairs)
     by_keys = {frozenset((p["a"]["key"], p["b"]["key"])): p for p in pairs}
-    assert by_keys[frozenset(("HW-1", "HW-2"))]["relation"] == "parent_child"
+    assert by_keys[frozenset(("HW-1", "HW-2"))]["relation"] == "related"
+    # 둘 다 HW-1 을 걸었을 뿐 서로는 안 걸었다 — 형제라는 관계는 없어졌다
+    if frozenset(("HW-2", "HW-3")) in by_keys:
+        assert by_keys[frozenset(("HW-2", "HW-3"))]["relation"] is None
     assert by_keys[frozenset(("HW-1", "HW-2"))]["matched"] in ("title", "body")
     assert all(not k.startswith("PAS-") for p in pairs for k in (p["a"]["key"], p["b"]["key"]))
 

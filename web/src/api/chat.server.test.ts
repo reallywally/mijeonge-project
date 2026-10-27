@@ -139,8 +139,7 @@ describe('SSE 읽기', () => {
 describe('작업 초안 이벤트', () => {
   const task: ProposedTask = {
     tempId: 't1',
-    parentTempId: null,
-    parentId: null,
+    relatedId: null,
     title: '간담회 준비',
     ownerId: 'u1',
     start: '2026-10-13',
@@ -155,12 +154,21 @@ describe('작업 초안 이벤트', () => {
       proposalOf({
         tasks: [
           { ...task, extra: 1 },
-          { ...task, tempId: 't2', parentTempId: 't1' },
+          { ...task, tempId: 't2', relatedId: 'k20' },
         ],
       }),
     ).toEqual({
       type: 'proposal',
-      proposal: { tasks: [task, { ...task, tempId: 't2', parentTempId: 't1' }] },
+      proposal: { tasks: [task, { ...task, tempId: 't2', relatedId: 'k20' }] },
+    })
+  })
+
+  it('relatedId 가 없으면 null 로 본다 — 지난 초안의 parentTempId · parentId 는 떼어 낸다', () => {
+    const bare: Record<string, unknown> = { ...task }
+    delete bare.relatedId
+    expect(proposalOf({ tasks: [{ ...bare, parentTempId: null, parentId: 'k4' }] })).toEqual({
+      type: 'proposal',
+      proposal: { tasks: [task] },
     })
   })
 
@@ -171,6 +179,7 @@ describe('작업 초안 이벤트', () => {
       { tasks: [{ ...task, title: undefined }] },
       { tasks: [{ ...task, priority: 'urgent' }] },
       { tasks: [{ ...task, start: 3 }] },
+      { tasks: [{ ...task, relatedId: 7 }] },
     ])
       expect(isUnreachable(catchOf(() => proposalOf(bad)))).toBe(true)
   })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
+import { ChevronRight, FolderClosed } from 'lucide-vue-next'
 import HistorySection from '@/components/app/HistorySection.vue'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import TaggedTests from '@/components/app/TaggedTests.vue'
@@ -9,27 +9,19 @@ import TaskComments from '@/components/app/TaskComments.vue'
 import TaskDependencies from '@/components/app/TaskDependencies.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
+import TaskRelated from '@/components/app/TaskRelated.vue'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
 import { statusSinceLabel } from '@/lib/dependency'
-import { periodProblem, TASK_STATUS_OPTIONS } from '@/lib/task'
+import { periodProblem } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
-import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
-import type { TaskLine, TaskStatus } from '@/types/domain'
+import type { TaskLine } from '@/types/domain'
 
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
-   따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 선행 작업 · 연결, 오른쪽이 속성이다.
+   따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 연관 작업 · 선행 작업 · 연결, 오른쪽이 속성이다.
    안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. 그 아래 댓글, 맨 아래가 접어 둔 변경 이력이다. */
 const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
@@ -40,7 +32,6 @@ const emit = defineEmits<{
 
 const data = useDataStore()
 const taskStore = useTaskStore()
-const partStore = usePartStore()
 const threadStore = useThreadStore()
 
 const detail = computed(() => (props.taskId ? taskStore.taskDetail(props.taskId) : null))
@@ -91,50 +82,6 @@ function commitPeriod() {
   if (!periodProblem(start, due)) taskStore.setPeriod(props.taskId, start || null, due || null)
 }
 
-const parentChoices = computed(() => (props.taskId ? taskStore.parentOptionsFor(props.taskId) : []))
-
-/* 하위 작업 추가 — 팝업을 띄우지 않고 제목만 받아 바로 만든다.
-   나머지는 작업 추가의 기본값(해야 할 일 · 보통 · 담당자 · 기간 미정)으로 서고, 파트는 상위의 것이다.
-   Enter 로 만들고 칸은 남겨 두어 이어서 적는다. Esc 나 빈 칸으로 벗어나면 닫는다. */
-const subOpen = ref(false)
-const subTitle = ref('')
-const subInput = ref<InstanceType<typeof Input> | null>(null)
-/* 서버가 만들어 돌려줄 때까지 Enter 를 또 받지 않는다 — 같은 작업이 두 번 생긴다 */
-const subSaving = ref(false)
-
-async function openSubtask() {
-  subOpen.value = true
-  await nextTick()
-  ;(subInput.value?.$el as HTMLInputElement | undefined)?.focus()
-}
-
-function closeSubtask() {
-  subOpen.value = false
-  subTitle.value = ''
-}
-
-async function addSubtask(e: KeyboardEvent) {
-  /* 한글 조합 중의 Enter 는 글자를 맺는 키다 — 그때 만들면 마지막 글자가 다음 칸으로 샌다 */
-  if (e.isComposing || subSaving.value) return
-  const title = subTitle.value.trim()
-  if (!props.taskId || !title) return
-  subSaving.value = true
-  const id = await taskStore.addTask({
-    title,
-    parentId: props.taskId,
-    body: [],
-    status: 'todo',
-    ownerId: null,
-    start: null,
-    due: null,
-    priority: 'normal',
-    threadIds: [],
-    partId: partStore.partForChildOf(props.taskId),
-  })
-  subSaving.value = false
-  if (id) subTitle.value = ''
-}
-
 /* 다른 작업으로 옮기거나 팝업을 다시 열면 칸들을 그 작업의 값으로 채운다 */
 watch(
   [() => props.taskId, open],
@@ -143,17 +90,10 @@ watch(
     titleDraft.value = task?.title ?? ''
     startDraft.value = task?.start ?? ''
     dueDraft.value = task?.due ?? ''
-    closeSubtask()
     void nextTick(fitTitle)
   },
   { immediate: true },
 )
-
-const subPct = computed(() => {
-  const d = detail.value
-  if (!d || d.children.length === 0) return 0
-  return Math.round((d.doneChildCount / d.children.length) * 100)
-})
 
 /* 아직 안 건 안건 — 검색 칸이 이 안에서 찾는다 */
 const threadChoices = computed(() => {
@@ -191,16 +131,7 @@ const threadChoices = computed(() => {
               @keydown="onTitleKeydown"
               @blur="commitTitle"
             />
-            <DialogDescription as-child>
-              <button
-                type="button"
-                class="self-start text-xs text-muted-foreground underline-offset-4 enabled:hover:underline"
-                :disabled="!detail.parent"
-                @click="detail.parent && emit('open-task', detail.parent.id)"
-              >
-                {{ detail.pathLabel }}
-              </button>
-            </DialogDescription>
+            <DialogDescription class="sr-only">{{ detail.task.key }} 작업 상세</DialogDescription>
             <div v-if="detail.task.minutesId" class="flex min-w-0">
               <MinutesSourceChip :minutes-id="detail.task.minutesId" />
             </div>
@@ -216,89 +147,11 @@ const threadChoices = computed(() => {
             />
           </section>
 
-          <section class="flex flex-col gap-3">
-            <div class="flex items-center gap-2.5">
-              <span class="shrink-0 text-xs font-medium">하위 작업</span>
-              <div class="h-1.5 grow overflow-hidden rounded-full bg-secondary">
-                <div class="h-full bg-primary" :style="{ width: `${subPct}%` }" />
-              </div>
-              <span class="shrink-0 text-xs text-muted-foreground">
-                {{ detail.doneChildCount }} / {{ detail.children.length }} 완료
-              </span>
-            </div>
-
-            <div class="flex flex-col overflow-hidden rounded-md border border-border">
-              <div
-                class="flex h-8 items-center gap-3 border-b border-border bg-muted/50 px-3 text-xs font-medium tracking-wider text-muted-foreground"
-              >
-                <span class="min-w-0 grow">작업</span>
-                <span class="w-[120px] shrink-0">상태</span>
-                <span class="w-14 shrink-0">담당자</span>
-              </div>
-
-              <div
-                v-for="child in detail.children"
-                :key="child.task.id"
-                class="flex min-h-[38px] items-center gap-3 border-b border-border px-3 py-1"
-              >
-                <span class="flex min-w-0 grow items-center gap-2.5">
-                  <span class="shrink-0 text-xs text-muted-foreground">{{ child.task.key }}</span>
-                  <button
-                    type="button"
-                    class="min-w-0 truncate text-left text-[13px] underline-offset-4 hover:underline"
-                    @click="emit('open-task', child.task.id)"
-                  >
-                    {{ child.task.title }}
-                  </button>
-                </span>
-                <Select
-                  :model-value="child.task.status"
-                  @update:model-value="(v) => taskStore.setStatus(child.task.id, v as TaskStatus)"
-                >
-                  <SelectTrigger class="h-[26px] w-[120px] shrink-0 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="o in TASK_STATUS_OPTIONS" :key="o.value" :value="o.value">
-                      {{ o.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <span class="w-14 shrink-0 truncate text-xs text-muted-foreground">
-                  {{ child.ownerName ?? '미정' }}
-                </span>
-              </div>
-
-              <p
-                v-if="detail.children.length === 0"
-                class="px-3 py-2.5 text-xs text-muted-foreground"
-              >
-                하위 작업이 없습니다.
-              </p>
-
-              <div v-if="subOpen" class="flex min-h-[38px] items-center gap-2 px-2 py-1">
-                <Plus class="ml-1 size-3.5 shrink-0 text-muted-foreground" />
-                <Input
-                  ref="subInput"
-                  v-model="subTitle"
-                  placeholder="하위 작업 제목을 적고 Enter"
-                  class="h-7 grow text-[13px]"
-                  @keydown.enter.prevent="addSubtask"
-                  @keydown.esc.stop.prevent="closeSubtask"
-                  @blur="!subTitle.trim() && closeSubtask()"
-                />
-              </div>
-              <button
-                v-else
-                type="button"
-                class="flex min-h-[34px] items-center gap-1.5 px-3 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                @click="openSubtask"
-              >
-                <Plus class="size-3.5" />
-                하위 작업 추가
-              </button>
-            </div>
-          </section>
+          <TaskRelated
+            :task-id="detail.task.id"
+            :related="detail.related"
+            @open-task="(id) => emit('open-task', id)"
+          />
 
           <TaskDependencies :task-id="detail.task.id" @open-task="(id) => emit('open-task', id)" />
 
@@ -325,15 +178,12 @@ const threadChoices = computed(() => {
           :status="detail.task.status"
           :owner-id="detail.task.ownerId"
           :priority="detail.task.priority"
-          :parent-id="detail.task.parentId"
           :part-id="detail.task.partId"
-          :parent-choices="parentChoices"
           :status-since="statusSinceLabel(detail.task)"
           show-done
           @update:status="(v) => taskStore.setStatus(detail!.task.id, v)"
           @update:owner-id="(v) => taskStore.setOwner(detail!.task.id, v)"
           @update:priority="(v) => taskStore.setPriority(detail!.task.id, v)"
-          @update:parent-id="(v) => taskStore.setParent(detail!.task.id, v)"
           @update:part-id="(v) => taskStore.setPart(detail!.task.id, v)"
           @update:start="commitPeriod"
           @update:due="commitPeriod"

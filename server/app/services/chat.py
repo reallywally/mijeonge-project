@@ -79,9 +79,8 @@ SYSTEM_PROMPT = """\
    프로젝트 전체를 물었으면 list_tasks 로 제목을 훑어 보탠다
 3. 후보는 get_task 로 본문을 읽고 판단한다. 다 못 읽으면 점수 높은 것부터 읽고,
    읽지 못한 것은 "제목만 봤다" 고 밝힌다
-4. relation 이 parent_child(상위 ↔ 하위)인 쌍은 원래 범위가 겹친다 — 중복으로 치지 않는다.
-   siblings 는 같은 상위 밑이라 겹칠 가능성이 크다.
-   상위 본문의 체크리스트와 하위 작업이 겹치는 것은 말해도 된다
+4. relation 이 related(어느 한쪽이 다른 쪽을 연관 작업으로 걸었음)인 쌍은 사람이 이미 이어 둔
+   관계다 — 중복이라 단정하지 말고 "연관으로 걸려 있다" 고 밝힌 뒤 겹치는 범위만 말한다
 5. "중복 가능성 높음" · "확인 필요" 로 나눠 말하고,
    왜 그렇게 봤는지(제목 · 본문 · 담당자 · 기간)를 짧게 붙인다.
    합치거나 지우는 것은 화면에서 사람이 한다 — 너는 바꾸지 못한다
@@ -135,21 +134,20 @@ SYSTEM_PROMPT = """\
 1. 작업을 만들어 달라는 말에는 **초안만 낸다.** propose_tasks 로 낸다
 2. 담당자 이름은 list_members 로 id 를 찾아 owner_id 에 넣는다.
    이름이 멤버에 없거나 여럿에 걸리면 **초안을 내지 말고** 누구인지 되묻는다
-3. 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업으로, 할 일을 하위 작업
-   (parent_temp_id 가 묶음의 temp_id)으로 둔다. 할 일이 하나면 상위 없이 하나만 낸다
-4. 상위 작업은 같은 초안 안의 앞 항목(parent_temp_id)이거나, 이미 있는 작업(parent_id)이다.
-   이미 있는 작업 밑에 붙일 때는 get_task 로 그 작업을 먼저 읽고 그 id 를 parent_id 에 넣는다.
-   한 항목에 둘을 같이 쓰지 않는다. 초안 안의 하위의 하위는 parent_temp_id 로 잇는다
+3. 초안은 평평한 목록이다 — 상위 · 하위로 묶지 않는다. 할 일마다 한 항목이다
+4. 이미 있는 작업과 이어진 할 일이면 get_task 로 그 작업을 먼저 읽고 그 id 를 related_id 에 넣는다.
+   등록하면 새 작업이 그 작업을 연관 작업으로 건다. 이어진 작업이 없으면 null
 5. 날짜("다음 주 금요일")는 오늘을 기준으로 YYYY-MM-DD 로 바꾼다.
    말하지 않은 기간은 null, 우선순위는 normal 로 둔다. 짐작으로 채우지 않는다
 6. propose_tasks 가 오류를 돌려주면 고쳐서 다시 부른다. 한 답에서 마지막으로 낸 초안만 화면에 보인다
 7. 초안을 낸 뒤의 답은 짧게 — "아래처럼 등록할까요?" 정도. 초안 내용을 본문에 다시 늘어놓지 않고,
    "등록했다" 고 말하지 않는다
-8. "@HW-20 분석해서 필요한 작업 하위에 추가해줘" 처럼 작업을 나눠 달라면:
-   get_task 로 그 작업의 제목 · 본문 · 걸어 둔 안건 · 이미 있는 하위 작업(children)을 읽는다.
+8. "@HW-20 분석해서 필요한 작업 추가해줘" 처럼 작업을 나눠 달라면:
+   get_task 로 그 작업의 제목 · 본문 · 걸어 둔 안건 ·
+   이미 이어진 작업(related · relatedBy)을 읽는다.
    걸린 안건의 결정이 할 일을 정하면 get_thread 로 읽는다. 그다음 그 작업을 끝내는 데 필요한데
-   **children 에 아직 없는** 할 일만 하위 작업 초안(parent_id = 그 작업의 id)으로 낸다.
-   이미 있는 하위 작업과 겹치는 것은 내지 않는다. 담당자 · 기간은 말하지 않았으면 비워 둔다.
+   **related · relatedBy 에 아직 없는** 할 일만 초안(related_id = 그 작업의 id)으로 낸다.
+   이미 이어진 작업과 겹치는 것은 내지 않는다. 담당자 · 기간은 말하지 않았으면 비워 둔다.
    답에는 무엇을 근거로 나눴는지 한 줄 말하고,
    읽은 작업 · 안건의 [[task:ID]] · [[thread:ID]] 를 붙인다
 9. 지난 답 뒤의 [작업 초안 …] 은 화면이 덧붙인 기록이다 — 네가 쓰는 형식이 아니다.
@@ -227,7 +225,8 @@ TOOLS: list[ToolSpec] = [
     {
         "name": "get_task",
         "description": (
-            "작업 하나를 읽는다 — 작업(본문 포함) + 걸어 둔 안건의 제목 · 상태. "
+            "작업 하나를 읽는다 — 작업(본문 포함) + 걸어 둔 안건의 제목 · 상태 + "
+            "related(이 작업이 건 연관 작업) · relatedBy(이 작업을 건 작업). "
             "task_id 에는 작업 id 나 작업 키(HW-4)를 넣는다."
         ),
         "input_schema": {
@@ -240,7 +239,8 @@ TOOLS: list[ToolSpec] = [
         "name": "list_tasks",
         "description": (
             "이 프로젝트의 작업 전체를 한 줄씩 "
-            "(id · key · title · status · parentKey · owner 이름) 준다. "
+            "(id · key · title · status · relatedKeys(이 작업이 건 연관 작업 키) · "
+            "owner 이름) 준다. "
             "번호 순, 본문 없음. 작업 전체를 훑어야 할 때(전체 현황 · 중복 · 빠진 것) 쓴다. "
             "특정 낱말로 찾을 때는 search_tasks, 본문은 get_task 를 쓴다. "
             "truncated 가 true 면 앞에서 잘린 것이다."
@@ -259,7 +259,7 @@ TOOLS: list[ToolSpec] = [
             "중복 · 겹치는 작업을 찾을 때 먼저 쓴다. "
             "task_id(id 나 작업 키)를 주면 그 작업이 낀 쌍만 준다. "
             "글자가 다르고 뜻만 같은 것은 못 찾는다. "
-            "relation: parent_child 는 상위 ↔ 하위, siblings 는 같은 상위 밑, null 은 관계 없음."
+            "relation: related 는 어느 한쪽이 다른 쪽을 연관 작업으로 걸었음, null 은 관계 없음."
         ),
         "input_schema": {
             "type": "object",
@@ -302,7 +302,7 @@ TOOLS: list[ToolSpec] = [
         "name": "propose_tasks",
         "description": (
             "작업 초안을 화면에 보인다. 저장하지 않는다 — 사용자가 [등록] 을 눌러야 저장된다. "
-            "배열 순서가 등록 순서이고, 상위 작업이 늘 하위보다 앞이다. "
+            "배열 순서가 등록 순서이고, 평평한 목록이다(상위 · 하위 없음). "
             "틀리면 오류로 돌려준다 — 고쳐서 다시 부른다."
         ),
         "input_schema": {
@@ -319,16 +319,11 @@ TOOLS: list[ToolSpec] = [
                                 "type": "string",
                                 "description": "이 초안 안에서만 쓰는 이름 — t1, t2 …",
                             },
-                            "parent_temp_id": {
-                                "type": ["string", "null"],
-                                "description": "상위 작업의 temp_id — 앞 항목만. 없으면 null",
-                            },
-                            "parent_id": {
+                            "related_id": {
                                 "type": ["string", "null"],
                                 "description": (
-                                    "이미 있는 작업 밑에 붙일 때 그 작업의 id "
-                                    "(get_task 로 읽은 것). parent_temp_id 와 같이 쓰지 않는다. "
-                                    "없으면 null"
+                                    "이 할 일과 이어진 이미 있는 작업의 id "
+                                    "(get_task 로 읽은 것). 없으면 null"
                                 ),
                             },
                             "title": {"type": "string"},
@@ -342,8 +337,7 @@ TOOLS: list[ToolSpec] = [
                         },
                         "required": [
                             "temp_id",
-                            "parent_temp_id",
-                            "parent_id",
+                            "related_id",
                             "title",
                             "owner_id",
                             "start",
@@ -466,7 +460,7 @@ async def check_proposal(
         if not problems:
             problems = await task_service.missing_owners(session, project_id, proposal.tasks)
         if not problems:
-            problems = await task_service.missing_parents(session, project_id, proposal.tasks)
+            problems = await task_service.missing_related(session, project_id, proposal.tasks)
         if problems:
             return (
                 json.dumps(
@@ -505,8 +499,7 @@ def proposal_note(proposal: ChatProposal) -> str:
     for item in proposal.tasks:
         fields = {
             "temp_id": item.temp_id,
-            "parent_temp_id": item.parent_temp_id,
-            "parent_id": item.parent_id,
+            "related_id": item.related_id,
             "title": item.title,
             "owner_id": item.owner_id,
             "start": item.start.isoformat() if item.start else None,
