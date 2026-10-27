@@ -68,6 +68,7 @@ export interface Project {
 | `entry_detail` | `Entry.detail: string[]` |
 | `thread_option` | `Thread.options: string[]` |
 | `task_line` | `Task.body: TaskLine[]` (`id` · `kind` · `text` · `done` · `level`) |
+| `task_relation` | `Task.relatedIds: string[]` — 건 순서(`created_at` → `related_id`), 한 방향 (Q61 · `task-flow.md` '연관 작업') |
 
 ### 무엇이 담기나 — 프로젝트로 거르는 기준
 
@@ -117,7 +118,7 @@ export interface Project {
 | --- | --- |
 | `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
 | `Entry` | `ownerId` · `minutesId` |
-| `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` · `minutesId` |
+| `Task` | `ownerId` · `start` · `due` · `partId` · `minutesId` (`parentId` 는 2026-10-27 에 걷었다 — Q61. 대신 `relatedIds` 는 빈 배열 `[]`) |
 | `MinutesItem` · `Minutes` | `meetingDate` (스냅샷 밖 — `GET /api/projects/{projectId}/minutes` 등으로만 나간다, `minutes.md`) |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
 | `CheckRequest` | `confirmedAt` (스냅샷 밖 — `GET /api/projects/{projectId}/checks` 로만 나간다, `check.md`) |
