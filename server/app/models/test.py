@@ -10,13 +10,12 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Identity,
     Index,
-    Integer,
     String,
     Text,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, new_id
 from app.models.task import HISTORY_CHANGES
@@ -37,10 +36,7 @@ class TestCase(Base):
     __table_args__ = (
         CheckConstraint(f"status in {TEST_STATUSES}", name="status"),
         CheckConstraint("parent_id is null or parent_id <> id", name="parent_not_self"),
-        # 서비스가 지키는 규칙의 안전망 — 실패 단계 · 메모가 다른 상태에 남지 않게
-        CheckConstraint(
-            "failed_step is null or (status = 'fail' and failed_step >= 1)", name="failed_step"
-        ),
+        # 서비스가 지키는 규칙의 안전망 — 메모가 다른 상태에 남지 않게
         CheckConstraint("result_note = '' or status in ('fail', 'blocked')", name="result_note"),
         UniqueConstraint("project_id", "key"),
         UniqueConstraint("id", "project_id"),
@@ -56,15 +52,13 @@ class TestCase(Base):
     key: Mapped[str] = mapped_column(String(32))
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
     title: Mapped[str] = mapped_column(Text)
-    purpose: Mapped[str] = mapped_column(Text, default="", server_default="")
-    precondition: Mapped[str] = mapped_column(Text, default="", server_default="")
+    content: Mapped[str] = mapped_column(Text, default="", server_default="")
     test_data: Mapped[str] = mapped_column(Text, default="", server_default="")
     parent_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="draft", server_default="draft")
     status_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
     status_changed_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
-    failed_step: Mapped[int | None] = mapped_column(Integer)
     result_note: Mapped[str] = mapped_column(Text, default="", server_default="")
     start: Mapped[date | None] = mapped_column(Date)
     due: Mapped[date | None] = mapped_column(Date)
@@ -74,26 +68,6 @@ class TestCase(Base):
     basis_seq: Mapped[int | None] = mapped_column(BigInteger)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-    steps: Mapped[list["TestStep"]] = relationship(
-        cascade="all, delete-orphan",
-        order_by="TestStep.sort_order",
-        lazy="selectin",
-    )
-
-
-class TestStep(Base):
-    """행동 ↔ 기대 결과 짝. 배열 순서가 단계 순서다."""
-
-    __test__ = False
-    __tablename__ = "test_step"
-    __table_args__ = (UniqueConstraint("test_id", "sort_order"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    test_id: Mapped[str] = mapped_column(ForeignKey("test_case.id", ondelete="CASCADE"))
-    sort_order: Mapped[int] = mapped_column(Integer)
-    action: Mapped[str] = mapped_column(Text)
-    expected: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class TestRef(Base):

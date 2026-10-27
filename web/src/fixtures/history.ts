@@ -38,7 +38,6 @@ testHistory.tc7.push({
   backfilled: false,
   changes: [
     { field: 'status', from: 'testing', to: 'fail', subject: '' },
-    { field: 'failedStep', from: null, to: 2, subject: '' },
     { field: 'resultNote', from: null, to: t7.resultNote, subject: '' },
   ],
 })

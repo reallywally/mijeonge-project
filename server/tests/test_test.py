@@ -9,14 +9,19 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import delete, event, func, select
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from alembic.script import ScriptDirectory
+from sqlalchemy import create_engine, delete, event, func, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import test as route
-from app.models import Member, Task, TestRef, TestStep, Thread
+from app.models import Member, Task, TestRef, Thread
 from app.models import TestCase as Case
 from app.schemas.risk import RiskSettings
 from app.services import test as service
+from scripts.seed import SEED_TESTS
 from tests.conftest import AsMember
 
 TODAY = date(2026, 10, 15)
@@ -104,9 +109,8 @@ async def test_seed_status_days_and_details(client: httpx.AsyncClient) -> None:
         "HW-T8": 1,
     }
     t7 = rows["HW-T7"]
-    assert (t7["status"], t7["failedStep"]) == ("fail", 2)
-    assert t7["resultNote"]
-    assert rows["HW-T6"]["resultNote"] and rows["HW-T6"]["failedStep"] is None
+    assert t7["status"] == "fail" and t7["resultNote"]
+    assert rows["HW-T6"]["resultNote"]
     assert rows["HW-T2"]["resultNote"] == ""
     assert rows["HW-T2"]["refs"] == [{"kind": "task", "id": "k4"}]
     assert rows["HW-T3"]["refs"] == [{"kind": "thread", "id": "t3"}]
@@ -114,10 +118,19 @@ async def test_seed_status_days_and_details(client: httpx.AsyncClient) -> None:
     assert rows["HW-T4"]["changedEntryIds"] == ["e3"]
     assert all(rows[k]["changedEntryIds"] == [] for k in rows if k != "HW-T4")
     assert rows["HW-T3"]["statusChangedAt"] == "2026-10-03T03:00:00Z"
-    assert rows["HW-T2"]["steps"][1] == {
-        "action": "dev01 과 임시 비밀번호를 넣고 [로그인]",
-        "expected": "대시보드가 열리고 이름이 보인다",
-    }
+    # 지난 목적 · 사전조건 · 단계를 0020 의 모양으로 합친 글 (목업과 같다)
+    assert rows["HW-T2"]["content"] == (
+        "목적\n발급받은 계정으로 들어갈 수 있는지 본다.\n\n"
+        "사전조건\n개발 서버가 떠 있고 계정이 발급돼 있다.\n\n"
+        "단계\n1. 로그인 화면을 연다\n"
+        "2. dev01 과 임시 비밀번호를 넣고 [로그인] → 대시보드가 열리고 이름이 보인다"
+    )
+    assert rows["HW-T8"]["content"] == (
+        "단계\n1. [계정 목록 내려받기] → 모든 계정이 담긴 CSV 가 받아진다"
+    )
+    # 목적 · 사전조건 · 단계 · 실패한 단계는 걷었다 (Q60)
+    gone = {"purpose", "precondition", "steps", "failedStep"}
+    assert not any(gone & row.keys() for row in rows.values())
     assert rows["HW-T7"]["statusChangedBy"] == "u1" and rows["HW-T8"]["partId"] == "pt1"
     # 레벨은 걷었다 (2026-10-27 고침)
     assert not any("level" in row for row in rows.values())
@@ -150,7 +163,7 @@ async def test_list_runs_a_fixed_number_of_queries(
                 {
                     "title": f"더 {n}",
                     "parentId": "tc5",
-                    "steps": [{"action": "한다"}],
+                    "content": "한다",
                     "refs": [{"kind": "task", "id": "k4"}, {"kind": "thread", "id": f"t{n + 1}"}],
                 },
             )
@@ -171,14 +184,9 @@ async def test_create_minimal(client: httpx.AsyncClient) -> None:
     assert body["status"] == "draft"
     assert body["statusChangedBy"] == "admin" and body["createdBy"] == "admin"
     assert body["statusDays"] == 0
-    assert (body["steps"], body["refs"], body["signals"], body["changedEntryIds"]) == (
-        [],
-        [],
-        [],
-        [],
-    )
-    assert body["purpose"] == body["precondition"] == body["testData"] == body["resultNote"] == ""
-    for key in ("parentId", "failedStep", "start", "due", "ownerId", "partId"):
+    assert (body["refs"], body["signals"], body["changedEntryIds"]) == ([], [], [])
+    assert body["content"] == body["testData"] == body["resultNote"] == ""
+    for key in ("parentId", "start", "due", "ownerId", "partId"):
         assert body[key] is None
     assert body["createdAt"].endswith("Z") and body["statusChangedAt"] == body["createdAt"]
     assert await one(client, body["id"]) == body
@@ -204,13 +212,11 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
         {
             "title": "계정 잠금 해제",
             "parentId": "tc5",
-            "purpose": "잠긴 계정을 관리자가 푼다",
-            "precondition": "잠긴 계정 하나",
+            "content": "  관리 화면을 연다\n[잠금 해제] → 다시 로그인된다\n",
             "testData": "u2",
-            "steps": [
-                {"action": "관리 화면을 연다"},
-                {"action": "[잠금 해제] 를 누른다", "expected": "다시 로그인된다"},
-            ],
+            # 걷은 칸 — 옛 화면이 보내도 오류 없이 버린다 (Q60)
+            "purpose": "잠긴 계정을 관리자가 푼다",
+            "steps": [{"action": "관리 화면을 연다"}],
             "refs": [
                 {"kind": "thread", "id": "t3"},
                 {"kind": "task", "id": "k21"},
@@ -226,10 +232,9 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
     )
     # 상위 테스트의 파트를 따른다
     assert body["partId"] == "pt1"
-    assert body["steps"] == [
-        {"action": "관리 화면을 연다", "expected": ""},
-        {"action": "[잠금 해제] 를 누른다", "expected": "다시 로그인된다"},
-    ]
+    # 글 칸은 받은 그대로 둔다 — 앞뒤 공백도
+    assert body["content"] == "  관리 화면을 연다\n[잠금 해제] → 다시 로그인된다\n"
+    assert not {"purpose", "steps"} & body.keys()
     # 겹친 태그는 하나로, task 먼저 → 작업 · 안건의 seq 순
     assert body["refs"] == [
         {"kind": "task", "id": "k4"},
@@ -263,28 +268,24 @@ async def test_patch_changes_only_what_was_sent(client: httpx.AsyncClient) -> No
     assert (body["start"], body["due"]) == ("2026-10-06", "2026-10-09")
     # 상태 · 태그는 PATCH 로 안 바뀐다
     assert body["status"] == "testing" and body["refs"] == [{"kind": "thread", "id": "t3"}]
-    assert body["ownerId"] == "u2" and len(body["steps"]) == 2
+    assert body["ownerId"] == "u2" and body["content"].startswith("목적\n")
 
 
-async def test_patch_replaces_steps(client: httpx.AsyncClient, session: AsyncSession) -> None:
-    grown = [{"action": f"단계 {n}", "expected": f"결과 {n}"} for n in range(4)]
-    res = await client.patch("/api/tests/tc2", json={"steps": grown})
-    assert res.json()["steps"] == grown
-    res = await client.patch("/api/tests/tc2", json={"steps": [{"action": "하나만"}]})
-    assert res.json()["steps"] == [{"action": "하나만", "expected": ""}]
-    left = await session.scalar(
-        select(func.count()).select_from(TestStep).where(TestStep.test_id == "tc2")
-    )
-    assert left == 1
-    res = await client.patch("/api/tests/tc2", json={"steps": []})
-    assert res.json()["steps"] == []
+async def test_patch_replaces_content(client: httpx.AsyncClient) -> None:
+    res = await client.patch("/api/tests/tc2", json={"content": "새로 쓴 내용"})
+    assert res.json()["content"] == "새로 쓴 내용"
+    res = await client.patch("/api/tests/tc2", json={"content": ""})
+    assert res.json()["content"] == ""
+    # 10,000자까지 받는다
+    res = await client.patch("/api/tests/tc2", json={"content": "가" * 10000})
+    assert res.status_code == 200 and len(res.json()["content"]) == 10000
 
 
 async def test_patch_null_means_clear_only_where_allowed(client: httpx.AsyncClient) -> None:
     res = await client.patch("/api/tests/tc3", json={"ownerId": None, "start": None})
     assert res.status_code == 200
     assert res.json()["ownerId"] is None and res.json()["start"] is None
-    for key in ("title", "purpose", "steps"):
+    for key in ("title", "content", "testData"):
         res = await client.patch("/api/tests/tc3", json={key: None})
         assert error(res, 422, "VALIDATION_ERROR")["detail"].keys() == {key}
 
@@ -311,21 +312,17 @@ async def test_get_missing_is_404(client: httpx.AsyncClient) -> None:
         ({"title": "   "}, "title"),
         ({"title": "가" * 201}, "title"),
         ({}, "title"),
-        ({"title": "t", "purpose": "가" * 4001}, "purpose"),
-        ({"title": "t", "precondition": "가" * 4001}, "precondition"),
+        ({"title": "t", "content": "가" * 10001}, "content"),
         ({"title": "t", "testData": "가" * 4001}, "testData"),
-        ({"title": "t", "steps": [{"action": "a"}] * 51}, "steps"),
-        ({"title": "t", "steps": [{"action": "a"}, {"action": "b"}, {"action": "  "}]}, None),
-        ({"title": "t", "steps": [{"action": "a", "expected": "가" * 4001}]}, "steps.0.expected"),
         ({"title": "t", "start": "2026-10-20", "due": "2026-10-19"}, "due"),
         ({"title": "t", "refs": [{"kind": "label", "id": "x"}]}, "refs.0.kind"),
     ],
 )
 async def test_create_validation(
-    client: httpx.AsyncClient, body: dict[str, Any], field: str | None
+    client: httpx.AsyncClient, body: dict[str, Any], field: str
 ) -> None:
     detail = error(await client.post(LIST, json=body), 422, "VALIDATION_ERROR")["detail"]
-    assert set(detail) == {field or "steps.2.action"}
+    assert set(detail) == {field}
 
 
 async def test_period_check_looks_at_the_stored_side(client: httpx.AsyncClient) -> None:
@@ -435,28 +432,23 @@ async def status(c: httpx.AsyncClient, test_id: str, **body: Any) -> httpx.Respo
     return await c.post(f"/api/tests/{test_id}/status", json=body)
 
 
-async def test_fail_keeps_step_and_note_then_testing_clears_them(
-    client: httpx.AsyncClient,
-) -> None:
+async def test_fail_keeps_note_then_testing_clears_it(client: httpx.AsyncClient) -> None:
+    # 실패한 단계는 걷었다(Q60) — 옛 화면이 보내도 버린다
     res = await status(client, "tc2", status="fail", failedStep=2, note="  화면이 멈춘다  ")
     assert res.status_code == 200
     body = res.json()
-    assert (body["status"], body["failedStep"], body["resultNote"]) == ("fail", 2, "화면이 멈춘다")
+    assert (body["status"], body["resultNote"]) == ("fail", "화면이 멈춘다")
+    assert "failedStep" not in body
     assert body["statusChangedBy"] == "admin" and body["statusDays"] == 0
-    body = (await status(client, "tc2", status="testing", failedStep=1, note="버린다")).json()
-    assert (body["status"], body["failedStep"], body["resultNote"]) == ("testing", None, "")
+    body = (await status(client, "tc2", status="testing", note="버린다")).json()
+    assert (body["status"], body["resultNote"]) == ("testing", "")
 
 
-async def test_blocked_keeps_note_but_not_step(client: httpx.AsyncClient) -> None:
-    body = (await status(client, "tc2", status="blocked", failedStep=1, note="서버 없음")).json()
-    assert (body["failedStep"], body["resultNote"]) == (None, "서버 없음")
+async def test_blocked_keeps_note(client: httpx.AsyncClient) -> None:
+    body = (await status(client, "tc2", status="blocked", note="서버 없음")).json()
+    assert body["resultNote"] == "서버 없음"
     body = (await status(client, "tc7", status="pass", note="버린다")).json()
-    assert (body["failedStep"], body["resultNote"]) == (None, "")
-
-
-async def test_fail_without_a_step_is_fine(client: httpx.AsyncClient) -> None:
-    body = (await status(client, "tc2", status="fail", note="어딘가 틀림")).json()
-    assert body["failedStep"] is None
+    assert body["resultNote"] == ""
 
 
 @pytest.mark.parametrize(
@@ -465,8 +457,6 @@ async def test_fail_without_a_step_is_fine(client: httpx.AsyncClient) -> None:
         ({"status": "fail"}, "note"),
         ({"status": "fail", "note": "   "}, "note"),
         ({"status": "blocked", "note": ""}, "note"),
-        ({"status": "fail", "failedStep": 3, "note": "n"}, "failedStep"),
-        ({"status": "fail", "failedStep": 0, "note": "n"}, "failedStep"),
         ({"status": "fail", "note": "가" * 4001}, "note"),
         ({"status": "done"}, "status"),
     ],
@@ -477,11 +467,6 @@ async def test_status_validation(
     detail = error(await status(client, "tc2", **body), 422, "VALIDATION_ERROR")["detail"]
     assert set(detail) == {field}
     assert (await one(client, "tc2"))["status"] == "pass"
-
-
-async def test_out_of_range_step_is_ignored_unless_fail(client: httpx.AsyncClient) -> None:
-    res = await status(client, "tc2", status="ready", failedStep=99)
-    assert res.status_code == 200 and res.json()["failedStep"] is None
 
 
 async def test_group_status_is_400(client: httpx.AsyncClient) -> None:
@@ -501,16 +486,13 @@ async def test_same_status_overwrites_when_and_who(
 # --- 지우기 · 권한 ---
 
 
-async def test_delete_removes_steps_and_refs(
-    client: httpx.AsyncClient, session: AsyncSession
-) -> None:
+async def test_delete_removes_refs(client: httpx.AsyncClient, session: AsyncSession) -> None:
     assert (await client.delete("/api/tests/tc2")).status_code == 204
     error(await client.get("/api/tests/tc2"), 404, "TEST_NOT_FOUND")
-    for model in (TestStep, TestRef):
-        left = await session.scalar(
-            select(func.count()).select_from(model).where(model.test_id == "tc2")
-        )
-        assert left == 0
+    left = await session.scalar(
+        select(func.count()).select_from(TestRef).where(TestRef.test_id == "tc2")
+    )
+    assert left == 0
     # 형제가 남아 있어 tc1 은 아직 묶음이다
     assert (await rows_by_key(client))["HW-T1"]["signals"] == []
 
@@ -698,7 +680,7 @@ async def test_new_decision_reaches_through_a_tagged_task(client: httpx.AsyncCli
 async def test_patch_restamps_the_basis(client: httpx.AsyncClient) -> None:
     changed = await add_entry(client, "t2", "change")
     assert (await one(client, "tc4"))["changedEntryIds"] == ["e3", changed]
-    res = await client.patch("/api/tests/tc4", json={"purpose": "다시 봤다"})
+    res = await client.patch("/api/tests/tc4", json={"content": "다시 봤다"})
     assert res.json()["changedEntryIds"] == []
     assert res.json()["signals"] == ["notStarted"]
     # 빈 PATCH 는 아무것도 안 바꾼 것이다 — 기준도 그대로
@@ -763,3 +745,111 @@ async def test_deleting_a_task_or_thread_drops_only_the_tag(
     assert rows["HW-T3"]["refs"] == []
     left = await session.scalar(select(func.count()).select_from(TestRef))
     assert left == 2  # HW-T2 → k4, HW-T4 → t2
+
+
+# --- 0020 — 테스트 내용으로 합치기 (Q60) ---
+
+# 0020 앞의 시드 그대로 — (id, 목적, 사전조건, 단계). 옮긴 글이 지금 시드의 content 와 같아야 한다
+OLD_TESTS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
+    ("tc1", "사내 계정으로 들어오는 길을 처음부터 끝까지 따라간다.", "", []),
+    (
+        "tc2",
+        "발급받은 계정으로 들어갈 수 있는지 본다.",
+        "개발 서버가 떠 있고 계정이 발급돼 있다.",
+        [
+            ("로그인 화면을 연다", ""),
+            ("dev01 과 임시 비밀번호를 넣고 [로그인]", "대시보드가 열리고 이름이 보인다"),
+        ],
+    ),
+    (
+        "tc3",
+        "비밀번호를 거푸 틀리면 계정이 잠기는지 본다.",
+        "",
+        [
+            ("틀린 비밀번호로 네 번 로그인한다", "매번 남은 횟수가 보인다"),
+            ("다섯 번째로 틀린다", "계정이 잠겼다는 안내가 뜬다"),
+        ],
+    ),
+    (
+        "tc6",
+        "",
+        "",
+        [
+            ("계정 목록 파일을 올린다", ""),
+            ("[한 번에 만들기]", "네 계정이 모두 만들어지고 메일이 나간다"),
+        ],
+    ),
+    # 사전조건만 · 아무것도 없음
+    ("x1", "", "서버가 떠 있다", []),
+    ("x2", "", "", []),
+]
+
+
+def test_migration_moves_old_fields_into_content() -> None:
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    revisions = list(reversed(list(script.walk_revisions("base", "heads"))))
+    head = next(i for i, rev in enumerate(revisions) if rev.revision == "0020_test_content")
+
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            for revision in revisions[:head]:
+                revision.module.upgrade()
+            conn.execute(
+                text("insert into project (id, name, task_key_prefix) values ('p', '피', 'P')")
+            )
+            for no, (test_id, purpose, precondition, steps) in enumerate(OLD_TESTS, start=1):
+                conn.execute(
+                    text(
+                        "insert into test_case (id, project_id, key, seq, title, purpose,"
+                        " precondition, status, failed_step, status_changed_at, created_at)"
+                        " values (:id, 'p', :key, :seq, '테스트', :purpose, :precondition,"
+                        " :status, :failed, '2026-09-03 00:00:00', '2026-09-03 00:00:00')"
+                    ),
+                    {
+                        "id": test_id,
+                        "key": f"P-T{no}",
+                        "seq": no,
+                        "purpose": purpose,
+                        "precondition": precondition,
+                        # 실패한 단계는 버린다
+                        "status": "fail" if test_id == "tc6" else "draft",
+                        "failed": 2 if test_id == "tc6" else None,
+                    },
+                )
+                # 단계 순서는 sort_order 다 — 거꾸로 넣어도 순서대로 옮긴다
+                for order, (action, expected) in reversed(list(enumerate(steps))):
+                    conn.execute(
+                        text(
+                            "insert into test_step (id, test_id, sort_order, action, expected)"
+                            " values (:id, :test_id, :order, :action, :expected)"
+                        ),
+                        {
+                            "id": f"{test_id}s{order}",
+                            "test_id": test_id,
+                            "order": order,
+                            "action": action,
+                            "expected": expected,
+                        },
+                    )
+            revisions[head].module.upgrade()
+
+            moved = dict(conn.execute(text("select id, content from test_case")).all())
+            seeded = {f"tc{no}": row.content for no, row in enumerate(SEED_TESTS, start=1)}
+            for test_id in ("tc1", "tc2", "tc3", "tc6"):
+                assert moved[test_id] == seeded[test_id], test_id
+            assert moved["x1"] == "사전조건\n서버가 떠 있다"
+            assert moved["x2"] == ""
+            columns = {c["name"] for c in inspect(conn).get_columns("test_case")}
+            assert not {"purpose", "precondition", "failed_step"} & columns
+            assert "test_step" not in inspect(conn).get_table_names()
+
+            # 열 · 테이블만 되살린다 — 값은 돌아오지 않는다
+            revisions[head].module.downgrade()
+            columns = {c["name"] for c in inspect(conn).get_columns("test_case")}
+            assert {"purpose", "precondition", "failed_step"} <= columns
+            assert "content" not in columns
+            assert "test_step" in inspect(conn).get_table_names()
+            purposes = conn.execute(text("select distinct purpose from test_case")).scalars()
+            assert list(purposes) == [""]

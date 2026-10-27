@@ -5,13 +5,6 @@ import TestSignalChips from '@/components/app/TestSignalChips.vue'
 import TestStatusBadge from '@/components/app/TestStatusBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { dayTime } from '@/lib/date'
 import { testSinceLabel, testStatusLabel, testStatusProblem } from '@/lib/testcase'
 import { useDataStore } from '@/stores/data'
@@ -19,7 +12,7 @@ import { useTestStore } from '@/stores/test'
 import type { TestRow, TestStatus, TestStatusInput } from '@/types/domain'
 
 /* 상태 바꾸기 — 결과 버튼은 [성공] · [실패] 둘이다. 작성 중 · 준비됨 · 테스트 중 · 막힘은 상세 위쪽 상태 칸에서 고르고,
-   그 칸이 pick 을 부른다. 실패 · 막힘은 여기서 메모를 받고, 실패는 몇 번째 단계였는지도 받은 뒤 보낸다.
+   그 칸이 pick 을 부른다. 실패 · 막힘은 여기서 메모를 받은 뒤 보낸다.
    이력은 없다 — 지금 상태 · N일째 · 누가 바꿨는지만 보이고 다시 돌리면 덮어쓴다 (Q54).
    묶음은 직접 돌리지 않는다 — 버튼 대신 하위 요약을 보인다 */
 const props = defineProps<{ row: TestRow }>()
@@ -37,7 +30,6 @@ const changedBy = computed(() => data.memberName(test.value.statusChangedBy))
 /* 실패 · 막힘의 메모 칸 — 누르면 열리고 [남기기] 로 보낸다 */
 const asking = ref<'fail' | 'blocked' | null>(null)
 const note = ref('')
-const failedStep = ref<string>('none')
 const problem = ref('')
 
 watch(
@@ -51,8 +43,6 @@ watch(
 function ask(status: 'fail' | 'blocked') {
   asking.value = status
   note.value = test.value.status === status ? test.value.resultNote : ''
-  failedStep.value =
-    status === 'fail' && test.value.failedStep ? String(test.value.failedStep) : 'none'
   problem.value = ''
 }
 
@@ -76,18 +66,13 @@ defineExpose({ pick })
 function submit() {
   const status = asking.value
   if (!status) return
-  const step = status === 'fail' && failedStep.value !== 'none' ? Number(failedStep.value) : null
-  const p = testStatusProblem(status, note.value, step, test.value.steps.length)
+  const p = testStatusProblem(status, note.value)
   const first = Object.values(p)[0]
   if (first) {
     problem.value = first
     return
   }
-  emit('set', {
-    status,
-    note: note.value.trim(),
-    ...(status === 'fail' ? { failedStep: step } : {}),
-  })
+  emit('set', { status, note: note.value.trim() })
   asking.value = null
 }
 
@@ -163,9 +148,6 @@ const childCounts = computed(() => {
           >
           <TestSignalChips :signals="test.signals" />
         </div>
-        <p v-if="test.status === 'fail' && test.failedStep" class="text-xs text-destructive">
-          {{ test.failedStep }}단계에서 실패
-        </p>
         <p v-if="test.resultNote" class="text-sm leading-relaxed text-pretty" data-test-result-note>
           {{ test.resultNote }}
         </p>
@@ -191,20 +173,6 @@ const childCounts = computed(() => {
         class="flex flex-col gap-2 rounded-md border border-border bg-muted/50 p-3"
         data-test-status-form
       >
-        <div v-if="asking === 'fail'" class="flex items-center gap-2">
-          <span class="w-[72px] shrink-0 text-xs text-muted-foreground">실패한 단계</span>
-          <Select v-model="failedStep">
-            <SelectTrigger class="h-8 w-[160px] bg-background text-xs" aria-label="실패한 단계">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">모름 · 고르지 않음</SelectItem>
-              <SelectItem v-for="(s, i) in test.steps" :key="i" :value="String(i + 1)"
-                >{{ i + 1 }}단계 — {{ s.action }}</SelectItem
-              >
-            </SelectContent>
-          </Select>
-        </div>
         <Textarea
           v-model="note"
           :placeholder="asking === 'fail' ? '무엇이 기대와 달랐나' : '무엇에 막혔나'"

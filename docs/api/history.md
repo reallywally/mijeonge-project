@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | 단위 | **요청 하나 = 이력 한 줄**. 한 줄에 바뀐 칸 여럿(`changes`) | "담당자와 기한을 같이 바꿨다" 가 한눈에 보인다 |
 | 값 | 바뀌기 **전 · 후 값**을 남긴다. id 는 id 로 — 이름은 화면이 지금의 멤버 · 파트 · 작업으로 찾는다 | 이름이 바뀌어도 이력이 틀리지 않는다 |
-| 긴 글 | 본문(`body`) · 단계(`steps`)는 **바뀌었다는 것만**(값 없이, 단계는 개수). 목적 · 사전조건 · 테스트 데이터는 값을 남긴다 | 본문은 줄 단위 비교가 따로 필요하다 — 나중 |
+| 긴 글 | 본문(`body`) · 단계(`steps`)는 **바뀌었다는 것만**(값 없이, 단계는 개수). 테스트 내용 · 목적 · 사전조건 · 테스트 데이터는 값을 남긴다 | 본문은 줄 단위 비교가 따로 필요하다 — 나중 |
 | 안 바뀐 것 | 값이 그대로인 칸은 남기지 않는다. 남길 칸이 하나도 없으면 줄을 안 만든다 | 빈 `PATCH` · 같은 값 저장이 이력을 덮지 않게 |
 | 테이블 | `task_history` · `test_history` 따로. 작업 · 테스트를 지우면 같이 지운다(cascade) | 작업 · 테스트의 복합 FK 규칙을 그대로 쓴다 |
 | 지난 것 | 마이그레이션이 기존 작업 · 테스트마다 **등록 한 줄**(`backfilled`)을 등록 시각에 남긴다. 그 앞은 모른다 | 어느 상세를 열어도 '등록' 줄부터 보인다 |
@@ -88,16 +88,16 @@ export interface HistoryEntry {
 | `field` | 언제 | `from` · `to` |
 | --- | --- | --- |
 | `created` | 추가 | `null` · `null` |
-| `title` · `purpose` · `precondition` · `testData` | `PATCH` | 글 |
-| `steps` | `PATCH` 의 `steps` 가 단계 하나라도 바꿈 | 단계 수 · 단계 수(같을 수 있다) |
+| `title` · `content` · `testData` | `PATCH` | 글 |
+| ~~`purpose` · `precondition` · `steps`~~ | 2026-10-27 걷음(Q60) — 새로 남기지 않는다. 지난 줄에만 있다 | 글 · 글 · 단계 수 |
 | `parentId` · `ownerId` · `partId` · `start` · `due` | `PATCH` | 작업과 같다 |
 | `status` | `POST .../status` | 상태 값. **같은 상태로 다시 보내도** 남긴다(`from = to`) — N일째가 다시 0 이 된 까닭 |
-| `failedStep` | 상태 바꾸기가 값을 바꿈 | 단계 번호 또는 `null` |
+| ~~`failedStep`~~ | 2026-10-27 걷음(Q60) — 지난 줄에만 있다 | 단계 번호 또는 `null` |
 | `resultNote` | 상태 바꾸기가 값을 바꿈 | 글(`''` 이 아니라 비면 `null`) |
 | `taskRef` · `threadRef` | 태그 `PUT`(새로) · `DELETE`(있던 것) | 걸기 `null` → id, 떼기 id → `null` |
 | `basis` | `POST .../basis` ("그대로 맞다") | `null` · `null` |
 
-- 상태 바꾸기의 줄은 `status` 를 맨 앞에 두고 `failedStep` · `resultNote` 가 뒤따른다
+- 상태 바꾸기의 줄은 `status` 를 맨 앞에 두고 `resultNote` 가 뒤따른다
 - 작업 · 테스트 모두 한 줄 안의 칸 순서는 위 표의 순서다
 
 ## 엔드포인트
@@ -114,7 +114,7 @@ export interface HistoryEntry {
 ## 시드 · 목업
 
 - 시드는 작업 · 테스트마다 **등록 한 줄**(`backfilled = false`, 바꾼 사람 = 담당자 · 테스트는 만든 사람)을 등록 시각에 둔다
-- 시연용으로 둘을 더한다 — `k20` 에 `status todo → doing`(2026-10-08T00:00:00Z, `task_log` 시연 줄과 같은 때) · `HW-T7` 에 `status testing → fail` + `failedStep null → 2` + `resultNote`(그 테스트의 바뀐 시각)
+- 시연용으로 둘을 더한다 — `k20` 에 `status todo → doing`(2026-10-08T00:00:00Z, `task_log` 시연 줄과 같은 때) · `HW-T7` 에 `status testing → fail` + `resultNote`(그 테스트의 바뀐 시각)
 - 목업(`web/src/fixtures`)도 같은 줄을 둔다
 
 ## 화면 (프론트가 정할 것의 테두리)
@@ -123,7 +123,7 @@ export interface HistoryEntry {
   - 값은 화면 말로 — 상태 · 우선순위 라벨, 멤버 · 파트 이름, 작업 키 · 안건 제목, 날짜는 `M/D`. 지금 없는(지운) 것은 '(삭제됨)'
   - `created` 는 '등록', backfill 이면 '등록(이전 기록 없음)' 처럼 사람 없이
   - `body` 는 '본문 고침', `steps` 는 '단계 고침 (3 → 4개)', `lineDone` 은 '☑ 줄 글' · '☐ 줄 글', `basis` 는 '기준 그대로 맞다 확인'
-  - 긴 글(목적 · 사전조건 · 테스트 데이터 · 결과 메모)은 줄여 보이고 펼친다
+  - 긴 글(테스트 내용 · 목적 · 사전조건 · 테스트 데이터 · 결과 메모)은 줄여 보이고 펼친다
 - 기본은 접어 둔다([변경 이력] 을 누르면 부른다) — 상세를 열 때마다 부르지 않게. 펼친 채로 무언가 바꾸면 다시 부른다
 
 ## 구현에서 메운 것 (서버)
@@ -137,7 +137,7 @@ export interface HistoryEntry {
 | 작업마다 '등록' (24줄, `k1` ~ `k22` · `x1` · `x2`) | `th-<작업 id>-1` (예: `th-k4-1`) | `2026-09-04T00:20:00Z` (작업의 `createdAt`) | 그 작업의 `ownerId` — **담당이 없는 작업(`k1` · `k5` · `k6` …)은 `null`** | `[created]` |
 | `k20` 상태 | `th-k20-2` | `2026-10-08T00:00:00Z` | `u3` | `[status todo → doing]` |
 | 테스트마다 '등록' (8줄, `tc1` ~ `tc8`) | `sh-<테스트 id>-1` (예: `sh-tc7-1`) | `2026-09-30T01:00:00Z` (테스트의 `createdAt`) | 그 테스트의 `createdBy` (= 담당) | `[created]` |
-| `HW-T7`(`tc7`) 상태 | `sh-tc7-2` | `2026-10-05T03:00:00Z` (T7 의 `statusChangedAt`) | `u1` | `[status testing → fail, failedStep null → 2, resultNote null → "관리 화면 주소를 직접 치면 열린다."]` |
+| `HW-T7`(`tc7`) 상태 | `sh-tc7-2` | `2026-10-05T03:00:00Z` (T7 의 `statusChangedAt`) | `u1` | `[status testing → fail, resultNote null → "관리 화면 주소를 직접 치면 열린다."]` |
 
 - 시드는 모두 `backfilled = false`, `subject` 는 `''`. 순서는 작업 등록 줄들(작업 배열 순) 뒤에 `th-k20-2`, 테스트 등록 줄들 뒤에 `sh-tc7-2`. id 는 목업이 먼저 쓴 이름에 맞췄다
 - '담당이 없는 작업은 `changedBy` null' — 계약은 '바꾼 사람 = 담당자' 라고만 했다. 담당이 없는 작업에 다른 사람을 지어내지 않았다. 화면은 backfill 이 아닌데 사람이 없는 줄을 받을 수 있다

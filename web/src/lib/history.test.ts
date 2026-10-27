@@ -8,7 +8,6 @@ import {
   historyView,
   MISSING,
   orderChanges,
-  stepsChanged,
   type HistoryNames,
 } from '@/lib/history'
 import type { HistoryEntry, TaskLine } from '@/types/domain'
@@ -52,7 +51,7 @@ describe('칸 비교', () => {
     expect(diffChanges({ title: '설계' }, { title: '설계', due: undefined }, 'task')).toEqual([])
   })
 
-  it('테스트는 테스트 칸 표 순서 — 상태 다음에 실패 단계 · 결과 메모', () => {
+  it('테스트는 테스트 칸 표 순서 — 상태 다음에 결과 메모, 지난 줄의 실패 단계는 그 사이', () => {
     expect(
       orderChanges(
         [
@@ -78,13 +77,6 @@ describe('칸 비교', () => {
     expect(bodyChanged(a, [line('하나', { level: 1 }), line('둘')])).toBe(true)
     expect(bodyChanged(a, [line('하나', { kind: 'bullet' }), line('둘')])).toBe(true)
     expect(bodyChanged(a, [line('하나')])).toBe(true)
-  })
-
-  it('단계는 행동 · 기대 결과 · 개수', () => {
-    const s = [{ action: '연다', expected: '' }]
-    expect(stepsChanged(s, [{ action: '연다', expected: '' }])).toBe(false)
-    expect(stepsChanged(s, [{ action: '연다', expected: '뜬다' }])).toBe(true)
-    expect(stepsChanged(s, [])).toBe(true)
   })
 })
 
@@ -156,7 +148,7 @@ describe('화면 말', () => {
     })
   })
 
-  it('등록 · 본문 · 단계 · 체크 · 기준은 문구 하나', () => {
+  it('등록 · 본문 · 단계(지난 줄) · 체크 · 기준은 문구 하나', () => {
     expect(task(change('created', null, null)).label).toBe('등록')
     expect(changeView('task', change('created', null, null), names, true).label).toBe(
       '등록(이전 기록 없음)',
@@ -177,6 +169,13 @@ describe('화면 말', () => {
   })
 
   it('긴 글 칸은 long, 비운 글은 (비움) · 결과 메모 null 은 없음', () => {
+    expect(test(change('content', '목적\n로그인', ''))).toMatchObject({
+      label: '테스트 내용',
+      from: '목적\n로그인',
+      to: '(비움)',
+      long: true,
+    })
+    /* 걷은 칸(Q60)도 지난 줄에 있으니 읽는다 */
     expect(test(change('purpose', '', '로그인을 본다'))).toMatchObject({
       label: '목적',
       from: '(비움)',

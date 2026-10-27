@@ -3,6 +3,8 @@
 > 기획은 `docs/test-proposal.md`, 결정은 `docs/api/decisions.md` Q53 ~ Q58.
 > **2026-10-27 고침 (사용자)** — 레벨을 걷었다(화면 · API · DB, 리비전 `0018_test_drop_level`). 상세의 결과 버튼은 **[성공] · [실패]** 둘이고,
 > 작성 중 · 준비됨 · 테스트 중 · 막힘은 상태 칸에서 고른다. 화면 말 '통과' 는 **'성공'** 이다(값은 그대로 `pass`).
+> **2026-10-27 고침 (사용자, Q60)** — 입력을 줄였다. **목적 · 사전조건 · 단계(단계 표 · 실패한 단계)를 걷고 `content` '테스트 내용'(글 칸 하나, textarea)을 더했다**(리비전 `0020_test_content`).
+> 지난 목적 · 사전조건 · 단계는 테스트 내용 글로 옮겼다. 테스트 데이터는 그대로 둔다. 실패는 메모만 받는다.
 >
 > 순서는 `server/PLAN.md` 16단계 · `web/PLAN.md` 16단계. **이 문서는 1단계(AI 없이)의 계약이다** —
 > AI 셋(검토 · 빠진 테스트 찾기 · 바뀐 자리 설명)과 챗봇 도구는 끝의 '나중' 에 테두리만 두고, 시작할 때 이 문서를 고친다.
@@ -31,24 +33,17 @@ test_case
   id · project_id → project cascade · key · seq (Identity, unique)
   unique (project_id, key) · unique (id, project_id)
   title            text not null
-  purpose · precondition · test_data   text not null default ''
+  content · test_data   text not null default ''
   parent_id        FK (parent_id, project_id) → test_case(id, project_id)   null 가능
   status           'draft' | 'ready' | 'testing' | 'pass' | 'fail' | 'blocked'   default 'draft'
   status_changed_at  timestamptz not null
   status_changed_by  → member, null 가능
-  failed_step      int, null 가능          -- status = 'fail' 일 때만 값이 있다
   result_note      text not null default '' -- status 가 'fail' · 'blocked' 일 때만 비어 있지 않다
   start · due      date, null 가능
   owner_id → member · part_id (복합 FK, 작업과 같게)   null 가능
   basis_seq        bigint, null 가능
   created_by → member · created_at
 index (project_id, seq)
-
-test_step
-  id · test_id → test_case cascade · sort_order
-  action    text not null
-  expected  text not null default ''
-unique (test_id, sort_order)
 
 test_ref
   test_id · project_id
@@ -74,13 +69,6 @@ export type TestSignal =
   | 'failedIdle' // 실패 그대로
   | 'basisChanged' // 기준 바뀜
 
-/** 단계 — 행동 ↔ 기대 결과 짝. 배열 순서가 단계 순서다(1부터 센다) */
-export interface TestStep {
-  action: string
-  /** 중간 단계는 '' 일 수 있다 */
-  expected: string
-}
-
 /** 참조 태그 */
 export interface TestRef {
   kind: 'task' | 'thread'
@@ -94,10 +82,9 @@ export interface TestCase {
   key: string
   title: string
   parentId: string | null
-  purpose: string
-  precondition: string
+  /** 테스트 내용 — 무엇을 어떻게 해 보고 무엇이 나와야 하나. 여러 줄 글 */
+  content: string
   testData: string
-  steps: TestStep[]
   refs: TestRef[]
   status: TestStatus
   /** 지금 상태가 된 시각. ISO 8601 UTC, Z */
@@ -106,8 +93,6 @@ export interface TestCase {
   statusChangedBy: string | null
   /** 오늘(KST) − statusChangedAt 의 날짜(KST). 오늘 바뀌었으면 0 */
   statusDays: number
-  /** status 가 fail 일 때 몇 번째 단계였나(1부터). 그 밖엔 null */
-  failedStep: number | null
   /** fail · blocked 의 메모. 그 밖엔 '' */
   resultNote: string
   /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
@@ -124,8 +109,8 @@ export interface TestCase {
 }
 ```
 
-- **`null` 이 나가는 자리**는 위 타입에 `| null` 로 적은 여덟뿐이다(`parentId` · `statusChangedBy` · `failedStep` · `start` · `due` · `ownerId` · `partId` · `createdBy`). 나머지 빈 값은 `''` · `[]` (Q17 과 같은 규칙)
-- `refs` 는 `kind` (task 먼저) → 그 작업 · 안건의 `seq` 순. `steps` 는 단계 순
+- **`null` 이 나가는 자리**는 위 타입에 `| null` 로 적은 일곱뿐이다(`parentId` · `statusChangedBy` · `start` · `due` · `ownerId` · `partId` · `createdBy`). 나머지 빈 값은 `''` · `[]` (Q17 과 같은 규칙)
+- `refs` 는 `kind` (task 먼저) → 그 작업 · 안건의 `seq` 순
 
 ### 요청
 
@@ -134,10 +119,8 @@ export interface TestCase {
 export interface TestInput {
   title: string
   parentId?: string | null
-  purpose?: string
-  precondition?: string
+  content?: string
   testData?: string
-  steps?: TestStep[]
   /** 작업 · 안건 상세의 [테스트 추가] 가 미리 채운다 */
   refs?: TestRef[]
   start?: string | null
@@ -151,11 +134,8 @@ export interface TestInput {
 export interface TestPatch {
   title?: string
   parentId?: string | null
-  purpose?: string
-  precondition?: string
+  content?: string
   testData?: string
-  /** 보내면 단계 전체를 이것으로 바꾼다(순서 · 짝을 한 번에) */
-  steps?: TestStep[]
   start?: string | null
   due?: string | null
   ownerId?: string | null
@@ -165,19 +145,17 @@ export interface TestPatch {
 /** POST /api/tests/{testId}/status */
 export interface TestStatusInput {
   status: TestStatus
-  /** status 가 fail 일 때만. 1 ~ 단계 수 */
-  failedStep?: number | null
   /** fail · blocked 면 필수(앞뒤 공백을 뗀 뒤 비면 안 된다). 그 밖엔 보내도 버린다 */
   note?: string
 }
 ```
 
 **검사**
-- `title` — 앞뒤 공백을 떼고 1 ~ 200자. `steps` 는 50개까지, `action` 은 비면 안 된다(앞뒤 공백을 뗀 뒤). 글 칸(`purpose` · `precondition` · `testData` · `action` · `expected` · `note`)은 각 4,000자. 어기면 422 `VALIDATION_ERROR`(`detail` 이 자리를 짚는다 — `steps.2.action`)
+- `title` — 앞뒤 공백을 떼고 1 ~ 200자. `content` 는 10,000자(지난 단계를 옮겨 담는 칸이라 넉넉히), `testData` · `note` 는 각 4,000자. 어기면 422 `VALIDATION_ERROR`(`detail` 이 자리를 짚는다 — `content`)
 - `start` · `due` — 둘 다 있으면 `start ≤ due`. 아니면 422
 - 상위 — 없거나 다른 프로젝트면 400 `TEST_PARENT_NOT_FOUND`, 자기 자신 400 `TEST_PARENT_SELF`, 자손 400 `TEST_PARENT_DESCENDANT`
 - 담당자 · 파트 — 작업과 같은 검사 · 같은 `code`(`TASK_OWNER_NOT_FOUND` 자리에 `TEST_OWNER_NOT_FOUND`, 파트는 작업과 같은 것)
-- 상태 — 하위가 있는 테스트는 400 `TEST_GROUP_STATUS`(묶음은 직접 돌리지 않는다). `failedStep` 이 범위 밖이면 422. `fail` 이 아니면 `failedStep` 을 비우고, `fail` · `blocked` 가 아니면 `resultNote` 를 비운다. **같은 상태로 다시 보내도** `statusChangedAt` · `By` 를 새로 찍는다(덮어쓴다)
+- 상태 — 하위가 있는 테스트는 400 `TEST_GROUP_STATUS`(묶음은 직접 돌리지 않는다). `fail` · `blocked` 가 아니면 `resultNote` 를 비운다. **같은 상태로 다시 보내도** `statusChangedAt` · `By` 를 새로 찍는다(덮어쓴다)
 - 태그 — 같은 프로젝트의 작업 · 안건만(아니면 404 `TASK_NOT_FOUND` · `THREAD_NOT_FOUND`), 20개까지 400 `TEST_REF_LIMIT`
 - 지우기 — 하위가 있으면 409 `TEST_HAS_CHILDREN`, 만든 사람 · 관리자가 아니면 403 `FORBIDDEN`
 
@@ -246,7 +224,7 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 | `HW-T4` 비밀번호 변경 주기 | T1 | ready · 10-01 | 10-13 ~ 10-17 | **결정이 바뀐 안건**(basis 뒤에 `decide` · `change` 줄) | `notStarted` · `basisChanged` |
 | `HW-T5` 계정 배포 시나리오 | (묶음) | draft | — | — | `[]` |
 | `HW-T6` 개발자 계정 일괄 생성 | T5 | blocked · 10-02 | — | 작업 `k21` | `longBlocked` |
-| `HW-T7` 권한 없는 계정 접근 차단 | T5 | fail · 10-05 (2단계) | 10-14 ~ 10-20 | — | `failedIdle` |
+| `HW-T7` 권한 없는 계정 접근 차단 | T5 | fail · 10-05 | 10-14 ~ 10-20 | — | `failedIdle` |
 | `HW-T8` 계정 목록 내려받기 | T5 | testing · 10-14 | — | — | `[]` (1일째) |
 
 시드가 고를 작업 · 안건 · Entry 는 서버가 정하고 아래 '구현에서 메운 것' 에 적는다. 목업(`web/src/fixtures`)도 같은 줄을 둔다.
@@ -261,8 +239,8 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 - **테스트 상세** — 작업 상세와 따로 만든 팝업(`/tests/:id`), 추가는 `/tests/new`(작업 · 안건 상세에서 오면 `?task=` · `?thread=` 로 태그를 미리 채운다)
   - 위: 키 · 제목 · 상태(N일째, 고르기) · 담당자 · 파트 · 상위 테스트 · 기간
   - 태그 칩 — 작업 번호 · 안건 제목으로 찾아 건다. 누르면 그 작업 · 안건 상세
-  - 목적 · 사전조건 · 테스트 데이터 · **단계 표**(`#` · 행동 · 기대 결과, 줄 추가 · 끌어 순서 · 지우기)
-  - **상태 바꾸기** — 결과 버튼은 **[성공] · [실패]** 둘(실패는 메모 · 단계 번호). 작성 중 · 준비됨 · 테스트 중 · 막힘은 위 **상태 칸에서 고른다**(작업 상세의 상태 고르기와 같은 방식, 막힘을 고르면 메모를 받는다). 묶음이면 버튼 · 고르기 대신 하위 요약
+  - **테스트 내용**(여러 줄 textarea) · 테스트 데이터
+  - **상태 바꾸기** — 결과 버튼은 **[성공] · [실패]** 둘(실패는 메모). 작성 중 · 준비됨 · 테스트 중 · 막힘은 위 **상태 칸에서 고른다**(작업 상세의 상태 고르기와 같은 방식, 막힘을 고르면 메모를 받는다). 묶음이면 버튼 · 고르기 대신 하위 요약
   - 기준 바뀜이면 `changedEntryIds` 의 Entry 를 안건 이력처럼 보이고 [그대로 맞다](= `POST .../basis`)
 - **작업 상세 · 안건 상세** — '이 작업(안건)을 태그한 테스트' 를 읽기 전용 칩(상태 색)으로, [테스트 추가]
 
@@ -281,17 +259,15 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 
 **테이블 · 저장**
 - 리비전은 `0017_test_case`. `test_ref` 에는 계약의 열 말고 **대리 키 `id`** 를 하나 더 둔다(PK 가 필요하다, JSON 에는 안 나간다). `test_id` 도 `(test_id, project_id) → test_case(id, project_id)` 복합 FK(cascade)라 태그의 `project_id` 가 테스트의 프로젝트와 어긋날 수 없다
-- 안전망 CHECK 셋 — `parent_id <> id`, `failed_step` 은 `status = 'fail'` 이고 1 이상일 때만, `result_note` 는 `fail` · `blocked` 일 때만 비어 있지 않다
-- 앞뒤 공백을 떼어 **저장한다** — `title` · 단계의 `action` · 상태의 `note`. `purpose` · `precondition` · `testData` · `expected` 는 받은 그대로 둔다
-- 단계를 `PATCH` 로 바꾸면 자리 순서대로 있던 줄을 고쳐 쓴다(남는 줄은 지운다). 단계가 줄어도 `failedStep` 은 그대로 둔다
-- 하위가 생긴 테스트(묶음)의 자기 `status` · `failedStep` · `resultNote` 는 건드리지 않는다 — 화면이 하위에서 모으고 신호는 `[]` 다. `changedEntryIds` 는 묶음에도 센다(태그가 있으면)
+- 안전망 CHECK 둘 — `parent_id <> id`, `result_note` 는 `fail` · `blocked` 일 때만 비어 있지 않다
+- 앞뒤 공백을 떼어 **저장한다** — `title` · 상태의 `note`. `content` · `testData` 는 받은 그대로 둔다
+- 하위가 생긴 테스트(묶음)의 자기 `status` · `resultNote` 는 건드리지 않는다 — 화면이 하위에서 모으고 신호는 `[]` 다. `changedEntryIds` 는 묶음에도 센다(태그가 있으면)
 
 **만들 때 · 상태**
 - 만들 때 `statusChangedAt` = `createdAt`, `statusChangedBy` = 만든 사람(draft 로 둔 사람)
-- `status` 가 `fail` 이 아니면 `failedStep` 은 범위를 보지 않고 버린다(422 아님). `fail` 에서 `failedStep` 은 빼도 된다(`null`)
 - 상태를 바꿔도 `basis_seq` 는 그대로다(계약의 '새로 찍는 때' 에 없다)
 - 검사 순서 — 모양(422) → 기간(422 `due`) → 상위 → 담당자 → 파트 → 태그. 지우기는 403 을 409 보다 먼저 본다. 상태는 400 `TEST_GROUP_STATUS` 를 422 보다 먼저 본다
-- 422 의 `detail` 자리 — 기간은 `due`, 단계는 `steps.2.action` · `steps.0.expected`, 태그는 `refs.0.kind`, 상태는 `failedStep` · `note`. `PATCH` 에서 `null` 을 못 받는 칸(`title` · 글 칸 · `steps`)에 `null` 을 보내면 그 칸으로 422
+- 422 의 `detail` 자리 — 기간은 `due`, 글은 `content` · `testData`, 태그는 `refs.0.kind`, 상태는 `note`. `PATCH` 에서 `null` 을 못 받는 칸(`title` · 글 칸)에 `null` 을 보내면 그 칸으로 422
 - 상위가 다른 프로젝트면 작업처럼 따로 코드를 두지 않고 `TEST_PARENT_NOT_FOUND`(계약대로)
 
 **기준 바뀜**
@@ -300,7 +276,7 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 - 만들 때 같은 태그를 여러 번 보내면 하나로 친다. 20개는 겹친 것을 뺀 수로 센다. `PUT` 으로 이미 있는 태그를 다시 거는 것은 20개여도 된다
 - `statusDays` 는 0 아래로 내려가지 않는다(바뀐 날이 오늘보다 뒤인 데이터)
 
-**시드** (`server/scripts/seed.py` 의 `SEED_TESTS`) — **목업 `web/src/fixtures/tests.ts` 와 같은 줄**이다(id `tc1` ~ `tc8` · 글자 · 담당 · 파트 · 시각 · 단계). 단계 id `tc2s0` 꼴 · 태그 id `tc2r0` 꼴은 서버만 쓴다. p1 의 `next_test_no` 는 9
+**시드** (`server/scripts/seed.py` 의 `SEED_TESTS`) — **목업 `web/src/fixtures/tests.ts` 와 같은 줄**이다(id `tc1` ~ `tc8` · 글자 · 담당 · 파트 · 시각 · 테스트 내용). 태그 id `tc2r0` 꼴은 서버만 쓴다. p1 의 `next_test_no` 는 9
 - 바뀐 시각은 표의 날 12:00 KST(`03:00Z`), 묶음 · `createdAt` 은 `2026-09-30T01:00:00Z`. 담당 = 바꾼 사람 = 만든 사람
 - **T2** — 작업 `k4`(개발 환경 설정 — `t1` · `t2` 에 걸려 있다) 태그, `basis_seq = 3`(닿는 안건의 최댓값 `e3`) → `changedEntryIds = []`. 태그한 작업으로 안건에 닿지만 바뀐 것이 없는 줄
 - **T3** — 안건 `t3`(미룸 `e4` 만 있다) 태그, `basis_seq = 4` → `[]`
@@ -319,3 +295,23 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 - **묶음의 [지우기]** 는 비활성(서버가 409). 태그를 떼면(204) 그 테스트를 한 번 더 `GET` 한다 — 기준이 새로 찍혀 신호가 바뀔 수 있다
 - **만들 때 `partId` 를 늘 보낸다**(상위 테스트의 활성 파트, 없으면 공통) — '안 보내면 상위를 따른다' 에 기대지 않는다
 - **간트** — 작업 간트의 dhtmlx 부분을 `GanttChart.vue` 로 떼어 `TaskGantt` · `TestGantt` 가 같이 쓴다. 기간 지남 · 오래 걸림 막대는 테두리를 세운다
+- **테스트 내용 칸 (Q60)** — 다른 글 칸처럼 칸을 벗어나면 바뀐 때만 `PATCH { content }`. 처음 높이는 넉넉히(약 8줄) 두고 글만큼 늘어난다. 10,000자 넘으면 보내기 전에 칸 아래에 같은 말을 띄운다. 목록 · 간트에는 보이지 않는다
+- **변경 이력의 걷은 칸** — `purpose` · `precondition` · `steps` · `failedStep` 의 칸 이름 · 표기('목적' · '사전조건' · '단계 고침 (n개)' · 'n단계')는 지난 줄을 읽으려고 그대로 둔다. 한 줄 안의 순서는 `content` · `testData` 뒤
+
+## 0020 — 테스트 내용으로 합치기 (2026-10-27, Q60)
+
+- `test_case.content` 를 더하고, 지난 값을 아래 모양으로 옮긴 뒤 `purpose` · `precondition` · `failed_step`(과 그 CHECK) · `test_step` 테이블을 지운다. 빈 절은 뺀다. 다 비면 `''`
+  ```
+  목적
+  <purpose>
+
+  사전조건
+  <precondition>
+
+  단계
+  1. <action> → <expected>      (expected 가 비면 ' → …' 없이)
+  2. ...
+  ```
+- `downgrade` 는 열 · 테이블을 되살리되 값은 되돌리지 않는다(`content` 는 버린다)
+- 지난 변경 이력(`test_history`)의 `purpose` · `precondition` · `steps` · `failedStep` 줄은 그대로 둔다 — 화면은 그 칸 이름을 계속 읽는다
+- (서버가 메운 것) '빈 절' · '`expected` 가 비면' 은 앞뒤 공백을 뗀 뒤 비었는지로 본다. 옮기는 글 자체는 받은 그대로(공백을 떼지 않는다). 걷은 키(`purpose` · `precondition` · `steps` · `failedStep`)가 요청에 와도 오류 없이 버린다 — 레벨을 걷을 때와 같다

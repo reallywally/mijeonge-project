@@ -236,22 +236,16 @@ describe('테스트 상세', () => {
     expect(useTestStore().byId.tc4.signals).toEqual(['notStarted'])
   })
 
-  it('단계를 더하고 행동을 적으면 저장된다 — 행동이 비면 기다린다', async () => {
+  it('테스트 내용은 글 칸 하나 — 벗어나면 저장된다', async () => {
     await mountAt('/tests/tc8')
-    /* 멈춘 시계에서는 Vue 가 이벤트 시각(_vts)으로 새로 붙은 칸의 blur 를 걸러 버린다 — 받은 뒤로는 진짜 시계로 */
+    const field = $('textarea[aria-label="테스트 내용"]') as HTMLTextAreaElement
+    expect(field.value).toBe('단계\n1. [계정 목록 내려받기] → 모든 계정이 담긴 CSV 가 받아진다')
+    expect($('[aria-label="목적"]')).toBeNull()
+    /* 멈춘 시계에서는 Vue 가 이벤트 시각(_vts)으로 blur 를 걸러 버린다 — 받은 뒤로는 진짜 시계로 */
     vi.useRealTimers()
-    await click(button('단계 추가'))
-    await type('textarea[aria-label="2단계 기대 결과"]', 'CSV 가 열린다')
-    await blur('textarea[aria-label="2단계 기대 결과"]')
-    expect(popupText()).toContain('행동을 다 적으면 단계가 저장됩니다.')
-    expect(useTestStore().byId.tc8.steps).toHaveLength(1)
-
-    await type('textarea[aria-label="2단계 행동"]', '받은 파일을 연다')
-    await blur('textarea[aria-label="2단계 행동"]')
-    expect(useTestStore().byId.tc8.steps).toEqual([
-      { action: '[계정 목록 내려받기]', expected: '모든 계정이 담긴 CSV 가 받아진다' },
-      { action: '받은 파일을 연다', expected: 'CSV 가 열린다' },
-    ])
+    await type('textarea[aria-label="테스트 내용"]', '받은 CSV 를 연다')
+    await blur('textarea[aria-label="테스트 내용"]')
+    expect(useTestStore().byId.tc8.content).toBe('받은 CSV 를 연다')
   })
 
   it('태그 칩을 누르면 그 작업 상세로 간다', async () => {
@@ -334,14 +328,13 @@ describe('작업 · 안건 상세의 태그한 테스트', () => {
 describe('테스트 상세 — 변경 이력', () => {
   const entries = () => $$('[data-history-entry]').map((e) => e.textContent!.replace(/\s+/g, ' '))
 
-  it('펼치면 부르고, 실패 줄은 상태 · 실패한 단계 · 결과 메모를 한 줄에 — 긴 글은 펼친다', async () => {
+  it('펼치면 부르고, 실패 줄은 상태 · 결과 메모를 한 줄에 — 긴 글은 펼친다', async () => {
     await mountAt('/tests/tc7')
     expect(entries()).toEqual([])
     await click($('[data-history-toggle]'))
     const [fail, created] = entries()
     expect(fail).toContain('김서연')
     expect(fail).toContain('상태: 테스트 중 → 실패')
-    expect(fail).toContain('실패한 단계: 없음 → 2단계')
     expect(fail).toContain('결과 메모: 없음 → 관리 화면 주소를 직접 치면 열린다.')
     expect(created).toContain('등록')
 
@@ -355,14 +348,14 @@ describe('테스트 상세 — 변경 이력', () => {
     expect(entries()[0]).toContain('가'.repeat(80))
   })
 
-  it('펼친 채로 단계 · 태그를 바꾸면 다시 부른다', async () => {
+  it('펼친 채로 테스트 내용 · 태그를 바꾸면 다시 부른다', async () => {
     await mountAt('/tests/tc1')
     await click($('[data-history-toggle]'))
     expect(entries()).toHaveLength(1)
-    await useTestStore().patch('tc1', { steps: [{ action: '연다', expected: '' }] })
+    await useTestStore().patch('tc1', { content: '연다' })
     await useTestStore().addRef('tc1', { kind: 'task', id: 'k4' })
     await flushPromises()
     expect(entries()[0]).toContain('작업 태그 걸기: HW-4')
-    expect(entries()[1]).toContain('단계 고침 (0 → 1개)')
+    expect(entries()[1]).toContain('테스트 내용')
   })
 })

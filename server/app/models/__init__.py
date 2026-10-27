@@ -15,7 +15,7 @@ from app.models.task import (
     TaskLog,
     TaskThreadLink,
 )
-from app.models.test import TestCase, TestHistory, TestRef, TestStep
+from app.models.test import TestCase, TestHistory, TestRef
 from app.models.thread import Entry, EntryDetail, Thread, ThreadCc, ThreadOption
 
 __all__ = [
@@ -43,7 +43,6 @@ __all__ = [
     "TestCase",
     "TestHistory",
     "TestRef",
-    "TestStep",
     "Thread",
     "ThreadCc",
     "ThreadOption",

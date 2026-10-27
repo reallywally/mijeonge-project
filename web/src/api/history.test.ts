@@ -67,7 +67,7 @@ describe('목업 갈래 — 시드', () => {
     })
   })
 
-  it('테스트마다 등록 한 줄(만든 사람) — HW-T7 은 실패 + 실패 단계 + 결과 메모를 한 줄로', async () => {
+  it('테스트마다 등록 한 줄(만든 사람) — HW-T7 은 실패 + 결과 메모를 한 줄로', async () => {
     const t7 = testCases.find((t) => t.id === 'tc7')!
     const got = await fetchTestHistory('tc7')
     expect(got[0]).toMatchObject({ changedAt: t7.createdAt, changedBy: 'u1', backfilled: false })
@@ -76,7 +76,6 @@ describe('목업 갈래 — 시드', () => {
       changedBy: 'u1',
       changes: [
         { field: 'status', from: 'testing', to: 'fail' },
-        { field: 'failedStep', from: null, to: 2 },
         { field: 'resultNote', from: null, to: '관리 화면 주소를 직접 치면 열린다.' },
       ],
     })
@@ -144,43 +143,36 @@ describe('목업 갈래 — 테스트 쓰기의 칸 규칙', () => {
     expect((await fetchTestHistory(made.id)).map(fields)).toEqual([['created']])
   })
 
-  it('PATCH 는 바뀐 칸만 — 같은 값만 보내면 줄이 없고, 단계는 개수만', async () => {
+  it('PATCH 는 바뀐 칸만 — 같은 값만 보내면 줄이 없고, 테스트 내용은 글 값으로', async () => {
     await patchTest('tc2', { title: '올바른 계정으로 로그인' })
     expect(await fetchTestHistory('tc2')).toHaveLength(1)
 
+    const before = testCases.find((t) => t.id === 'tc2')!.content
     await patchTest('tc2', {
       due: '2026-10-12',
       title: '  올바른 계정으로 로그인  ',
-      purpose: '새 목적',
-      steps: [
-        { action: '로그인 화면을 연다', expected: '' },
-        { action: 'dev01 과 임시 비밀번호를 넣고 [로그인]', expected: '대시보드가 열린다' },
-        { action: '로그아웃', expected: '' },
-      ],
+      content: '새 내용',
     })
     expect((await last('tc2')).changes).toEqual([
-      change('purpose', '발급받은 계정으로 들어갈 수 있는지 본다.', '새 목적'),
-      change('steps', 2, 3),
+      change('content', before, '새 내용'),
       change('due', '2026-10-10', '2026-10-12'),
     ])
   })
 
-  it('상태는 같은 상태로 다시 보내도 남고, 실패 단계 · 결과 메모는 바뀔 때만 뒤따른다', async () => {
+  it('상태는 같은 상태로 다시 보내도 남고, 결과 메모는 바뀔 때만 뒤따른다', async () => {
     await setTestStatus('tc3', { status: 'testing' })
     expect((await last('tc3')).changes).toEqual([change('status', 'testing', 'testing')])
 
-    await setTestStatus('tc3', { status: 'fail', failedStep: 2, note: '안 잠긴다' })
+    await setTestStatus('tc3', { status: 'fail', note: '안 잠긴다' })
     expect((await last('tc3')).changes).toEqual([
       change('status', 'testing', 'fail'),
-      change('failedStep', null, 2),
       change('resultNote', null, '안 잠긴다'),
     ])
 
-    /* 성공으로 돌리면 실패 단계 · 메모가 비워진다 — 빈 메모는 '' 가 아니라 null */
+    /* 성공으로 돌리면 메모가 비워진다 — 빈 메모는 '' 가 아니라 null */
     await setTestStatus('tc3', { status: 'pass' })
     expect((await last('tc3')).changes).toEqual([
       change('status', 'fail', 'pass'),
-      change('failedStep', 2, null),
       change('resultNote', '안 잠긴다', null),
     ])
   })

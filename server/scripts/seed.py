@@ -44,7 +44,6 @@ from app.models import (
     TestCase,
     TestHistory,
     TestRef,
-    TestStep,
     Thread,
     ThreadCc,
     ThreadOption,
@@ -758,6 +757,11 @@ def noon(day: str) -> str:
     return f"{day}T03:00:00Z"
 
 
+def lines(*parts: str) -> str:
+    """테스트 내용 — 지난 목적 · 사전조건 · 단계를 0020 이 옮긴 모양. 목업도 같은 글이다."""
+    return "\n".join(parts)
+
+
 @dataclass
 class SeedTest:
     title: str
@@ -765,12 +769,9 @@ class SeedTest:
     status: str
     changed_at: str = TEST_CREATED
     parent: str | None = None
-    purpose: str = ""
-    precondition: str = ""
+    content: str = ""
     test_data: str = ""
-    steps: list[tuple[str, str]] = field(default_factory=list)
     refs: list[tuple[str, str]] = field(default_factory=list)
-    failed_step: int | None = None
     note: str = ""
     start: str | None = None
     due: str | None = None
@@ -783,7 +784,7 @@ SEED_TESTS: list[SeedTest] = [
         "로그인 시나리오",
         "u2",
         "draft",
-        purpose="사내 계정으로 들어오는 길을 처음부터 끝까지 따라간다.",
+        content=lines("목적", "사내 계정으로 들어오는 길을 처음부터 끝까지 따라간다."),
     ),
     SeedTest(
         "올바른 계정으로 로그인",
@@ -793,13 +794,18 @@ SEED_TESTS: list[SeedTest] = [
         parent="tc1",
         start="2026-10-08",
         due="2026-10-10",
-        purpose="발급받은 계정으로 들어갈 수 있는지 본다.",
-        precondition="개발 서버가 떠 있고 계정이 발급돼 있다.",
+        content=lines(
+            "목적",
+            "발급받은 계정으로 들어갈 수 있는지 본다.",
+            "",
+            "사전조건",
+            "개발 서버가 떠 있고 계정이 발급돼 있다.",
+            "",
+            "단계",
+            "1. 로그인 화면을 연다",
+            "2. dev01 과 임시 비밀번호를 넣고 [로그인] → 대시보드가 열리고 이름이 보인다",
+        ),
         test_data="dev01 / 발급 메일의 임시 비밀번호",
-        steps=[
-            ("로그인 화면을 연다", ""),
-            ("dev01 과 임시 비밀번호를 넣고 [로그인]", "대시보드가 열리고 이름이 보인다"),
-        ],
         refs=[("task", "k4")],
         # k4 로 닿는 t1 · t2 의 최댓값 e3
         basis=3,
@@ -812,11 +818,14 @@ SEED_TESTS: list[SeedTest] = [
         parent="tc1",
         start="2026-10-06",
         due="2026-10-08",
-        purpose="비밀번호를 거푸 틀리면 계정이 잠기는지 본다.",
-        steps=[
-            ("틀린 비밀번호로 네 번 로그인한다", "매번 남은 횟수가 보인다"),
-            ("다섯 번째로 틀린다", "계정이 잠겼다는 안내가 뜬다"),
-        ],
+        content=lines(
+            "목적",
+            "비밀번호를 거푸 틀리면 계정이 잠기는지 본다.",
+            "",
+            "단계",
+            "1. 틀린 비밀번호로 네 번 로그인한다 → 매번 남은 횟수가 보인다",
+            "2. 다섯 번째로 틀린다 → 계정이 잠겼다는 안내가 뜬다",
+        ),
         refs=[("thread", "t3")],
         # t3 에는 미룸 e4 뿐이다
         basis=4,
@@ -829,8 +838,13 @@ SEED_TESTS: list[SeedTest] = [
         parent="tc1",
         start="2026-10-13",
         due="2026-10-17",
-        purpose="정해 둔 주기가 지난 계정은 비밀번호를 바꾸게 하는지 본다.",
-        steps=[("주기가 지난 계정으로 로그인한다", "비밀번호 바꾸기 화면으로 간다")],
+        content=lines(
+            "목적",
+            "정해 둔 주기가 지난 계정은 비밀번호를 바꾸게 하는지 본다.",
+            "",
+            "단계",
+            "1. 주기가 지난 계정으로 로그인한다 → 비밀번호 바꾸기 화면으로 간다",
+        ),
         refs=[("thread", "t2")],
         # 테스트를 쓸 때 본 기준 뒤로 t2 에 결정 e3(seq 3) 이 생겼다
         basis=2,
@@ -840,7 +854,7 @@ SEED_TESTS: list[SeedTest] = [
         "u3",
         "draft",
         part="pt1",
-        purpose="개발자 계정을 만들어 나눠 주고 권한을 거르는 흐름.",
+        content=lines("목적", "개발자 계정을 만들어 나눠 주고 권한을 거르는 흐름."),
     ),
     SeedTest(
         "개발자 계정 일괄 생성",
@@ -850,10 +864,11 @@ SEED_TESTS: list[SeedTest] = [
         parent="tc5",
         note="DB 설치(HW-20)가 안 끝나 계정을 만들 DB 가 없다.",
         part="pt1",
-        steps=[
-            ("계정 목록 파일을 올린다", ""),
-            ("[한 번에 만들기]", "네 계정이 모두 만들어지고 메일이 나간다"),
-        ],
+        content=lines(
+            "단계",
+            "1. 계정 목록 파일을 올린다",
+            "2. [한 번에 만들기] → 네 계정이 모두 만들어지고 메일이 나간다",
+        ),
         refs=[("task", "k21")],
     ),
     SeedTest(
@@ -862,15 +877,15 @@ SEED_TESTS: list[SeedTest] = [
         "fail",
         noon("2026-10-05"),
         parent="tc5",
-        failed_step=2,
         note="관리 화면 주소를 직접 치면 열린다.",
         start="2026-10-14",
         due="2026-10-20",
         part="pt1",
-        steps=[
-            ("일반 계정으로 로그인한다", ""),
-            ("관리 화면 주소를 직접 연다", "권한이 없다는 화면이 뜬다"),
-        ],
+        content=lines(
+            "단계",
+            "1. 일반 계정으로 로그인한다",
+            "2. 관리 화면 주소를 직접 연다 → 권한이 없다는 화면이 뜬다",
+        ),
     ),
     SeedTest(
         "계정 목록 내려받기",
@@ -879,7 +894,7 @@ SEED_TESTS: list[SeedTest] = [
         noon("2026-10-14"),
         parent="tc5",
         part="pt1",
-        steps=[("[계정 목록 내려받기]", "모든 계정이 담긴 CSV 가 받아진다")],
+        content=lines("단계", "1. [계정 목록 내려받기] → 모든 계정이 담긴 CSV 가 받아진다"),
     ),
 ]
 
@@ -892,14 +907,12 @@ def test_cases() -> list[TestCase]:
             project_id="p1",
             key=f"HW-T{no}",
             title=row.title,
-            purpose=row.purpose,
-            precondition=row.precondition,
+            content=row.content,
             test_data=row.test_data,
             parent_id=row.parent,
             status=row.status,
             status_changed_at=at(row.changed_at),
             status_changed_by=row.owner,
-            failed_step=row.failed_step,
             result_note=row.note,
             start=d(row.start),
             due=d(row.due),
@@ -908,10 +921,6 @@ def test_cases() -> list[TestCase]:
             basis_seq=row.basis,
             created_by=row.owner,
             created_at=at(TEST_CREATED),
-            steps=[
-                TestStep(id=f"tc{no}s{i}", sort_order=i, action=action, expected=expected)
-                for i, (action, expected) in enumerate(row.steps)
-            ],
         )
         for no, row in enumerate(SEED_TESTS, start=1)
     ]
@@ -944,7 +953,6 @@ def test_histories() -> list[TestHistory]:
             changed_at=at(T7.changed_at),
             changes=[
                 {"field": "status", "from": "testing", "to": "fail", "subject": ""},
-                {"field": "failedStep", "from": None, "to": T7.failed_step, "subject": ""},
                 {"field": "resultNote", "from": None, "to": T7.note, "subject": ""},
             ],
             backfilled=False,
@@ -972,7 +980,6 @@ async def clear(session: AsyncSession) -> None:
     for model in (
         TestHistory,
         TestRef,
-        TestStep,
         TestCase,
         ProjectReport,
         CheckRequest,

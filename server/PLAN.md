@@ -358,6 +358,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 - [x] 시드 HW-T1 ~ T8 — 목업 `web/src/fixtures/tests.ts` 를 그대로(id `tc1` ~ `tc8`). 고른 태그 · `basis_seq` 는 계약의 '구현에서 메운 것'
 - [x] 검사 — `tests/test_test.py`(CRUD · 검사 오류 코드 전부 · 권한 · 다른 프로젝트 404 · 상태 규칙 · 신호 여섯과 경계값 · 기준 설정을 바꾸면 신호가 바뀜 · 기준 바뀜이 PATCH · basis · 태그로 지워짐 · 태그한 작업으로 닿는 안건 · 키 발번 · 작업 · 안건을 지우면 태그만 빠짐 · 목록 쿼리 수가 테스트 수에 안 늘어남) · `test_contract_types.py` 의 테스트 모양
 - [x] 2026-10-27 고침 — 레벨을 걷었다(사용자 결정). 리비전 `0018_test_drop_level`(batch 로 CHECK · 열 지우기, downgrade 는 null 가능 열로만 되살림 — 값은 안 돌아온다) · 모델 · 스키마 · 시드 · 검사에서 `level` 을 뺐다. 요청에 `level` 이 와도 버린다(`Schema` 는 extra 를 따로 정하지 않아 Pydantic 기본 `ignore`)
+- [x] 2026-10-27 고침 (Q60) — 목적 · 사전조건 · 단계 · 실패한 단계를 걷고 `content` '테스트 내용'(10,000자)을 더했다. 리비전 `0020_test_content`(content 열 → 지난 값을 계약 '0020' 의 모양으로 옮김 → `test_step` · 열 셋 · CHECK `failed_step` 지움, downgrade 는 열 · 테이블만 — 값은 안 돌아온다) · 모델 · 스키마 · 서비스(이력에 `content` 를 글로) · `_INDEXED` 의 `steps` · 시드(같은 규칙으로 합친 글, `sh-tc7-2` 의 `failedStep` 뺌) · 검사(옮김 검사는 `test_test.py`, 옮긴 글이 시드 content 와 같은지 본다). 걷은 키가 와도 버린다
 - [ ] `API.md` 의 엔드포인트 줄을 `구현` 으로 — 프론트 에이전트와 겹치지 않게 이번에는 안 건드렸다
 - [ ] 개발 DB — `alembic upgrade head` 와 시드는 사람이 돌린다
 

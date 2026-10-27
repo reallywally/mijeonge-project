@@ -8,7 +8,6 @@ import type {
   TaskPriority,
   TaskStatus,
   TestStatus,
-  TestStep,
 } from '@/types/domain'
 
 /* 변경 이력 (docs/api/history.md). 서버는 값을 id 그대로 남기고 이름은 화면이 지금의 것으로 찾는다.
@@ -36,9 +35,11 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
   test: [
     'created',
     'title',
+    'content',
+    'testData',
+    /* 목적 · 사전조건 · 단계 · 실패한 단계는 2026-10-27 걷었다(Q60) — 지난 이력 줄에만 있어 읽기는 둔다 */
     'purpose',
     'precondition',
-    'testData',
     'steps',
     'parentId',
     'ownerId',
@@ -75,7 +76,7 @@ export function orderChanges(changes: HistoryChange[], kind: HistoryKind): Histo
 
 /**
  * 고친 요청(next)이 지금 값(before)에서 바꾼 칸 — 보낸 칸 가운데 값이 달라진 것만, 칸 표 순서로.
- * 값이 글 · 수 · 참거짓 · null 인 칸만 본다(본문 · 단계는 따로 — bodyChanged · stepsChanged)
+ * 값이 글 · 수 · 참거짓 · null 인 칸만 본다(본문은 따로 — bodyChanged)
  */
 export function diffChanges(
   before: object,
@@ -108,14 +109,6 @@ export function bodyChanged(a: TaskLine[], b: TaskLine[]) {
   )
 }
 
-/** 단계가 하나라도 바뀌었나 */
-export function stepsChanged(a: TestStep[], b: TestStep[]) {
-  return (
-    a.length !== b.length ||
-    a.some((s, i) => s.action !== b[i].action || s.expected !== b[i].expected)
-  )
-}
-
 /* ── 화면 말 ─────────────────────────────────────────── */
 
 /** 지금의 이름을 찾는 길 — 못 찾으면 null(지웠거나 못 보는 것) */
@@ -141,7 +134,7 @@ export interface HistoryChangeView {
   from?: string
   to?: string
   value?: string
-  /** 긴 글(목적 · 사전조건 · 테스트 데이터 · 결과 메모) — 줄여 보이고 펼친다 */
+  /** 긴 글(테스트 내용 · 목적 · 사전조건 · 테스트 데이터 · 결과 메모) — 줄여 보이고 펼친다 */
   long: boolean
 }
 
@@ -166,6 +159,7 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
   },
   test: {
     title: '제목',
+    content: '테스트 내용',
     purpose: '목적',
     precondition: '사전조건',
     testData: '테스트 데이터',
@@ -180,7 +174,7 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
   },
 }
 
-const LONG_FIELDS = new Set(['purpose', 'precondition', 'testData', 'resultNote'])
+const LONG_FIELDS = new Set(['content', 'purpose', 'precondition', 'testData', 'resultNote'])
 
 const str = (v: Value) => (v === null ? '' : String(v))
 

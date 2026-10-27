@@ -9,7 +9,6 @@ import PartField from '@/components/app/PartField.vue'
 import TestRefs from '@/components/app/TestRefs.vue'
 import TestStatusBadge from '@/components/app/TestStatusBadge.vue'
 import TestStatusSection from '@/components/app/TestStatusSection.vue'
-import TestStepsEditor from '@/components/app/TestStepsEditor.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -27,12 +26,12 @@ import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
-import type { TestRef, TestStatus, TestStatusInput, TestStep } from '@/types/domain'
+import type { TestRef, TestStatus, TestStatusInput } from '@/types/domain'
 
 /* 테스트 상세 · 추가 — 작업 상세와 따로 만든 팝업이다(입력 항목이 다르다, Q55).
    상세(testId)는 보는 자리가 곧 고치는 자리라 칸을 벗어나면 그 값만 바로 들어간다.
    추가(testId = null)는 같은 칸을 채운 뒤 [만들기] 로 한 번에 보낸다 — 늘 작성 중으로 들어간다.
-   왼쪽이 제목 · 태그 · 목적 · 사전조건 · 테스트 데이터 · 단계 · 상태 · 기준 바뀜, 오른쪽이 속성이다 */
+   왼쪽이 제목 · 태그 · 테스트 내용 · 테스트 데이터 · 상태 · 기준 바뀜, 오른쪽이 속성이다 */
 const props = defineProps<{
   testId: string | null
   /** 추가할 때 미리 채울 것 — 줄의 + 는 상위, 작업 · 안건 상세의 [테스트 추가] 는 태그 */
@@ -59,15 +58,13 @@ const missing = computed(() => !isNew.value && testStore.loaded && !test.value)
 
 /* 칸들 — 상세는 고치는 동안 들고 있다가 벗어날 때 넣고, 추가는 [만들기] 때 모아 보낸다 */
 const title = ref('')
-const purpose = ref('')
-const precondition = ref('')
+const content = ref('')
 const testData = ref('')
 const ownerId = ref<string | null>(null)
 const partId = ref<string | null>(null)
 const parentId = ref<string | null>(null)
 const start = ref('')
 const due = ref('')
-const steps = ref<TestStep[]>([])
 const refs = ref<TestRef[]>([])
 const problems = ref<Record<string, string>>({})
 const saving = ref(false)
@@ -87,27 +84,23 @@ function fill() {
   problems.value = {}
   if (t) {
     title.value = t.title
-    purpose.value = t.purpose
-    precondition.value = t.precondition
+    content.value = t.content
     testData.value = t.testData
     ownerId.value = t.ownerId
     partId.value = t.partId
     parentId.value = t.parentId
     start.value = t.start ?? ''
     due.value = t.due ?? ''
-    steps.value = t.steps.map((s) => ({ ...s }))
     refs.value = [...t.refs]
   } else if (isNew.value) {
     title.value = ''
-    purpose.value = ''
-    precondition.value = ''
+    content.value = ''
     testData.value = ''
     ownerId.value = null
     parentId.value = props.initialParentId ?? null
     partId.value = partForChild(parentId.value)
     start.value = ''
     due.value = ''
-    steps.value = []
     refs.value = [...(props.initialRefs ?? [])]
   }
   void nextTick(fitTitle)
@@ -140,8 +133,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   }
 }
 
-type TextKey = 'purpose' | 'precondition' | 'testData'
-const textRefs = { purpose, precondition, testData }
+type TextKey = 'content' | 'testData'
+const textRefs = { content, testData }
 
 function commitText(key: TextKey) {
   const t = test.value
@@ -175,19 +168,6 @@ function commitPeriod() {
 }
 
 const picked = (e: Event) => (e.target as HTMLInputElement).value
-
-/* 단계 — 행동이 빈 줄이 있으면 서버가 받지 않으니 채울 때까지 보내지 않는다 */
-const stepHint = ref('')
-function onSteps(next: TestStep[]) {
-  steps.value = next
-  if (!test.value) return
-  if (next.some((s) => !s.action.trim())) {
-    stepHint.value = '행동을 다 적으면 단계가 저장됩니다.'
-    return
-  }
-  stepHint.value = ''
-  void testStore.patch(test.value.id, { steps: next })
-}
 
 function addRef(ref: TestRef) {
   if (test.value) void testStore.addRef(test.value.id, ref)
@@ -240,14 +220,10 @@ async function remove() {
 /* ── 추가: 모아 보낸다 ── */
 async function create() {
   if (saving.value) return
-  /* 아무것도 안 적은 단계 줄은 빼고 보낸다 */
-  const sent = steps.value.filter((s) => s.action.trim() || s.expected.trim())
   const found = testFieldProblems({
     title: title.value,
-    purpose: purpose.value,
-    precondition: precondition.value,
+    content: content.value,
     testData: testData.value,
-    steps: sent,
     start: start.value || null,
     due: due.value || null,
   })
@@ -257,10 +233,8 @@ async function create() {
   const id = await testStore.create({
     title: title.value.trim(),
     parentId: parentId.value,
-    purpose: purpose.value,
-    precondition: precondition.value,
+    content: content.value,
     testData: testData.value,
-    steps: sent,
     refs: refs.value,
     start: start.value || null,
     due: due.value || null,
@@ -270,10 +244,6 @@ async function create() {
   saving.value = false
   if (id) emit('created', id)
 }
-
-const stepProblem = computed(
-  () => Object.entries(problems.value).find(([k]) => k.startsWith('steps'))?.[1] ?? stepHint.value,
-)
 
 const ghost =
   'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-accent focus-visible:bg-background focus-visible:border-input'
@@ -344,52 +314,31 @@ const area =
 
           <section class="flex flex-col gap-3">
             <label class="flex flex-col gap-1">
-              <span class="text-xs font-medium">목적</span>
+              <span class="text-xs font-medium">테스트 내용</span>
               <Textarea
-                v-model="purpose"
-                aria-label="목적"
-                placeholder="이 테스트로 무엇을 확인하나 (한두 줄)"
-                :class="area"
-                @blur="commitText('purpose')"
+                v-model="content"
+                aria-label="테스트 내용"
+                placeholder="무엇을 어떻게 해 보고 무엇이 나와야 하나"
+                :class="[area, 'min-h-[180px]']"
+                @blur="commitText('content')"
               />
+              <span v-if="problems.content" class="text-xs text-destructive">{{
+                problems.content
+              }}</span>
             </label>
-            <div class="grid grid-cols-2 gap-3">
-              <label class="flex flex-col gap-1">
-                <span class="text-xs font-medium">사전조건</span>
-                <Textarea
-                  v-model="precondition"
-                  aria-label="사전조건"
-                  placeholder="돌리기 전에 갖춰져 있어야 하는 것"
-                  :class="area"
-                  @blur="commitText('precondition')"
-                />
-              </label>
-              <label class="flex flex-col gap-1">
-                <span class="text-xs font-medium">테스트 데이터</span>
-                <Textarea
-                  v-model="testData"
-                  aria-label="테스트 데이터"
-                  placeholder="쓸 계정 · 값 · 파일"
-                  :class="area"
-                  @blur="commitText('testData')"
-                />
-              </label>
-            </div>
-          </section>
-
-          <section class="flex flex-col gap-2">
-            <div class="flex items-baseline gap-2">
-              <span class="text-xs font-medium">단계</span>
-              <span class="text-xs text-muted-foreground">{{ steps.length }}개</span>
-              <span class="grow" />
-              <span class="text-xs text-muted-foreground">행동 ↔ 기대 결과를 짝으로</span>
-            </div>
-            <TestStepsEditor
-              :steps="test ? test.steps : steps"
-              :failed-step="test?.status === 'fail' ? test.failedStep : null"
-              @change="onSteps"
-            />
-            <p v-if="stepProblem" class="text-xs text-destructive">{{ stepProblem }}</p>
+            <label class="flex flex-col gap-1">
+              <span class="text-xs font-medium">테스트 데이터</span>
+              <Textarea
+                v-model="testData"
+                aria-label="테스트 데이터"
+                placeholder="쓸 계정 · 값 · 파일"
+                :class="area"
+                @blur="commitText('testData')"
+              />
+              <span v-if="problems.testData" class="text-xs text-destructive">{{
+                problems.testData
+              }}</span>
+            </label>
           </section>
 
           <TestStatusSection

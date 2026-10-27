@@ -74,13 +74,12 @@ async def test_seed_demo_lines(client: httpx.AsyncClient) -> None:
     assert failed["changedAt"] == "2026-10-05T03:00:00Z" and failed["changedBy"] == "u1"
     assert failed["changes"] == [
         ch("status", "testing", "fail"),
-        ch("failedStep", None, 2),
         ch("resultNote", None, "관리 화면 주소를 직접 치면 열린다."),
     ]
     # 시연 줄이 지금 값과 맞는다
     tc7 = (await client.get("/api/tests/tc7")).json()
-    assert tc7["status"] == "fail" and tc7["failedStep"] == 2
-    assert tc7["resultNote"] == failed["changes"][2]["to"]
+    assert tc7["status"] == "fail"
+    assert tc7["resultNote"] == failed["changes"][1]["to"]
 
 
 # --- 작업 ---------------------------------------------------------------------------------
@@ -250,7 +249,7 @@ async def test_test_create_and_patch(client: httpx.AsyncClient) -> None:
         "/api/projects/p1/tests",
         json={
             "title": "새 테스트",
-            "steps": [{"action": "연다"}],
+            "content": "연다",
             "refs": [{"kind": "task", "id": "k4"}],
         },
     )
@@ -264,22 +263,22 @@ async def test_test_create_and_patch(client: httpx.AsyncClient) -> None:
         f"/api/{path}",
         json={
             "due": "2026-10-20",
-            "steps": [{"action": "연다"}, {"action": "닫는다"}],
             "ownerId": "u2",
             "testData": "dev01",
-            "purpose": "목적",
+            "content": "연다\n닫는다",
             "title": "고친 테스트",
             "parentId": "tc1",
             "partId": "pt1",
             "start": "2026-10-16",
-            "precondition": "",
+            # 걷은 칸(Q60) — 보내도 버리고 이력에 남지 않는다
+            "purpose": "목적",
+            "steps": [{"action": "연다"}],
         },
     )
     assert await last_changes(client, path) == [
         ch("title", "새 테스트", "고친 테스트"),
-        ch("purpose", "", "목적"),
+        ch("content", "연다", "연다\n닫는다"),
         ch("testData", "", "dev01"),
-        ch("steps", 1, 2),
         ch("parentId", None, "tc1"),
         ch("ownerId", None, "u2"),
         ch("partId", None, "pt1"),
@@ -293,17 +292,18 @@ async def test_test_patch_without_a_change_writes_nothing(client: httpx.AsyncCli
     tc2 = (await client.get("/api/tests/tc2")).json()
     for body in (
         {},
-        {"title": tc2["title"], "steps": tc2["steps"], "due": tc2["due"], "ownerId": "u2"},
+        {"title": tc2["title"], "content": tc2["content"], "due": tc2["due"], "ownerId": "u2"},
     ):
         assert (await client.patch("/api/tests/tc2", json=body)).status_code == 200
     assert await history(client, "tests/tc2") == before
 
 
-async def test_steps_change_with_the_same_count(client: httpx.AsyncClient) -> None:
-    steps = (await client.get("/api/tests/tc7")).json()["steps"]
-    steps[1]["expected"] = "403 화면이 뜬다"
-    await client.patch("/api/tests/tc7", json={"steps": steps})
-    assert await last_changes(client, "tests/tc7") == [ch("steps", 2, 2)]
+async def test_content_keeps_the_whole_text(client: httpx.AsyncClient) -> None:
+    """테스트 내용은 값을 남긴다 — 본문(`body`)처럼 '바뀜' 만 남기지 않는다 (history.md)."""
+    before = (await client.get("/api/tests/tc7")).json()["content"]
+    after = before.replace("권한이 없다는 화면이 뜬다", "403 화면이 뜬다")
+    await client.patch("/api/tests/tc7", json={"content": after})
+    assert await last_changes(client, "tests/tc7") == [ch("content", before, after)]
 
 
 async def test_same_status_is_still_recorded(client: httpx.AsyncClient) -> None:
@@ -314,20 +314,17 @@ async def test_same_status_is_still_recorded(client: httpx.AsyncClient) -> None:
     assert [row["changes"] for row in rows[before:]] == [[ch("status", "testing", "testing")]] * 2
 
 
-async def test_status_brings_step_and_note(client: httpx.AsyncClient) -> None:
+async def test_status_brings_note(client: httpx.AsyncClient) -> None:
+    # 실패한 단계는 걷었다(Q60) — 보내도 이력에 남지 않는다
     await client.post(
         "/api/tests/tc8/status", json={"status": "fail", "failedStep": 1, "note": "  빈 파일  "}
     )
     assert await last_changes(client, "tests/tc8") == [
         ch("status", "testing", "fail"),
-        ch("failedStep", None, 1),
         ch("resultNote", None, "빈 파일"),
     ]
     await client.post("/api/tests/tc8/status", json={"status": "blocked", "note": "빈 파일"})
-    assert await last_changes(client, "tests/tc8") == [
-        ch("status", "fail", "blocked"),
-        ch("failedStep", 1, None),
-    ]
+    assert await last_changes(client, "tests/tc8") == [ch("status", "fail", "blocked")]
     await client.post("/api/tests/tc8/status", json={"status": "testing", "note": "버린다"})
     assert await last_changes(client, "tests/tc8") == [
         ch("status", "blocked", "testing"),

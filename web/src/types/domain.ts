@@ -987,13 +987,6 @@ export type TestSignal =
   | 'failedIdle' // 실패 그대로
   | 'basisChanged' // 기준 바뀜
 
-/** 단계 — 행동 ↔ 기대 결과 짝. 배열 순서가 단계 순서다(1부터 센다) */
-export interface TestStep {
-  action: string
-  /** 중간 단계는 '' 일 수 있다 */
-  expected: string
-}
-
 /** 참조 태그 */
 export interface TestRef {
   kind: 'task' | 'thread'
@@ -1007,10 +1000,9 @@ export interface TestCase {
   key: string
   title: string
   parentId: string | null
-  purpose: string
-  precondition: string
+  /** 테스트 내용 — 무엇을 어떻게 해 보고 무엇이 나와야 하나. 여러 줄 글 */
+  content: string
   testData: string
-  steps: TestStep[]
   refs: TestRef[]
   status: TestStatus
   /** 지금 상태가 된 시각. ISO 8601 UTC, Z */
@@ -1019,8 +1011,6 @@ export interface TestCase {
   statusChangedBy: string | null
   /** 오늘(KST) − statusChangedAt 의 날짜(KST). 오늘 바뀌었으면 0 */
   statusDays: number
-  /** status 가 fail 일 때 몇 번째 단계였나(1부터). 그 밖엔 null */
-  failedStep: number | null
   /** fail · blocked 의 메모. 그 밖엔 '' */
   resultNote: string
   /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
@@ -1040,10 +1030,8 @@ export interface TestCase {
 export interface TestInput {
   title: string
   parentId?: string | null
-  purpose?: string
-  precondition?: string
+  content?: string
   testData?: string
-  steps?: TestStep[]
   /** 작업 · 안건 상세의 [테스트 추가] 가 미리 채운다 */
   refs?: TestRef[]
   start?: string | null
@@ -1057,11 +1045,8 @@ export interface TestInput {
 export interface TestPatch {
   title?: string
   parentId?: string | null
-  purpose?: string
-  precondition?: string
+  content?: string
   testData?: string
-  /** 보내면 단계 전체를 이것으로 바꾼다(순서 · 짝을 한 번에) */
-  steps?: TestStep[]
   start?: string | null
   due?: string | null
   ownerId?: string | null
@@ -1071,8 +1056,6 @@ export interface TestPatch {
 /** POST /api/tests/{testId}/status */
 export interface TestStatusInput {
   status: TestStatus
-  /** status 가 fail 일 때만. 1 ~ 단계 수 */
-  failedStep?: number | null
   /** fail · blocked 면 필수(앞뒤 공백을 뗀 뒤 비면 안 된다). 그 밖엔 보내도 버린다 */
   note?: string
 }

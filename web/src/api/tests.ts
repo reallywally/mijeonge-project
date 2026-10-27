@@ -6,7 +6,7 @@ import { projects } from '@/fixtures'
 import type { MockTestCase } from '@/fixtures'
 import { canDeleteComment, canSeeProject } from '@/lib/access'
 import { kstToday, nowIso } from '@/lib/date'
-import { change, diffChanges, stepsChanged } from '@/lib/history'
+import { change, diffChanges } from '@/lib/history'
 import { DEFAULT_RISK_SETTINGS } from '@/lib/risk'
 import {
   TEST_REF_MAX,
@@ -221,15 +221,12 @@ const mock = {
       key,
       title: input.title.trim(),
       parentId,
-      purpose: input.purpose ?? '',
-      precondition: input.precondition ?? '',
+      content: input.content ?? '',
       testData: input.testData ?? '',
-      steps: (input.steps ?? []).map((s) => ({ action: s.action.trim(), expected: s.expected })),
       refs: sortRefs(refs),
       status: 'draft',
       statusChangedAt: at,
       statusChangedBy: me.id,
-      failedStep: null,
       resultNote: '',
       start: input.start ?? null,
       due: input.due ?? null,
@@ -256,18 +253,13 @@ const mock = {
     if (patch.ownerId !== undefined) checkOwner(row.projectId, patch.ownerId, row.ownerId)
     if (patch.partId !== undefined) checkPart(row.projectId, patch.partId, row.partId)
 
-    /* 이력 — 보낸 칸 가운데 값이 바뀐 것만. 단계는 개수만 남긴다 */
-    const nextSteps = patch.steps?.map((s) => ({ action: s.action.trim(), expected: s.expected }))
-    const changes = diffChanges(row, { ...patch, title: trimmed(patch.title) }, 'test', ['steps'])
-    if (nextSteps && stepsChanged(row.steps, nextSteps))
-      changes.push(change('steps', row.steps.length, nextSteps.length))
+    /* 이력 — 보낸 칸 가운데 값이 바뀐 것만 */
+    const changes = diffChanges(row, { ...patch, title: trimmed(patch.title) }, 'test')
 
     if (patch.title !== undefined) row.title = trimmed(patch.title)!
     if (patch.parentId !== undefined) row.parentId = patch.parentId
-    if (patch.purpose !== undefined) row.purpose = patch.purpose
-    if (patch.precondition !== undefined) row.precondition = patch.precondition
+    if (patch.content !== undefined) row.content = patch.content
     if (patch.testData !== undefined) row.testData = patch.testData
-    if (nextSteps !== undefined) row.steps = nextSteps
     if (patch.start !== undefined) row.start = patch.start
     if (patch.due !== undefined) row.due = patch.due
     if (patch.ownerId !== undefined) row.ownerId = patch.ownerId
@@ -295,22 +287,21 @@ const mock = {
         'TEST_GROUP_STATUS',
         '하위 테스트가 있는 테스트는 상태를 직접 바꾸지 않습니다.',
       )
-    const problems = testStatusProblem(input.status, input.note, input.failedStep, row.steps.length)
+    const problems = testStatusProblem(input.status, input.note)
     if (Object.keys(problems).length > 0) throw invalid(problems)
     /* 같은 상태로 다시 보내도 시각 · 사람을 새로 찍는다(덮어쓴다) — 이력에도 status 가 남는다 */
-    const before = { status: row.status, failedStep: row.failedStep, resultNote: row.resultNote }
+    const before = { status: row.status, resultNote: row.resultNote }
     row.status = input.status
     row.statusChangedAt = nowIso()
     row.statusChangedBy = me.id
-    row.failedStep = input.status === 'fail' ? (input.failedStep ?? null) : null
     row.resultNote =
       input.status === 'fail' || input.status === 'blocked' ? (input.note ?? '').trim() : ''
     const note = (v: string) => v || null
     recordMockHistory('test', row.id, [
       change('status', before.status, row.status),
       ...diffChanges(
-        { failedStep: before.failedStep, resultNote: note(before.resultNote) },
-        { failedStep: row.failedStep, resultNote: note(row.resultNote) },
+        { resultNote: note(before.resultNote) },
+        { resultNote: note(row.resultNote) },
         'test',
       ),
     ])

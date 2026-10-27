@@ -110,25 +110,23 @@ describe('화면 말 · 검사', () => {
     expect(
       testFieldProblems({
         title: 'a'.repeat(201),
-        steps: [
-          { action: '열기', expected: '' },
-          { action: '  ', expected: 'x' },
-        ],
+        content: 'a'.repeat(10001),
+        testData: 'a'.repeat(4000),
         start: '2026-10-09',
         due: '2026-10-08',
       }),
     ).toEqual({
       title: '제목은 1 ~ 200자로 적어 주세요.',
-      'steps.1.action': '행동을 적어 주세요.',
+      content: '10,000자까지 적을 수 있습니다.',
       due: '끝나는 날이 시작하는 날보다 앞입니다.',
     })
     expect(testFieldProblems({ title: '로그인' })).toEqual({})
   })
 
-  it('상태 검사 — 실패 · 막힘은 메모, 실패 단계는 1 ~ 단계 수, 다른 상태는 단계를 안 본다', () => {
-    expect(testStatusProblem('blocked', ' ', null, 2)).toHaveProperty('note')
-    expect(testStatusProblem('fail', '안 됨', 3, 2)).toHaveProperty('failedStep')
-    expect(testStatusProblem('fail', '안 됨', null, 2)).toEqual({})
-    expect(testStatusProblem('pass', undefined, 9, 2)).toEqual({})
+  it('상태 검사 — 실패 · 막힘은 메모만 본다', () => {
+    expect(testStatusProblem('blocked', ' ')).toHaveProperty('note')
+    expect(testStatusProblem('fail', ' ')).toHaveProperty('note')
+    expect(testStatusProblem('fail', '안 됨')).toEqual({})
+    expect(testStatusProblem('pass', undefined)).toEqual({})
   })
 })

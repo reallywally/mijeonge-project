@@ -14,7 +14,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
-from app.models import Entry, Project, Task, TaskThreadLink, TestCase, TestRef, TestStep, Thread
+from app.models import Entry, Project, Task, TaskThreadLink, TestCase, TestRef, Thread
 from app.models.base import new_id
 from app.schemas.risk import RiskSettings
 from app.schemas.test import (
@@ -27,8 +27,6 @@ from app.schemas.test import (
     TestRefOut,
     TestSignal,
     TestStatusInput,
-    TestStepIn,
-    TestStepOut,
 )
 from app.services import access
 from app.services import history as history_service
@@ -245,16 +243,13 @@ async def _build(
                 key=row.key,
                 title=row.title,
                 parent_id=row.parent_id,
-                purpose=row.purpose,
-                precondition=row.precondition,
+                content=row.content,
                 test_data=row.test_data,
-                steps=[TestStepOut(action=s.action, expected=s.expected) for s in row.steps],
                 refs=[TestRefOut(kind=ref.kind, id=ref.target_id) for ref in refs.get(row.id, [])],
                 status=row.status,
                 status_changed_at=row.status_changed_at,
                 status_changed_by=row.status_changed_by,
                 status_days=days,
-                failed_step=row.failed_step,
                 result_note=row.result_note,
                 start=row.start,
                 due=row.due,
@@ -380,26 +375,6 @@ async def _part_for_new(session: AsyncSession, project_id: str, payload: TestCre
     return part_id
 
 
-def _new_steps(steps: list[TestStepIn]) -> list[TestStep]:
-    return [
-        TestStep(id=new_id(), sort_order=order, action=step.action, expected=step.expected)
-        for order, step in enumerate(steps)
-    ]
-
-
-def _replace_steps(test: TestCase, steps: list[TestStepIn]) -> None:
-    """자리 순서대로 있던 줄을 고쳐 쓴다 — 지우고 새로 넣으면 `(test_id, sort_order)` 유니크에
-    걸린다(같은 flush 에서 INSERT 가 DELETE 보다 먼저 나간다). 남는 줄은 delete-orphan 이 지운다."""
-    existing = list(test.steps)
-    replaced: list[TestStep] = []
-    for order, item in enumerate(steps):
-        step = existing[order] if order < len(existing) else TestStep(id=new_id(), sort_order=order)
-        step.action = item.action
-        step.expected = item.expected
-        replaced.append(step)
-    test.steps = replaced
-
-
 def _unique_refs(refs: list[TestRefIn]) -> list[TestRefIn]:
     return list({(ref.kind, ref.id): ref for ref in refs}.values())
 
@@ -434,15 +409,13 @@ async def create_test(
         project_id=project.id,
         key=await _next_key(session, project),
         title=payload.title,
-        purpose=payload.purpose,
-        precondition=payload.precondition,
+        content=payload.content,
         test_data=payload.test_data,
         parent_id=payload.parent_id,
         status="draft",
         status_changed_at=at,
         # 만든 사람이 draft 로 둔 것이다
         status_changed_by=actor_id,
-        failed_step=None,
         result_note="",
         start=payload.start,
         due=payload.due,
@@ -450,7 +423,6 @@ async def create_test(
         part_id=part_id,
         created_by=actor_id,
         created_at=at,
-        steps=_new_steps(payload.steps),
     )
     session.add(test)
     await session.flush()
@@ -463,11 +435,10 @@ async def create_test(
 
 
 def _text_fields(test: TestCase) -> list[tuple[str, object]]:
-    """PATCH 가 남기는 글 칸 — 계약 '칸' 표의 순서. 단계는 그 뒤, 나머지는 `_plan_fields`."""
+    """PATCH 가 남기는 글 칸 — 계약 '칸' 표의 순서. 나머지는 `_plan_fields`."""
     return [
         ("title", test.title),
-        ("purpose", test.purpose),
-        ("precondition", test.precondition),
+        ("content", test.content),
         ("testData", test.test_data),
     ]
 
@@ -480,10 +451,6 @@ def _plan_fields(test: TestCase) -> list[tuple[str, object]]:
         ("start", test.start),
         ("due", test.due),
     ]
-
-
-def _steps_shape(test: TestCase) -> list[tuple[str, str]]:
-    return [(step.action, step.expected) for step in test.steps]
 
 
 def _diff_fields(
@@ -499,9 +466,8 @@ async def patch_test(
     test = await load_test(session, test_id)
     texts_before = _text_fields(test)
     plan_before = _plan_fields(test)
-    steps_before = _steps_shape(test)
     sent = payload.model_fields_set
-    changes = payload.model_dump(exclude_unset=True, exclude={"steps"})
+    changes = payload.model_dump(exclude_unset=True)
     _guard_period(changes.get("start", test.start), changes.get("due", test.due))
     if "parent_id" in changes:
         await _guard_parent(session, test.project_id, test.id, changes["parent_id"])
@@ -512,12 +478,7 @@ async def patch_test(
         await part_service.guard_part(session, test.project_id, changes["part_id"])
     for field, value in changes.items():
         setattr(test, field, value)
-    if "steps" in sent:
-        _replace_steps(test, payload.steps)
     changed = _diff_fields(texts_before, _text_fields(test))
-    # 단계는 바뀌었다는 것과 개수만 남긴다 (docs/api/history.md '긴 글')
-    if _steps_shape(test) != steps_before:
-        changed.append(history_service.change("steps", len(steps_before), len(test.steps)))
     changed += _diff_fields(plan_before, _plan_fields(test))
     history_service.record_test(session, test, changed, actor_id, now())
     # 고쳤다는 것은 지금 기준으로 다시 봤다는 뜻이다
@@ -545,25 +506,16 @@ async def set_status(
     test = await load_test(session, test_id)
     if await _has_children(session, test.id):
         raise bad_request("TEST_GROUP_STATUS", "하위가 있는 테스트는 상태를 직접 바꿀 수 없습니다.")
-    failed_step = payload.failed_step if payload.status == "fail" else None
-    if failed_step is not None and not 1 <= failed_step <= len(test.steps):
-        raise _invalid("failedStep", f"1 ~ {len(test.steps)} 사이의 단계여야 합니다.")
     note = payload.note.strip()
     if payload.status in WITH_NOTE and not note:
         raise _invalid("note", "값을 입력해 주세요.")
     result_note = note if payload.status in WITH_NOTE else ""
     # 상태는 같은 값이어도 남긴다 — 며칠째가 다시 0 이 된 까닭이다. 메모의 빈 값은 null 로 남긴다
     changed = [history_service.change("status", test.status, payload.status)]
-    changed += history_service.diff(
-        [
-            ("failedStep", test.failed_step, failed_step),
-            ("resultNote", test.result_note or None, result_note or None),
-        ]
-    )
+    changed += history_service.diff([("resultNote", test.result_note or None, result_note or None)])
     test.status = payload.status
     test.status_changed_at = now()
     test.status_changed_by = actor_id
-    test.failed_step = failed_step
     test.result_note = result_note
     history_service.record_test(session, test, changed, actor_id, test.status_changed_at)
     await session.commit()

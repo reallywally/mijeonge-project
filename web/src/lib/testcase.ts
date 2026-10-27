@@ -1,5 +1,5 @@
 import { localDay, slashDay } from '@/lib/date'
-import type { TestCase, TestSignal, TestStatus, TestStep } from '@/types/domain'
+import type { TestCase, TestSignal, TestStatus } from '@/types/domain'
 
 /* 테스트 (docs/api/test.md). 며칠째 · 신호는 서버가 센다 — 여기의 testSignals 는 목업 api 만 쓴다.
    묶음의 상태 · 신호 모으기, '지금' 의 정렬 · 화면 말은 화면이 정할 몫이라 여기 한 벌로 둔다 */
@@ -156,21 +156,20 @@ export function dueLeftLabel(due: string | null, today: string) {
 
 /* 입력 검사 — 계약 '검사' 그대로. 목업 api 가 서버처럼 422 를 내고, 화면이 보내기 전에 같은 말을 띄운다 */
 export const TEST_TITLE_MAX = 200
-export const TEST_STEPS_MAX = 50
+/** 테스트 내용 — 지난 단계를 옮겨 담는 칸이라 넉넉히 */
+export const TEST_CONTENT_MAX = 10000
 export const TEST_TEXT_MAX = 4000
 export const TEST_REF_MAX = 20
 
 export interface TestFieldsInput {
   title?: string
-  purpose?: string
-  precondition?: string
+  content?: string
   testData?: string
-  steps?: TestStep[]
   start?: string | null
   due?: string | null
 }
 
-/** 어긴 자리 → 까닭. detail 키는 서버와 같다(`steps.2.action`) */
+/** 어긴 자리 → 까닭. detail 키는 서버와 같다 */
 export function testFieldProblems(input: TestFieldsInput): Record<string, string> {
   const detail: Record<string, string> = {}
   if (input.title !== undefined) {
@@ -178,45 +177,24 @@ export function testFieldProblems(input: TestFieldsInput): Record<string, string
     if (title.length < 1 || title.length > TEST_TITLE_MAX)
       detail.title = `제목은 1 ~ ${TEST_TITLE_MAX}자로 적어 주세요.`
   }
-  for (const key of ['purpose', 'precondition', 'testData'] as const) {
-    const v = input[key]
-    if (v !== undefined && v.length > TEST_TEXT_MAX)
-      detail[key] = `${TEST_TEXT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
-  }
-  if (input.steps !== undefined) {
-    if (input.steps.length > TEST_STEPS_MAX)
-      detail.steps = `단계는 ${TEST_STEPS_MAX}개까지 둘 수 있습니다.`
-    input.steps.forEach((s, i) => {
-      if (!s.action.trim()) detail[`steps.${i}.action`] = '행동을 적어 주세요.'
-      else if (s.action.length > TEST_TEXT_MAX)
-        detail[`steps.${i}.action`] = `${TEST_TEXT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
-      if (s.expected.length > TEST_TEXT_MAX)
-        detail[`steps.${i}.expected`] = `${TEST_TEXT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
-    })
-  }
+  if (input.content !== undefined && input.content.length > TEST_CONTENT_MAX)
+    detail.content = `${TEST_CONTENT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
+  if (input.testData !== undefined && input.testData.length > TEST_TEXT_MAX)
+    detail.testData = `${TEST_TEXT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
   if (input.start && input.due && input.start > input.due)
     detail.due = '끝나는 날이 시작하는 날보다 앞입니다.'
   return detail
 }
 
-/** 상태 바꾸기의 검사 — 실패 · 막힘은 메모 필수, 실패 단계는 1 ~ 단계 수 */
+/** 상태 바꾸기의 검사 — 실패 · 막힘은 메모 필수 */
 export function testStatusProblem(
   status: TestStatus,
   note: string | undefined,
-  failedStep: number | null | undefined,
-  stepCount: number,
 ): Record<string, string> {
   const detail: Record<string, string> = {}
   if ((status === 'fail' || status === 'blocked') && !(note ?? '').trim())
     detail.note = status === 'fail' ? '실패한 까닭을 적어 주세요.' : '막힌 까닭을 적어 주세요.'
   if ((note ?? '').length > TEST_TEXT_MAX)
     detail.note = `${TEST_TEXT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
-  if (
-    status === 'fail' &&
-    failedStep !== undefined &&
-    failedStep !== null &&
-    (!Number.isInteger(failedStep) || failedStep < 1 || failedStep > stepCount)
-  )
-    detail.failedStep = `단계 번호는 1 ~ ${stepCount} 사이입니다.`
   return detail
 }

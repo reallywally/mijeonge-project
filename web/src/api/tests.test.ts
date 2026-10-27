@@ -63,7 +63,6 @@ describe('목업 갈래 — 시드', () => {
     /* 태그한 작업으로 안건에 닿지만 바뀐 것이 없다 */
     expect(got.find((t) => t.key === 'HW-T2')!.changedEntryIds).toEqual([])
     expect(got.find((t) => t.key === 'HW-T7')!).toMatchObject({
-      failedStep: 2,
       resultNote: '관리 화면 주소를 직접 치면 열린다.',
     })
   })
@@ -83,7 +82,7 @@ describe('목업 갈래 — 쓰기', () => {
     const made = await createTest('p1', {
       title: '  관리자 계정 잠금 해제  ',
       parentId: 'tc5',
-      steps: [{ action: ' 관리자가 [잠금 풀기] ', expected: '다시 로그인된다' }],
+      content: '단계\n1. 관리자가 [잠금 풀기] → 다시 로그인된다',
       refs: [
         { kind: 'thread', id: 't2' },
         { kind: 'task', id: 'k21' },
@@ -99,7 +98,7 @@ describe('목업 갈래 — 쓰기', () => {
       partId: 'pt1',
       statusDays: 0,
       changedEntryIds: [],
-      steps: [{ action: '관리자가 [잠금 풀기]', expected: '다시 로그인된다' }],
+      content: '단계\n1. 관리자가 [잠금 풀기] → 다시 로그인된다',
       /* 겹친 태그는 하나로, 작업 먼저 */
       refs: [
         { kind: 'task', id: 'k21' },
@@ -115,13 +114,13 @@ describe('목업 갈래 — 쓰기', () => {
     const bad = await failure(
       createTest('p1', {
         title: ' ',
-        steps: [{ action: '', expected: '' }],
+        content: 'a'.repeat(10001),
         start: '2026-10-09',
         due: '2026-10-08',
       }),
     )
     expect([bad.status, bad.code]).toEqual([422, 'VALIDATION_ERROR'])
-    expect(Object.keys(bad.detail ?? {})).toEqual(['title', 'steps.0.action', 'due'])
+    expect(Object.keys(bad.detail ?? {})).toEqual(['title', 'content', 'due'])
 
     expect((await failure(createTest('p1', { title: 'a', parentId: 'x' }))).code).toBe(
       'TEST_PARENT_NOT_FOUND',
@@ -146,12 +145,9 @@ describe('목업 갈래 — 쓰기', () => {
     expect((await patchTest('tc3', { parentId: 'tc5' })).parentId).toBe('tc5')
   })
 
-  it('상태 — 실패는 메모 · 단계, 묶음은 직접 못 돌린다, 다른 상태로 가면 메모를 비운다', async () => {
+  it('상태 — 실패는 메모, 묶음은 직접 못 돌린다, 다른 상태로 가면 메모를 비운다', async () => {
     const e = await failure(setTestStatus('tc3', { status: 'fail', note: ' ' }))
     expect([e.status, Object.keys(e.detail ?? {})]).toEqual([422, ['note']])
-    expect(
-      (await failure(setTestStatus('tc3', { status: 'fail', note: 'x', failedStep: 3 }))).detail,
-    ).toHaveProperty('failedStep')
     expect((await failure(setTestStatus('tc1', { status: 'testing' }))).code).toBe(
       'TEST_GROUP_STATUS',
     )
@@ -159,16 +155,14 @@ describe('목업 갈래 — 쓰기', () => {
     const failed = await setTestStatus('tc3', {
       status: 'fail',
       note: ' 잠기지 않음 ',
-      failedStep: 2,
     })
     expect(failed).toMatchObject({
       status: 'fail',
-      failedStep: 2,
       resultNote: '잠기지 않음',
       statusDays: 0,
     })
-    const again = await setTestStatus('tc3', { status: 'testing', note: '버린다', failedStep: 1 })
-    expect(again).toMatchObject({ status: 'testing', failedStep: null, resultNote: '' })
+    const again = await setTestStatus('tc3', { status: 'testing', note: '버린다' })
+    expect(again).toMatchObject({ status: 'testing', resultNote: '' })
   })
 
   it('태그 걸기 · 떼기는 멱등이고, 기준을 새로 찍는다 · [그대로 맞다] 로 기준 바뀜이 풀린다', async () => {

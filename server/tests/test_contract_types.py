@@ -545,21 +545,19 @@ async def test_report_responses_match_contract(client: AsyncClient) -> None:
 
 # 테스트 — docs/api/test.md '모양' · '요청'(1단계). 집계(statusDays · signals · changedEntryIds)를
 # 서버가 하는 예외라 계산된 값이 응답에 실린다. 어긋나면 계약 쪽이 기준이다.
-# null 이 나가는 자리는 TestCase 의 여덟뿐이다. 레벨은 걷었다(2026-10-27 고침)
+# null 이 나가는 자리는 TestCase 의 일곱뿐이다. 레벨은 걷었다(2026-10-27 고침).
+# 목적 · 사전조건 · 단계 · 실패한 단계는 테스트 내용(`content`)으로 합쳤다(Q60)
 _TEST_EDITABLE = {
     "title",
     "parentId",
-    "purpose",
-    "precondition",
+    "content",
     "testData",
-    "steps",
     "start",
     "due",
     "ownerId",
     "partId",
 }
 TEST_SHAPES: dict[str, set[str]] = {
-    "TestStep": {"action", "expected"},
     "TestRef": {"kind", "id"},
     "TestCase": {
         "id",
@@ -567,16 +565,13 @@ TEST_SHAPES: dict[str, set[str]] = {
         "key",
         "title",
         "parentId",
-        "purpose",
-        "precondition",
+        "content",
         "testData",
-        "steps",
         "refs",
         "status",
         "statusChangedAt",
         "statusChangedBy",
         "statusDays",
-        "failedStep",
         "resultNote",
         "start",
         "due",
@@ -589,14 +584,13 @@ TEST_SHAPES: dict[str, set[str]] = {
     },
     "TestInput": _TEST_EDITABLE | {"refs"},
     "TestPatch": _TEST_EDITABLE,
-    "TestStatusInput": {"status", "failedStep", "note"},
+    "TestStatusInput": {"status", "note"},
 }
 _TEST_EDITABLE_NULLABLE = {"parentId", "start", "due", "ownerId", "partId"}
 TEST_NULLABLE: dict[str, set[str]] = {
-    "TestCase": _TEST_EDITABLE_NULLABLE | {"statusChangedBy", "failedStep", "createdBy"},
+    "TestCase": _TEST_EDITABLE_NULLABLE | {"statusChangedBy", "createdBy"},
     "TestInput": _TEST_EDITABLE_NULLABLE,
     "TestPatch": _TEST_EDITABLE_NULLABLE,
-    "TestStatusInput": {"failedStep"},
 }
 
 
@@ -619,7 +613,6 @@ async def test_test_responses_match_contract(client: AsyncClient) -> None:
         for field, value in row.items():
             if value is None:
                 assert field in TEST_NULLABLE["TestCase"], f"TestCase.{field} 가 null"
-        assert all(set(step) == TEST_SHAPES["TestStep"] for step in row["steps"])
         assert all(set(ref) == TEST_SHAPES["TestRef"] for ref in row["refs"])
     # null 로 나가 보는 줄이 시드에 있다 — 담당 · 바꾼 사람 · 만든 사람은 시드가 다 채웠다
     nulls = {field for row in rows for field, value in row.items() if value is None}
