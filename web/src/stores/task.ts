@@ -3,12 +3,15 @@ import { computed } from 'vue'
 import * as api from '@/api'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { dependencyChoices } from '@/lib/dependency'
+import { bodyChanged, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
 import { inheritedPartId } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
+import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import { useThreadStore } from '@/stores/thread'
 import type {
+  HistoryChange,
   ProposedTask,
   Task,
   TaskBatchResult,
@@ -34,6 +37,7 @@ export const useTaskStore = defineStore('task', () => {
   const data = useDataStore()
   const threadStore = useThreadStore()
   const partStore = usePartStore()
+  const history = useHistoryStore()
 
   const tasks = computed<Task[]>(() =>
     data.allTasks.filter((t) => t.projectId === data.currentProjectId),
@@ -174,6 +178,22 @@ export const useTaskStore = defineStore('task', () => {
   const dependencyChoicesFor = (taskId: string) =>
     dependencyChoices(tasks.value, dependencies.value, taskId)
 
+  /* 목업은 서버가 없어 변경 이력도 여기서 남긴다 — 서버는 요청을 받아 스스로 남긴다 (docs/api/history.md) */
+  function logMock(taskId: string, changes: HistoryChange[]) {
+    if (!data.mock || changes.length === 0) return
+    api.recordMockHistory('task', taskId, changes)
+    history.touched('task', taskId)
+  }
+
+  /** 서버에 보낸 쓰기가 끝나면 펼쳐 둔 이력 칸이 다시 부르게 알린다 */
+  function afterWrite(taskId: string, done: Promise<unknown>) {
+    void done.finally(() => history.touched('task', taskId))
+  }
+
+  /** PATCH 한 번의 이력 — 지금 값에서 바뀐 칸만. 고치기 전에 부른다 */
+  const logPatch = (task: Task, next: TaskPatch) =>
+    logMock(task.id, diffChanges(task, next, 'task'))
+
   const hasDependency = (taskId: string, dependsOnId: string) =>
     data.taskDependencies.some((d) => d.taskId === taskId && d.dependsOnId === dependsOnId)
 
@@ -209,8 +229,11 @@ export const useTaskStore = defineStore('task', () => {
     if (!data.mock) data.taskDependencies.push({ taskId, dependsOnId })
     try {
       await api.putTaskDependency(taskId, dependsOnId)
-      if (data.mock && !hasDependency(taskId, dependsOnId))
+      if (!data.mock) history.touched('task', taskId)
+      if (data.mock && !hasDependency(taskId, dependsOnId)) {
         data.taskDependencies.push({ taskId, dependsOnId })
+        logMock(taskId, [change('dependsOn', null, dependsOnId)])
+      }
       return null
     } catch (e) {
       if (!data.mock && dependencyTurn.get(key) === mine) dropDependency(taskId, dependsOnId)
@@ -227,6 +250,8 @@ export const useTaskStore = defineStore('task', () => {
     dropDependency(taskId, dependsOnId)
     try {
       await api.deleteTaskDependency(taskId, dependsOnId)
+      if (data.mock) logMock(taskId, [change('dependsOn', dependsOnId, null)])
+      else history.touched('task', taskId)
       return true
     } catch (e) {
       if (dependencyTurn.get(key) === mine && !hasDependency(taskId, dependsOnId))
@@ -256,7 +281,10 @@ export const useTaskStore = defineStore('task', () => {
 
   function patch(taskId: string, change: TaskPatch) {
     if (data.mock) return
-    void data.save(`task:${taskId}`, () => api.patchTask(taskId, change), replaceTask)
+    afterWrite(
+      taskId,
+      data.save(`task:${taskId}`, () => api.patchTask(taskId, change), replaceTask),
+    )
   }
 
   function setStatus(taskId: string, status: TaskStatus) {
@@ -264,6 +292,7 @@ export const useTaskStore = defineStore('task', () => {
     if (!task) return
     /* 상태가 바뀌면 기록이 한 줄 는다 — 목업은 여기서, 서버는 응답의 값으로 갈아끼운다.
        그대로인 것은 남기지 않는다 (docs/api/task-flow.md) */
+    logPatch(task, { status })
     if (task.status !== status) {
       task.statusChangedAt = nowIso()
       task.statusSinceBackfill = false
@@ -276,6 +305,7 @@ export const useTaskStore = defineStore('task', () => {
     const task = findTask(taskId)
     if (!task) return
     if (data.rejectOwner(ownerId, 'TASK_OWNER_NOT_FOUND', task.ownerId)) return
+    logPatch(task, { ownerId })
     task.ownerId = ownerId
     patch(taskId, { ownerId })
   }
@@ -286,6 +316,7 @@ export const useTaskStore = defineStore('task', () => {
     if (!task) return
     /* 한쪽만 아는 기간은 기간 미정과 구분이 안 된다 — 둘 다 있을 때만 기간으로 친다 */
     const both = start !== null && due !== null
+    logPatch(task, { start: both ? start : null, due: both ? due : null })
     task.start = both ? start : null
     task.due = both ? due : null
     patch(taskId, { start: task.start, due: task.due })
@@ -316,6 +347,7 @@ export const useTaskStore = defineStore('task', () => {
   function setTitle(taskId: string, title: string) {
     const task = findTask(taskId)
     if (!task || !title.trim()) return
+    logPatch(task, { title: title.trim() })
     task.title = title.trim()
     patch(taskId, { title: task.title })
   }
@@ -325,6 +357,7 @@ export const useTaskStore = defineStore('task', () => {
     const task = findTask(taskId)
     if (!task) return
     if (parentId && selfAndDescendants(taskId).has(parentId)) return
+    logPatch(task, { parentId })
     task.parentId = parentId
     patch(taskId, { parentId })
   }
@@ -334,6 +367,7 @@ export const useTaskStore = defineStore('task', () => {
     const task = findTask(taskId)
     if (!task || task.partId === partId) return
     if (data.rejectPart(partId, task.partId)) return
+    logPatch(task, { partId })
     task.partId = partId
     patch(taskId, { partId })
   }
@@ -341,13 +375,14 @@ export const useTaskStore = defineStore('task', () => {
   function setPriority(taskId: string, priority: TaskPriority) {
     const task = findTask(taskId)
     if (!task) return
+    logPatch(task, { priority })
     task.priority = priority
     patch(taskId, { priority })
   }
 
   function sendBody(taskId: string, lines: TaskLine[]) {
     const sent = lines.map((l) => ({ ...l, id: serverLineId(l.id) }))
-    void data.save(
+    const done = data.save(
       `task:${taskId}`,
       async () => {
         const res = await api.patchTask(taskId, { body: sent })
@@ -360,11 +395,26 @@ export const useTaskStore = defineStore('task', () => {
       },
       replaceTask,
     )
+    afterWrite(taskId, done)
+  }
+
+  /* 목업의 본문 이력 — 서버는 모아 보낸 한 번을 한 줄로 남긴다. 목업은 타이머 없이, 바로 앞 고침과
+     BODY_DEBOUNCE_MS 안에 이어진 고침을 같은 한 번으로 본다 */
+  const mockBodyAt = new Map<string, number>()
+
+  function logMockBody(task: Task, body: TaskLine[]) {
+    if (!data.mock || !bodyChanged(task.body, body)) return
+    const now = Date.now()
+    const last = mockBodyAt.get(task.id)
+    mockBodyAt.set(task.id, now)
+    if (last === undefined || now - last > BODY_DEBOUNCE_MS)
+      logMock(task.id, [change('body', null, null)])
   }
 
   function setBody(taskId: string, body: TaskLine[]) {
     const task = findTask(taskId)
     if (!task) return
+    logMockBody(task, body)
     task.body = body
     if (data.mock) return
     clearTimeout(bodyTimers.get(taskId))
@@ -381,12 +431,16 @@ export const useTaskStore = defineStore('task', () => {
     const line = findTask(taskId)?.body.find((l) => l.id === lineId)
     if (!line || line.kind !== 'check') return
     line.done = !line.done
+    logMock(taskId, [change('lineDone', !line.done, line.done, line.text)])
     if (data.mock) return
     const done = line.done
-    void data.save(
-      `task:${taskId}`,
-      () => api.patchTaskLine(taskId, serverLineId(lineId), done),
-      replaceTask,
+    afterWrite(
+      taskId,
+      data.save(
+        `task:${taskId}`,
+        () => api.patchTaskLine(taskId, serverLineId(lineId), done),
+        replaceTask,
+      ),
     )
   }
 
@@ -441,6 +495,8 @@ export const useTaskStore = defineStore('task', () => {
       statusSinceBackfill: false,
     })
     for (const threadId of input.threadIds) addLink(id, threadId)
+    /* 등록 때 함께 건 안건은 created 에 든 것으로 본다 */
+    logMock(id, [change('created', null, null)])
     return id
   }
 
@@ -468,24 +524,34 @@ export const useTaskStore = defineStore('task', () => {
 
   /** 작업 상세에서 안건을 걸고 뗀다. 안건 화면에서는 이 링크를 읽기만 한다. */
   function linkThread(taskId: string, threadId: string) {
+    if (!data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId))
+      logMock(taskId, [change('thread', null, threadId)])
     addLink(taskId, threadId)
     if (data.mock) return
-    void data.save(
-      `link:${taskId}:${threadId}`,
-      () => api.linkTaskThread(taskId, threadId),
-      () => {},
+    afterWrite(
+      taskId,
+      data.save(
+        `link:${taskId}:${threadId}`,
+        () => api.linkTaskThread(taskId, threadId),
+        () => {},
+      ),
     )
   }
 
   function unlinkThread(taskId: string, threadId: string) {
+    if (data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId))
+      logMock(taskId, [change('thread', threadId, null)])
     data.taskThreads = data.taskThreads.filter(
       (l) => !(l.taskId === taskId && l.threadId === threadId),
     )
     if (data.mock) return
-    void data.save(
-      `link:${taskId}:${threadId}`,
-      () => api.unlinkTaskThread(taskId, threadId),
-      () => {},
+    afterWrite(
+      taskId,
+      data.save(
+        `link:${taskId}:${threadId}`,
+        () => api.unlinkTaskThread(taskId, threadId),
+        () => {},
+      ),
     )
   }
 

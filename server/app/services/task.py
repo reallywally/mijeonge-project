@@ -37,6 +37,7 @@ from app.schemas.task import (
     TaskThreadLinkOut,
 )
 from app.services import access
+from app.services import history as history_service
 from app.services import part as part_service
 from app.services import project as project_service
 from app.time import now
@@ -210,7 +211,7 @@ async def _guard_parent(
 async def _insert_task(
     session: AsyncSession, project: Project, payload: TaskCreate, actor_id: str | None
 ) -> Task:
-    """작업 하나를 넣는다 — 상태 기록 첫 줄(`null → 상태`)까지.
+    """작업 하나를 넣는다 — 상태 기록 첫 줄(`null → 상태`) · 이력 '등록' 줄까지.
     커밋하지 않는다 — 일괄 등록 · 회의록 apply 가 여럿을 한 트랜잭션에 묶는다."""
     await _guard_parent(session, project.id, None, payload.parent_id)
     part_id = await _part_for_new_task(session, project.id, payload)
@@ -244,6 +245,8 @@ async def _insert_task(
     session.add(task)
     await session.flush()
     record_status(session, task, None, actor_id, task.created_at)
+    # 같이 건 안건은 '등록' 에 든 것으로 본다 — 링크 줄을 따로 안 만든다 (docs/api/history.md)
+    history_service.record_task(session, task, history_service.created(), actor_id, task.created_at)
 
     for thread_id in dict.fromkeys(payload.thread_ids):
         await _attach_thread(session, task, thread_id)
@@ -438,6 +441,8 @@ async def patch_task(
 ) -> TaskOut:
     task = await load_task(session, task_id)
     before = task.status
+    snapshot = _history_fields(task)
+    body_before = _body_shape(task.lines)
     # exclude_unset — 안 보낸 것과 null 로 보낸 것을 가른다. ownerId: null 은 담당자 지우기다
     changes = payload.model_dump(exclude_unset=True, exclude={"body"})
     if "body" in payload.model_fields_set:
@@ -452,11 +457,37 @@ async def patch_task(
         await part_service.guard_part(session, task.project_id, changes["part_id"])
     for field, value in changes.items():
         setattr(task, field, value)
+    at = now()
     # 상태가 그대로인 수정은 남기지 않는다 — '진행 중이 된 지 며칠' 이 다시 0 이 되면 안 된다
     if task.status != before:
-        record_status(session, task, before, actor_id, now())
+        record_status(session, task, before, actor_id, at)
+    after = dict(_history_fields(task))
+    changed = history_service.diff((field, old, after[field]) for field, old in snapshot)
+    # 본문은 바뀌었다는 것만 남긴다 — 줄 단위 비교는 나중 (docs/api/history.md '긴 글')
+    if _body_shape(task.lines) != body_before:
+        changed.append(history_service.change("body", None, None))
+    history_service.record_task(session, task, changed, actor_id, at)
     await session.commit()
     return to_task(task, await comment_count(session, task.id), await status_since(session, task))
+
+
+def _history_fields(task: Task) -> list[tuple[str, object]]:
+    """PATCH 가 남기는 칸 — 계약 '칸' 표의 순서다. 본문은 따로 본다."""
+    return [
+        ("title", task.title),
+        ("status", task.status),
+        ("priority", task.priority),
+        ("ownerId", task.owner_id),
+        ("partId", task.part_id),
+        ("parentId", task.parent_id),
+        ("start", task.start),
+        ("due", task.due),
+    ]
+
+
+def _body_shape(lines: Sequence[TaskLine]) -> list[tuple[str, str, bool, int]]:
+    """본문이 바뀌었나를 가르는 값 — 줄 글 · 종류 · 체크 · 들여쓰기 · 순서. 줄 id 는 안 본다."""
+    return [(line.text, line.kind, line.done, line.level) for line in lines]
 
 
 def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:
@@ -479,20 +510,31 @@ def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:
     task.lines = lines
 
 
-async def set_line_done(session: AsyncSession, task_id: str, line_id: str, done: bool) -> TaskOut:
+async def set_line_done(
+    session: AsyncSession, task_id: str, line_id: str, done: bool, actor_id: str
+) -> TaskOut:
     task = await load_task(session, task_id)
     line = next((each for each in task.lines if each.id == line_id), None)
     if line is None:
         raise not_found("TASK_LINE_NOT_FOUND", "그 본문 줄을 찾을 수 없습니다.")
     if line.kind != "check":
         raise bad_request("TASK_LINE_NOT_CHECKABLE", "체크박스가 아닌 줄은 켜고 끌 수 없습니다.")
+    if line.done != done:
+        history_service.record_task(
+            session,
+            task,
+            [history_service.change("lineDone", line.done, done, subject=line.text)],
+            actor_id,
+            now(),
+        )
     line.done = done
     await session.commit()
     return to_task(task, await comment_count(session, task.id), await status_since(session, task))
 
 
-async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> None:
-    """같은 프로젝트인지 보고 링크를 건다. 이미 있으면 아무것도 하지 않는다(멱등)."""
+async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> bool:
+    """같은 프로젝트인지 보고 링크를 건다. 이미 있으면 아무것도 하지 않는다(멱등).
+    새로 걸었으면 True — 이력은 새로 건 것만 남긴다."""
     thread = await _load_thread(session, thread_id)
     if thread.project_id != task.project_id:
         raise bad_request(
@@ -503,24 +545,40 @@ async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> N
             TaskThreadLink.task_id == task.id, TaskThreadLink.thread_id == thread_id
         )
     )
-    if found.scalar_one_or_none() is None:
-        session.add(
-            TaskThreadLink(task_id=task.id, thread_id=thread_id, project_id=task.project_id)
-        )
+    if found.scalar_one_or_none() is not None:
+        return False
+    session.add(TaskThreadLink(task_id=task.id, thread_id=thread_id, project_id=task.project_id))
+    return True
 
 
-async def link_thread(session: AsyncSession, task_id: str, thread_id: str) -> TaskThreadLinkOut:
+async def link_thread(
+    session: AsyncSession, task_id: str, thread_id: str, actor_id: str
+) -> TaskThreadLinkOut:
     task = await load_task(session, task_id)
-    await _attach_thread(session, task, thread_id)
+    if await _attach_thread(session, task, thread_id):
+        history_service.record_task(
+            session, task, [history_service.change("thread", None, thread_id)], actor_id, now()
+        )
     await session.commit()
     return TaskThreadLinkOut(task_id=task_id, thread_id=thread_id)
 
 
-async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str) -> None:
-    await load_task(session, task_id)
+async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str, actor_id: str) -> None:
+    task = await load_task(session, task_id)
+    linked = await session.scalar(
+        select(TaskThreadLink.thread_id).where(
+            TaskThreadLink.task_id == task_id, TaskThreadLink.thread_id == thread_id
+        )
+    )
+    # 없는 링크를 떼는 것도 성공이지만 이력은 있던 것을 뗄 때만 남긴다
+    if linked is None:
+        return
     await session.execute(
         delete(TaskThreadLink).where(
             TaskThreadLink.task_id == task_id, TaskThreadLink.thread_id == thread_id
         )
+    )
+    history_service.record_task(
+        session, task, [history_service.change("thread", thread_id, None)], actor_id, now()
     )
     await session.commit()

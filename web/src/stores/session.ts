@@ -4,11 +4,13 @@ import { useChatStore } from '@/stores/chat'
 import { useCheckStore } from '@/stores/check'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
+import { useHistoryStore } from '@/stores/history'
 import { useMinutesStore } from '@/stores/minutes'
 import { useMinutesDraftStore } from '@/stores/minutesDraft'
 import { usePartStore } from '@/stores/part'
 import { useReportStore } from '@/stores/report'
 import { useRiskStore } from '@/stores/risk'
+import { useTestStore } from '@/stores/test'
 
 /**
  * 로그아웃 · 세션 끝남 — 들고 있던 것을 전부 비운다. 다른 사람이 같은 브라우저로 들어올 수 있다.
@@ -17,11 +19,13 @@ import { useRiskStore } from '@/stores/risk'
 export function clearSession() {
   useChatStore().reset()
   useCommentStore().clear()
+  useHistoryStore().clear()
   useAdminStore().clear()
   usePartStore().clear()
   useRiskStore().clear()
   useReportStore().clear()
   useCheckStore().clear()
+  useTestStore().clear()
   useMinutesDraftStore().reset()
   useMinutesStore().clear()
   useDataStore().clear()

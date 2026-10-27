@@ -46,16 +46,20 @@ async def patch_task(
 
 @router.patch("/tasks/{task_id}/lines/{line_id}")
 async def patch_task_line(
-    task_id: str, line_id: str, payload: TaskLinePatch, session: Session
+    task_id: str, line_id: str, payload: TaskLinePatch, scope: ProjectScope, session: Session
 ) -> TaskOut:
-    return await task_service.set_line_done(session, task_id, line_id, payload.done)
+    return await task_service.set_line_done(session, task_id, line_id, payload.done, scope.actor.id)
 
 
 @router.put("/tasks/{task_id}/threads/{thread_id}")
-async def link_thread(task_id: str, thread_id: str, session: Session) -> TaskThreadLinkOut:
-    return await task_service.link_thread(session, task_id, thread_id)
+async def link_thread(
+    task_id: str, thread_id: str, scope: ProjectScope, session: Session
+) -> TaskThreadLinkOut:
+    return await task_service.link_thread(session, task_id, thread_id, scope.actor.id)
 
 
 @router.delete("/tasks/{task_id}/threads/{thread_id}", status_code=204)
-async def unlink_thread(task_id: str, thread_id: str, session: Session) -> None:
-    await task_service.unlink_thread(session, task_id, thread_id)
+async def unlink_thread(
+    task_id: str, thread_id: str, scope: ProjectScope, session: Session
+) -> None:
+    await task_service.unlink_thread(session, task_id, thread_id, scope.actor.id)

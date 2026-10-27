@@ -10,10 +10,12 @@ from app.models.task import (
     Task,
     TaskComment,
     TaskDependency,
+    TaskHistory,
     TaskLine,
     TaskLog,
     TaskThreadLink,
 )
+from app.models.test import TestCase, TestHistory, TestRef
 from app.models.thread import Entry, EntryDetail, Thread, ThreadCc, ThreadOption
 
 __all__ = [
@@ -34,9 +36,13 @@ __all__ = [
     "Task",
     "TaskComment",
     "TaskDependency",
+    "TaskHistory",
     "TaskLine",
     "TaskLog",
     "TaskThreadLink",
+    "TestCase",
+    "TestHistory",
+    "TestRef",
     "Thread",
     "ThreadCc",
     "ThreadOption",

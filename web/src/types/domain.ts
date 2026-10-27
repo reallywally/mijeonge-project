@@ -316,6 +316,31 @@ export interface TaskComment {
   editedAt: string | null
 }
 
+/** 칸 하나의 바뀜 (docs/api/history.md) */
+export interface HistoryChange {
+  /** '칸' 표의 이름 — created · status · ownerId · lineDone · taskRef … */
+  field: string
+  /** 바뀌기 전 값. 없던 값(담당자 없음 · 기간 미정 · 새로 건 태그)은 null */
+  from: string | number | boolean | null
+  /** 바뀐 뒤 값. 비운 값 · 뗀 태그는 null */
+  to: string | number | boolean | null
+  /** 무엇에 대한 바뀜인지 한 줄 — 체크한 본문 줄의 글. 없으면 '' */
+  subject: string
+}
+
+/** 이력 한 줄 = 요청 하나. GET /api/tasks/{taskId}/history · /api/tests/{testId}/history 가 seq 오름차순으로 낸다 */
+export interface HistoryEntry {
+  id: string
+  /** ISO 8601 UTC, Z */
+  changedAt: string
+  /** 바꾼 사람. backfill 이면 null */
+  changedBy: string | null
+  /** 마이그레이션이 넣은 '등록' 줄이면 true — 등록한 사람을 모른다 */
+  backfilled: boolean
+  /** 비지 않는다 */
+  changes: HistoryChange[]
+}
+
 /** POST /api/tasks/{taskId}/comments — 서버가 body 를 trim 하고 빈 값은 거절한다. 작성자는 로그인한 사람이다 */
 export interface TaskCommentInput {
   body: string
@@ -950,3 +975,104 @@ export type ReportEvent =
   /** 저장까지 끝. refs 는 본문의 근거 중 넣어 준 id 만 */
   | { type: 'done'; report: ReportItem; refs: ChatRef[] }
   | { type: 'error'; code: string; message: string }
+
+/* ── 테스트 (docs/api/test.md) — 작업과 따로 둔다. 스냅샷에 싣지 않고 프로젝트 단위로 받는다 ── */
+
+export type TestStatus = 'draft' | 'ready' | 'testing' | 'pass' | 'fail' | 'blocked'
+export type TestSignal =
+  | 'longRunning' // 오래 걸림
+  | 'overdue' // 기간 지남
+  | 'notStarted' // 시작 안 함
+  | 'longBlocked' // 오래 막힘
+  | 'failedIdle' // 실패 그대로
+  | 'basisChanged' // 기준 바뀜
+
+/** 참조 태그 */
+export interface TestRef {
+  kind: 'task' | 'thread'
+  id: string
+}
+
+export interface TestCase {
+  id: string
+  projectId: string
+  /** HW-T12 */
+  key: string
+  title: string
+  parentId: string | null
+  /** 테스트 내용 — 무엇을 어떻게 해 보고 무엇이 나와야 하나. 여러 줄 글 */
+  content: string
+  testData: string
+  refs: TestRef[]
+  status: TestStatus
+  /** 지금 상태가 된 시각. ISO 8601 UTC, Z */
+  statusChangedAt: string
+  /** 지금 상태로 바꾼 사람. 멤버가 지워졌으면 null */
+  statusChangedBy: string | null
+  /** 오늘(KST) − statusChangedAt 의 날짜(KST). 오늘 바뀌었으면 0 */
+  statusDays: number
+  /** fail · blocked 의 메모. 그 밖엔 '' */
+  resultNote: string
+  /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
+  start: string | null
+  due: string | null
+  ownerId: string | null
+  partId: string | null
+  /** 규칙이 붙인 신호. 하위가 있는 테스트(묶음)는 늘 [] */
+  signals: TestSignal[]
+  /** 기준 바뀜의 근거 — basis 뒤로 닿는 안건에 생긴 decide · change Entry 의 id, 오래된 것부터. 없으면 [] */
+  changedEntryIds: string[]
+  createdBy: string | null
+  createdAt: string
+}
+
+/** POST /api/projects/{projectId}/tests — status 는 받지 않는다(늘 draft 로 들어간다) */
+export interface TestInput {
+  title: string
+  parentId?: string | null
+  content?: string
+  testData?: string
+  /** 작업 · 안건 상세의 [테스트 추가] 가 미리 채운다 */
+  refs?: TestRef[]
+  start?: string | null
+  due?: string | null
+  ownerId?: string | null
+  /** 안 보내면 상위 테스트의 파트를 따른다(작업과 같다) */
+  partId?: string | null
+}
+
+/** PATCH /api/tests/{testId} — 보낸 키만 바꾼다. status · refs 는 여기서 안 바꾼다 */
+export interface TestPatch {
+  title?: string
+  parentId?: string | null
+  content?: string
+  testData?: string
+  start?: string | null
+  due?: string | null
+  ownerId?: string | null
+  partId?: string | null
+}
+
+/** POST /api/tests/{testId}/status */
+export interface TestStatusInput {
+  status: TestStatus
+  /** fail · blocked 면 필수(앞뒤 공백을 뗀 뒤 비면 안 된다). 그 밖엔 보내도 버린다 */
+  note?: string
+}
+
+/** 테스트 목록 · 간트 한 줄 — 화면이 계산해서 얻는 값. 묶음의 상태 · 신호는 하위에서 모은다 */
+export interface TestRow {
+  test: TestCase
+  /** 하위가 있는 테스트 */
+  isGroup: boolean
+  /** 묶음이면 하위 중 가장 나쁜 것, 아니면 자기 상태 */
+  status: TestStatus
+  /** 묶음이면 하위 신호를 모은 것(계약 표 순서), 아니면 자기 신호 */
+  signals: TestSignal[]
+  ownerName: string | null
+  /** 로그인 시나리오 · 하위 3건 / 또는 '최상위 테스트' */
+  pathLabel: string
+  /** 10/8 ~ 10/10 또는 '' */
+  periodLabel: string
+  childCount: number
+}

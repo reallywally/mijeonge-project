@@ -5,6 +5,7 @@ import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
+import TaggedTests from '@/components/app/TaggedTests.vue'
 import ThreadDecisionPanel from '@/components/app/ThreadDecisionPanel.vue'
 import ThreadFields from '@/components/app/ThreadFields.vue'
 import ThreadPropertyPanel from '@/components/app/ThreadPropertyPanel.vue'
@@ -125,6 +126,8 @@ function setPart(value: string | null) {
           </ThreadFields>
 
           <CheckRequestSection :thread-id="detail.thread.id" />
+
+          <TaggedTests kind="thread" :ref-id="detail.thread.id" />
 
           <section class="flex flex-col gap-3.5">
             <div class="flex items-baseline gap-2">

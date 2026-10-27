@@ -4,13 +4,25 @@ import { Search, X } from 'lucide-vue-next'
 
 /* 상위 작업 고르기 — 평소엔 지금 상위를 글처럼 보이고, 누르면 찾기 칸이 열린다.
    작업 번호(HW-4)나 경로(개발 환경 설정 › DB 설치)의 낱말로 찾는다. 낱말은 모두 들어가야 한다.
-   ↑ ↓ 로 옮기고 Enter 로 고르며, Esc · 바깥 누르기는 고르지 않고 닫는다. */
-const props = defineProps<{
-  choices: { id: string; key: string; label: string }[]
-}>()
+   ↑ ↓ 로 옮기고 Enter 로 고르며, Esc · 바깥 누르기는 고르지 않고 닫는다.
+   테스트의 상위 테스트도 같은 칸이다 — noun 만 바꾼다 */
+const props = withDefaults(
+  defineProps<{
+    choices: { id: string; key: string; label: string }[]
+    /** 무엇의 상위인가 — 작업 · 테스트 */
+    noun?: string
+  }>(),
+  { noun: '작업' },
+)
 const parentId = defineModel<string | null>({ required: true })
 
 const LIMIT = 50
+
+/* 받침에 따라 이 · 가 — 작업이 · 테스트가 */
+const nounSubject = computed(() => {
+  const code = props.noun.charCodeAt(props.noun.length - 1) - 0xac00
+  return `${props.noun}${code >= 0 && code % 28 !== 0 ? '이' : '가'}`
+})
 
 const editing = ref(false)
 const query = ref('')
@@ -21,7 +33,7 @@ const current = computed(() => props.choices.find((c) => c.id === parentId.value
 
 /* 맨 위 '없음' 은 찾는 말이 없을 때만 — 고르면 최상위 작업이 된다 */
 type Row = { id: string | null; key: string; label: string }
-const NONE_ROW: Row = { id: null, key: '', label: '없음 (최상위 작업)' }
+const noneRow = computed<Row>(() => ({ id: null, key: '', label: `없음 (최상위 ${props.noun})` }))
 
 const words = computed(() => query.value.trim().toLowerCase().split(/\s+/).filter(Boolean))
 const found = computed(() =>
@@ -31,7 +43,7 @@ const found = computed(() =>
   }),
 )
 const matches = computed<Row[]>(() => [
-  ...(words.value.length ? [] : [NONE_ROW]),
+  ...(words.value.length ? [] : [noneRow.value]),
   ...found.value.slice(0, LIMIT),
 ])
 const hiddenCount = computed(() => Math.max(found.value.length - LIMIT, 0))
@@ -80,7 +92,7 @@ function onKeydown(e: KeyboardEvent) {
     <div v-if="!editing" class="flex items-center">
       <button
         type="button"
-        aria-label="상위 작업"
+        :aria-label="`상위 ${noun}`"
         class="flex h-8 min-w-0 grow items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-accent"
         @click="open"
       >
@@ -93,8 +105,8 @@ function onKeydown(e: KeyboardEvent) {
       <button
         v-if="current"
         type="button"
-        aria-label="상위 작업 빼기"
-        title="상위 작업 빼기 — 최상위 작업이 됩니다"
+        :aria-label="`상위 ${noun} 빼기`"
+        :title="`상위 ${noun} 빼기 — 최상위 ${nounSubject} 됩니다`"
         class="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
         @click="parentId = null"
       >
@@ -113,8 +125,8 @@ function onKeydown(e: KeyboardEvent) {
           type="text"
           role="combobox"
           aria-expanded="true"
-          aria-label="상위 작업 찾기"
-          placeholder="작업 번호나 제목으로 찾기"
+          :aria-label="`상위 ${noun} 찾기`"
+          :placeholder="`${noun} 번호나 제목으로 찾기`"
           class="min-w-0 grow bg-transparent text-xs outline-none placeholder:text-muted-foreground"
           @input="active = 0"
           @blur="close"
@@ -142,7 +154,7 @@ function onKeydown(e: KeyboardEvent) {
           <span class="min-w-0 grow truncate" :title="row.label">{{ row.label }}</span>
         </li>
         <li v-if="matches.length === 0" class="px-2 py-1.5 text-xs text-muted-foreground">
-          '{{ query.trim() }}' 이 들어간 작업이 없습니다
+          '{{ query.trim() }}' 이 들어간 {{ nounSubject }} 없습니다
         </li>
         <li v-if="hiddenCount > 0" class="px-2 py-1.5 text-xs text-muted-foreground">
           {{ hiddenCount }}건 더 있습니다 — 더 좁혀 찾아 주세요

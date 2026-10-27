@@ -9,6 +9,7 @@ from app.api import (
     comment,
     dependency,
     health,
+    history,
     minutes,
     part,
     project,
@@ -16,6 +17,7 @@ from app.api import (
     risk,
     search,
     task,
+    test,
     thread,
 )
 from app.api.deps import require_json, require_scope
@@ -56,5 +58,7 @@ for scoped in (
     check.router,
     minutes.router,
     report.router,
+    test.router,
+    history.router,
 ):
     app.include_router(scoped, prefix="/api", dependencies=[Depends(require_scope)])

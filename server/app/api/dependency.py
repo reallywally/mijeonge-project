@@ -25,8 +25,10 @@ async def put_dependency(
 
 
 @router.delete("/tasks/{task_id}/dependencies/{depends_on_id}", status_code=204)
-async def delete_dependency(task_id: str, depends_on_id: str, session: Session) -> None:
-    await dependency_service.delete_dependency(session, task_id, depends_on_id)
+async def delete_dependency(
+    task_id: str, depends_on_id: str, scope: ProjectScope, session: Session
+) -> None:
+    await dependency_service.delete_dependency(session, task_id, depends_on_id, scope.actor.id)
 
 
 @router.post("/projects/{project_id}/dependencies/suggest")

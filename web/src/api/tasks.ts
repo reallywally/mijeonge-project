@@ -1,8 +1,10 @@
 import { ApiError, id, request } from '@/api/client'
+import { recordMockHistory } from '@/api/history'
 import { isMockMode } from '@/api/mode'
 import { mockDb } from '@/api/mockAuth'
 import { projects, tasks } from '@/fixtures'
 import { nowIso } from '@/lib/date'
+import { change } from '@/lib/history'
 import { inheritedPartId } from '@/lib/part'
 import type {
   Task,
@@ -142,6 +144,7 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
     madeByTempId[t.tempId] = task
     return task
   })
+  for (const t of made) recordMockHistory('task', t.id, [change('created', null, null)])
   return { tasks: made, taskIdByTempId }
 }
 

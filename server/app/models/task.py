@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_id, trgm_index
@@ -23,6 +25,8 @@ from app.models.base import Base, new_id, trgm_index
 TASK_STATUSES = ("todo", "doing", "blocked", "done")
 TASK_PRIORITIES = ("low", "normal", "high")
 TASK_LINE_KINDS = ("check", "bullet")
+# 변경 이력의 칸들 — Postgres 는 jsonb, 검사의 sqlite 는 JSON 으로 선다
+HISTORY_CHANGES = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Task(Base):
@@ -199,4 +203,32 @@ class TaskLog(Base):
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # changed_at 으로 세우지 않는다 — 한 트랜잭션 안에서 같고 시계가 되감길 수 있다 (Q15)
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    backfilled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class TaskHistory(Base):
+    """작업 변경 이력 한 줄 = 요청 하나 (docs/api/history.md · Q59). 화면에 보이기 위한 것이다.
+
+    셈(N일째 · 리포트)은 `task_log` 가 한다 — 이것으로 세지 않는다. `changes` 는 계약의
+    `HistoryChange[]` 를 camelCase 그대로 담는다. `backfilled` 는 마이그레이션이 지난 작업에
+    넣은 '등록' 줄이라 바꾼 사람이 없다.
+    """
+
+    __tablename__ = "task_history"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
+        ),
+        Index("ix_task_history_task_id_seq", "task_id", "seq"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36))
+    task_id: Mapped[str] = mapped_column(String(36))
+    # backfill 은 누가 했는지 모른다. 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    changed_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # changed_at 으로 세우지 않는다 — 한 트랜잭션 안에서 같고 시계가 되감길 수 있다 (Q15)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    changes: Mapped[list[dict[str, object]]] = mapped_column(HISTORY_CHANGES)
     backfilled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))

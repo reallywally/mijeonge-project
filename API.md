@@ -24,6 +24,8 @@
 | `docs/api/minutes.md` | 회의록 — 게시판(쓰기 · 읽기 · 고치기 · 지우기) · 회의록 하나 → 새 안건 · 기존 안건 이력 · 작업 초안(SSE) → 고른 것만 한 번에 등록, 출처 `minutesId`. 2단계 녹음 업로드의 테두리 |
 | `docs/api/task-flow.md` | 선행 작업(사람이 지정 · AI 제안 → [적용]) · 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕 |
 | `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
+| `docs/api/test.md` | 테스트 — 작업과 따로 두는 기능 · 시나리오 테스트(단계는 행동 ↔ 기대 결과 짝 · 상위 테스트 묶음 · 작업 · 안건 참조 태그) · 상태와 N일째 · 손쓸 테스트 신호 · 기준 바뀜. 1단계(AI 없이)의 계약, AI 는 테두리만 |
+| `docs/api/history.md` | 변경 이력 — 작업 · 테스트를 누가 언제 무엇을 바꿨나(요청 하나 = 한 줄, 칸마다 전 · 후). 상세에서 보인다. `task_log` 와 따로 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
 - 새 도메인의 계약이 길어지면(표 한 줄로 안 끝나면) `docs/api/<도메인>.md` 를 새로 세우고 위 표에 줄을 더한다
@@ -198,10 +200,31 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | GET · POST | `/api/projects/{projectId}/reports` | 목록 · 만들기(본문 없음 — 계산 → `facts` → Claude 글 스트림 → 다 받으면 저장) | `ReportItem[]` · `text/event-stream` (`ReportEvent`) | 구현 |
 | GET · DELETE | `/api/reports/{reportId}` | 읽기 · 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | `Report` · 204 | 구현 |
 
+### 테스트
+
+'테스트' 메뉴(`server/PLAN.md` 16단계 · `web/PLAN.md` 16단계). 모양은 `docs/api/test.md` 다. 결정은 Q53 ~ Q58.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET · POST | `/api/projects/{projectId}/tests` | 목록(`seq` 순, 며칠째 · 신호 · 기준 바뀜까지 서버가 셈) · 추가 | `TestCase[]` · 201 `TestCase` | 구현 |
+| GET · PATCH · DELETE | `/api/tests/{testId}` | 읽기 · 고치기(단계는 목록째) · 지우기(만든 사람 · 관리자, 하위 있으면 409) | `TestCase` · 204 | 구현 |
+| POST | `/api/tests/{testId}/status` | 상태 바꾸기(실패 · 막힘은 메모, 덮어씀) | `TestCase` | 구현 |
+| PUT · DELETE | `/api/tests/{testId}/refs/{kind}/{refId}` | 작업 · 안건 태그 걸기 · 떼기(멱등) | `TestCase` · 204 | 구현 |
+| POST | `/api/tests/{testId}/basis` | "그대로 맞다" — 기준 바뀜을 지운다 | `TestCase` | 구현 |
+
+### 변경 이력
+
+작업 · 테스트 상세의 '변경 이력'(`server/PLAN.md` 17단계 · `web/PLAN.md` 17단계). 모양은 `docs/api/history.md` 다. 결정은 Q59.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/tasks/{taskId}/history` | 작업의 변경 이력 — 등록 순(오래된 것 먼저), 요청 하나 = 한 줄 | `HistoryEntry[]` | 구현 |
+| GET | `/api/tests/{testId}/history` | 테스트의 변경 이력 — 같은 모양 | `HistoryEntry[]` | 구현 |
+
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q52).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q60).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

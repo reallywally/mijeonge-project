@@ -8,10 +8,12 @@ import {
   rangeLabel,
   toGanttItems,
   toGanttLinks,
+  toTestGanttItems,
   weekLabel,
 } from './gantt'
 import { taskStatusLabel } from './task'
 import { useTaskStore } from '@/stores/task'
+import type { TestRow } from '@/types/domain'
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -118,5 +120,42 @@ describe('선행 관계 ↔ 간트 화살표', () => {
     for (const type of ['1', '2', '3'])
       expect(linkToDependency({ source: 'k15', target: 'k16', type })).toBeNull()
     expect(linkToDependency({ source: 'k15', target: 'k15', type: '0' })).toBeNull()
+  })
+})
+
+describe('테스트를 간트가 먹는 모양으로', () => {
+  const row = (id: string, parentId: string | null, start: string | null, due: string | null) =>
+    ({
+      test: { id, key: id.toUpperCase(), title: id, parentId, start, due },
+      isGroup: false,
+      status: 'draft',
+      signals: id === 'c' ? ['overdue'] : [],
+      ownerName: null,
+      pathLabel: '',
+      periodLabel: '',
+      childCount: 0,
+    }) as unknown as TestRow
+
+  it('묶음 막대는 하위 테스트의 기간을 덮고, 기간 지남 · 오래 걸림은 late 로 표를 한다', () => {
+    const items = toTestGanttItems(
+      [
+        row('g', null, null, null),
+        row('a', 'g', '2026-10-06', '2026-10-08'),
+        row('c', 'g', '2026-10-13', '2026-10-17'),
+        row('u', 'g', null, null),
+        row('e', null, null, null),
+      ],
+      (s) => s,
+    )
+    const by = (id: string) => items.find((i) => i.id === id)!
+    expect(by('g')).toMatchObject({
+      type: 'project',
+      start_date: new Date(2026, 9, 6),
+      end_date: new Date(2026, 9, 18),
+    })
+    expect(by('c').late).toBe(true)
+    expect(by('a').late).toBeUndefined()
+    expect(by('u').unscheduled).toBe(true)
+    expect(by('e').unscheduled).toBe(true)
   })
 })
