@@ -16,8 +16,7 @@ const meetupProposal = (packOwnerId: string): TaskProposal => ({
   tasks: [
     {
       tempId: 't1',
-      parentTempId: null,
-      parentId: null,
+      relatedId: null,
       title: '간담회 준비',
       ownerId: null,
       start: null,
@@ -26,8 +25,7 @@ const meetupProposal = (packOwnerId: string): TaskProposal => ({
     },
     {
       tempId: 't2',
-      parentTempId: 't1',
-      parentId: null,
+      relatedId: null,
       title: '일정 체크',
       ownerId: 'u1',
       start: '2026-10-13',
@@ -36,8 +34,7 @@ const meetupProposal = (packOwnerId: string): TaskProposal => ({
     },
     {
       tempId: 't3',
-      parentTempId: 't1',
-      parentId: null,
+      relatedId: null,
       title: '준비물 체크',
       ownerId: packOwnerId,
       start: null,
@@ -87,7 +84,7 @@ export const chatReplies: MockChatReply[] = [
   {
     keywords: ['만들어', '등록해', '추가해'],
     tools: proposeTools,
-    answer: '‘간담회 준비’ 아래에 작업 둘을 두었습니다. 아래처럼 등록할까요?',
+    answer: '간담회 준비 작업 초안 셋입니다. 아래처럼 등록할까요?',
     proposal: meetupProposal('u2'),
   },
   {

@@ -119,8 +119,7 @@ describe('목업 갈래 — 한 곳에서 남기기', () => {
       tasks: [
         {
           tempId: 'a',
-          parentTempId: null,
-          parentId: null,
+          relatedId: null,
           title: '새 작업',
           ownerId: null,
           start: null,

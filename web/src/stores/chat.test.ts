@@ -207,8 +207,8 @@ describe('작업 초안', () => {
     })
     const made = data.allTasks.slice(-3)
     expect(made.map((t) => t.key)).toEqual([`HW-${no}`, `HW-${no + 1}`, `HW-${no + 2}`])
-    expect(made[1]).toMatchObject({ parentId: made[0].id, ownerId: 'u1', status: 'todo' })
-    expect(made[2].parentId).toBe(made[0].id)
+    expect(made[1]).toMatchObject({ relatedIds: [], ownerId: 'u1', status: 'todo' })
+    expect(made.every((t) => t.relatedIds.length === 0)).toBe(true)
 
     await expect(chat.register(answer.id)).resolves.toBe(false)
     expect(data.allTasks.slice(-3)).toEqual(made)

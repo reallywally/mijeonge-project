@@ -5,7 +5,6 @@ import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { dependencyChoices } from '@/lib/dependency'
 import { bodyChanged, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
-import { inheritedPartId } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
 import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
@@ -29,10 +28,12 @@ import type {
 /**
  * 작업.
  *
- * 계층으로 쌓이지만 목록은 펼치지 않는다 — 한 줄에 하나씩 놓고 어디에 속했는지는 경로로 적는다.
- * 계층째로 보는 건 간트차트가 맡는다. start · due 가 둘 다 없으면 기간 미정이라 간트에 막대가 없고,
- * 그래서 목록에서 챙겨야 한다.
+ * 평평하다 — 계층 대신 한 방향 '연관 작업'(relatedIds)을 여럿 건다(Q61). 목록 · 칸반 · 간트 모두 한 줄에 하나씩.
+ * start · due 가 둘 다 없으면 기간 미정이라 간트에 막대가 없고, 그래서 목록에서 챙겨야 한다.
  */
+/** 한 작업이 거는 연관 작업은 이만큼까지 (Q61) */
+export const RELATED_LIMIT = 20
+
 export const useTaskStore = defineStore('task', () => {
   const data = useDataStore()
   const threadStore = useThreadStore()
@@ -47,40 +48,11 @@ export const useTaskStore = defineStore('task', () => {
     Object.fromEntries(tasks.value.map((t) => [t.id, t])),
   )
 
-  const childCountOf = computed<Record<string, number>>(() => {
-    const counts: Record<string, number> = {}
-    for (const t of tasks.value) {
-      if (t.parentId) counts[t.parentId] = (counts[t.parentId] ?? 0) + 1
-    }
-    return counts
-  })
-
-  /** 위로 올라가며 모은 조상들의 제목 */
-  function ancestorTitles(task: Task) {
-    const names: string[] = []
-    let parent = task.parentId ? byId.value[task.parentId] : undefined
-    while (parent) {
-      names.unshift(parent.title)
-      parent = parent.parentId ? byId.value[parent.parentId] : undefined
-    }
-    return names
+  /** 연관 HW-3, HW-7 — 건 것이 없으면 '' */
+  function relatedLabel(task: Task) {
+    const keys = task.relatedIds.map((id) => byId.value[id]?.key).filter((k) => k !== undefined)
+    return keys.length > 0 ? `연관 ${keys.join(', ')}` : ''
   }
-
-  /** 개발 › AI Biz › 가상비서 · 하위 2건 — 최상위면 '최상위 작업' */
-  function pathLabel(task: Task) {
-    const names = ancestorTitles(task)
-    const base = names.length === 0 ? '최상위 작업' : names.join(' › ')
-    const kids = childCountOf.value[task.id] ?? 0
-    return kids > 0 ? `${base} · 하위 ${kids}건` : base
-  }
-
-  /** 자기까지 포함한 경로 — 상위 작업을 고르는 자리가 쓴다 */
-  const fullPath = (task: Task) => [...ancestorTitles(task), task.title].join(' › ')
-
-  /** 상위 작업 고르기 목록. 고르는 값은 이름이 아니라 id 다 */
-  const parentOptions = computed<{ id: string; key: string; label: string }[]>(() =>
-    tasks.value.map((t) => ({ id: t.id, key: t.key, label: fullPath(t) })),
-  )
 
   const periodLabel = (task: Task) =>
     task.start && task.due ? `${slashDay(task.start)} ~ ${slashDay(task.due)}` : ''
@@ -95,11 +67,10 @@ export const useTaskStore = defineStore('task', () => {
     return {
       task,
       ownerName: data.memberName(task.ownerId),
-      pathLabel: pathLabel(task),
+      relatedLabel: relatedLabel(task),
       periodLabel: periodLabel(task),
       undated: !task.start || !task.due,
       threadCount: threadsOfTask(task.id).length,
-      childCount: childCountOf.value[task.id] ?? 0,
     }
   }
 
@@ -146,16 +117,15 @@ export const useTaskStore = defineStore('task', () => {
   function taskDetail(taskId: string): TaskDetail | null {
     const task = data.allTasks.find((t) => t.id === taskId)
     if (!task) return null
-    const children = tasks.value.filter((t) => t.parentId === taskId).map(toRow)
     return {
       task,
       ownerName: data.memberName(task.ownerId),
-      pathLabel: pathLabel(task),
       periodLabel: periodLabel(task),
-      parent: task.parentId ? (byId.value[task.parentId] ?? null) : null,
-      children,
+      related: task.relatedIds
+        .map((id) => byId.value[id])
+        .filter((t): t is Task => t !== undefined)
+        .map(toRow),
       threads: threadsOfTask(taskId).map(threadRow),
-      doneChildCount: children.filter((c) => c.task.status === 'done').length,
       dependsOn: dependsOnOf(taskId),
       dependents: dependentsOf(taskId),
     }
@@ -174,7 +144,7 @@ export const useTaskStore = defineStore('task', () => {
   const dependentsOf = (taskId: string): Task[] =>
     dependencies.value.filter((d) => d.dependsOnId === taskId).map((d) => byId.value[d.taskId])
 
-  /** 선행으로 고를 수 있는 것 — 자기 · 상위 · 하위 · 이미 건 것은 빠지고, 순환이 되는 것은 까닭이 붙는다 */
+  /** 선행으로 고를 수 있는 것 — 자기 · 이미 건 것은 빠지고, 순환이 되는 것은 까닭이 붙는다 */
   const dependencyChoicesFor = (taskId: string) =>
     dependencyChoices(tasks.value, dependencies.value, taskId)
 
@@ -214,7 +184,7 @@ export const useTaskStore = defineStore('task', () => {
 
   /**
    * 선행 작업을 건다. 화면에 먼저 넣고, 거절되면 빼고 까닭을 띄운다(링크와 같다).
-   * 목업도 api 를 거친다 — 상하위 · 순환 · 20개 검사가 서버와 같은 코드로 나와야 해서다.
+   * 목업도 api 를 거친다 — 자기 · 순환 · 20개 검사가 서버와 같은 코드로 나와야 해서다.
    * 목업은 응답 뒤에 넣는다 — 목업 api 는 이미 걸린 관계를 검사 없이 통과시키므로(서버와 같다) 먼저 넣으면 제 검사를 건너뛴다.
    * 실패하면 그 까닭 한 줄, 되면 null. 제안 창처럼 그 줄에 까닭을 다는 자리는 quiet 로 토스트를 끈다
    */
@@ -322,26 +292,10 @@ export const useTaskStore = defineStore('task', () => {
     patch(taskId, { start: task.start, due: task.due })
   }
 
-  /** 자기와 자기 아래 작업들 — 상위 작업으로 고르면 계층이 고리가 된다 */
-  function selfAndDescendants(taskId: string): Set<string> {
-    const ids = new Set([taskId])
-    let grew = true
-    while (grew) {
-      grew = false
-      for (const t of tasks.value) {
-        if (t.parentId && ids.has(t.parentId) && !ids.has(t.id)) {
-          ids.add(t.id)
-          grew = true
-        }
-      }
-    }
-    return ids
-  }
-
-  /** 수정할 때 고를 수 있는 상위 작업 — 자기와 자기 아래는 뺀다 */
-  const parentOptionsFor = (taskId: string) => {
-    const blocked = selfAndDescendants(taskId)
-    return parentOptions.value.filter((o) => !blocked.has(o.id))
+  /** 연관으로 더 걸 수 있는 작업 — 같은 프로젝트에서 자기 · 이미 건 것을 뺀다 */
+  function relatedOptionsFor(taskId: string): Task[] {
+    const already = new Set(findTask(taskId)?.relatedIds ?? [])
+    return tasks.value.filter((t) => t.id !== taskId && !already.has(t.id))
   }
 
   function setTitle(taskId: string, title: string) {
@@ -352,17 +306,69 @@ export const useTaskStore = defineStore('task', () => {
     patch(taskId, { title: task.title })
   }
 
-  /** 자기나 자기 아래 작업을 상위로 고르면 계층이 고리가 되니 받지 않는다 */
-  function setParent(taskId: string, parentId: string | null) {
-    const task = findTask(taskId)
-    if (!task) return
-    if (parentId && selfAndDescendants(taskId).has(parentId)) return
-    logPatch(task, { parentId })
-    task.parentId = parentId
-    patch(taskId, { parentId })
+  /* 목업 갈래가 서버처럼 연관 작업을 거른다 — 거절했으면 서버와 같은 코드로 알리고 true */
+  function rejectRelated(task: Task, ids: string[]) {
+    if (!data.mock) return false
+    const fail = (
+      status: number,
+      code: string,
+      message: string,
+      detail?: Record<string, string>,
+    ) => {
+      toastError(new api.ApiError(status, { code, message, ...(detail ? { detail } : {}) }))
+      return true
+    }
+    if (ids.length > RELATED_LIMIT)
+      return fail(422, 'VALIDATION_ERROR', '입력값이 올바르지 않습니다.', {
+        relatedIds: `연관 작업은 ${RELATED_LIMIT}개까지입니다.`,
+      })
+    if (ids.includes(task.id))
+      return fail(400, 'TASK_RELATED_SELF', '자기 자신은 연관 작업으로 걸 수 없습니다.')
+    const own = (id: string) =>
+      data.allTasks.some((t) => t.id === id && t.projectId === task.projectId)
+    if (!ids.every(own)) return fail(400, 'TASK_RELATED_NOT_FOUND', '연관 작업을 찾을 수 없습니다.')
+    return false
   }
 
-  /** 파트를 바꾼다(null 은 공통). 하위 작업은 따라 바뀌지 않는다 — 계약이 그렇다 */
+  /**
+   * 연관 작업을 통째로 갈아끼운다(PATCH relatedIds). 중복은 한 번으로 친다.
+   * 화면에 먼저 놓는 순서는 '건 순서' — 남는 것은 제자리, 새로 건 것은 뒤. 서버 응답이 오면 그것으로 갈아끼운다
+   */
+  function setRelated(taskId: string, relatedIds: string[]) {
+    const task = findTask(taskId)
+    if (!task) return
+    const ids = [...new Set(relatedIds)]
+    if (rejectRelated(task, ids)) return
+    const next = [
+      ...task.relatedIds.filter((id) => ids.includes(id)),
+      ...ids.filter((id) => !task.relatedIds.includes(id)),
+    ]
+    /* 같은 집합이면 보낼 것이 없다 — 서버도 이력을 안 남긴다 */
+    if (next.length === task.relatedIds.length && next.every((id, i) => id === task.relatedIds[i]))
+      return
+    logPatch(task, { relatedIds: next })
+    task.relatedIds = next
+    patch(taskId, { relatedIds: ids })
+  }
+
+  /** 여럿을 한 번에 더 건다 — 건 순서 뒤에 붙는다 */
+  function addRelated(taskId: string, ids: string[]) {
+    const task = findTask(taskId)
+    if (!task) return
+    const next = [...task.relatedIds, ...ids.filter((id) => !task.relatedIds.includes(id))]
+    if (next.length !== task.relatedIds.length) setRelated(taskId, next)
+  }
+
+  function removeRelated(taskId: string, relatedId: string) {
+    const task = findTask(taskId)
+    if (!task || !task.relatedIds.includes(relatedId)) return
+    setRelated(
+      taskId,
+      task.relatedIds.filter((id) => id !== relatedId),
+    )
+  }
+
+  /** 파트를 바꾼다(null 은 공통) */
   function setPart(taskId: string, partId: string | null) {
     const task = findTask(taskId)
     if (!task || task.partId === partId) return
@@ -467,10 +473,8 @@ export const useTaskStore = defineStore('task', () => {
       }
     }
     if (data.rejectOwner(input.ownerId, 'TASK_OWNER_NOT_FOUND')) return null
-    /* partId 를 안 보냈으면 상위 작업의 것을 따른다. 따라온 것도 새로 다는 것으로 보고 검사한다 —
-       서버가 그렇게 한다 (API.md Q32) */
-    const parentTask = input.parentId ? findTask(input.parentId) : null
-    const partId = inheritedPartId(input.partId, parentTask)
+    /* partId 를 안 보냈으면 공통이다 (Q61) */
+    const partId = input.partId ?? null
     if (data.rejectPart(partId)) return null
     const id = data.nextId('nk')
     const createdAt = nowIso()
@@ -480,7 +484,7 @@ export const useTaskStore = defineStore('task', () => {
       /* 목업에서는 키를 프로젝트의 접두사와 다음 번호로 세운다 — 서버 모드는 서버가 낸다 */
       key: data.takeTaskKey(data.currentProjectId),
       title: input.title,
-      parentId: input.parentId,
+      relatedIds: [],
       body: input.body,
       status: input.status,
       ownerId: input.ownerId,
@@ -570,10 +574,8 @@ export const useTaskStore = defineStore('task', () => {
     undatedCount,
     blockedCount,
     statusCounts,
-    pathLabel,
-    fullPath,
-    parentOptions,
-    parentOptionsFor,
+    relatedLabel,
+    relatedOptionsFor,
     periodLabel,
     taskDetail,
     threadRow,
@@ -584,7 +586,9 @@ export const useTaskStore = defineStore('task', () => {
     setPeriod,
     toggleBodyLine,
     setTitle,
-    setParent,
+    setRelated,
+    addRelated,
+    removeRelated,
     setPriority,
     setPart,
     setBody,

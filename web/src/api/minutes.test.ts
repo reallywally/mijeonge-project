@@ -342,7 +342,6 @@ describe('목업 apply', () => {
     input.entries.push({ ...input.entries[0], tempId: 'e2' })
     input.tasks[0].threadTempIds = ['n9']
     input.tasks[1].start = '2026-10-30'
-    input.tasks[2].parentTempId = 't9'
     input.tasks[2].tempId = 'n1'
     const e = await rejected(applyMinutes('m1', input))
     expect(e).toMatchObject({ status: 422, code: 'VALIDATION_ERROR' })
@@ -352,7 +351,6 @@ describe('목업 apply', () => {
       'entries.1.threadId': '한 안건에 이력은 하나까지입니다.',
       'tasks.0.threadTempIds.0': '이 초안의 새 안건이 아닙니다.',
       'tasks.1.due': expect.any(String),
-      'tasks.2.parentTempId': expect.any(String),
       'tasks.2.tempId': '임시 이름이 겹칩니다.',
     })
   })
@@ -367,14 +365,10 @@ describe('목업 apply', () => {
     expect(over.detail).toEqual({ tasks: '작업은 30개까지입니다.' })
   })
 
-  it('새 안건 tempId 를 작업의 parentTempId 로 쓰면 422, 담당자가 있는 줄의 ownerHint 는 오류가 아니다', async () => {
+  it('담당자가 있는 줄의 ownerHint 는 오류가 아니다', async () => {
     const input = fullInput()
     input.tasks[2] = { ...input.tasks[2], ownerId: 'u2', ownerHint: '최 선임' }
     expect((await applyMinutes('m1', input)).tasks[2].ownerId).toBe('u2')
-
-    input.tasks[2].parentTempId = 'n1'
-    const e = await rejected(applyMinutes('m1', input))
-    expect(e.detail).toEqual({ 'tasks.2.parentTempId': expect.any(String) })
   })
 
   it('400 THREAD_NOT_FOUND — 없는 안건 · 다른 프로젝트 안건의 자리', async () => {
@@ -415,18 +409,18 @@ describe('목업 apply', () => {
     })
   })
 
-  it('400 TASK_PARENT_NOT_FOUND — 다른 프로젝트의 작업 밑에는 못 붙인다. 있는 작업이면 파트를 따른다', async () => {
+  it('400 TASK_RELATED_NOT_FOUND — 다른 프로젝트의 작업은 연관으로 못 건다. 있는 작업이면 걸고, 파트는 공통이다', async () => {
     const input = fullInput()
-    input.tasks[2].parentId = 'x1'
+    input.tasks[2].relatedId = 'x1'
     const e = await rejected(applyMinutes('m1', input))
     expect(e).toMatchObject({
-      code: 'TASK_PARENT_NOT_FOUND',
-      detail: { 'tasks.2.parentId': expect.any(String) },
+      code: 'TASK_RELATED_NOT_FOUND',
+      detail: { 'tasks.2.relatedId': '연관 작업을 찾을 수 없습니다.' },
     })
 
-    input.tasks[2].parentId = 'k4'
+    input.tasks[2].relatedId = 'k4'
     const r = await applyMinutes('m1', input)
-    expect([r.tasks[2].parentId, r.tasks[2].partId]).toEqual(['k4', 'pt1'])
+    expect([r.tasks[2].relatedIds, r.tasks[2].partId]).toEqual([['k4'], null])
   })
 })
 

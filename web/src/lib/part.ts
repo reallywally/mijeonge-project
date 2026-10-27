@@ -11,7 +11,8 @@ import type { Part, Task, TaskThreadLink, Thread } from '@/types/domain'
 export type PartScope = 'mine' | 'all'
 
 export interface PartScopeInput {
-  tasks: Pick<Task, 'id' | 'parentId' | 'partId' | 'ownerId'>[]
+  /** 작업은 평평하다(Q61) — parentId 는 테스트처럼 아직 계층이 있는 것만 싣는다 */
+  tasks: (Pick<Task, 'id' | 'partId' | 'ownerId'> & { parentId?: string | null })[]
   threads: Pick<Thread, 'id' | 'partId' | 'ownerId'>[]
   links: TaskThreadLink[]
   /** 로그인한 사람 — 담당 규칙에 쓴다 */
@@ -22,7 +23,7 @@ export interface PartScopeInput {
 
 export interface PartScopeResult {
   taskIds: Set<string>
-  /** 스스로는 안 맞지만 보이는 작업의 조상이라 선 작업 — 경로 · 간트 트리가 끊기지 않게. 흐리게 그린다 */
+  /** 스스로는 안 맞지만 보이는 것의 조상이라 선 것(테스트) — 간트 트리가 끊기지 않게. 흐리게 그린다. 작업은 늘 비었다 */
   contextTaskIds: Set<string>
   threadIds: Set<string>
 }
@@ -30,10 +31,10 @@ export interface PartScopeResult {
 /**
  * '내 파트' 에서 보이는 것.
  *
- * 작업 — ① 공통이거나 내 파트 ② 내가 담당 ③ ①② 로 보이는 작업의 조상.
+ * 작업 — ① 공통이거나 내 파트 ② 내가 담당. 연관 작업은 끌어오지 않는다(Q61).
+ *   테스트도 이 함수를 쓴다 — 테스트는 계층이 남아 ③ ①② 로 보이는 것의 조상도 선다.
  * 안건 — ① 공통이거나 내 파트 ② 내가 담당 ③ 작업 ①② 에 링크로 걸린 것 — 막힌 이유는 언제나 보인다.
- *   경로를 잇느라 선 조상(③)의 링크는 끌어오지 않는다 — 조상은 맥락일 뿐 내 일이 아니라서,
- *   남의 파트 묶음 아래 작업 하나를 맡았다고 그 파트의 결정이 다 딸려 오면 노이즈를 줄이는 뜻이 없어진다
+ *   조상이라 선 것의 링크는 끌어오지 않는다 — 조상은 맥락일 뿐 내 일이 아니라서
  */
 export function visibleInMyParts(input: PartScopeInput): PartScopeResult {
   const { memberId, myPartIds } = input
@@ -46,7 +47,7 @@ export function visibleInMyParts(input: PartScopeInput): PartScopeResult {
 
   for (const t of input.tasks) if (ownsOrShares(t)) taskIds.add(t.id)
 
-  /* 조상을 올라가며 채운다. 계층이 고리가 될 일은 없지만(서버가 막는다) 혹시 있어도 멈추게 본 것을 센다 */
+  /* 조상을 올라가며 채운다(테스트만 — 작업에는 parentId 가 없다). 계층이 고리가 될 일은 없지만(서버가 막는다) 혹시 있어도 멈추게 본 것을 센다 */
   for (const id of [...taskIds]) {
     const seen = new Set([id])
     let parentId = byId.get(id)?.parentId ?? null
@@ -58,7 +59,7 @@ export function visibleInMyParts(input: PartScopeInput): PartScopeResult {
         taskIds.add(parent.id)
         contextTaskIds.add(parent.id)
       }
-      parentId = parent.parentId
+      parentId = parent.parentId ?? null
     }
   }
 
@@ -108,16 +109,4 @@ export function partNameProblem(name: string): string | null {
   if (!trimmed) return '파트 이름을 적어 주세요.'
   if (trimmed.length > PART_NAME_MAX) return `파트 이름은 ${PART_NAME_MAX}자까지입니다.`
   return null
-}
-
-/**
- * 작업 등록에서 partId 를 안 보냈을 때 붙는 파트 — 상위 작업의 것을 따른다(최상위면 공통).
- * 보냈으면(null 포함) 그 값이다. 서버 규칙과 같고, 목업 갈래가 이걸로 서버를 흉내 낸다.
- */
-export function inheritedPartId(
-  sent: string | null | undefined,
-  parent: Pick<Task, 'partId'> | null | undefined,
-): string | null {
-  if (sent !== undefined) return sent
-  return parent?.partId ?? null
 }

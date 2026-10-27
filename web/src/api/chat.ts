@@ -167,16 +167,15 @@ export const isDayOrNull = (v: unknown): v is string | null => v === null || typ
 /** 초안 한 항목. 아는 칸만 옮긴다 — 다음 질문에 그대로 돌려보내므로 모르는 칸을 싣지 않는다 */
 export function toProposedTask(v: unknown): ProposedTask | null {
   if (!isRecord(v)) return null
-  const { tempId, parentTempId, title, ownerId, start, due, priority } = v
-  /* parentId 는 나중에 늘어난 칸이다 — 없으면 null 로 본다 */
-  const parentId = v.parentId ?? null
+  const { tempId, title, ownerId, start, due, priority } = v
+  /* 없으면 null 로 본다 — 지난 대화의 초안(parentTempId 시절)도 깨지 않게 */
+  const relatedId = v.relatedId ?? null
   if (typeof tempId !== 'string' || typeof title !== 'string') return null
-  if (parentTempId !== null && typeof parentTempId !== 'string') return null
-  if (parentId !== null && typeof parentId !== 'string') return null
+  if (relatedId !== null && typeof relatedId !== 'string') return null
   if (ownerId !== null && typeof ownerId !== 'string') return null
   if (!isDayOrNull(start) || !isDayOrNull(due)) return null
   if (priority !== 'low' && priority !== 'normal' && priority !== 'high') return null
-  return { tempId, parentTempId, parentId, title, ownerId, start, due, priority }
+  return { tempId, relatedId, title, ownerId, start, due, priority }
 }
 
 function toProposal(v: unknown): TaskProposal | null {

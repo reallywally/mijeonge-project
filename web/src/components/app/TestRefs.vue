@@ -8,7 +8,7 @@ import { useTestStore } from '@/stores/test'
 import { useThreadStore } from '@/stores/thread'
 import type { TestRef } from '@/types/domain'
 
-/* 태그 — 테스트에 거는 작업 · 안건 참조. 작업 번호나 안건 제목으로 찾아 걸고(상위 작업 찾기와 같은 찾기),
+/* 태그 — 테스트에 거는 작업 · 안건 참조. 작업 번호나 안건 제목으로 찾아 걸고(상위 테스트 찾기와 같은 찾기),
    칩을 누르면 그 작업 · 안건 상세로 간다. 작업이 지워지면 서버가 그 태그만 뺀다 */
 const props = defineProps<{ refs: TestRef[] }>()
 const emit = defineEmits<{

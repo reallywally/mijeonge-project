@@ -82,13 +82,14 @@ describe('작업 상세 — 선행 작업', () => {
     expect($$('[data-dependent] [aria-label$="빼기"]')).toHaveLength(0)
   })
 
-  it('고르기 — 자기 · 상위 · 이미 건 것은 없고, 순환이 되는 것은 흐리게 까닭과 함께 못 고른다', async () => {
+  it('고르기 — 자기 · 이미 건 것은 없고, 순환이 되는 것은 흐리게 까닭과 함께 못 고른다', async () => {
     await mountDetail('k20')
     await search('HW-')
     const texts = options().map((o) => o.textContent ?? '')
     expect(texts.some((t) => t.includes('HW-20 '))).toBe(false)
-    expect(texts.some((t) => t.includes('HW-4 '))).toBe(false)
     expect(texts.some((t) => t.includes('HW-19 '))).toBe(false)
+    /* 연관으로 건 HW-4 도 선행으로 고를 수 있다 — 상하위 검사는 걷었다 (Q61) */
+    expect(texts.some((t) => t.includes('HW-4'))).toBe(true)
 
     await search('계정 배포')
     const [k21] = options()

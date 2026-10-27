@@ -39,7 +39,6 @@ function why(a: TaskAttention, ctx: ReportBodyContext) {
 function weightLine(a: TaskAttention) {
   const w = a.weight
   const out: string[] = []
-  if (w.openChildren > 0) out.push(`안 끝난 하위 작업 ${w.openChildren}개`)
   if (w.totalLines > 0) out.push(`체크리스트 ${w.totalLines}줄 중 ${w.openLines}줄 남음`)
   return out.length > 0 ? ` 무게는 ${out.join(', ')}입니다.` : ''
 }

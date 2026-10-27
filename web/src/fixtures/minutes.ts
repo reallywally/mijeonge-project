@@ -111,8 +111,7 @@ export const mockMinutesDraft: MinutesDraft = {
   tasks: [
     {
       tempId: 't1',
-      parentTempId: null,
-      parentId: null,
+      relatedId: null,
       title: '가상비서 대화 로그 현황 조사',
       ownerId: 'u4',
       ownerHint: '',
@@ -125,8 +124,7 @@ export const mockMinutesDraft: MinutesDraft = {
     },
     {
       tempId: 't2',
-      parentTempId: null,
-      parentId: null,
+      relatedId: null,
       title: '운영 DB 계정 · 권한 표 작성',
       ownerId: 'u3',
       ownerHint: '',
@@ -139,8 +137,7 @@ export const mockMinutesDraft: MinutesDraft = {
     },
     {
       tempId: 't3',
-      parentTempId: null,
-      parentId: null,
+      relatedId: null,
       title: '통합 테스트 시나리오 초안 공유',
       /* 최 선임은 기간계팀 사람이라 멤버에 없다 — 비우고 부른 말을 남긴다 */
       ownerId: null,

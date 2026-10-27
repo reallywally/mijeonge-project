@@ -217,7 +217,7 @@ describe('바로 저장하는 수정', () => {
     const before = data.allTasks.find((t) => t.id === 'k4')!.status
     on('PATCH /api/tasks/k4', () =>
       json(
-        { code: 'TASK_PARENT_DESCENDANT', message: '하위 작업을 상위로 고를 수 없습니다.' },
+        { code: 'TASK_RELATED_SELF', message: '자기 자신은 연관 작업으로 걸 수 없습니다.' },
         400,
       ),
     )
@@ -226,7 +226,7 @@ describe('바로 저장하는 수정', () => {
     await flush()
 
     expect(toastError).toHaveBeenCalledOnce()
-    expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'TASK_PARENT_DESCENDANT' })
+    expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'TASK_RELATED_SELF' })
     expect(calls.slice(-2).map((c) => c.route)).toEqual([
       'GET /api/projects/p1/snapshot',
       'GET /api/projects/p1/members',
@@ -301,13 +301,11 @@ describe('만드는 것', () => {
       id: 'srv-task',
       key: 'HW-99',
       title: 'CI 러너 늘리기',
-      parentId: null,
     }
     on('POST /api/projects/p1/tasks', () => json(made, 201))
 
     const pending = task.addTask({
       title: 'CI 러너 늘리기',
-      parentId: null,
       body: [],
       status: 'todo',
       ownerId: null,
@@ -440,14 +438,13 @@ describe('파트 (서버 갈래)', () => {
     expect(data.parts).toHaveLength(before)
   })
 
-  it('작업 등록은 partId 를 고른 그대로 싣고, 안 고르면 키째로 빼서 상위를 따르게 한다', async () => {
+  it('작업 등록은 partId 를 고른 그대로 싣고, 안 고르면 키째로 뺀다(서버가 공통으로 둔다)', async () => {
     const data = await booted()
     const task = useTaskStore()
     const made: Task = { ...data.allTasks[0], id: 'srv-k', key: 'HW-99', partId: 'pt2' }
     on('POST /api/projects/p1/tasks', () => json(made, 201))
     const input = {
-      title: '하위',
-      parentId: 'k7',
+      title: '새 작업',
       body: [],
       status: 'todo' as const,
       ownerId: null,
@@ -461,6 +458,25 @@ describe('파트 (서버 갈래)', () => {
     expect(calls.at(-1)!.body).not.toHaveProperty('partId')
     await task.addTask({ ...input, partId: null })
     expect(calls.at(-1)!.body).toMatchObject({ partId: null })
+  })
+
+  it('연관 작업은 relatedIds 를 통째로 PATCH 하고, 응답의 순서로 갈아끼운다', async () => {
+    const data = await booted()
+    const k20 = data.allTasks.find((t) => t.id === 'k20')!
+    on('PATCH /api/tasks/k20', () => json({ ...k20, relatedIds: ['k19', 'k4', 'k21'] }))
+    const task = useTaskStore()
+    task.addRelated('k20', ['k21', 'k19'])
+    expect(calls.at(-1)).toEqual({
+      route: 'PATCH /api/tasks/k20',
+      body: { relatedIds: ['k4', 'k21', 'k19'] },
+    })
+    expect(data.allTasks.find((t) => t.id === 'k20')!.relatedIds).toEqual(['k4', 'k21', 'k19'])
+
+    await flush()
+    expect(data.allTasks.find((t) => t.id === 'k20')!.relatedIds).toEqual(['k19', 'k4', 'k21'])
+
+    task.removeRelated('k20', 'k4')
+    expect(calls.at(-1)!.body).toEqual({ relatedIds: ['k19', 'k21'] })
   })
 
   it('파트를 바꾸면 그 필드만 PATCH 한다', async () => {

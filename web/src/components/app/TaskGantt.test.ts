@@ -10,7 +10,6 @@ import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
-import { useTaskStore } from '@/stores/task'
 
 vi.mock('vue-sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
@@ -37,19 +36,15 @@ async function mountGantt() {
 }
 
 describe('간트차트', () => {
-  it('목록과 달리 계층 트리로 선다', async () => {
+  it('작업은 평평하게 한 줄씩 선다 — 묶음 막대가 없다 (Q61)', async () => {
     const w = await mountGantt()
     expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(22)
 
+    /* HW-8 은 HW-7 을 연관으로 걸었지만 그 아래로 들어가지 않는다 */
     const tool01 = w.get('.gantt_grid_data [data-task-id="k8"]')
-    /* 개발 › AI Biz › 가상비서 아래 네 번째 단 */
-    expect(tool01.attributes('aria-level')).toBe('4')
+    expect(tool01.attributes('aria-level')).toBe('1')
     expect(tool01.text()).toContain('HW-8')
-  })
-
-  it('자식이 있는 작업은 자식들의 기간을 덮는 묶음 막대가 된다', async () => {
-    const w = await mountGantt()
-    expect(w.findAll('.gantt_task_line.gantt_project')).toHaveLength(7)
+    expect(w.findAll('.gantt_task_line.gantt_project')).toHaveLength(0)
   })
 
   it('기간 미정 작업은 그리드에는 서고 막대는 없다', async () => {
@@ -112,26 +107,10 @@ describe('간트차트', () => {
     expect(w.emitted('open-task')).toEqual([['k18']])
   })
 
-  it('접기 화살표는 팝업을 열지 않고 접기만 한다', async () => {
+  it("'+' 열이 없다 — 작업 추가는 화면 머리의 버튼이 맡는다", async () => {
     const w = await mountGantt()
-    const caret = w.get('.gantt_grid_data [data-task-id="k7"] .gantt_tree_icon')
-    await caret.trigger('click')
-    await flushPromises()
-
-    expect(w.emitted('open-task')).toBeUndefined()
-    /* 가상비서 아래 네 줄이 접힌다 */
-    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(18)
-  })
-
-  it("'+' 는 그 줄 아래로 작업을 만들라고 알린다 — 라이브러리가 직접 만들지 않는다", async () => {
-    const w = await mountGantt()
-    const taskStore = useTaskStore()
-    await w.get('.gantt_grid_data [data-task-id="k4"] .gantt_add').trigger('click')
-    await flushPromises()
-
-    expect(w.emitted('add-task')).toEqual([['k4']])
-    expect(taskStore.rows).toHaveLength(22)
-    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(22)
+    expect(w.find('.gantt_grid_data .gantt_add').exists()).toBe(false)
+    expect(w.find('.gantt_grid_scale .gantt_add').exists()).toBe(false)
   })
 
   it('기본 편집창은 뜨지 않는다', async () => {
@@ -185,18 +164,18 @@ describe('간트차트 — 선행 관계', () => {
     expect(toast.error).not.toHaveBeenCalled()
   })
 
-  it('순환 · 상하위 · 끝 → 시작이 아닌 것은 그 자리에서 까닭을 띄우고 걸지 않는다', async () => {
+  it('순환 · 끝 → 시작이 아닌 것은 그 자리에서 까닭을 띄우고 걸지 않는다', async () => {
     await mountGantt()
     const add = (source: string, target: string, type = '0') =>
       chart.callEvent('onBeforeLinkAdd', ['tmp', { id: 'tmp', source, target, type }])
 
     expect(add('k21', 'k19')).toBe(false)
-    expect(add('k4', 'k20')).toBe(false)
     expect(add('k15', 'k16', '1')).toBe(false)
+    expect(add('k20', 'k20')).toBe(false)
     await flushPromises()
     expect(vi.mocked(toast.error).mock.calls.map((c) => c[0])).toEqual([
       '선행 작업이 이미 이 작업을 기다리고 있어 순환이 생깁니다.',
-      '자기 자신이나 상위 · 하위 작업은 선행 작업으로 둘 수 없습니다.',
+      '앞 작업 막대의 오른쪽 끝에서 뒤 작업 막대의 왼쪽 끝으로 끌어 겁니다.',
       '앞 작업 막대의 오른쪽 끝에서 뒤 작업 막대의 왼쪽 끝으로 끌어 겁니다.',
     ])
     expect(pairs()).toEqual(['k19>k20', 'k20>k21', 'k20>k22'])

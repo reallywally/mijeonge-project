@@ -75,10 +75,24 @@ describe('목업 작업 쓰기의 이력', () => {
     ])
   })
 
+  it('연관 작업은 relatedIds 한 칸에 전 · 후 배열로 — 같은 집합이면 줄이 없다', async () => {
+    const tasks = useTaskStore()
+    tasks.setRelated('k20', ['k4'])
+    tasks.setRelated('k20', ['k4', 'k19'])
+    tasks.setRelated('k20', ['k19', 'k4'])
+    tasks.removeRelated('k20', 'k4')
+    tasks.setRelated('k20', [])
+    const related = (await lines('k20')).filter((e) => e.changes[0].field === 'relatedIds')
+    expect(related.map((e) => e.changes)).toEqual([
+      [change('relatedIds', ['k4'], ['k4', 'k19'])],
+      [change('relatedIds', ['k4', 'k19'], ['k19'])],
+      [change('relatedIds', ['k19'], [])],
+    ])
+  })
+
   it('추가하면 등록 한 줄 — 같이 건 안건은 따로 줄을 안 만든다', async () => {
     const id = await useTaskStore().addTask({
       title: '새 작업',
-      parentId: null,
       body: [],
       status: 'todo',
       ownerId: null,

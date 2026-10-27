@@ -24,7 +24,6 @@ const lastError = () => vi.mocked(toastError).mock.calls.at(-1)?.[0]
 
 const blankTask = (over: Partial<TaskInput> = {}): TaskInput => ({
   title: '새 작업',
-  parentId: null,
   body: [],
   status: 'todo',
   ownerId: null,
@@ -86,8 +85,10 @@ describe('[내 파트 | 전체]', () => {
     const part = usePartStore()
     expect(part.scope).toBe('all')
     part.setScope('mine')
-    expect(useTaskStore().visibleRows.map((r) => r.task.id)).toContain('k21')
-    expect(part.isContextTask('k4')).toBe(true)
+    const ids = useTaskStore().visibleRows.map((r) => r.task.id)
+    expect(ids).toContain('k21')
+    /* k21 이 연관으로 건 HW-4(기반 파트 · 남의 담당)는 끌려오지 않는다 (Q61) */
+    expect(ids).not.toContain('k4')
   })
 
   it('속한 파트가 없으면 전환이 숨고 전체다 — 시스템 관리자 · 파트 없는 프로젝트', async () => {
@@ -115,17 +116,17 @@ describe('[내 파트 | 전체]', () => {
 })
 
 describe('작업 · 안건의 partId (목업 서버)', () => {
-  it('작업 등록에서 partId 를 안 보내면 상위를 따르고, null 이면 공통이다', async () => {
+  it('작업 등록에서 partId 를 안 보내거나 null 이면 공통이다 — 따를 상위가 없다 (Q61)', async () => {
     await signedIn('u1@innoflow.local')
     const task = useTaskStore()
     const data = useDataStore()
-    const inherited = await task.addTask(blankTask({ parentId: 'k7' }))
-    const common = await task.addTask(blankTask({ parentId: 'k7', partId: null }))
-    const top = await task.addTask(blankTask())
+    const unsent = await task.addTask(blankTask())
+    const common = await task.addTask(blankTask({ partId: null }))
+    const placed = await task.addTask(blankTask({ partId: 'pt2' }))
     const byId = (id: string | null) => data.allTasks.find((t) => t.id === id)!
-    expect(byId(inherited).partId).toBe('pt2')
+    expect(byId(unsent).partId).toBeNull()
     expect(byId(common).partId).toBeNull()
-    expect(byId(top).partId).toBeNull()
+    expect(byId(placed).partId).toBe('pt2')
   })
 
   it('다른 프로젝트 · 없는 파트는 PART_NOT_FOUND, 보관 파트를 새로 달면 PART_ARCHIVED', async () => {
@@ -147,22 +148,7 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
     expect(useDataStore().allTasks.find((t) => t.id === 'k4')!.partId).toBe('pt1')
   })
 
-  it('상위의 파트가 보관이면 안 보낸 등록은 서버처럼 PART_ARCHIVED — 화면은 공통을 골라 싣는다 (Q32)', async () => {
-    await signedIn('u1@innoflow.local')
-    const task = useTaskStore()
-    const part = usePartStore()
-    await part.setPartActive('pt1', false)
-
-    expect(await task.addTask(blankTask({ parentId: 'k4' }))).toBeNull()
-    expect(lastError()).toMatchObject({ code: 'PART_ARCHIVED' })
-
-    expect(part.partForChildOf('k4')).toBeNull()
-    expect(part.partForChildOf('k7')).toBe('pt2')
-    const id = await task.addTask(blankTask({ parentId: 'k4', partId: part.partForChildOf('k4') }))
-    expect(useDataStore().allTasks.find((t) => t.id === id)!.partId).toBeNull()
-  })
-
-  it('작업의 파트를 바꿔도 하위 작업은 따라 바뀌지 않는다', async () => {
+  it('작업의 파트를 바꿔도 그 작업을 연관으로 건 작업은 따라 바뀌지 않는다', async () => {
     await signedIn('u1@innoflow.local')
     const task = useTaskStore()
     const data = useDataStore()

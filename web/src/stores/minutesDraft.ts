@@ -66,12 +66,6 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
       .map((tempId) => form.value!.threads.find((t) => t.tempId === tempId)?.title ?? tempId)
   }
 
-  /** 상위 작업(초안 안의 것)이 꺼져서 최상위로 들어가나 */
-  const losesParent = (taskTempId: string) => {
-    const task = form.value?.tasks.find((t) => t.tempId === taskTempId)
-    return !!task?.parentTempId && !picked.value[task.parentTempId]
-  }
-
   /** 켠 줄 중 고쳐야 보낼 수 있는 것 — tempId → 한 줄. 서버도 같은 것을 422 로 거절한다 */
   const problems = computed<Record<string, string>>(() => {
     const out: Record<string, string> = {}
@@ -253,7 +247,6 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     problems,
     canApply,
     droppedThreads,
-    losesParent,
     run,
     stop,
     setPicked,

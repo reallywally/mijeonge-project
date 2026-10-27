@@ -74,14 +74,6 @@ async function click(el: Element | undefined) {
   await flushPromises()
 }
 
-async function fill(selector: string, value: string) {
-  const el = document.body.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)
-  expect(el, `${selector} 를 못 찾았다`).toBeTruthy()
-  el!.value = value
-  el!.dispatchEvent(new Event('input'))
-  await flushPromises()
-}
-
 /* 고쳐 쓰는 칸 — 값을 넣고 그 칸이 듣는 이벤트를 쏜다 */
 async function type(selector: string, value: string, event: 'input' | 'change' = 'input') {
   const el = document.body.querySelector<HTMLInputElement | HTMLTextAreaElement>(selector)
@@ -139,10 +131,12 @@ describe('작업 목록 화면', () => {
     expect(w.text()).toContain('총 22건 중 1–8건')
   })
 
-  it('제목 아래에 어디에 속한 작업인지 경로가 붙는다', async () => {
+  it('작업은 평평하게 한 줄씩 — 건 연관 작업이 있으면 제목 아래에 키로 붙는다', async () => {
     const w = await mountView()
-    expect(w.text()).toContain('최상위 작업 · 하위 2건')
-    expect(w.text()).toContain('설계')
+    const row = (title: string) => w.findAll('tbody tr').find((r) => r.text().includes(title))!
+    expect(row('데이터 설계').text()).toContain('연관 HW-1')
+    expect(row('개발 환경 설정').text()).not.toContain('연관')
+    expect(w.text()).not.toContain('최상위 작업')
   })
 
   it('상태 칩이 그 상태의 수를 들고 있다', async () => {
@@ -175,14 +169,18 @@ describe('작업 목록 화면', () => {
 })
 
 describe('작업 상세 팝업', () => {
-  it('행을 누르면 그 작업의 제목과 경로를 들고 뜬다', async () => {
+  it('행을 누르면 그 작업의 제목을 들고 뜬다 — 경로 · 하위 작업 · 상위 작업 칸은 없다', async () => {
     const w = await mountView()
     await w.findAll('tbody tr')[3].trigger('click')
     await flushPromises()
 
     expect(popupText()).toContain('개발 환경 설정')
     expect(popupText()).toContain('HW-4')
-    expect(popupText()).toContain('최상위 작업 · 하위 4건')
+    expect(popupText()).not.toContain('최상위 작업')
+    expect(popupText()).not.toContain('하위 작업')
+    expect(popupText()).not.toContain('상위 작업')
+    /* 한 방향 — HW-19 ~ HW-22 가 HW-4 를 걸었어도 HW-4 의 연관 작업은 비었다 */
+    expect(popupText()).toContain('연관 작업이 없습니다.')
     /* 본문은 줄마다 고칠 수 있는 칸으로 뜬다 */
     expect(fieldValues()).toContain('mysql 설치와 계정 발급')
     /* 걸린 안건이 지금까지 정해진 내용까지 달고 온다 */
@@ -285,34 +283,45 @@ describe('작업 상세 팝업', () => {
     expect([task().start, task().due]).toEqual(['2026-10-01', '2026-10-10'])
   })
 
-  it("'하위 작업 추가'는 폼을 띄우지 않고 제목만 받아 바로 만든다", async () => {
-    await mountView('/tasks/k4')
+  it('연관 작업 — 줄로 보이고, 찾아서 잇달아 걸고, 줄마다 뗀다', async () => {
+    await mountView('/tasks/k20')
     const taskStore = useTaskStore()
-    const children = () => taskStore.tasks.filter((t) => t.parentId === 'k4')
-    expect(children()).toHaveLength(4)
+    const related = () => taskStore.taskDetail('k20')!.task.relatedIds
+    const rows = () =>
+      [...document.body.querySelectorAll('[data-related-row]')].map((r) => r.textContent ?? '')
+    expect(rows()).toEqual([expect.stringContaining('HW-4')])
+    expect(rows()[0]).toContain('개발 환경 설정')
+    expect(rows()[0]).toContain('진행 중')
+    expect(rows()[0]).toContain('이도현')
 
-    await click(popupButton('하위 작업 추가'))
-    expect(popupText()).not.toContain('만들고 계속 추가')
+    await click(popupButton('연관 작업 추가'))
+    const input = '[data-related-picker] input'
+    /* 자기(HW-20)와 이미 건 것(HW-4)은 후보에 없다 */
+    await type(input, '개발 환경')
+    expect(options()).toEqual([])
+    await type(input, 'DB')
+    expect(options()).toEqual([expect.stringContaining('HW-22')])
+    await keydown(input, 'Enter')
+    /* 칸은 그대로 남아 이어서 고른다 */
+    await type(input, 'HW-19')
+    await keydown(input, 'Enter')
+    expect(related()).toEqual(['k4', 'k22', 'k19'])
+    expect(rows().map((r) => r.trim().match(/^HW-\d+/)?.[0])).toEqual(['HW-4', 'HW-22', 'HW-19'])
 
-    const input = 'input[placeholder="하위 작업 제목을 적고 Enter"]'
-    await fill(input, '스테이징 서버 신청')
-    document.body
-      .querySelector(input)!
-      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    await flushPromises()
+    const unlink = document.body.querySelector<HTMLButtonElement>(
+      'button[aria-label="개발 환경 설정 연관에서 빼기"]',
+    )!
+    await click(unlink)
+    expect(related()).toEqual(['k22', 'k19'])
+  })
 
-    expect(children()).toHaveLength(5)
-    const made = children().at(-1)!
-    expect(made.title).toBe('스테이징 서버 신청')
-    expect([made.status, made.priority, made.ownerId, made.start, made.due]).toEqual([
-      'todo',
-      'normal',
-      null,
-      null,
-      null,
-    ])
-    /* 칸은 비워진 채 남아 이어서 적는다 */
-    expect(document.body.querySelector<HTMLInputElement>(input)?.value).toBe('')
+  it('연관 작업 줄을 누르면 그 작업 상세로 간다', async () => {
+    await mountView('/tasks/k20')
+    const title = [...document.body.querySelectorAll('[data-related-row] button')].find(
+      (b) => b.textContent?.trim() === '개발 환경 설정',
+    )
+    await click(title)
+    expect(window.location.pathname).toBe('/tasks/k4')
   })
 })
 
@@ -362,9 +371,10 @@ describe('작업 추가 팝업', () => {
     expect(taskStore.threadsOfTask(made.task.id).map((t) => t.id)).toEqual(['t4'])
   })
 
-  it('하위 작업 추가로 들어오면 상위 작업이 채워져 있다', async () => {
-    await mountView('/tasks/new?parent=k4')
-    expect(popupText()).toContain('개발 환경 설정 아래로 들어갑니다')
+  it('상위 작업을 고르는 칸이 없다 — 연관 작업은 만든 뒤 상세에서 건다', async () => {
+    await mountView('/tasks/new')
+    expect(popupText()).toContain('연관 작업은 만든 뒤 상세에서 겁니다')
+    expect(document.body.querySelector('[aria-label="상위 작업"]')).toBeNull()
   })
 
   it('제목이 비거나 기간이 반쪽이면 만들 수 없다', async () => {
@@ -386,7 +396,7 @@ describe('칸반보드 탭', () => {
       .findAllComponents(Select)
       .find((s) => (s.element as HTMLElement)?.closest?.(`[data-task-id="${taskId}"]`))
 
-  it('칸 넷이 상태 순서대로 서고, 묶음 작업은 카드가 되지 않는다', async () => {
+  it('칸 넷이 상태 순서대로 서고, 작업은 모두 카드가 된다', async () => {
     const w = await mountView('/tasks?view=board')
     expect(w.findAll('[data-column]').map((c) => c.attributes('data-column'))).toEqual([
       'todo',
@@ -397,17 +407,15 @@ describe('칸반보드 탭', () => {
     expect(w.text()).toContain('해야 할 일')
     expect(w.text()).toContain('막힘')
 
-    /* 잎 작업 15건만 올라온다 — 자식이 있는 7건(설계 · 개발 환경 설정 · 개발 …)은 빠진다 */
+    /* 작업은 평평하다(Q61) — 22건이 다 카드다 */
     const ids = w.findAll('[data-task-id]').map((c) => c.attributes('data-task-id'))
-    expect(ids).toHaveLength(15)
-    /* 설계(k1) · 개발 환경 설정(k4) · 개발(k5) · AI Biz(k6) … 는 카드가 없다.
-       제목 아래 경로로만 남는다 */
-    for (const parentId of ['k1', 'k4', 'k5', 'k6', 'k7', 'k12', 'k14']) {
-      expect(ids).not.toContain(parentId)
-    }
-    expect(w.get('[data-column="todo"]').findAll('[data-task-id]')).toHaveLength(7)
-    expect(w.get('[data-column="doing"]').findAll('[data-task-id]')).toHaveLength(3)
+    expect(ids).toHaveLength(22)
+    expect(w.get('[data-column="todo"]').findAll('[data-task-id]')).toHaveLength(11)
+    expect(w.get('[data-column="doing"]').findAll('[data-task-id]')).toHaveLength(6)
+    expect(w.get('[data-column="blocked"]').findAll('[data-task-id]')).toHaveLength(2)
     expect(w.get('[data-column="done"]').findAll('[data-task-id]')).toHaveLength(3)
+    /* 건 연관 작업은 카드 제목 아래 */
+    expect(w.get('[data-task-id="k8"]').text()).toContain('연관 HW-7')
   })
 
   it('카드의 상태를 바꾸면 다른 칸으로 옮겨간다', async () => {
@@ -490,10 +498,10 @@ describe('간트차트 탭', () => {
     expect(w.text()).toContain('막대 읽는 법')
   })
 
-  it('목록과 달리 계층을 그대로 넘긴다. 기간 미정은 막대가 없다', async () => {
+  it('평평하게 한 줄씩 넘긴다. 기간 미정은 막대가 없다', async () => {
     await mountView('/tasks?view=gantt')
     expect(chart.parsed).toHaveLength(22)
-    expect(parsed('HW-8').parent).toBe('k7')
+    expect(parsed('HW-8').parent).toBe('0')
     expect(parsed('HW-1').parent).toBe('0')
     expect(parsed('HW-18').unscheduled).toBe(true)
     expect(parsed('HW-4').unscheduled).toBeUndefined()
@@ -525,16 +533,18 @@ describe('간트차트 탭', () => {
     expect(window.location.pathname).toBe('/tasks')
   })
 
-  it("'+' 는 상위 작업이 채워진 채로 추가 팝업을 연다", async () => {
-    await mountView('/tasks?view=gantt')
-    /* 라이브러리가 제 손으로 줄을 만들지 않게 막는다 */
-    expect(chart.events.onTaskCreated({ parent: 'k4' })).toBe(false)
-    await flushPromises()
+  it("그리드에 '+' 열이 없다 — 작업 추가는 머리의 버튼으로 한다", async () => {
+    const w = await mountView('/tasks?view=gantt')
+    const columns = chart.config.columns as { name: string }[]
+    expect(columns.map((c) => c.name)).not.toContain('add')
 
+    await w
+      .findAll('button')
+      .find((b) => b.text() === '작업 추가')!
+      .trigger('click')
+    await flushPromises()
     expect(window.location.pathname).toBe('/tasks/new')
-    expect(window.location.search).toContain('parent=k4')
     expect(window.location.search).toContain('view=gantt')
-    expect(popupText()).toContain('개발 환경 설정 아래로 들어갑니다')
   })
 
   it('막대를 끌면 스토어의 기간이 바뀐다', async () => {

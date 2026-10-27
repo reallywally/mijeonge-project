@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Check, Clock } from 'lucide-vue-next'
-import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,8 +20,6 @@ import type { TaskPriority, TaskStatus } from '@/types/domain'
    기간(start · due)은 'YYYY-MM-DD' 또는 빈 문자열이다 — 한쪽만 고른 동안에도 들고 있어야 해서다.
    아래 슬롯에는 상세의 읽기 전용 정보나 추가의 안내를 넣는다. */
 defineProps<{
-  /** 고를 수 있는 상위 작업 — 상세에서는 자기와 자기 아래가 빠진다 */
-  parentChoices: { id: string; key: string; label: string }[]
   /** 상태 옆의 '완료' 버튼 — 이미 있는 작업에만 */
   showDone?: boolean
   /** '진행 중 · 12일째' — 이미 있는 작업에만 */
@@ -33,7 +30,6 @@ const ownerId = defineModel<string | null>('ownerId', { required: true })
 const start = defineModel<string>('start', { required: true })
 const due = defineModel<string>('due', { required: true })
 const priority = defineModel<TaskPriority>('priority', { required: true })
-const parentId = defineModel<string | null>('parentId', { required: true })
 const partId = defineModel<string | null>('partId', { required: true })
 
 const data = useDataStore()
@@ -166,13 +162,6 @@ const ghost =
           >
             {{ p.label }}
           </button>
-        </dd>
-      </div>
-
-      <div class="flex min-h-9 items-center gap-2">
-        <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">상위 작업</dt>
-        <dd class="min-w-0 grow">
-          <ParentTaskPicker v-model="parentId" :choices="parentChoices" />
         </dd>
       </div>
     </dl>

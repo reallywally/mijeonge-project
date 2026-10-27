@@ -46,8 +46,8 @@ import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import type { TaskRow, TaskStatus } from '@/types/domain'
 
-/* 작업 목록 — 안건 목록과 같은 게시판이다. 계층을 펼치지 않고 한 줄에 하나씩 놓고,
-   어디에 속했는지는 제목 아래 경로로 적는다. 계층째로 보는 건 간트차트가 맡는다. */
+/* 작업 목록 — 안건 목록과 같은 게시판이다. 작업은 평평해 한 줄에 하나씩 놓고(Q61),
+   건 연관 작업이 있으면 제목 아래 회색 글씨로 적는다. */
 const data = useDataStore()
 const taskStore = useTaskStore()
 const partStore = usePartStore()
@@ -170,8 +170,6 @@ const detailOpen = computed({
   },
 })
 
-/* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열리고, 닫으면 그 상위 작업으로 돌아간다 */
-const createParentId = computed(() => (route.query.parent as string | undefined) ?? null)
 /* 칸반의 칸마다 있는 '작업 추가' — 그 칸의 상태로 폼이 열린다 */
 const createStatus = computed<TaskStatus | null>(() => {
   const value = route.query.status
@@ -181,8 +179,7 @@ const createOpen = computed({
   get: () => route.path === '/tasks/new',
   set: (open: boolean) => {
     if (open) return
-    const back = createParentId.value ? `/tasks/${createParentId.value}` : '/tasks'
-    router.push({ path: back, query: viewQuery.value })
+    router.push({ path: '/tasks', query: viewQuery.value })
   },
 })
 
@@ -190,20 +187,15 @@ function openTask(id: string) {
   router.push({ path: `/tasks/${id}`, query: viewQuery.value })
 }
 
-function openCreate(parentId: string | null = null, status: TaskStatus | null = null) {
+function openCreate(status: TaskStatus | null = null) {
   router.push({
     path: '/tasks/new',
-    query: {
-      ...viewQuery.value,
-      ...(parentId ? { parent: parentId } : {}),
-      ...(status ? { status } : {}),
-    },
+    query: { ...viewQuery.value, ...(status ? { status } : {}) },
   })
 }
 
 /* 간트 막대 읽는 법 — 왼쪽에 둔다. 색은 TaskGantt 의 막대와 같은 토큰을 쓴다 */
 const barLegend = [
-  { label: '묶음 작업 · 자식들의 기간', bar: 'h-2 rounded-full bg-border' },
   { label: '진행 중', bar: 'h-4 rounded-sm border border-primary bg-secondary' },
   { label: '완료', bar: 'h-4 rounded-sm bg-primary' },
   {
@@ -368,16 +360,12 @@ function bulkOwner(value: string) {
       </template>
     </div>
 
-    <TaskGantt
-      v-if="view === 'gantt'"
-      @open-task="openTask"
-      @add-task="(parentId) => openCreate(parentId)"
-    />
+    <TaskGantt v-if="view === 'gantt'" @open-task="openTask" />
 
     <TaskBoard
       v-if="view === 'board'"
       @open-task="openTask"
-      @add-task="(status) => openCreate(null, status)"
+      @add-task="(status) => openCreate(status)"
       @open-thread="(id) => router.push(`/threads/${id}`)"
     />
 
@@ -390,9 +378,9 @@ function bulkOwner(value: string) {
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-2xl font-semibold tracking-tight">작업</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-              목록 · 간트차트 · 칸반보드는 같은 작업을 보는 방식만 다릅니다. 목록은 계층을 펼치지
-              않고 안건 목록처럼 한 줄에 하나씩 놓는 게시판입니다. 어디에 속한 작업인지는 제목 아래
-              경로로 보이고, 계층째로 보려면 간트차트로 갑니다.
+              목록 · 간트차트 · 칸반보드는 같은 작업을 보는 방식만 다릅니다. 목록은 안건 목록처럼 한
+              줄에 하나씩 놓는 게시판입니다. 건 연관 작업은 제목 아래에 보이고, 작업 상세에서
+              겁니다.
             </p>
           </div>
           <Button class="shrink-0" @click="openCreate()">
@@ -534,11 +522,7 @@ function bulkOwner(value: string) {
                       <span class="flex min-w-0 items-center gap-2">
                         <span
                           class="truncate text-sm underline-offset-4 group-hover:underline"
-                          :class="
-                            row.task.status === 'done' || partStore.isContextTask(row.task.id)
-                              ? 'text-muted-foreground'
-                              : ''
-                          "
+                          :class="row.task.status === 'done' ? 'text-muted-foreground' : ''"
                           >{{ row.task.title }}</span
                         >
                         <PartChip :part-id="row.task.partId" />
@@ -552,9 +536,11 @@ function bulkOwner(value: string) {
                           {{ row.task.commentCount }}
                         </span>
                       </span>
-                      <span class="truncate text-xs text-muted-foreground">{{
-                        row.pathLabel
-                      }}</span>
+                      <span
+                        v-if="row.relatedLabel"
+                        class="truncate text-xs text-muted-foreground"
+                        >{{ row.relatedLabel }}</span
+                      >
                     </span>
                   </div>
                 </TableCell>
@@ -675,7 +661,6 @@ function bulkOwner(value: string) {
 
     <TaskCreateDialog
       v-model:open="createOpen"
-      :parent-id="createParentId"
       :initial-status="createStatus"
       @created="(id) => openTask(id)"
     />
