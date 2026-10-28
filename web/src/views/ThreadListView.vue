@@ -180,43 +180,41 @@ function onCreated(id: string) {
       <div class="h-px bg-border" />
       <div class="flex flex-col gap-3">
         <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
-        <div
-          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm"
-        >
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+        <div class="flex flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
+          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
             아직 아무 기록이 없는 안건이 {{ counts.queued }}건 있습니다.
           </p>
           <button
             type="button"
-            class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline"
+            class="min-h-6 text-left text-[12.5px] font-semibold underline-offset-4 hover:underline"
             @click="pickState('queued')"
           >
             그 안건만 보기
           </button>
         </div>
         <div
-          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+          class="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2.5"
         >
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
             3번 이상 미뤄진 안건이 {{ counts.stuck }}건 있습니다.
           </p>
           <button
             type="button"
-            class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline"
+            class="min-h-6 text-left text-[12.5px] font-semibold text-destructive underline-offset-4 hover:underline"
             @click="pickState('stuck')"
           >
             그 안건만 보기
           </button>
         </div>
         <div
-          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+          class="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2.5"
         >
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
             기한이 지난 안건이 {{ counts.overdue }}건 있습니다.
           </p>
           <button
             type="button"
-            class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline"
+            class="min-h-6 text-left text-[12.5px] font-semibold text-destructive underline-offset-4 hover:underline"
             @click="pickState('overdue')"
           >
             그 안건만 보기
@@ -225,7 +223,7 @@ function onCreated(id: string) {
       </div>
     </template>
 
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">안건</span>
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <div class="grow" />
@@ -236,8 +234,8 @@ function onCreated(id: string) {
       <div class="flex w-full max-w-[900px] flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">안건</h1>
-            <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">안건</h1>
+            <p class="text-[13px] leading-relaxed text-muted-foreground text-pretty">
               정해야 할 것을 안건으로 먼저 등록해 두고, 정해지면 무엇을 왜 그렇게 정했는지 남깁니다.
               못 정하면 사유를 달아 미룹니다 — 몇 번 미뤄졌는지가 그대로 보입니다.
             </p>
@@ -249,20 +247,20 @@ function onCreated(id: string) {
         </header>
 
         <section
-          class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+          class="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
         >
           <div class="flex items-center gap-2.5">
             <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
             <Input
               v-model="titleDraft"
               placeholder="안건 제목에 들어가는 말"
-              class="grow bg-background"
+              class="grow"
               @keyup.enter="search"
             />
             <template v-if="partStore.parts.length > 0">
               <span class="shrink-0 text-sm text-muted-foreground">파트</span>
               <Select v-model="partFilter" @update:model-value="resetPage">
-                <SelectTrigger class="w-[132px] shrink-0 bg-background" aria-label="파트 거르기">
+                <SelectTrigger class="w-[132px] shrink-0" aria-label="파트 거르기">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -276,7 +274,7 @@ function onCreated(id: string) {
             </template>
             <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
             <Select v-model="ownerFilter" @update:model-value="resetPage">
-              <SelectTrigger class="w-[132px] shrink-0 bg-background">
+              <SelectTrigger class="w-[132px] shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -301,19 +299,17 @@ function onCreated(id: string) {
                 v-for="c in stateChips"
                 :key="c.key"
                 type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors"
+                class="inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
                 :class="
                   stateFilter === c.key
-                    ? 'border-primary bg-primary text-primary-foreground shadow'
-                    : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
+                    ? 'border-primary/35 bg-brand-soft text-primary'
+                    : 'border-border bg-card hover:bg-muted'
                 "
                 @click="pickState(c.key)"
               >
                 {{ c.label }}
                 <span
-                  :class="
-                    stateFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'
-                  "
+                  :class="stateFilter === c.key ? 'text-primary/70' : 'text-muted-foreground'"
                   >{{ c.n }}</span
                 >
               </button>
@@ -321,10 +317,12 @@ function onCreated(id: string) {
           </div>
         </section>
 
-        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+        >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
                 <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground"
                   >상태</TableHead

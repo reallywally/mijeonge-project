@@ -73,7 +73,7 @@ function openThread(id: string) {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">확인 요청</span>
       <div class="grow" />
       <div
@@ -106,7 +106,7 @@ function openThread(id: string) {
       <div class="flex w-full max-w-[900px] flex-col gap-4 pb-[26px]">
         <header class="flex items-end gap-2.5">
           <div class="flex grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">확인 요청</h1>
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">확인 요청</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               결정된 안건의 '이 결정 확인해 주세요' 입니다. 대기와 확인 두 상태뿐이고, 확인하면 보낸
               사람에게 시각이 남습니다.
@@ -143,13 +143,13 @@ function openThread(id: string) {
         <!-- 받은 것 — 대기 먼저(오래된 순), 그다음 확인(최근 확인 순) -->
         <div
           v-else-if="tab === 'received'"
-          class="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
           role="tabpanel"
           aria-label="받은 것"
         >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >안건 · 결정</TableHead
                 >
@@ -210,13 +210,13 @@ function openThread(id: string) {
         <!-- 보낸 것 — 최근 순, 한 번에 보낸 묶음이 한 줄 -->
         <div
           v-else
-          class="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
           role="tabpanel"
           aria-label="보낸 것"
         >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >안건 · 결정</TableHead
                 >

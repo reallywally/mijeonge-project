@@ -97,7 +97,7 @@ function onCreated() {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">프로젝트</span>
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
     </div>
@@ -106,7 +106,7 @@ function onCreated() {
       <div class="flex w-full max-w-[900px] flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">프로젝트</h1>
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">프로젝트</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               가장 큰 단위입니다. 개발은 차세대 · 이관 같은 사업 단위로, 사무직은 파트 단위로
               만듭니다. 여기서 고른 프로젝트 안에서만 작업 · 안건이 돕니다.
@@ -119,13 +119,13 @@ function onCreated() {
         </header>
 
         <section
-          class="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+          class="flex items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
         >
           <span class="w-[52px] shrink-0 text-sm text-muted-foreground">이름</span>
           <Input
             v-model="nameDraft"
             placeholder="프로젝트 이름에 들어가는 말"
-            class="grow bg-background"
+            class="grow"
             @keyup.enter="search"
           />
           <Button class="shrink-0" @click="search">
@@ -135,10 +135,12 @@ function onCreated() {
           <Button variant="outline" class="shrink-0" @click="resetAll">초기화</Button>
         </section>
 
-        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+        >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >프로젝트</TableHead
                 >

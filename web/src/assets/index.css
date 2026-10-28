@@ -3,66 +3,83 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn-vue 기본 테마 (style: new-york, baseColor: neutral) */
+/* innoFlow 테마 — 차분한 회색 바탕에 코발트 하나. 색은 뜻이 있는 자리(주요 행동 · 선택 · 상태)에만 쓴다. */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.985 0.002 260);
+  --foreground: oklch(0.21 0.012 265);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.21 0.012 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.21 0.012 265);
 
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.53 0.2 264);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.955 0.006 264);
+  --secondary-foreground: oklch(0.3 0.015 265);
 
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.965 0.004 264);
+  --muted-foreground: oklch(0.54 0.016 265);
+  --accent: oklch(0.955 0.012 264);
+  --accent-foreground: oklch(0.25 0.02 265);
 
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.6 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.915 0.006 264);
+  --input: oklch(0.88 0.008 264);
+  --ring: oklch(0.53 0.2 264);
+
+  /* 사이드바 · 상태 색 */
+  --sidebar: oklch(0.97 0.004 264);
+  --brand-soft: oklch(0.95 0.03 264);
+  --status-todo: oklch(0.62 0.015 265);
+  --status-doing: oklch(0.56 0.19 264);
+  --status-done: oklch(0.6 0.15 155);
+  --status-blocked: oklch(0.6 0.21 25);
+  --status-warn: oklch(0.72 0.15 70);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --background: oklch(0.17 0.008 265);
+  --foreground: oklch(0.96 0.003 264);
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0.01 265);
+  --card-foreground: oklch(0.96 0.003 264);
+  --popover: oklch(0.22 0.01 265);
+  --popover-foreground: oklch(0.96 0.003 264);
 
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.66 0.17 264);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.27 0.012 265);
+  --secondary-foreground: oklch(0.96 0.003 264);
 
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.25 0.01 265);
+  --muted-foreground: oklch(0.7 0.012 265);
+  --accent: oklch(0.28 0.02 264);
+  --accent-foreground: oklch(0.96 0.003 264);
 
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.99 0 0);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.66 0.17 264);
+
+  --sidebar: oklch(0.19 0.009 265);
+  --brand-soft: oklch(0.3 0.06 264);
+  --status-todo: oklch(0.66 0.012 265);
+  --status-doing: oklch(0.68 0.16 264);
+  --status-done: oklch(0.7 0.14 155);
+  --status-blocked: oklch(0.68 0.19 25);
+  --status-warn: oklch(0.78 0.14 70);
 }
 
 @theme inline {
-  /* shadcn은 폰트를 정하지 않는다. 한글 본문용 산세리프 하나만 둔다. */
-  --font-sans: 'IBM Plex Sans KR', ui-sans-serif, system-ui, sans-serif;
+  /* 한글 업무 화면에 맞춘 산세리프 하나 */
+  --font-sans: 'Pretendard Variable', Pretendard, ui-sans-serif, system-ui, sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -83,6 +100,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-brand-soft: var(--brand-soft);
+  --color-status-todo: var(--status-todo);
+  --color-status-doing: var(--status-doing);
+  --color-status-done: var(--status-done);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-warn: var(--status-warn);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -96,5 +120,16 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-size: 14px;
+    letter-spacing: -0.005em;
+  }
+  /* 번호 · 날짜 · 건수는 자리가 맞게 */
+  td,
+  th,
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: var(--brand-soft);
   }
 }

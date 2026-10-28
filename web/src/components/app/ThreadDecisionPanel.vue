@@ -206,7 +206,7 @@ function onKeydown(e: KeyboardEvent) {
           :class="
             mode === c.mode
               ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
+              : 'border-border bg-card hover:bg-muted'
           "
           @click="mode !== c.mode && switchTo(c.mode)"
         >
@@ -264,7 +264,7 @@ function onKeydown(e: KeyboardEvent) {
             :class="
               text === option
                 ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
+                : 'border-border bg-card hover:bg-muted'
             "
             :aria-pressed="text === option"
             @click="text = option"

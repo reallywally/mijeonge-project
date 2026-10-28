@@ -19,6 +19,7 @@ import TaskBoard from '@/components/app/TaskBoard.vue'
 import TaskCreateDialog from '@/components/app/TaskCreateDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import TaskGantt from '@/components/app/TaskGantt.vue'
+import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -38,7 +39,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { partFilterOf } from '@/lib/part'
-import { TASK_STATUS_OPTIONS } from '@/lib/task'
+import { TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
@@ -202,11 +203,16 @@ function openCreate(parentId: string | null = null, status: TaskStatus | null = 
 /* 간트 막대 읽는 법 — 왼쪽에 둔다. 색은 TaskGantt 의 막대와 같은 토큰을 쓴다 */
 const barLegend = [
   { label: '묶음 작업 · 자식들의 기간', bar: 'h-2 rounded-full bg-border' },
-  { label: '진행 중', bar: 'h-4 rounded-sm border border-primary bg-secondary' },
-  { label: '완료', bar: 'h-4 rounded-sm bg-primary' },
+  { label: '해야 할 일', bar: 'h-3.5 rounded-[4px] border border-border bg-muted' },
+  {
+    label: '진행 중',
+    bar: 'h-3.5 rounded-[4px] border border-status-doing/55 bg-status-doing/15',
+  },
+  { label: '완료', bar: 'h-3.5 rounded-[4px] bg-status-done' },
+  { label: '막힘', bar: 'h-3.5 rounded-[4px] bg-status-blocked' },
   {
     label: '기간 미정 · 막대가 없습니다',
-    bar: 'h-4 rounded-sm border border-dashed border-destructive',
+    bar: 'h-3.5 rounded-[4px] border border-dashed border-destructive',
   },
 ]
 
@@ -260,16 +266,16 @@ function bulkOwner(value: string) {
         </div>
         <div
           v-if="view === 'board'"
-          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+          class="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2.5"
         >
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
             막힘 칸에 있는 작업은 연관 안건이 정해지면 다시 움직입니다. 카드의 안건 배지를 눌러
             안건으로 갑니다.
           </p>
         </div>
         <div
           v-if="view === 'gantt'"
-          class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-[13px] py-3 shadow-sm"
+          class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5"
         >
           <div v-for="b in barLegend" :key="b.label" class="flex items-center gap-2.5">
             <span class="w-[34px] shrink-0" :class="b.bar" />
@@ -278,15 +284,15 @@ function bulkOwner(value: string) {
         </div>
         <div
           v-if="view === 'list'"
-          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-border bg-card px-[13px] py-3 shadow-sm"
+          class="flex flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2.5"
         >
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
             기간이 아직 안 잡힌 작업이 {{ counts.undated }}건 있습니다. 간트차트에는 막대가
             없습니다.
           </p>
           <button
             type="button"
-            class="min-h-[30px] text-left text-sm font-medium underline-offset-4 hover:underline"
+            class="min-h-6 text-left text-[12.5px] font-semibold underline-offset-4 hover:underline"
             @click="pickStatus('undated')"
           >
             그 작업만 보기
@@ -294,14 +300,14 @@ function bulkOwner(value: string) {
         </div>
         <div
           v-if="view === 'list'"
-          class="flex flex-col gap-2 rounded-lg border border-border border-l-[3px] border-l-destructive bg-card px-[13px] py-3 shadow-sm"
+          class="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2.5"
         >
-          <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
             안건이 안 정해져서 멈춘 작업이 {{ counts.blocked }}건 있습니다.
           </p>
           <button
             type="button"
-            class="min-h-[30px] text-left text-sm font-medium text-destructive underline-offset-4 hover:underline"
+            class="min-h-6 text-left text-[12.5px] font-semibold text-destructive underline-offset-4 hover:underline"
             @click="pickStatus('blocked')"
           >
             그 작업만 보기
@@ -310,13 +316,13 @@ function bulkOwner(value: string) {
       </div>
     </template>
 
-    <div class="flex h-[46px] shrink-0 items-center gap-1 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-card px-6">
       <RouterLink
         :to="{ path: '/tasks' }"
-        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'list'
-            ? 'border-foreground font-medium'
+            ? 'border-primary font-semibold text-foreground [&>svg]:text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground'
         "
       >
@@ -325,10 +331,10 @@ function bulkOwner(value: string) {
       </RouterLink>
       <RouterLink
         :to="{ path: '/tasks', query: { view: 'gantt' } }"
-        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'gantt'
-            ? 'border-foreground font-medium'
+            ? 'border-primary font-semibold text-foreground [&>svg]:text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground'
         "
       >
@@ -337,10 +343,10 @@ function bulkOwner(value: string) {
       </RouterLink>
       <RouterLink
         :to="{ path: '/tasks', query: { view: 'board' } }"
-        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'board'
-            ? 'border-foreground font-medium'
+            ? 'border-primary font-semibold text-foreground [&>svg]:text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground'
         "
       >
@@ -379,8 +385,8 @@ function bulkOwner(value: string) {
       <div class="flex w-full max-w-[1040px] flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">작업</h1>
-            <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">작업</h1>
+            <p class="text-[13px] leading-relaxed text-muted-foreground text-pretty">
               목록 · 간트차트 · 칸반보드는 같은 작업을 보는 방식만 다릅니다. 목록은 계층을 펼치지
               않고 안건 목록처럼 한 줄에 하나씩 놓는 게시판입니다. 어디에 속한 작업인지는 제목 아래
               경로로 보이고, 계층째로 보려면 간트차트로 갑니다.
@@ -393,20 +399,20 @@ function bulkOwner(value: string) {
         </header>
 
         <section
-          class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+          class="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
         >
           <div class="flex items-center gap-2.5">
             <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
             <Input
               v-model="titleDraft"
               placeholder="작업 제목에 들어가는 말"
-              class="grow bg-background"
+              class="grow"
               @keyup.enter="search"
             />
             <template v-if="partStore.parts.length > 0">
               <span class="shrink-0 text-sm text-muted-foreground">파트</span>
               <Select v-model="partFilter" @update:model-value="resetPage">
-                <SelectTrigger class="w-[132px] shrink-0 bg-background" aria-label="파트 거르기">
+                <SelectTrigger class="w-[132px] shrink-0" aria-label="파트 거르기">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -420,7 +426,7 @@ function bulkOwner(value: string) {
             </template>
             <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
             <Select v-model="ownerFilter" @update:model-value="resetPage">
-              <SelectTrigger class="w-[132px] shrink-0 bg-background">
+              <SelectTrigger class="w-[132px] shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -445,19 +451,17 @@ function bulkOwner(value: string) {
                 v-for="c in statusChips"
                 :key="c.key"
                 type="button"
-                class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors"
+                class="inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors"
                 :class="
                   statusFilter === c.key
-                    ? 'border-primary bg-primary text-primary-foreground shadow'
-                    : 'border-border bg-background shadow-sm hover:bg-accent hover:text-accent-foreground'
+                    ? 'border-primary/35 bg-brand-soft text-primary'
+                    : 'border-border bg-card hover:bg-muted'
                 "
                 @click="pickStatus(c.key)"
               >
                 {{ c.label }}
                 <span
-                  :class="
-                    statusFilter === c.key ? 'text-primary-foreground/60' : 'text-muted-foreground'
-                  "
+                  :class="statusFilter === c.key ? 'text-primary/70' : 'text-muted-foreground'"
                   >{{ c.n }}</span
                 >
               </button>
@@ -465,10 +469,12 @@ function bulkOwner(value: string) {
           </div>
         </section>
 
-        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+        >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 w-10">
                   <Checkbox
                     :model-value="pageAllChecked"
@@ -499,7 +505,7 @@ function bulkOwner(value: string) {
               <TableRow
                 v-for="row in pageRows"
                 :key="row.task.id"
-                class="group h-14 cursor-pointer"
+                class="group h-[52px] cursor-pointer"
                 @click="openTask(row.task.id)"
               >
                 <TableCell @click.stop>
@@ -513,18 +519,18 @@ function bulkOwner(value: string) {
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <span
-                      class="h-[26px] w-1 shrink-0 rounded-full"
+                      class="h-[22px] w-[3px] shrink-0 rounded-full"
                       :class="{
                         'bg-border': row.task.status === 'todo',
-                        'bg-primary': row.task.status === 'doing',
-                        'bg-destructive': row.task.status === 'blocked',
-                        'bg-muted-foreground/40': row.task.status === 'done',
+                        'bg-status-doing': row.task.status === 'doing',
+                        'bg-status-blocked': row.task.status === 'blocked',
+                        'bg-status-done/50': row.task.status === 'done',
                       }"
                     />
                     <span class="flex min-w-0 flex-col gap-0.5">
                       <span class="flex min-w-0 items-center gap-2">
                         <span
-                          class="truncate text-sm underline-offset-4 group-hover:underline"
+                          class="truncate text-[13.5px] font-medium group-hover:text-primary"
                           :class="
                             row.task.status === 'done' || partStore.isContextTask(row.task.id)
                               ? 'text-muted-foreground'
@@ -554,8 +560,11 @@ function bulkOwner(value: string) {
                     :model-value="row.task.status"
                     @update:model-value="(v) => taskStore.setStatus(row.task.id, v as TaskStatus)"
                   >
-                    <SelectTrigger class="h-8 w-[120px] text-xs">
-                      <SelectValue />
+                    <SelectTrigger
+                      class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent hover:bg-muted focus:ring-[3px]"
+                      :aria-label="`상태 ${taskStatusLabel(row.task.status)}`"
+                    >
+                      <TaskStatusBadge :status="row.task.status" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="todo">해야 할 일</SelectItem>

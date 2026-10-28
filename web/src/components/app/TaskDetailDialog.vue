@@ -8,17 +8,12 @@ import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
+import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
-import { periodProblem, statusSinceLabel, TASK_STATUS_OPTIONS } from '@/lib/task'
+import { periodProblem, statusSinceLabel, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
@@ -253,8 +248,11 @@ const threadChoices = computed(() => {
                   :model-value="child.task.status"
                   @update:model-value="(v) => taskStore.setStatus(child.task.id, v as TaskStatus)"
                 >
-                  <SelectTrigger class="h-[26px] w-[120px] shrink-0 text-xs">
-                    <SelectValue />
+                  <SelectTrigger
+                    class="h-7 w-[120px] shrink-0 justify-start gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent hover:bg-muted focus:ring-[3px]"
+                    :aria-label="`상태 ${taskStatusLabel(child.task.status)}`"
+                  >
+                    <TaskStatusBadge :status="child.task.status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="o in TASK_STATUS_OPTIONS" :key="o.value" :value="o.value">

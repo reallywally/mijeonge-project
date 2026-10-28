@@ -32,7 +32,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
   <SelectPortal>
     <SelectContent
       v-bind="{ ...forwarded, ...$attrs }" :class="cn(
-        'relative z-50 max-h-96 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md',
+        'relative z-50 max-h-96 min-w-32 overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-[0_8px_24px_-6px_rgb(16_24_40/0.14),0_2px_6px_rgb(16_24_40/0.06)]',
         position === 'popper'
           && 'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
         props.class,

@@ -53,7 +53,7 @@ watch(
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">{{ label }}</span>
       <span v-if="meta" class="text-xs text-muted-foreground">{{ meta }}</span>
     </div>

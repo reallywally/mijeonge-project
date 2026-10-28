@@ -11,7 +11,7 @@ const name = computed(() => partStore.partName(props.partId))
 <template>
   <span
     v-if="name"
-    class="inline-flex h-5 max-w-[120px] shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-muted-foreground"
+    class="inline-flex h-5 max-w-[120px] shrink-0 items-center rounded-[4px] bg-secondary px-1.5 text-[11.5px] font-medium text-secondary-foreground/80"
     :title="`파트 · ${name}`"
     data-part-chip
   >

@@ -26,7 +26,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
   <DropdownMenuPortal>
     <DropdownMenuContent
       v-bind="forwarded"
-      :class="cn('z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md', props.class)"
+      :class="cn('z-50 min-w-32 overflow-hidden rounded-lg border bg-popover p-1 text-popover-foreground shadow-[0_8px_24px_-6px_rgb(16_24_40/0.14),0_2px_6px_rgb(16_24_40/0.06)]', props.class)"
     >
       <slot />
     </DropdownMenuContent>

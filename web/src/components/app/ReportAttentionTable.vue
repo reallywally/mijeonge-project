@@ -33,10 +33,12 @@ const legacy = computed(() =>
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+  <div
+    class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+  >
     <Table>
       <TableHeader>
-        <TableRow class="bg-muted/50 hover:bg-muted/50">
+        <TableRow class="bg-muted/60 hover:bg-muted/60">
           <TableHead class="h-10 text-xs font-medium text-muted-foreground">작업</TableHead>
           <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
             >상태 며칠째</TableHead
