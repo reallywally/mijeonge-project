@@ -190,6 +190,8 @@ export interface ProposedTask {
 - `title` 은 앞뒤 공백을 떼고 비지 않는다. `ownerId` 는 있는 멤버다. `start ≤ due`(둘 다 있을 때)
 - `parentId` 는 **그 프로젝트의** 작업이다(아니면 400 `TASK_PARENT_NOT_FOUND`, `detail` 은 `tasks.N.parentId`).
   `parentTempId` 와 둘 다 두면 422(`tasks.N.parentId`). 파트는 그 상위 작업을 따른다
+- 작업은 **4단까지**다(최상위가 1단 · Q64). 넘는 줄은 400 `TASK_DEPTH_EXCEEDED`, `detail` 은 `tasks.N.parentTempId` · `tasks.N.parentId`.
+  이미 있는 상위는 그 단부터 센다. `TASK_PARENT_NOT_FOUND` 다음에 본다
 
 ### 스트림에 늘어난 것 — `ChatEvent`
 
@@ -238,7 +240,8 @@ export interface TaskBatchResult {
 
 - **한 트랜잭션**이다 — 하나라도 틀리면 아무것도 안 남는다. `key` 는 배열 순서대로 발번한다
 - 오류: 없는 프로젝트 404 `PROJECT_NOT_FOUND`, 검사 규칙 위반은 422 `VALIDATION_ERROR`(`detail` 에
-  `tasks.1.parentTempId` 처럼 몇 번째의 어느 칸인지), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`
+  `tasks.1.parentTempId` 처럼 몇 번째의 어느 칸인지), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`,
+  없는 상위는 400 `TASK_PARENT_NOT_FOUND`, 4단을 넘으면 400 `TASK_DEPTH_EXCEEDED`(Q64)
 - 구현 (2026-10-12, 서버) — `detail` 의 자리 이름: 개수(0개 · 21개 이상)는 `tasks`, `start > due` 는
   `tasks.N.due`, 날짜 형식 · `priority` 같은 타입 오류도 `tasks.N.칸` 이다. 없는 멤버의 400 에도 `detail` 이
   `tasks.N.ownerId` 로 붙는다. 검사가 끝난 뒤에만 쓰고, 쓰다 터지면 발번한 번호까지 되돌린다.

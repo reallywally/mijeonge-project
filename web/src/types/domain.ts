@@ -363,6 +363,14 @@ export interface TaskThreadLink {
 }
 
 /** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
+/** 상위 작업 고르기의 한 줄. 고르면 4단을 넘는 것은 disabledReason 이 있다 — 보이되 못 고른다 (Q64) */
+export interface ParentChoice {
+  id: string
+  key: string
+  label: string
+  disabledReason?: string
+}
+
 export interface TaskRow {
   task: Task
   ownerName: string | null

@@ -76,6 +76,7 @@
 | --- | --- | --- |
 | 404 | `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `TASK_LINE_NOT_FOUND` | 경로가 가리키는 것이 없을 때 |
 | 400 | `TASK_PARENT_SELF` · `TASK_PARENT_NOT_FOUND` · `TASK_PARENT_OTHER_PROJECT` · `TASK_PARENT_DESCENDANT` | 상위 작업이 고리를 만들거나 다른 프로젝트에 있을 때 (Q16) |
+| 400 | `TASK_DEPTH_EXCEEDED` | 작업 계층이 **4단**을 넘을 때 (Q64) — 등록 · 일괄 등록 · 회의록 반영의 상위, 수정의 `parentId`(옮기는 작업의 하위까지 센다). 최상위가 1단이다. 일괄이면 `detail` 이 `{ "tasks.2.parentTempId": … }` · `tasks.2.parentId` 처럼 자리를 짚는다. 이미 4단을 넘은 지난 작업은 그대로 두고, 상위를 안 바꾸는 수정은 막지 않는다 |
 | 400 | `THREAD_PARENT_NOT_FOUND` · `THREAD_PARENT_OTHER_PROJECT` | 상위 안건이 없거나 다른 프로젝트에 있을 때 (Q16) |
 | 400 | `TASK_THREAD_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
@@ -220,7 +221,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q60).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q65).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

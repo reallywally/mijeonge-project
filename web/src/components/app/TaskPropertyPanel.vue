@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select'
 import { periodProblem, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
-import type { TaskPriority, TaskStatus } from '@/types/domain'
+import type { ParentChoice, TaskPriority, TaskStatus } from '@/types/domain'
 
 /* 작업의 속성 — 작업 상세와 작업 추가의 오른쪽 칸. 값은 부모가 들고, 여기는 보여 주고 고친 값을 올린다.
    상세는 올라온 값을 바로 넣고, 추가는 만들 때 한꺼번에 넣는다.
@@ -22,7 +22,7 @@ import type { TaskPriority, TaskStatus } from '@/types/domain'
    아래 슬롯에는 상세의 읽기 전용 정보나 추가의 안내를 넣는다. */
 defineProps<{
   /** 고를 수 있는 상위 작업 — 상세에서는 자기와 자기 아래가 빠진다 */
-  parentChoices: { id: string; key: string; label: string }[]
+  parentChoices: ParentChoice[]
   /** 상태 옆의 '완료' 버튼 — 이미 있는 작업에만 */
   showDone?: boolean
   /** '진행 중 · 12일째' — 이미 있는 작업에만 */

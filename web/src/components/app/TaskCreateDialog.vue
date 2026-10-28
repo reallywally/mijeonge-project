@@ -7,7 +7,7 @@ import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
-import { periodProblem } from '@/lib/task'
+import { periodProblem, TASK_DEPTH_MESSAGE } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
@@ -108,6 +108,9 @@ const parentPath = computed(() => {
 })
 
 const blocker = computed(() => {
+  /* 4단 작업 밑으로 '하위 작업 추가' 가 들어온 경우 — 피커에서는 못 고르지만 주소로는 온다 */
+  if (taskStore.parentOptions.some((o) => o.id === parent.value && o.disabledReason))
+    return TASK_DEPTH_MESSAGE
   if (!title.value.trim()) return '제목을 적어야 만들 수 있습니다'
   return periodProblem(start.value, due.value)
 })

@@ -6,6 +6,7 @@ import { projects, tasks } from '@/fixtures'
 import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { inheritedPartId } from '@/lib/part'
+import { batchDepthProblems, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
 import type {
   Task,
   TaskBatchInput,
@@ -105,6 +106,15 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       code: 'TASK_PARENT_NOT_FOUND',
       message: '상위 작업을 찾을 수 없습니다.',
       detail: { [`tasks.${foreign}.parentId`]: '상위 작업을 찾을 수 없습니다.' },
+    })
+
+  /* 4단까지 (Q64) — 걸린 자리를 모두 짚는다 */
+  const tooDeep = batchDepthProblems(input.tasks, taskDepths(tasks))
+  if (Object.keys(tooDeep).length > 0)
+    throw new ApiError(400, {
+      code: 'TASK_DEPTH_EXCEEDED',
+      message: TASK_DEPTH_MESSAGE,
+      detail: tooDeep,
     })
 
   const taskIdByTempId: Record<string, string> = {}

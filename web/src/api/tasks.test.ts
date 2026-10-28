@@ -47,6 +47,25 @@ describe('한 번에 등록 — 목업 갈래', () => {
     })
   })
 
+  it('4단을 넘으면 400 TASK_DEPTH_EXCEEDED — 걸린 자리를 짚는다 (Q64)', async () => {
+    /* 가상비서(k7)가 3단 — 그 밑이 4단, 또 밑이 5단이다 */
+    const error = await createTasksBatch('p1', {
+      tasks: [draft('t1', { parentId: 'k7' }), draft('t2', { parentTempId: 't1' })],
+    }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({
+      status: 400,
+      code: 'TASK_DEPTH_EXCEEDED',
+      message: '작업은 4단까지만 쌓을 수 있습니다.',
+      detail: { 'tasks.1.parentTempId': '작업은 4단까지만 쌓을 수 있습니다.' },
+    })
+
+    const under4 = await createTasksBatch('p1', {
+      tasks: [draft('t1', { parentId: 'k8' })],
+    }).catch((e: unknown) => e)
+    expect(under4).toMatchObject({ detail: { 'tasks.0.parentId': expect.any(String) } })
+  })
+
   it('상위를 둘 다 두면 422', async () => {
     const error = await createTasksBatch('p1', {
       tasks: [draft('t1'), draft('t2', { parentTempId: 't1', parentId: 'k1' })],

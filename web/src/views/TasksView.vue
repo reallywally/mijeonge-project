@@ -13,6 +13,7 @@ import {
   SquareKanban,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import HideDoneToggle from '@/components/app/HideDoneToggle.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TaskBoard from '@/components/app/TaskBoard.vue'
@@ -108,12 +109,27 @@ function matchesPart(row: TaskRow) {
   return row.task.partId === partFilter.value
 }
 
-const filtered = computed(() =>
+const matched = computed(() =>
   taskStore.visibleRows.filter(
     (r) =>
       r.task.title.includes(query.value) && matchesStatus(r) && matchesOwner(r) && matchesPart(r),
   ),
 )
+
+/* 완료 숨기기 — 상태로 '완료' 를 직접 골랐으면 그쪽이 이긴다. 숨기면 빈 표만 남는다 */
+const doneChosen = computed(() => statusFilter.value === 'done')
+const filtered = computed(() =>
+  doneChosen.value
+    ? matched.value
+    : matched.value.filter((r) => !taskStore.doneHiddenIds.has(r.task.id)),
+)
+/* 숨은 수 — 목록은 조회 조건에 맞는 것 중에서 센다. 그래야 '총 N건' 과 더해 조건의 건수가 된다 */
+const hiddenDone = computed(() =>
+  view.value === 'list'
+    ? matched.value.length - filtered.value.length
+    : taskStore.doneHiddenIds.size,
+)
+watch(() => taskStore.hideDone, resetPage)
 
 const pageCount = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage)))
 const current = computed(() => Math.min(page.value, pageCount.value))
@@ -354,6 +370,13 @@ function bulkOwner(value: string) {
         칸반보드
       </RouterLink>
       <div class="grow" />
+      <HideDoneToggle
+        v-if="view !== 'board'"
+        :hidden="hiddenDone"
+        :disabled-reason="
+          view === 'list' && doneChosen ? '상태로 완료를 골라 완료 작업도 보입니다' : undefined
+        "
+      />
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>

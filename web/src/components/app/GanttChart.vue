@@ -130,6 +130,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
     [
       asItem(task).unscheduled ? 'tg-row-unscheduled' : '',
       asItem(task).context ? 'tg-row-context' : '',
+      asItem(task).noAdd ? 'tg-row-noadd' : '',
     ].join(' ')
 
   g.attachEvent('onBeforeLightbox', () => false)
@@ -142,6 +143,8 @@ function setup(g: GanttStatic, el: HTMLElement) {
   })
   /* 그리드의 + 열 — 라이브러리가 직접 줄을 만들지 않게 막고 부모가 추가 팝업을 연다 */
   g.attachEvent('onTaskCreated', (task: GanttTask) => {
+    /* + 를 숨긴 줄(4단 작업)이면 받지 않는다 — 숨김을 비켜 들어온 손놀림까지 */
+    if (task.parent && props.items.find((i) => i.id === String(task.parent))?.noAdd) return false
     emit('add', task.parent ? String(task.parent) : null)
     return false
   })
@@ -442,6 +445,11 @@ function showToday() {
 }
 
 /* '내 파트' 에서 길을 잇느라 선 조상 — 내 일이 아니라 흐리게 */
+.tg-root .gantt_grid_data .gantt_row.tg-row-noadd .gantt_add {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .tg-root .gantt_grid_data .gantt_row.tg-row-context {
   opacity: 0.55;
 }

@@ -1,16 +1,26 @@
 import { defineStore } from 'pinia'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import * as api from '@/api'
+import { ApiError } from '@/api'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { bodyChanged, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
 import { inheritedPartId } from '@/lib/part'
+import { recall, remember } from '@/lib/storage'
+import {
+  MAX_TASK_DEPTH,
+  TASK_DEPTH_MESSAGE,
+  hiddenDoneIds,
+  subtreeHeights,
+  taskDepths,
+} from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import { useThreadStore } from '@/stores/thread'
 import type {
   HistoryChange,
+  ParentChoice,
   ProposedTask,
   Task,
   TaskBatchResult,
@@ -76,9 +86,26 @@ export const useTaskStore = defineStore('task', () => {
   /** 자기까지 포함한 경로 — 상위 작업을 고르는 자리가 쓴다 */
   const fullPath = (task: Task) => [...ancestorTitles(task), task.title].join(' › ')
 
-  /** 상위 작업 고르기 목록. 고르는 값은 이름이 아니라 id 다 */
-  const parentOptions = computed<{ id: string; key: string; label: string }[]>(() =>
-    tasks.value.map((t) => ({ id: t.id, key: t.key, label: fullPath(t) })),
+  /** 작업마다 몇 단인지(최상위 1) · 자기 아래 높이(하위 없으면 1) — 4단 제한을 본다 (Q64) */
+  const depthOf = computed(() => taskDepths(tasks.value))
+  const heightOf = computed(() => subtreeHeights(tasks.value))
+
+  /** 이 작업 밑에 하위를 더 둘 수 있는지 */
+  const canAddChild = (taskId: string) => (depthOf.value[taskId] ?? 0) < MAX_TASK_DEPTH
+
+  const depthReason = (depth: number) => `${depth}단이 됩니다 · ${MAX_TASK_DEPTH}단까지`
+
+  /** 상위 작업 고르기 목록(등록). 고르는 값은 이름이 아니라 id 다. 밑에 두면 4단을 넘는 것은 막아 둔다 */
+  const parentOptions = computed<ParentChoice[]>(() =>
+    tasks.value.map((t) => {
+      const depth = (depthOf.value[t.id] ?? 1) + 1
+      return {
+        id: t.id,
+        key: t.key,
+        label: fullPath(t),
+        ...(depth > MAX_TASK_DEPTH ? { disabledReason: depthReason(depth) } : {}),
+      }
+    }),
   )
 
   const periodLabel = (task: Task) =>
@@ -107,6 +134,24 @@ export const useTaskStore = defineStore('task', () => {
   /** [내 파트 | 전체] 로 거른 행 — 목록 · 칸반 · 간트가 이것을 쓴다. 상세는 거르지 않는다 */
   const visibleRows = computed<TaskRow[]>(() =>
     partStore.visible ? rows.value.filter((r) => partStore.showsTask(r.task.id)) : rows.value,
+  )
+
+  /* 완료 숨기기 — 목록 · 간트가 같이 따른다(칸반은 완료 칸이 따로 있어 안 따른다). 처음은 켜짐이고
+     바꾼 값은 브라우저에 기억한다. 보기만 거른다 — 아래 수 · 리포트 · 진척률은 숨긴 것도 센다 (Q64) */
+  const HIDE_DONE_KEY = 'innoflow.tasks.hideDone'
+  const hideDone = ref(recall(HIDE_DONE_KEY) !== 'off')
+  function setHideDone(on: boolean) {
+    hideDone.value = on
+    remember(HIDE_DONE_KEY, on ? 'on' : 'off')
+  }
+
+  /** 지금 숨는 작업 — 완료인데 안 끝난 하위가 없는 것. 보이는 범위([내 파트 | 전체]) 안에서 본다 */
+  const doneHiddenIds = computed<Set<string>>(() =>
+    hideDone.value ? hiddenDoneIds(visibleRows.value.map((r) => r.task)) : new Set(),
+  )
+  /** 간트가 그리는 행 — 보이는 범위에서 숨긴 완료를 뺀 것 */
+  const shownRows = computed<TaskRow[]>(() =>
+    visibleRows.value.filter((r) => !doneHiddenIds.value.has(r.task.id)),
   )
 
   /* 아래 수는 보이는 것만 센다 — 화면에 없는 작업을 '몇 건' 이라 적으면 찾을 수 없다 */
@@ -251,10 +296,34 @@ export const useTaskStore = defineStore('task', () => {
     return ids
   }
 
-  /** 수정할 때 고를 수 있는 상위 작업 — 자기와 자기 아래는 뺀다 */
-  const parentOptionsFor = (taskId: string) => {
+  /** 수정할 때 고를 수 있는 상위 작업 — 자기와 자기 아래는 뺀다. 옮기면 자기 아래까지 4단을 넘는 것은 막아 둔다.
+      지금 상위는 막지 않는다 — 상위를 안 바꾸는 수정은 서버도 막지 않는다 */
+  const parentOptionsFor = (taskId: string): ParentChoice[] => {
     const blocked = selfAndDescendants(taskId)
-    return parentOptions.value.filter((o) => !blocked.has(o.id))
+    const height = heightOf.value[taskId] ?? 1
+    const current = byId.value[taskId]?.parentId ?? null
+    return parentOptions.value
+      .filter((o) => !blocked.has(o.id))
+      .map(({ id, key, label }) => {
+        const depth = (depthOf.value[id] ?? 1) + height
+        return depth > MAX_TASK_DEPTH && id !== current
+          ? { id, key, label, disabledReason: depthReason(depth) }
+          : { id, key, label }
+      })
+  }
+
+  /** 목업은 서버가 없어 4단 제한도 여기서 흉내 낸다 — 서버의 400 TASK_DEPTH_EXCEEDED 와 같은 모양 */
+  function rejectDepth(parentId: string | null, height = 1) {
+    if (!data.mock || !parentId) return false
+    if ((depthOf.value[parentId] ?? 1) + height <= MAX_TASK_DEPTH) return false
+    toastError(
+      new ApiError(400, {
+        code: 'TASK_DEPTH_EXCEEDED',
+        message: TASK_DEPTH_MESSAGE,
+        detail: { parentId: TASK_DEPTH_MESSAGE },
+      }),
+    )
+    return true
   }
 
   function setTitle(taskId: string, title: string) {
@@ -270,6 +339,7 @@ export const useTaskStore = defineStore('task', () => {
     const task = findTask(taskId)
     if (!task) return
     if (parentId && selfAndDescendants(taskId).has(parentId)) return
+    if (parentId !== task.parentId && rejectDepth(parentId, heightOf.value[taskId] ?? 1)) return
     logPatch(task, { parentId })
     task.parentId = parentId
     patch(taskId, { parentId })
@@ -380,6 +450,7 @@ export const useTaskStore = defineStore('task', () => {
       }
     }
     if (data.rejectOwner(input.ownerId, 'TASK_OWNER_NOT_FOUND')) return null
+    if (rejectDepth(input.parentId)) return null
     /* partId 를 안 보냈으면 상위 작업의 것을 따른다. 따라온 것도 새로 다는 것으로 보고 검사한다 —
        서버가 그렇게 한다 (API.md Q32) */
     const parentTask = input.parentId ? findTask(input.parentId) : null
@@ -487,6 +558,11 @@ export const useTaskStore = defineStore('task', () => {
     fullPath,
     parentOptions,
     parentOptionsFor,
+    canAddChild,
+    hideDone,
+    setHideDone,
+    doneHiddenIds,
+    shownRows,
     periodLabel,
     taskDetail,
     threadRow,

@@ -18,6 +18,9 @@ for (const prop of ['offsetWidth', 'clientWidth']) {
 enableAutoUnmount(afterEach)
 
 beforeEach(() => {
+  /* 완료 숨기기는 처음이 켜짐이다 — 22줄 트리를 보는 검사들이라 끄고 시작한다 */
+  localStorage.clear()
+  localStorage.setItem('innoflow.tasks.hideDone', 'off')
   setActivePinia(createPinia())
 })
 
@@ -83,6 +86,19 @@ describe('간트차트', () => {
     expect(w.findAll('.gantt_scale_cell.tg-today')).toHaveLength(1)
     expect(w.findAll('.gantt_task_cell.tg-today')).toHaveLength(22)
     vi.useRealTimers()
+  })
+
+  it("4단 줄은 '+' 를 숨긴다 — 그 밑은 5단이다 (Q64)", async () => {
+    const w = await mountGantt()
+    expect(w.get('.gantt_grid_data [data-task-id="k9"]').classes()).toContain('tg-row-noadd')
+    expect(w.get('.gantt_grid_data [data-task-id="k7"]').classes()).not.toContain('tg-row-noadd')
+  })
+
+  it('완료 숨기기를 켜면 하위가 다 끝난 완료 줄이 빠진다 (Q64)', async () => {
+    useTaskStore().setHideDone(true)
+    const w = await mountGantt()
+    expect(w.findAll('.gantt_grid_data .gantt_row')).toHaveLength(19)
+    expect(w.find('.gantt_grid_data [data-task-id="k8"]').exists()).toBe(false)
   })
 
   it('주에서 개월로 눈금을 바꾼다', async () => {

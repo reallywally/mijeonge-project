@@ -428,6 +428,18 @@ describe('목업 apply', () => {
     const r = await applyMinutes('m1', input)
     expect([r.tasks[2].parentId, r.tasks[2].partId]).toEqual(['k4', 'pt1'])
   })
+
+  it('400 TASK_DEPTH_EXCEEDED — 4단 작업(tool01) 밑에는 못 붙인다 (Q64)', async () => {
+    const input = fullInput()
+    input.tasks[2].parentId = 'k8'
+    const e = await rejected(applyMinutes('m1', input))
+    expect(e).toMatchObject({
+      status: 400,
+      code: 'TASK_DEPTH_EXCEEDED',
+      message: '작업은 4단까지만 쌓을 수 있습니다.',
+      detail: { 'tasks.2.parentId': '작업은 4단까지만 쌓을 수 있습니다.' },
+    })
+  })
 })
 
 describe('서버 갈래', () => {

@@ -238,7 +238,7 @@ export interface MinutesApplyResult {
 - 이력이 상태를 바꾸는 규칙은 `POST /api/threads/{threadId}/entries` 와 같다 — `decide` 면 `decided`, 그 밖은 `queued` 면 `open`
 - 이력의 `createdAt` 은 등록하는 지금이다(회의 날짜가 아니다) — 다른 이력과 같은 규칙
 - 화면이 새 안건을 빼면 그 `tempId` 를 가리키는 `threadTempIds` 도 화면이 지우고 보낸다. 남아 있으면 422
-- 오류: 404 `MINUTES_NOT_FOUND` · 422 `VALIDATION_ERROR`(`detail` 은 `threads.N.title` · `entries.N.threadId` · `tasks.N.threadTempIds.0` 처럼 자리를 짚는다 — `tasks/batch` 의 표기를 넓힌다) · 400 `THREAD_NOT_FOUND`(`entries.N.threadId` · `tasks.N.threadIds.M`) · 400 `THREAD_OWNER_NOT_FOUND` · `ENTRY_OWNER_NOT_FOUND` · `TASK_OWNER_NOT_FOUND`(그 자리의 `….ownerId`, 기존 등록 · 이력과 같은 코드 · 같은 경계) · 400 `TASK_PARENT_NOT_FOUND`
+- 오류: 404 `MINUTES_NOT_FOUND` · 422 `VALIDATION_ERROR`(`detail` 은 `threads.N.title` · `entries.N.threadId` · `tasks.N.threadTempIds.0` 처럼 자리를 짚는다 — `tasks/batch` 의 표기를 넓힌다) · 400 `THREAD_NOT_FOUND`(`entries.N.threadId` · `tasks.N.threadIds.M`) · 400 `THREAD_OWNER_NOT_FOUND` · `ENTRY_OWNER_NOT_FOUND` · `TASK_OWNER_NOT_FOUND`(그 자리의 `….ownerId`, 기존 등록 · 이력과 같은 코드 · 같은 경계) · 400 `TASK_PARENT_NOT_FOUND` · 400 `TASK_DEPTH_EXCEEDED`(작업은 4단까지 · Q64, `tasks.N.parentTempId` · `tasks.N.parentId`)
 - 하나라도 틀리면 아무것도 안 남는다. 발번한 작업 번호도 되돌린다
 
 ### 구현 (2026-10-19, 서버)
@@ -246,7 +246,7 @@ export interface MinutesApplyResult {
 계약이 비워 둔 자리는 이렇게 정했다. 화면이 불편하면 새 Q 로 다시 연다.
 
 - 셋 다 0개인 `apply` 는 422, `detail` 자리는 **`요청`**(어느 묶음의 자리가 아니라서 — 오류 처리기가 요청 전체에 쓰는 이름). 개수 초과는 `threads` · `entries` · `tasks`
-- 400 이 여럿 걸리면 **하나만** 낸다 — 순서는 `THREAD_NOT_FOUND` → `THREAD_OWNER_NOT_FOUND` → `ENTRY_OWNER_NOT_FOUND` → `TASK_OWNER_NOT_FOUND` → `TASK_PARENT_NOT_FOUND`(422 가 늘 먼저). `detail` 에는 그 코드에 걸린 자리를 다 싣는다. `propose_minutes` 는 전부를 한 번에 Claude 에게 돌려준다
+- 400 이 여럿 걸리면 **하나만** 낸다 — 순서는 `THREAD_NOT_FOUND` → `THREAD_OWNER_NOT_FOUND` → `ENTRY_OWNER_NOT_FOUND` → `TASK_OWNER_NOT_FOUND` → `TASK_PARENT_NOT_FOUND` → `TASK_DEPTH_EXCEEDED`(422 가 늘 먼저, 마지막 것은 Q64 로 더했다). `detail` 에는 그 코드에 걸린 자리를 다 싣는다. `propose_minutes` 는 전부를 한 번에 Claude 에게 돌려준다
 - `ownerHint` 는 `ownerId` 가 있으면 **오류가 아니라 비운다**(초안에서도) — `apply` 는 어차피 버린다
 - `tempId` 는 세 묶음 전체에서 겹치면 422(`….tempId`). 접두사(`n` · `e` · `t`)는 검사하지 않는다 — Claude 에게 프롬프트로만 시킨다. 새 안건의 `tempId` 를 작업의 `parentTempId` 로 쓰면 422
 - 이력의 담당자는 그 안건 담당자를 그대로 적으면 검사하지 않는다(`POST .../entries` 와 같은 경계). 새 안건의 이력도 그 새 안건의 담당자와 같으면 같다

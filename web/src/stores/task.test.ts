@@ -1,12 +1,16 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
+import { toastError } from '@/lib/notify'
 import { useAuthStore } from './auth'
 import { useDataStore } from './data'
 import { useTaskStore } from './task'
 
+vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
+
 beforeEach(() => {
+  vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
 })
 
@@ -259,5 +263,88 @@ describe('상태 기록', () => {
       },
     ])
     expect(batch!.tasks[0].statusChangedAt).toBe(batch!.tasks[0].createdAt)
+  })
+})
+
+describe('4단 제한 (Q64)', () => {
+  const reason = (choices: { id: string; disabledReason?: string }[], id: string) =>
+    choices.find((c) => c.id === id)?.disabledReason
+  const codeOfLastToast = () =>
+    (vi.mocked(toastError).mock.calls.at(-1)?.[0] as { code?: string } | undefined)?.code
+
+  it('등록 — 4단 작업은 상위로 못 고른다. 이유가 붙는다', () => {
+    const task = useTaskStore()
+    expect(reason(task.parentOptions, 'k8')).toBe('5단이 됩니다 · 4단까지')
+    expect(reason(task.parentOptions, 'k7')).toBeUndefined()
+    expect(task.canAddChild('k8')).toBe(false)
+    expect(task.canAddChild('k7')).toBe(true)
+  })
+
+  it('수정 — 옮기는 작업의 하위 높이까지 센다. 지금 상위는 막지 않는다', () => {
+    const task = useTaskStore()
+    /* 가상비서(k7)는 하위까지 2단 — 3단 작업(AI 심사 k12) 밑으로 가면 5단이다 */
+    const choices = task.parentOptionsFor('k7')
+    expect(reason(choices, 'k12')).toBe('5단이 됩니다 · 4단까지')
+    expect(reason(choices, 'k17')).toBe(undefined)
+    expect(reason(choices, 'k6')).toBeUndefined()
+    /* 하위가 없는 tool01(k8)은 3단 밑까지 갈 수 있다 */
+    expect(reason(task.parentOptionsFor('k8'), 'k12')).toBeUndefined()
+    expect(reason(task.parentOptionsFor('k8'), 'k13')).toBe('5단이 됩니다 · 4단까지')
+  })
+
+  it('목업은 서버처럼 400 TASK_DEPTH_EXCEEDED 로 막는다 — 등록 · 상위 바꾸기', async () => {
+    const task = useTaskStore()
+    const data = useDataStore()
+    const before = data.allTasks.length
+    const id = await task.addTask({
+      title: '다섯째 단',
+      parentId: 'k8',
+      body: [],
+      status: 'todo',
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal',
+      threadIds: [],
+    })
+    expect(id).toBeNull()
+    expect(data.allTasks).toHaveLength(before)
+    expect(codeOfLastToast()).toBe('TASK_DEPTH_EXCEEDED')
+
+    vi.mocked(toastError).mockClear()
+    task.setParent('k7', 'k12')
+    expect(data.allTasks.find((t) => t.id === 'k7')!.parentId).toBe('k6')
+    expect(codeOfLastToast()).toBe('TASK_DEPTH_EXCEEDED')
+
+    vi.mocked(toastError).mockClear()
+    task.setParent('k7', 'k5')
+    expect(data.allTasks.find((t) => t.id === 'k7')!.parentId).toBe('k5')
+    expect(toastError).not.toHaveBeenCalled()
+  })
+})
+
+describe('완료 숨기기 (Q64)', () => {
+  it('처음은 켜짐 — 하위가 다 끝난 완료만 숨고, 수 · 리포트용 집계는 그대로다', () => {
+    const task = useTaskStore()
+    expect(task.hideDone).toBe(true)
+    expect([...task.doneHiddenIds].sort()).toEqual(['k19', 'k2', 'k8'])
+    expect(task.shownRows).toHaveLength(19)
+    expect(task.statusCounts.done).toBe(3)
+    expect(task.statusCounts.all).toBe(22)
+  })
+
+  it('안 끝난 하위가 있는 완료 상위는 남는다', () => {
+    const task = useTaskStore()
+    task.setStatus('k1', 'done')
+    expect(task.doneHiddenIds.has('k1')).toBe(false)
+    task.setStatus('k3', 'done')
+    expect(task.doneHiddenIds.has('k1')).toBe(true)
+  })
+
+  it('끄면 다 보인다', () => {
+    const task = useTaskStore()
+    task.setHideDone(false)
+    expect(task.doneHiddenIds.size).toBe(0)
+    expect(task.shownRows).toHaveLength(22)
   })
 })
