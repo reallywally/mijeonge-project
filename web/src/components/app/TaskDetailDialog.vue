@@ -13,7 +13,13 @@ import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/c
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
-import { periodProblem, statusSinceLabel, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
+import {
+  MAX_TASK_DEPTH,
+  periodProblem,
+  statusSinceLabel,
+  TASK_STATUS_OPTIONS,
+  taskStatusLabel,
+} from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
@@ -284,6 +290,13 @@ const threadChoices = computed(() => {
                   @blur="!subTitle.trim() && closeSubtask()"
                 />
               </div>
+              <p
+                v-else-if="!taskStore.canAddChild(detail.task.id)"
+                class="flex min-h-[34px] items-center gap-1.5 px-3 text-xs text-muted-foreground"
+                data-subtask-limit
+              >
+                작업은 {{ MAX_TASK_DEPTH }}단까지라 이 밑에는 하위 작업을 더 둘 수 없습니다.
+              </p>
               <button
                 v-else
                 type="button"

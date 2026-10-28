@@ -26,6 +26,8 @@ export interface GanttItem {
   open: boolean
   /** '내 파트' 에서 보이는 작업의 조상이라 선 것 — 흐리게 그린다 */
   context?: boolean
+  /** 그리드의 + 를 숨긴다 — 4단 작업 밑에는 더 쌓을 수 없다 (Q64) */
+  noAdd?: boolean
   /** 기간 지남 · 오래 걸림 — 막대 테두리를 세운다(테스트) */
   late?: boolean
 }

@@ -42,6 +42,14 @@ from app.services import part as part_service
 from app.services import project as project_service
 from app.time import now
 
+# 최상위가 1단이다. 넘는 지난 데이터는 그대로 두고 새로 쌓는 것만 막는다 (Q64)
+MAX_TASK_DEPTH = 4
+DEPTH_EXCEEDED = "작업은 4단까지만 쌓을 수 있습니다."
+
+
+def _depth_exceeded() -> ApiError:
+    return bad_request("TASK_DEPTH_EXCEEDED", DEPTH_EXCEEDED)
+
 
 class StatusSince(NamedTuple):
     """지금 상태가 된 시각 — task_log 의 마지막 줄 (docs/api/task-flow.md)."""
@@ -180,13 +188,14 @@ async def _next_key(session: AsyncSession, project: Project) -> str:
 
 async def _guard_parent(
     session: AsyncSession, project_id: str, task_id: str | None, parent_id: str | None
-) -> None:
+) -> int:
     """고리 금지 — 자기 자신이나 자손을 부모로 두면 조상을 타고 올라갈 때 돌아 나온다.
 
     등록할 때는 아직 id 가 없어(`task_id=None`) 고리가 생길 수 없고, 상위 작업이 있는지만 본다.
+    돌려주는 값은 상위의 단(최상위면 1, 상위가 없으면 0) — 같은 걸음에서 센다.
     """
     if parent_id is None:
-        return
+        return 0
     if parent_id == task_id:
         raise bad_request("TASK_PARENT_SELF", "작업을 자기 자신의 상위로 둘 수 없습니다.")
 
@@ -197,15 +206,39 @@ async def _guard_parent(
     if found.project_id != project_id:
         raise bad_request("TASK_PARENT_OTHER_PROJECT", "상위 작업이 다른 프로젝트에 있습니다.")
 
+    depth = 1
     seen: set[str] = set()
     walker: str | None = found.parent_id
     while walker is not None:
         if walker == task_id:
             raise bad_request("TASK_PARENT_DESCENDANT", "하위 작업을 상위로 둘 수 없습니다.")
         if walker in seen:  # 이미 망가진 데이터를 만나도 여기서 멈춘다
-            return
+            return depth
         seen.add(walker)
+        depth += 1
         walker = await session.scalar(select(Task.parent_id).where(Task.id == walker))
+    return depth
+
+
+async def _subtree_height(session: AsyncSession, task_id: str, limit: int) -> int:
+    """자기만 있으면 1. `limit` 을 넘는 줄 알면 더 내려가지 않는다 — 단마다 쿼리 하나."""
+    height = 1
+    seen = {task_id}
+    frontier = [task_id]
+    while height <= limit:
+        children = [
+            child
+            for child in (
+                await session.scalars(select(Task.id).where(Task.parent_id.in_(frontier)))
+            ).all()
+            if child not in seen  # 망가진 고리는 한 번만 센다
+        ]
+        if not children:
+            break
+        seen.update(children)
+        frontier = children
+        height += 1
+    return height
 
 
 async def _insert_task(
@@ -213,7 +246,8 @@ async def _insert_task(
 ) -> Task:
     """작업 하나를 넣는다 — 상태 기록 첫 줄(`null → 상태`) · 이력 '등록' 줄까지.
     커밋하지 않는다 — 일괄 등록 · 회의록 apply 가 여럿을 한 트랜잭션에 묶는다."""
-    await _guard_parent(session, project.id, None, payload.parent_id)
+    if await _guard_parent(session, project.id, None, payload.parent_id) + 1 > MAX_TASK_DEPTH:
+        raise _depth_exceeded()
     part_id = await _part_for_new_task(session, project.id, payload)
 
     task = Task(
@@ -372,6 +406,49 @@ async def missing_parents(
     }
 
 
+async def too_deep(
+    session: AsyncSession, project_id: str, tasks: Sequence[ProposedTask]
+) -> dict[str, str]:
+    """넣으면 4단을 넘는 자리 — `tasks.N.parentTempId` · `tasks.N.parentId`.
+
+    없는 상위 · 뒤를 가리키는 상위는 앞의 검사가 짚으니 여기서는 건너뛴다.
+    """
+    if not any(item.parent_id is not None for item in tasks):
+        parent_of: dict[str, str | None] = {}
+    else:
+        rows = await session.execute(
+            select(Task.id, Task.parent_id).where(Task.project_id == project_id)
+        )
+        parent_of = dict(rows.tuples().all())
+
+    def depth_of(task_id: str) -> int:
+        depth, seen = 0, set[str]()
+        walker: str | None = task_id
+        while walker is not None and walker not in seen:  # 망가진 고리에서도 멈춘다
+            seen.add(walker)
+            depth += 1
+            walker = parent_of.get(walker)
+        return depth
+
+    problems: dict[str, str] = {}
+    depth_by_temp: dict[str, int] = {}
+    for index, item in enumerate(tasks):
+        if item.parent_temp_id is not None:
+            if item.parent_temp_id not in depth_by_temp:
+                continue
+            depth, at = depth_by_temp[item.parent_temp_id] + 1, "parentTempId"
+        elif item.parent_id is not None:
+            if item.parent_id not in parent_of:
+                continue
+            depth, at = depth_of(item.parent_id) + 1, "parentId"
+        else:
+            depth, at = 1, ""
+        if depth > MAX_TASK_DEPTH:
+            problems[f"tasks.{index}.{at}"] = DEPTH_EXCEEDED
+        depth_by_temp.setdefault(item.temp_id, depth)
+    return problems
+
+
 async def create_tasks(
     session: AsyncSession, project_id: str, payload: TaskBatchInput, actor_id: str
 ) -> TaskBatchResult:
@@ -386,6 +463,9 @@ async def create_tasks(
     orphans = await missing_parents(session, project.id, payload.tasks)
     if orphans:
         raise ApiError(400, "TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.", orphans)
+    deep = await too_deep(session, project.id, payload.tasks)
+    if deep:
+        raise ApiError(400, "TASK_DEPTH_EXCEEDED", DEPTH_EXCEEDED, deep)
     await _guard_batch_parts(session, project.id, payload.tasks)
 
     id_by_temp: dict[str, str] = {}
@@ -448,7 +528,12 @@ async def patch_task(
     if "body" in payload.model_fields_set:
         _replace_body(task, payload.body)
     if "parent_id" in changes:
-        await _guard_parent(session, task.project_id, task.id, changes["parent_id"])
+        depth = await _guard_parent(session, task.project_id, task.id, changes["parent_id"])
+        # 상위를 그대로 두는 수정은 지난 깊은 데이터여도 막지 않는다. 최상위로 올리면 depth 는 0
+        if changes["parent_id"] != task.parent_id and depth > 0:
+            limit = MAX_TASK_DEPTH - depth
+            if await _subtree_height(session, task.id, limit) > limit:
+                raise _depth_exceeded()
     # 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다 — 프로젝트에서 빠진 사람이어도
     if "owner_id" in changes and changes["owner_id"] != task.owner_id:
         await _guard_owner(session, task.project_id, changes["owner_id"])

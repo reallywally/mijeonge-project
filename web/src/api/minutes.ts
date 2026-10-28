@@ -18,6 +18,7 @@ import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
 import { inheritedPartId } from '@/lib/part'
+import { batchDepthProblems, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
 import type {
   Entry,
   Me,
@@ -378,6 +379,14 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       orphans[`tasks.${i}.parentId`] = '상위 작업을 찾을 수 없습니다.'
   })
   reject('TASK_PARENT_NOT_FOUND', '상위 작업을 찾을 수 없습니다.', orphans)
+  reject(
+    'TASK_DEPTH_EXCEEDED',
+    TASK_DEPTH_MESSAGE,
+    batchDepthProblems(
+      input.tasks,
+      taskDepths(world.tasks.filter((t) => t.projectId === projectId)),
+    ),
+  )
 
   const createdAt = nowIso()
   const clean = (lines: string[]) => lines.map((s) => s.trim()).filter(Boolean)

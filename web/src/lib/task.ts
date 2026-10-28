@@ -78,3 +78,90 @@ export function statusSinceLabel(
   const span = days === 0 ? '오늘부터' : task.statusSinceBackfill ? `${days}일 이상` : `${days}일째`
   return `${taskStatusLabel(task.status)} · ${span}`
 }
+
+/* ── 계층 깊이 · 완료 숨기기 (Q64) ───────────────────── */
+
+/** 작업은 4단까지 — 최상위가 1단이다. 서버도 같은 수로 막는다(400 TASK_DEPTH_EXCEEDED) */
+export const MAX_TASK_DEPTH = 4
+export const TASK_DEPTH_MESSAGE = `작업은 ${MAX_TASK_DEPTH}단까지만 쌓을 수 있습니다.`
+
+type TaskNode = Pick<Task, 'id' | 'parentId'>
+
+/** 작업마다 몇 단인지 — 최상위가 1. 상위가 목록에 없으면 거기서 끊는다. 고리가 있어도 멈춘다 */
+export function taskDepths(tasks: TaskNode[]): Record<string, number> {
+  const parentOf = new Map(tasks.map((t) => [t.id, t.parentId]))
+  const depths: Record<string, number> = {}
+  const depthOf = (id: string): number => {
+    if (depths[id] !== undefined) return depths[id]
+    const seen = new Set<string>()
+    const chain: string[] = []
+    let at: string | null | undefined = id
+    while (at && parentOf.has(at) && depths[at] === undefined && !seen.has(at)) {
+      seen.add(at)
+      chain.push(at)
+      at = parentOf.get(at)
+    }
+    let d = at && depths[at] !== undefined ? depths[at] : 0
+    for (const node of chain.reverse()) depths[node] = ++d
+    return depths[id]
+  }
+  for (const t of tasks) depthOf(t.id)
+  return depths
+}
+
+/** 작업마다 자기를 포함한 하위의 높이 — 하위가 없으면 1 */
+export function subtreeHeights(tasks: TaskNode[]): Record<string, number> {
+  const depths = taskDepths(tasks)
+  const heights: Record<string, number> = {}
+  /* 깊은 것부터 올라가며 부모의 높이를 키운다 */
+  const order = [...tasks].sort((a, b) => depths[b.id] - depths[a.id])
+  for (const t of order) {
+    heights[t.id] ??= 1
+    if (t.parentId && depths[t.parentId] !== undefined && depths[t.parentId] < depths[t.id])
+      heights[t.parentId] = Math.max(heights[t.parentId] ?? 1, heights[t.id] + 1)
+  }
+  return heights
+}
+
+/**
+ * 완료 숨기기에서 숨는 작업 — 완료인데 아직 안 끝난 하위가 하나도 없는 것.
+ * 안 끝난 작업의 조상은 완료여도 남겨 트리가 끊기지 않게 한다
+ */
+export function hiddenDoneIds(tasks: Pick<Task, 'id' | 'parentId' | 'status'>[]): Set<string> {
+  const parentOf = new Map(tasks.map((t) => [t.id, t.parentId]))
+  const kept = new Set<string>()
+  for (const t of tasks) {
+    if (t.status === 'done') continue
+    let at = t.parentId
+    while (at && parentOf.has(at) && !kept.has(at)) {
+      kept.add(at)
+      at = parentOf.get(at) ?? null
+    }
+  }
+  return new Set(tasks.filter((t) => t.status === 'done' && !kept.has(t.id)).map((t) => t.id))
+}
+
+/**
+ * 한 번에 등록(챗봇 일괄 · 회의록 반영)에서 4단을 넘는 자리 — 목업이 서버의 detail 을 흉내 낸다.
+ * 이미 있는 상위의 단은 depths 로 받는다(모르는 작업이면 최상위로 본다)
+ */
+export function batchDepthProblems(
+  drafts: { tempId: string; parentTempId: string | null; parentId: string | null }[],
+  depths: Record<string, number>,
+): Record<string, string> {
+  const detail: Record<string, string> = {}
+  const byTemp: Record<string, number> = {}
+  drafts.forEach((t, i) => {
+    const depth =
+      t.parentTempId !== null
+        ? (byTemp[t.parentTempId] ?? 0) + 1
+        : t.parentId !== null
+          ? (depths[t.parentId] ?? 1) + 1
+          : 1
+    byTemp[t.tempId] = depth
+    if (depth > MAX_TASK_DEPTH)
+      detail[`tasks.${i}.${t.parentTempId !== null ? 'parentTempId' : 'parentId'}`] =
+        TASK_DEPTH_MESSAGE
+  })
+  return detail
+}

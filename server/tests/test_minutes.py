@@ -376,6 +376,12 @@ async def test_rule_violation_is_422_with_position(
             "TASK_PARENT_NOT_FOUND",
             "tasks.0.parentId",
         ),
+        (
+            # k8 은 4단이다 — 그 밑은 5단 (Q64)
+            minutes(tasks=[task("t1", "가", parentId="k8")]),
+            "TASK_DEPTH_EXCEEDED",
+            "tasks.0.parentId",
+        ),
     ],
 )
 async def test_reference_errors_are_400_and_leave_nothing(

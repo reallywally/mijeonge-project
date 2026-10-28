@@ -66,6 +66,8 @@ beforeEach(() => {
   resetMockAuth()
   sessionStorage.clear()
   localStorage.clear()
+  /* 완료 숨기기는 끄고 본다 — 건수는 파트 범위만 본다 */
+  localStorage.setItem('innoflow.tasks.hideDone', 'off')
   vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
   document.body.innerHTML = ''
@@ -115,6 +117,15 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 
     const other = await mountAt('/tasks?view=list&part=pt9')
     expect(other.text()).toContain('총 22건')
+  })
+
+  it("파트 관리의 '작업 N건 보기' 로 와도 완료 숨기기로 건수가 어긋나지 않는다 — 보인 수 + 숨긴 수 (Q64)", async () => {
+    localStorage.removeItem('innoflow.tasks.hideDone')
+    await signedIn('u1@innoflow.local')
+    const w = await mountAt('/tasks?view=list&part=pt1')
+    /* 인프라 5건 중 완료(HW-19) 하나가 숨는다 */
+    expect(w.text()).toContain('총 4건')
+    expect(w.find('[data-hidden-done]').text()).toBe('완료 1건 숨김')
   })
 
   it('시스템 관리자는 속한 파트가 없어 전환이 없다', async () => {

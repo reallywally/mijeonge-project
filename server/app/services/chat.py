@@ -139,7 +139,8 @@ SYSTEM_PROMPT = """\
    (parent_temp_id 가 묶음의 temp_id)으로 둔다. 할 일이 하나면 상위 없이 하나만 낸다
 4. 상위 작업은 같은 초안 안의 앞 항목(parent_temp_id)이거나, 이미 있는 작업(parent_id)이다.
    이미 있는 작업 밑에 붙일 때는 get_task 로 그 작업을 먼저 읽고 그 id 를 parent_id 에 넣는다.
-   한 항목에 둘을 같이 쓰지 않는다. 초안 안의 하위의 하위는 parent_temp_id 로 잇는다
+   한 항목에 둘을 같이 쓰지 않는다. 초안 안의 하위의 하위는 parent_temp_id 로 잇는다.
+   작업은 4단까지다(최상위가 1단) — 넘으면 propose_tasks 가 그 자리를 짚어 돌려준다
 5. 날짜("다음 주 금요일")는 오늘을 기준으로 YYYY-MM-DD 로 바꾼다.
    말하지 않은 기간은 null, 우선순위는 normal 로 둔다. 짐작으로 채우지 않는다
 6. propose_tasks 가 오류를 돌려주면 고쳐서 다시 부른다. 한 답에서 마지막으로 낸 초안만 화면에 보인다
@@ -467,6 +468,8 @@ async def check_proposal(
             problems = await task_service.missing_owners(session, project_id, proposal.tasks)
         if not problems:
             problems = await task_service.missing_parents(session, project_id, proposal.tasks)
+        if not problems:
+            problems = await task_service.too_deep(session, project_id, proposal.tasks)
         if problems:
             return (
                 json.dumps(

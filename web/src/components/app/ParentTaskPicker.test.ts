@@ -73,4 +73,38 @@ describe('ParentTaskPicker', () => {
     expect(w.find('input').exists()).toBe(false)
     expect(w.emitted('update:modelValue')).toBeUndefined()
   })
+
+  it('고르면 4단을 넘는 작업은 흐리게 이유를 적고 고르지 못한다 — ↑ ↓ 도 건너뛴다 (Q64)', async () => {
+    const w = mount(ParentTaskPicker, {
+      props: {
+        choices: [
+          { id: 'k7', key: 'HW-7', label: '개발 › AI Biz › 가상비서' },
+          {
+            id: 'k8',
+            key: 'HW-8',
+            label: '개발 › AI Biz › 가상비서 › tool01',
+            disabledReason: '5단이 됩니다 · 4단까지',
+          },
+          { id: 'k9', key: 'HW-9', label: '개발 › AI Biz › 가상비서 › tool02' },
+        ],
+        modelValue: null,
+      },
+      attachTo: document.body,
+    })
+    await w.get('button[aria-label="상위 작업"]').trigger('click')
+    const blocked = w.findAll('[role="option"]')[2]!
+    expect(blocked.attributes('aria-disabled')).toBe('true')
+    expect(blocked.text()).toContain('5단이 됩니다 · 4단까지')
+
+    await blocked.trigger('mousedown')
+    expect(w.emitted('update:modelValue')).toBeUndefined()
+    expect(w.find('input').exists()).toBe(true)
+
+    /* 없음 → HW-7 → (HW-8 건너뜀) → HW-9 */
+    const input = w.get('input')
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    await input.trigger('keydown', { key: 'ArrowDown' })
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(w.emitted('update:modelValue')).toEqual([['k9']])
+  })
 })

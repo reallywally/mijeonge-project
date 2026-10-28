@@ -229,7 +229,7 @@ async def minutes_problems(
 ) -> list[ApiError]:
     """걸린 것을 오류 하나씩으로 — 등록은 첫 것을 내고, 초안 도구는 다 모아 Claude 에게 돌려준다.
 
-    순서는 422 → 없는 안건 → 담당자(안건 · 이력 · 작업) → 없는 상위 작업. 읽기만 한다.
+    순서는 422 → 없는 안건 → 담당자(안건 · 이력 · 작업) → 없는 상위 작업 → 4단 넘김. 읽기만 한다.
     """
     found: list[ApiError] = []
     shape = shape_problems(threads, entries, tasks)
@@ -304,6 +304,10 @@ async def minutes_problems(
         found.append(
             ApiError(400, "TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.", orphans)
         )
+
+    deep = await task_service.too_deep(session, project_id, tasks)
+    if deep:
+        found.append(ApiError(400, "TASK_DEPTH_EXCEEDED", task_service.DEPTH_EXCEEDED, deep))
     return found
 
 

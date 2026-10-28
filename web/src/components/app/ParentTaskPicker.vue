@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { Search, X } from 'lucide-vue-next'
+import type { ParentChoice } from '@/types/domain'
 
 /* 상위 작업 고르기 — 평소엔 지금 상위를 글처럼 보이고, 누르면 찾기 칸이 열린다.
    작업 번호(HW-4)나 경로(개발 환경 설정 › DB 설치)의 낱말로 찾는다. 낱말은 모두 들어가야 한다.
    ↑ ↓ 로 옮기고 Enter 로 고르며, Esc · 바깥 누르기는 고르지 않고 닫는다.
-   테스트의 상위 테스트도 같은 칸이다 — noun 만 바꾼다 */
+   테스트의 상위 테스트도 같은 칸이다 — noun 만 바꾼다.
+   고르면 4단을 넘는 작업(disabledReason)은 목록에 두되 흐리게 이유를 적고 고르지 못하게 한다 */
 const props = withDefaults(
   defineProps<{
-    choices: { id: string; key: string; label: string }[]
+    choices: ParentChoice[]
     /** 무엇의 상위인가 — 작업 · 테스트 */
     noun?: string
   }>(),
@@ -32,7 +34,7 @@ const input = ref<HTMLInputElement | null>(null)
 const current = computed(() => props.choices.find((c) => c.id === parentId.value) ?? null)
 
 /* 맨 위 '없음' 은 찾는 말이 없을 때만 — 고르면 최상위 작업이 된다 */
-type Row = { id: string | null; key: string; label: string }
+type Row = { id: string | null; key: string; label: string; disabledReason?: string }
 const noneRow = computed<Row>(() => ({ id: null, key: '', label: `없음 (최상위 ${props.noun})` }))
 
 const words = computed(() => query.value.trim().toLowerCase().split(/\s+/).filter(Boolean))
@@ -48,10 +50,18 @@ const matches = computed<Row[]>(() => [
 ])
 const hiddenCount = computed(() => Math.max(found.value.length - LIMIT, 0))
 
+/* ↑ ↓ 는 막힌 줄을 건너뛴다. 갈 곳이 없으면 그 자리 */
+function step(from: number, by: 1 | -1) {
+  for (let i = from + by; i >= 0 && i < matches.value.length; i += by)
+    if (!matches.value[i]!.disabledReason) return i
+  return from
+}
+const firstEnabled = () => Math.max(step(-1, 1), 0)
+
 async function open() {
   editing.value = true
   query.value = ''
-  active.value = 0
+  active.value = firstEnabled()
   await nextTick()
   input.value?.focus()
 }
@@ -62,7 +72,7 @@ function close() {
 }
 
 function pick(row: Row | undefined) {
-  if (!row) return
+  if (!row || row.disabledReason) return
   if (row.id !== parentId.value) parentId.value = row.id
   close()
 }
@@ -71,10 +81,10 @@ function onKeydown(e: KeyboardEvent) {
   if (e.isComposing) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    active.value = Math.min(active.value + 1, matches.value.length - 1)
+    active.value = step(active.value, 1)
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
-    active.value = Math.max(active.value - 1, 0)
+    active.value = step(active.value, -1)
   } else if (e.key === 'Enter') {
     e.preventDefault()
     pick(matches.value[active.value])
@@ -128,7 +138,7 @@ function onKeydown(e: KeyboardEvent) {
           :aria-label="`상위 ${noun} 찾기`"
           :placeholder="`${noun} 번호나 제목으로 찾기`"
           class="min-w-0 grow bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-          @input="active = 0"
+          @input="active = firstEnabled()"
           @blur="close"
           @keydown="onKeydown"
         />
@@ -142,16 +152,22 @@ function onKeydown(e: KeyboardEvent) {
           :key="row.id ?? 'none'"
           role="option"
           :aria-selected="i === active"
-          class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-xs"
+          :aria-disabled="row.disabledReason ? 'true' : undefined"
+          :title="row.disabledReason"
+          class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs"
           :class="[
-            i === active ? 'bg-accent text-accent-foreground' : '',
+            row.disabledReason ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer',
+            i === active && !row.disabledReason ? 'bg-accent text-accent-foreground' : '',
             row.id === parentId ? 'font-medium' : '',
           ]"
-          @mouseenter="active = i"
+          @mouseenter="!row.disabledReason && (active = i)"
           @mousedown.prevent="pick(row)"
         >
           <span v-if="row.key" class="shrink-0 text-muted-foreground">{{ row.key }}</span>
           <span class="min-w-0 grow truncate" :title="row.label">{{ row.label }}</span>
+          <span v-if="row.disabledReason" class="shrink-0 text-muted-foreground">{{
+            row.disabledReason
+          }}</span>
         </li>
         <li v-if="matches.length === 0" class="px-2 py-1.5 text-xs text-muted-foreground">
           '{{ query.trim() }}' 이 들어간 {{ nounSubject }} 없습니다

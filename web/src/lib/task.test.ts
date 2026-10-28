@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { tasks } from '@/fixtures'
-import { parseTaskBody, statusDays, statusSinceLabel } from './task'
+import {
+  batchDepthProblems,
+  hiddenDoneIds,
+  MAX_TASK_DEPTH,
+  parseTaskBody,
+  statusDays,
+  statusSinceLabel,
+  subtreeHeights,
+  taskDepths,
+} from './task'
 
 describe('작업 내용 옮기기', () => {
   it('[] 로 시작하면 체크박스, - 로 시작하면 불릿이다', () => {
@@ -62,5 +71,74 @@ describe('상태가 된 지 며칠', () => {
     /* 기간 없는 작업은 등록 시각 */
     expect(at('k18').statusChangedAt).toBe(at('k18').createdAt)
     expect(tasks.every((t) => t.statusSinceBackfill === false)).toBe(true)
+  })
+})
+
+describe('작업 계층 깊이 (Q64)', () => {
+  const p1 = tasks.filter((t) => t.projectId === 'p1')
+
+  it('최상위가 1단 — 개발 › AI Biz › 가상비서 › tool01 이 4단이다. 시드는 4단을 넘지 않는다', () => {
+    const depths = taskDepths(p1)
+    expect([depths.k5, depths.k6, depths.k7, depths.k8]).toEqual([1, 2, 3, 4])
+    expect(Math.max(...Object.values(depths))).toBe(MAX_TASK_DEPTH)
+  })
+
+  it('하위 높이는 자기까지 센다 — 하위가 없으면 1', () => {
+    const heights = subtreeHeights(p1)
+    expect([heights.k5, heights.k7, heights.k8, heights.k4]).toEqual([4, 2, 1, 2])
+  })
+
+  it('상위가 목록에 없거나 고리가 있어도 멈춘다', () => {
+    const depths = taskDepths([
+      { id: 'a', parentId: 'gone' },
+      { id: 'b', parentId: 'c' },
+      { id: 'c', parentId: 'b' },
+    ])
+    expect(depths.a).toBe(1)
+    expect(Number.isFinite(depths.b)).toBe(true)
+  })
+
+  it('한 번에 등록에서 4단을 넘는 자리를 짚는다 — 임시 상위면 parentTempId, 있는 상위면 parentId', () => {
+    const d = (tempId: string, parentTempId: string | null, parentId: string | null = null) => ({
+      tempId,
+      parentTempId,
+      parentId,
+    })
+    expect(batchDepthProblems([d('t1', null, 'k7'), d('t2', 't1')], taskDepths(p1))).toEqual({
+      'tasks.1.parentTempId': '작업은 4단까지만 쌓을 수 있습니다.',
+    })
+    expect(batchDepthProblems([d('t1', null, 'k8')], taskDepths(p1))).toEqual({
+      'tasks.0.parentId': '작업은 4단까지만 쌓을 수 있습니다.',
+    })
+    expect(
+      batchDepthProblems([d('t1', null), d('t2', 't1'), d('t3', 't2'), d('t4', 't3')], {}),
+    ).toEqual({})
+  })
+})
+
+describe('완료 숨기기 (Q64)', () => {
+  type Node = { id: string; parentId: string | null; status: 'todo' | 'doing' | 'blocked' | 'done' }
+  const n = (id: string, parentId: string | null, status: Node['status']): Node => ({
+    id,
+    parentId,
+    status,
+  })
+
+  it('하위가 다 끝난 완료는 숨는다', () => {
+    expect(hiddenDoneIds([n('a', null, 'done'), n('b', 'a', 'done')])).toEqual(new Set(['a', 'b']))
+  })
+
+  it('안 끝난 하위가 있는 완료 상위는 위로 끝까지 남는다', () => {
+    const hidden = hiddenDoneIds([
+      n('a', null, 'done'),
+      n('b', 'a', 'done'),
+      n('c', 'b', 'doing'),
+      n('d', 'a', 'done'),
+    ])
+    expect(hidden).toEqual(new Set(['d']))
+  })
+
+  it('완료가 아니면 숨지 않는다', () => {
+    expect(hiddenDoneIds([n('a', null, 'blocked'), n('b', 'a', 'todo')]).size).toBe(0)
   })
 })

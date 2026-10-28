@@ -117,7 +117,13 @@ const options = () =>
 
 enableAutoUnmount(afterEach)
 
+/* 완료 숨기기는 처음이 켜짐이다 — 아래 검사들은 22건이 다 서는 것을 보므로 끄고 시작한다.
+   켜짐 그대로는 '완료 숨기기' 묶음이 따로 본다 */
+const HIDE_DONE_KEY = 'innoflow.tasks.hideDone'
+
 beforeEach(() => {
+  localStorage.clear()
+  localStorage.setItem(HIDE_DONE_KEY, 'off')
   setActivePinia(createPinia())
   document.body.innerHTML = ''
   chart.events = {}
@@ -569,5 +575,95 @@ describe('간트차트 탭', () => {
     expect(chart.destroyed).toBe(0)
     w.unmount()
     expect(chart.destroyed).toBe(1)
+  })
+})
+
+describe('완료 숨기기 (Q64)', () => {
+  /* 이 묶음은 처음 그대로(켜짐)에서 본다 */
+  beforeEach(() => localStorage.clear())
+
+  const toggle = (w: Awaited<ReturnType<typeof mountView>>) => w.find('[data-hide-done]')
+  const hiddenNote = (w: Awaited<ReturnType<typeof mountView>>) => w.find('[data-hidden-done]')
+
+  it('처음은 켜짐 — 목록에서 완료 셋이 숨고 그 수를 적는다', async () => {
+    const w = await mountView()
+    expect(toggle(w).attributes('data-state')).toBe('checked')
+    expect(w.text()).toContain('총 19건 중 1–8건')
+    expect(hiddenNote(w).text()).toBe('완료 3건 숨김')
+    /* 상태 칩의 수 · 간트의 'N / 22 완료' 같은 집계는 숨긴 것도 센다 */
+    const chips = w.findAll('button').map((b) => b.text())
+    expect(chips.some((t) => t.startsWith('완료') && t.endsWith('3'))).toBe(true)
+  })
+
+  it('간트도 같은 값을 따른다 — 완료 줄이 빠진다', async () => {
+    const w = await mountView('/tasks')
+    expect(chart.parsed).toHaveLength(19)
+    expect(chart.parsed.some((t) => t.key === 'HW-8')).toBe(false)
+    expect(hiddenNote(w).text()).toBe('완료 3건 숨김')
+    expect(w.text()).toContain('3 / 22 완료')
+  })
+
+  it('안 끝난 하위가 있는 완료 상위는 남아 트리를 잇는다', async () => {
+    const taskStore = useTaskStore()
+    /* 설계(HW-1)를 완료로 — 아래의 프로그램 설계(HW-3)가 아직 진행 중이다 */
+    taskStore.setStatus('k1', 'done')
+    await mountView('/tasks')
+    expect(chart.parsed.find((t) => t.key === 'HW-1')).toBeTruthy()
+    expect(chart.parsed.find((t) => t.key === 'HW-3')!.parent).toBe('k1')
+    expect(chart.parsed.some((t) => t.key === 'HW-2')).toBe(false)
+  })
+
+  it('끄면 다 보이고, 바꾼 값을 브라우저에 기억한다', async () => {
+    const w = await mountView()
+    await toggle(w).trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('총 22건 중 1–8건')
+    expect(hiddenNote(w).exists()).toBe(false)
+    expect(localStorage.getItem('innoflow.tasks.hideDone')).toBe('off')
+
+    /* 새로 열어도(스토어를 새로 세워도) 꺼진 채다 */
+    setActivePinia(createPinia())
+    const again = await mountView('/tasks')
+    expect(chart.parsed).toHaveLength(22)
+    expect(toggle(again).attributes('data-state')).toBe('unchecked')
+  })
+
+  it("상태로 '완료' 를 고르면 그쪽이 이긴다 — 빈 표가 되지 않는다", async () => {
+    const w = await mountView()
+    const doneChip = w.findAll('button').find((b) => b.text().startsWith('완료'))!
+    await doneChip.trigger('click')
+    expect(w.findAll('tbody tr')).toHaveLength(3)
+    expect(toggle(w).attributes('disabled')).toBeDefined()
+    expect(hiddenNote(w).exists()).toBe(false)
+  })
+
+  it('칸반에는 없다 — 완료 칸이 따로 있다', async () => {
+    const w = await mountView('/tasks?view=board')
+    expect(toggle(w).exists()).toBe(false)
+  })
+})
+
+describe('4단 제한 (Q64)', () => {
+  it('4단 작업의 상세에는 하위 작업 추가 대신 이유가 선다', async () => {
+    await mountView('/tasks/k9?view=list')
+    expect(popupButton('하위 작업 추가')).toBeUndefined()
+    expect(popupText()).toContain('작업은 4단까지라 이 밑에는 하위 작업을 더 둘 수 없습니다.')
+  })
+
+  it('주소로 4단 작업 밑에 추가하러 와도 만들기가 막힌다', async () => {
+    await mountView('/tasks/new?parent=k9&view=list')
+    expect(popupText()).toContain('작업은 4단까지만 쌓을 수 있습니다.')
+    expect(popupButton('만들기')!.hasAttribute('disabled')).toBe(true)
+  })
+
+  it("간트의 4단 줄은 '+' 를 숨기고, 눌려도 받지 않는다", async () => {
+    await mountView('/tasks')
+    expect((chart.parsed.find((t) => t.key === 'HW-9') as { noAdd?: boolean }).noAdd).toBe(true)
+    expect(
+      (chart.parsed.find((t) => t.key === 'HW-7') as { noAdd?: boolean }).noAdd,
+    ).toBeUndefined()
+    expect(chart.events.onTaskCreated({ parent: 'k9' })).toBe(false)
+    await flushPromises()
+    expect(window.location.pathname).toBe('/tasks')
   })
 })

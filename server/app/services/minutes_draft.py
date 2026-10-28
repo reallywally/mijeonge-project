@@ -93,7 +93,8 @@ propose_minutes 로 낸다. 너는 아무것도 저장하지 못한다 — 사�
    말하지 않은 기한은 채우지 않는다(null). 작업 우선순위는 말하지 않았으면 normal
 10. summary 는 회의 요약 서너 줄. 한국어로 짧게
 11. temp_id 는 새 안건 n1, n2 …, 이력 e1, e2 …, 작업 t1, t2 … — 초안 안에서 서로 다르다.
-    작업의 상위는 같은 초안의 앞 작업(parent_temp_id)이다. 이미 있는 작업 밑에 붙일 때만 parent_id
+    작업의 상위는 같은 초안의 앞 작업(parent_temp_id)이다. 이미 있는 작업 밑에 붙일 때만 parent_id.
+    작업은 4단까지다(최상위가 1단)
 12. 개수: 새 안건 {threads_max}개 · 이력 {entries_max}개 · 작업 {tasks_max}개까지
 13. 정리할 것이 하나도 없으면 threads · entries · tasks 를 모두 빈 배열로 해서
     propose_minutes 를 부른다
