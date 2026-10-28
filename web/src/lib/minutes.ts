@@ -95,7 +95,7 @@ export const outcomeCount = (o: MinutesOutcome) =>
 
 /**
  * apply 의 검사 규칙 중 DB 를 안 보는 것 — 어긋난 자리를 `threads.0.title` 처럼 한 번에 모은다(422 detail).
- * 안건 · 담당자 · 연관 작업이 있는지는 목업 api 가 데이터를 보고 따로 본다
+ * 안건 · 담당자 · 상위 작업이 있는지는 목업 api 가 데이터를 보고 따로 본다
  */
 export function minutesApplyProblems(input: MinutesApplyInput): Record<string, string> {
   const detail: Record<string, string> = {}
@@ -140,15 +140,21 @@ export function minutesApplyProblems(input: MinutesApplyInput): Record<string, s
   })
 
   const newThreads = new Set(threads.map((t) => t.tempId))
+  const earlier = new Set<string>()
   tasks.forEach((t, i) => {
     const at = `tasks.${i}`
     claim(at, t.tempId)
+    if (t.parentTempId !== null && !earlier.has(t.parentTempId))
+      detail[`${at}.parentTempId`] = '상위 작업은 이 작업보다 앞에 있어야 합니다.'
+    if (t.parentTempId !== null && t.parentId !== null)
+      detail[`${at}.parentId`] = '상위는 parentTempId 와 parentId 중 하나만 둡니다.'
     if (!t.title.trim()) detail[`${at}.title`] = '제목을 적어 주세요.'
     if (t.start && t.due && t.start > t.due) detail[`${at}.due`] = '마감이 시작보다 빠릅니다.'
     t.threadTempIds.forEach((tempId, j) => {
       if (!newThreads.has(tempId))
         detail[`${at}.threadTempIds.${j}`] = '이 초안의 새 안건이 아닙니다.'
     })
+    earlier.add(t.tempId)
   })
   return detail
 }
@@ -168,7 +174,8 @@ function plainBody(e: ProposedEntryBody): ProposedEntryBody {
 }
 
 /**
- * 고른 줄만 apply 모양으로. 빠진 새 안건을 가리키는 threadTempIds 는 지운다(남아 있으면 422)
+ * 고른 줄만 apply 모양으로. 빠진 새 안건을 가리키는 threadTempIds 는 지운다(남아 있으면 422).
+ * 상위 작업이 빠진 작업은 최상위로 들어간다 — parentTempId 가 보내지 않는 줄을 가리키면 422 다
  */
 export function toMinutesApplyInput(
   form: Pick<MinutesDraft, 'summary' | 'threads' | 'entries' | 'tasks'>,
@@ -192,12 +199,15 @@ export function toMinutesApplyInput(
     .filter((e) => on(e.tempId))
     .map((e) => ({ ...plainBody(e), tempId: e.tempId, threadId: e.threadId, quote: e.quote }))
   const kept = new Set(threads.map((t) => t.tempId))
+  const sentTasks = new Set<string>()
   const tasks: ProposedMinutesTask[] = []
   for (const t of form.tasks) {
     if (!on(t.tempId)) continue
     tasks.push({
       tempId: t.tempId,
-      relatedId: t.relatedId,
+      parentTempId:
+        t.parentTempId !== null && sentTasks.has(t.parentTempId) ? t.parentTempId : null,
+      parentId: t.parentId,
       title: t.title,
       ownerId: t.ownerId,
       ownerHint: hintOf(t.ownerId, t.ownerHint),
@@ -208,6 +218,7 @@ export function toMinutesApplyInput(
       threadIds: [...t.threadIds],
       quote: t.quote,
     })
+    sentTasks.add(t.tempId)
   }
   return { summary: form.summary, threads, entries, tasks }
 }

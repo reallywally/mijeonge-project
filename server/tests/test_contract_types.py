@@ -325,7 +325,8 @@ async def test_check_responses_match_contract(client: AsyncClient) -> None:
 # `MinutesEvent` 는 union 이라 여기서 못 읽는다 — test_minutes 가 본다
 _PROPOSED_TASK = {
     "tempId",
-    "relatedId",
+    "parentTempId",
+    "parentId",
     "title",
     "ownerId",
     "start",
@@ -372,7 +373,7 @@ MINUTES_NULLABLE: dict[str, set[str]] = {
     "ProposedThread": {"ownerId", "dueDate", "entry"},
     "ProposedEntryBody": {"ownerId"},
     "ProposedEntry": {"ownerId"},
-    "ProposedMinutesTask": {"relatedId", "ownerId", "start", "due"},
+    "ProposedMinutesTask": {"parentTempId", "parentId", "ownerId", "start", "due"},
 }
 
 
@@ -493,7 +494,7 @@ REPORT_INLINE: dict[str, set[str]] = {
     },
     "previous": {"reportId", "periodEnd", "doneRate", "blocked"},
     "decisions": {"decidedThreadIds", "deferredThreadIds", "riskyThreadIds"},
-    "weight": {"openLines", "totalLines", "threadCount", "priority"},
+    "weight": {"openChildren", "openLines", "totalLines", "threadCount", "priority"},
 }
 
 

@@ -131,10 +131,10 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
     expect(document.body.querySelector('[aria-label="파트"]')!.textContent).toContain('AI')
   })
 
-  it('작업 추가는 파트가 공통으로 열리고, 그대로 만들면 공통이다 — 따를 상위가 없다 (Q61)', async () => {
+  it('하위 작업 추가는 상위의 파트가 골라진 채 열리고, 그대로 만들어진다', async () => {
     await signedIn('u1@innoflow.local')
-    await mountAt('/tasks/new')
-    expect(document.body.querySelector('[aria-label="파트"]')!.textContent).toContain('공통')
+    await mountAt('/tasks/new?parent=k7')
+    expect(document.body.querySelector('[aria-label="파트"]')!.textContent).toContain('AI')
 
     const title = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="제목"]')!
     title.value = 'tool05'
@@ -142,8 +142,8 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
     await flushPromises()
     await click(bodyButton('만들기'))
     const made = useDataStore().allTasks.find((t) => t.title === 'tool05')!
-    expect(made.relatedIds).toEqual([])
-    expect(made.partId).toBeNull()
+    expect(made.parentId).toBe('k7')
+    expect(made.partId).toBe('pt2')
   })
 })
 

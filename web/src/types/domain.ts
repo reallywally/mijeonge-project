@@ -254,8 +254,9 @@ export interface ThreadDetail {
 /**
  * 작업(task) — memo 의 네 번째 엔티티.
  *
- * 평평하다 — 계층 대신 한 방향 '연관 작업'(relatedIds)을 여럿 건다(Q61). 목록 · 칸반 · 간트 모두
- * 한 줄에 하나씩 놓는다. start · due 가 둘 다 null 이면 기간 미정이라 간트에 막대가 없다(unscheduled).
+ * 계층으로 쌓이지만 목록은 펼치지 않고 한 줄에 하나씩 놓는다(경로는 제목 아래 회색 글씨).
+ * 계층째로 보는 건 간트차트가 맡는다. start · due 가 둘 다 null 이면 기간 미정이라
+ * 간트에 막대가 없다(unscheduled).
  */
 
 export type TaskStatus =
@@ -282,8 +283,7 @@ export interface Task {
   /** 화면에 보이는 번호 — HW-4 */
   key: string
   title: string
-  /** 이 작업이 건 연관 작업 id — 건 순서. 한 방향이라 걸린 쪽에는 안 보인다 (Q61) */
-  relatedIds: string[]
+  parentId: string | null
   body: TaskLine[]
   status: TaskStatus
   ownerId: string | null
@@ -291,7 +291,7 @@ export interface Task {
   start: string | null
   due: string | null
   priority: TaskPriority
-  /** 속한 파트. null 은 프로젝트 공통 */
+  /** 속한 파트. null 은 프로젝트 공통. 계층과 따로 간다 — 상위를 바꿔도 안 따라 바뀐다 */
   partId: string | null
   createdAt: string
   /** 댓글 수. 본문은 스냅샷에 없어 상세를 열 때 따로 받는다 */
@@ -320,7 +320,7 @@ export interface TaskComment {
 export interface HistoryChange {
   /** '칸' 표의 이름 — created · status · ownerId · lineDone · taskRef … */
   field: string
-  /** 바뀌기 전 값. 없던 값(담당자 없음 · 기간 미정 · 새로 건 태그)은 null. 연관 작업(relatedIds)은 id 배열 */
+  /** 바뀌기 전 값. 없던 값(담당자 없음 · 기간 미정 · 새로 건 태그)은 null. 지난 연관 작업(relatedIds) 줄은 id 배열 */
   from: string | number | boolean | string[] | null
   /** 바뀐 뒤 값. 비운 값 · 뗀 태그는 null */
   to: string | number | boolean | string[] | null
@@ -384,28 +384,31 @@ export interface DependencySuggestion {
   reason: string
 }
 
-/** 작업 목록 한 행 */
+/** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
 export interface TaskRow {
   task: Task
   ownerName: string | null
-  /** 건 연관 작업의 키 — '연관 HW-3, HW-7'. 없으면 '' */
-  relatedLabel: string
+  /** 개발 › AI Biz › 가상비서 · 하위 2건 / 또는 '최상위 작업' */
+  pathLabel: string
   /** 9/8 ~ 9/15 또는 '' (기간 미정) */
   periodLabel: string
   /** 기간이 안 잡혔는가 — 간트에 막대가 없는 작업 */
   undated: boolean
   threadCount: number
+  childCount: number
 }
 
 /** 작업 하나 보기 */
 export interface TaskDetail {
   task: Task
   ownerName: string | null
+  pathLabel: string
   periodLabel: string
-  /** 이 작업이 건 연관 작업 — 건 순서. 지금 프로젝트에 없는 id 는 빠진다 */
-  related: TaskRow[]
+  parent: Task | null
+  children: TaskRow[]
   /** 이 작업을 하다가 정해야 했던 것들 */
   threads: TaskThreadRow[]
+  doneChildCount: number
   /** 이 작업의 선행 작업 */
   dependsOn: Task[]
   /** 이 작업을 선행으로 둔 작업 — 읽기만 한다 */
@@ -426,6 +429,7 @@ export interface TaskThreadRow {
 /** 작업을 새로 만들 때 화면이 넘기는 것 */
 export interface TaskInput {
   title: string
+  parentId: string | null
   body: TaskLine[]
   status: TaskStatus
   ownerId: string | null
@@ -433,7 +437,7 @@ export interface TaskInput {
   due: string | null
   priority: TaskPriority
   threadIds: string[]
-  /** 안 보내거나 null 이면 공통 (Q61 — 상위를 따르는 규칙은 없어졌다) */
+  /** **안 보내면 상위 작업의 파트를 따른다**(최상위면 공통). null 을 보내면 공통이다 */
   partId?: string | null
 }
 
@@ -443,15 +447,14 @@ export interface TaskInput {
  */
 export interface TaskPatch {
   title?: string
-  /** 통째로 갈아끼운다. [] 는 비우기. 중복은 한 번, 20개까지 (Q61) */
-  relatedIds?: string[]
+  parentId?: string | null
   status?: TaskStatus
   ownerId?: string | null
   start?: string | null
   due?: string | null
   priority?: TaskPriority
   body?: TaskLine[]
-  /** null 로 공통 */
+  /** null 로 공통. 하위 작업은 따라 바뀌지 않는다 */
   partId?: string | null
 }
 
@@ -517,15 +520,17 @@ export interface ChatMessage {
 
 /** 챗봇이 낸 작업 초안 — 사람이 [등록] 을 눌러야 저장된다 (API.md '## AI 챗봇 — 작업 초안') */
 export interface TaskProposal {
-  /** 배열 순서 = 등록 순서 = 화면 순서. 초안끼리 묶음은 없다 — 평평한 목록 */
+  /** 배열 순서 = 등록 순서 = 화면 순서. 상위가 늘 하위보다 앞이다 */
   tasks: ProposedTask[]
 }
 
 export interface ProposedTask {
   /** 이 초안 안에서만 쓰는 임시 이름 — 't1', 't2' … */
   tempId: string
-  /** 이미 있는 작업과 관련된 초안이면 그 작업 id — 등록하면 새 작업이 그 작업을 연관으로 건다 */
-  relatedId: string | null
+  /** 같은 초안 안의 상위 작업 */
+  parentTempId: string | null
+  /** 이미 있는 작업 밑에 붙일 때 그 작업의 id. parentTempId 와 같이 쓰지 않는다 */
+  parentId: string | null
   title: string
   ownerId: string | null
   /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */
@@ -667,7 +672,7 @@ export interface ThreadRisk {
   blockedTaskIds: string[]
   /** 아직 안 막혔지만 이 결정을 기다리는 연결 작업(해야 할 일 · 진행 중) */
   waitingTaskIds: string[]
-  /** 막힌 연결 작업 중 완료가 아닌 것의 수 */
+  /** 막힌 연결 작업과 그 하위 중 완료가 아닌 것의 수 (중복 없이) */
   impactTaskCount: number
   /** 연결된 작업(완료 제외) 중 가장 이른 기한 */
   nearestTaskDue: string | null
@@ -920,6 +925,8 @@ export interface TaskAttention {
   blockingTaskIds: string[]
   /** 무게 — Claude 가 '어려운가' 를 판단하는 재료 */
   weight: {
+    /** 완료 아닌 하위 작업 수 (자손 전부) */
+    openChildren: number
     /** 본문 체크리스트 중 안 끝난 줄 · 전체 줄 */
     openLines: number
     totalLines: number

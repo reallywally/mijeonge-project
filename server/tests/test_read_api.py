@@ -38,7 +38,7 @@ TASK_KEYS = {
     "projectId",
     "key",
     "title",
-    "relatedIds",
+    "parentId",
     "body",
     "status",
     "ownerId",

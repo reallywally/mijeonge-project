@@ -22,7 +22,7 @@
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
 | `docs/api/check.md` | 확인 요청 — 결정된 안건에서 버튼 하나로 연결 작업 담당자 + 참조에게 · 받은 것 / 보낸 것 · 배지. 안건의 참조(`ccIds`). 2차 확인율 분석의 테두리 |
 | `docs/api/minutes.md` | 회의록 — 게시판(쓰기 · 읽기 · 고치기 · 지우기) · 회의록 하나 → 새 안건 · 기존 안건 이력 · 작업 초안(SSE) → 고른 것만 한 번에 등록, 출처 `minutesId`. 2단계 녹음 업로드의 테두리 |
-| `docs/api/task-flow.md` | 선행 작업(사람이 지정 · AI 제안 → [적용]) · 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕 · 연관 작업(`Task.relatedIds`, 한 방향, 작업 계층을 대신한다 — Q61) |
+| `docs/api/task-flow.md` | 선행 작업(사람이 지정 · AI 제안 → [적용]) · 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕 |
 | `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
 | `docs/api/test.md` | 테스트 — 작업과 따로 두는 기능 · 시나리오 테스트(단계는 행동 ↔ 기대 결과 짝 · 상위 테스트 묶음 · 작업 · 안건 참조 태그) · 상태와 N일째 · 손쓸 테스트 신호 · 기준 바뀜. 1단계(AI 없이)의 계약, AI 는 테두리만 |
 | `docs/api/history.md` | 변경 이력 — 작업 · 테스트를 누가 언제 무엇을 바꿨나(요청 하나 = 한 줄, 칸마다 전 · 후). 상세에서 보인다. `task_log` 와 따로 |
@@ -75,7 +75,7 @@
 | 상태 | `code` | 언제 |
 | --- | --- | --- |
 | 404 | `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `TASK_LINE_NOT_FOUND` | 경로가 가리키는 것이 없을 때 |
-| 400 | `TASK_RELATED_SELF` · `TASK_RELATED_NOT_FOUND` | 연관 작업(`relatedIds` · 초안의 `relatedId`)이 자기 자신이거나, 없거나 다른 프로젝트에 있을 때 (Q61). 작업 계층(`TASK_PARENT_*`)은 2026-10-27 에 걷었다 |
+| 400 | `TASK_PARENT_SELF` · `TASK_PARENT_NOT_FOUND` · `TASK_PARENT_OTHER_PROJECT` · `TASK_PARENT_DESCENDANT` | 상위 작업이 고리를 만들거나 다른 프로젝트에 있을 때 (Q16) |
 | 400 | `THREAD_PARENT_NOT_FOUND` · `THREAD_PARENT_OTHER_PROJECT` | 상위 안건이 없거나 다른 프로젝트에 있을 때 (Q16) |
 | 400 | `TASK_THREAD_LINK_OTHER_PROJECT` | 링크가 프로젝트를 넘으려 할 때 (Q13) |
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
@@ -111,8 +111,8 @@
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 연결 |
-| POST | `/api/projects/{projectId}/tasks/batch` | 챗봇 초안을 한 번에 등록 — **한 트랜잭션**, `tempId` → 실제 id 치환, `key` 는 배열 순서대로 발번. 검사 규칙 위반은 422(`detail` 에 `tasks.1.title`), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`, 없는 연관 작업(`relatedId`)은 400 `TASK_RELATED_NOT_FOUND` (`docs/api/chat.md` '작업 초안') | `TaskBatchResult` · 201 | 구현 (2026-10-27 고침 — Q61) |
-| PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 우선순위 · **연관 작업** · **본문** 부분 수정. `relatedIds` 는 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422, 중복은 한 번, 20개까지 — Q61 · `docs/api/task-flow.md` '연관 작업'). `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 구현 (2026-10-27 고침 — Q61, 프론트 연결 대기) |
+| POST | `/api/projects/{projectId}/tasks/batch` | 챗봇 초안을 한 번에 등록 — **한 트랜잭션**, `tempId` → 실제 id 치환, `key` 는 배열 순서대로 발번. 검사 규칙 위반은 422(`detail` 에 `tasks.1.parentTempId`), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND` (`docs/api/chat.md` '작업 초안') | `TaskBatchResult` · 201 | 구현 |
+| PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 연결 |
 | PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 연결 |
 | PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 연결 |
 | POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` · `ccIds`(참조, `check.md`) 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 연결 |
@@ -190,7 +190,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| PUT · DELETE | `/api/tasks/{taskId}/dependencies/{dependsOnId}` | 선행 작업 걸기 · 떼기 (멱등). 자기 400, 순환 409, 20개까지 | `TaskDependency` · 204 | 구현 |
+| PUT · DELETE | `/api/tasks/{taskId}/dependencies/{dependsOnId}` | 선행 작업 걸기 · 떼기 (멱등). 자기 · 상위 ↔ 하위 400, 순환 409, 20개까지 | `TaskDependency` · 204 | 구현 |
 | POST | `/api/projects/{projectId}/dependencies/suggest` | AI 가 빠진 선행 관계를 이유와 함께 제안 — 저장하지 않는다 | `DependencySuggestions` | 구현 |
 
 프로젝트 진행 리포트(왼쪽 메뉴 '리포트', `server/PLAN.md` 14단계 · `web/PLAN.md` 15단계). 모양은 `docs/api/report.md` 다. 결정은 Q49 ~ Q51.
@@ -224,7 +224,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q62).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q60).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

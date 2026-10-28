@@ -38,8 +38,8 @@ SYSTEM_PROMPT = """\
 
 ## 받는 것
 사용자 메시지의 JSON 하나다.
-- tasks: 아직 안 끝난 작업. key(HW-4) · title · related(이 작업이 건 연관 작업의 key 목록) ·
-  status · start · due · body(본문 앞 몇 줄) · threads(걸린 안건 제목)
+- tasks: 아직 안 끝난 작업. key(HW-4) · title · parent(상위 작업의 key) · status · start · due ·
+  body(본문 앞 몇 줄) · threads(걸린 안건 제목)
 - existing: 이미 걸린 선행 관계. task 가 dependsOn 을 기다린다
 
 ## 답의 모양
@@ -53,7 +53,7 @@ JSON 하나만 쓴다. 앞뒤에 설명 · 마크다운 · 코드 블록 표시�
 ## 규칙
 1. 근거가 약하면 내지 않는다. 제목 · 본문 · 기간에서 이유를 한 문장으로 댈 수 있는 것만 낸다.
    기간이 앞뒤라는 것만으로는 선후가 아니다
-2. related 는 '이어진 일' 일 뿐 선후가 아니다 — related 라는 것만으로 선후를 내지 않는다
+2. 상위 · 하위 작업 사이는 선후가 아니다 — 하위는 상위의 일부다. 내지 않는다
 3. existing 에 있는 관계 · 그 반대 방향 · 순환이 되는 관계는 내지 않는다
 4. 가장 확실한 것부터 최대 {limit}개
 """
@@ -123,7 +123,7 @@ async def build_context(session: AsyncSession, project_id: str) -> tuple[dict[st
                 {
                     "key": task.key,
                     "title": task.title,
-                    "related": [keys[id_] for id_ in task.related_ids if id_ in keys],
+                    "parent": keys.get(task.parent_id) if task.parent_id else None,
                     "status": task.status,
                     "start": task.start.isoformat() if task.start else None,
                     "due": task.due.isoformat() if task.due else None,

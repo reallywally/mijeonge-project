@@ -53,10 +53,15 @@ describe('목업 갈래', () => {
     expect(await putTaskDependency('k20', 'k19')).toEqual({ taskId: 'k20', dependsOnId: 'k19' })
   })
 
-  it('자기 자신은 400 TASK_DEPENDENCY_SELF — 연관으로 건 작업끼리는 걸린다 (Q61)', async () => {
-    const e = await failure(putTaskDependency('k20', 'k20'))
-    expect([e.status, e.code]).toEqual([400, 'TASK_DEPENDENCY_SELF'])
-    expect(await putTaskDependency('k20', 'k4')).toEqual({ taskId: 'k20', dependsOnId: 'k4' })
+  it('상위 ↔ 하위 · 자기 자신은 400 TASK_DEPENDENCY_HIERARCHY', async () => {
+    for (const [a, b] of [
+      ['k20', 'k4'],
+      ['k4', 'k20'],
+      ['k20', 'k20'],
+    ]) {
+      const e = await failure(putTaskDependency(a, b))
+      expect([e.status, e.code]).toEqual([400, 'TASK_DEPENDENCY_HIERARCHY'])
+    }
   })
 
   it('몇 단계를 건너 순환이 되면 409 TASK_DEPENDENCY_CYCLE', async () => {
@@ -68,7 +73,7 @@ describe('목업 갈래', () => {
     const extra = Array.from({ length: 20 }, (_, i) => ({
       ...tasks[0],
       id: `z${i}`,
-      relatedIds: [],
+      parentId: null,
     }))
     provideMockWorld(() =>
       world(
@@ -80,9 +85,9 @@ describe('목업 갈래', () => {
     expect([e.status, e.code]).toEqual([400, 'TASK_DEPENDENCY_LIMIT'])
   })
 
-  it('이미 걸린 관계는 검사 없이 200 — 지금은 순환이 되는 관계라도', async () => {
-    provideMockWorld(() => world([...taskDependencies, { taskId: 'k19', dependsOnId: 'k21' }]))
-    expect(await putTaskDependency('k19', 'k21')).toEqual({ taskId: 'k19', dependsOnId: 'k21' })
+  it('이미 걸린 관계는 검사 없이 200 — 상위를 바꿔 지금은 상하위가 된 관계라도', async () => {
+    provideMockWorld(() => world([...taskDependencies, { taskId: 'k20', dependsOnId: 'k4' }]))
+    expect(await putTaskDependency('k20', 'k4')).toEqual({ taskId: 'k20', dependsOnId: 'k4' })
   })
 
   it('다른 프로젝트의 작업끼리는 404 TASK_NOT_FOUND', async () => {

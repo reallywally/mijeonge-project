@@ -26,7 +26,6 @@ from app.models import (
     Member,
     Task,
     TaskLine,
-    TaskRelation,
     TaskThreadLink,
     Thread,
     ThreadOption,
@@ -342,30 +341,18 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
         .where(TaskThreadLink.task_id == task.id, TaskThreadLink.project_id == project_id)
         .order_by(Thread.seq)
     )
-    # 연관 줄은 같은 프로젝트에서만 서지만(복합 FK) 도구 안에서도 project_id 로 한 번 더 거른다
-    related = await session.execute(
+    children = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
-        .join(TaskRelation, TaskRelation.related_id == Task.id)
-        .where(TaskRelation.task_id == task.id, Task.project_id == project_id)
-        .order_by(TaskRelation.created_at, TaskRelation.related_id)
-    )
-    related_by = await session.execute(
-        select(Task.id, Task.key, Task.title, Task.status)
-        .join(TaskRelation, TaskRelation.task_id == Task.id)
-        .where(TaskRelation.related_id == task.id, Task.project_id == project_id)
+        .where(Task.parent_id == task.id, Task.project_id == project_id)
         .order_by(Task.seq)
     )
     return TaskDoc(
         task=to_task(
             task, await comment_count(session, task.id), await status_since(session, task)
         ),
-        related=[
+        children=[
             LinkedTask(id=id_, key=key, title=title, status=status)
-            for id_, key, title, status in related.all()
-        ],
-        related_by=[
-            LinkedTask(id=id_, key=key, title=title, status=status)
-            for id_, key, title, status in related_by.all()
+            for id_, key, title, status in children.all()
         ],
         threads=[
             LinkedThread(id=id_, title=title, state=state) for id_, title, state in threads.all()
@@ -379,7 +366,7 @@ def _brief(task: Task, key_of: dict[str, str], name_of: dict[str, str]) -> TaskB
         key=task.key,
         title=task.title,
         status=task.status,
-        related_keys=[key_of[id_] for id_ in task.related_ids if id_ in key_of],
+        parent_key=key_of.get(task.parent_id) if task.parent_id else None,
         owner=name_of.get(task.owner_id) if task.owner_id else None,
     )
 
@@ -405,7 +392,7 @@ async def list_tasks(
         .scalars()
         .all()
     )
-    # 연관 키는 거르기 전 전체에서 찾는다 — 연관 작업이 다른 상태여도 이름이 보이게
+    # 상위 키는 거르기 전 전체에서 찾는다 — 상위가 다른 상태여도 이름이 보이게
     key_of = {t.id: t.key for t in tasks}
     picked = [t for t in tasks if status is None or t.status == status][: TASK_LIST_MAX + 1]
     name_of = await _owner_names(session, picked)
@@ -477,9 +464,11 @@ async def similar_tasks(
     pairs: list[SimilarPair] = []
     for a_id, b_id, t_score, d_score in rows:
         x, y = by_id[a_id], by_id[b_id]
-        relation: Literal["related"] | None = None
-        if y.id in x.related_ids or x.id in y.related_ids:
-            relation = "related"
+        relation: Literal["parent_child", "siblings"] | None = None
+        if x.parent_id == y.id or y.parent_id == x.id:
+            relation = "parent_child"
+        elif x.parent_id is not None and x.parent_id == y.parent_id:
+            relation = "siblings"
         pairs.append(
             SimilarPair(
                 a=_brief(x, key_of, name_of),

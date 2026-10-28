@@ -298,10 +298,8 @@ async def test_details_for_top_eight(client: httpx.AsyncClient) -> None:
     k4 = next(d for d in details if d["id"] == "k4")
     checks = [line for line in k4["body"] if line["kind"] == "check"]
     assert checks and all(isinstance(line["done"], bool) for line in checks)
-    # 하위 작업 대신 이 작업이 건 연관 작업 (Q61) — k4 는 건 것이 없고, k22 는 k4 를 걸었다
-    assert "children" not in k4 and k4["related"] == []
-    k22 = next(d for d in details if d["id"] == "k22")
-    assert [(c["key"], c["status"]) for c in k22["related"]] == [("HW-4", "doing")]
+    assert [c["key"] for c in k4["children"]] == ["HW-19", "HW-20", "HW-21", "HW-22"]
+    assert {c["status"] for c in k4["children"]} == {"done", "doing", "todo", "blocked"}
     threads = {t["id"]: t for t in k4["threads"]}
     assert set(threads) == {"t1", "t2"}
     last = threads["t2"]["lastEntry"]

@@ -30,19 +30,23 @@ HISTORY_CHANGES = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Task(Base):
-    """평평하다 — 계층 대신 한 방향 연관 작업(`TaskRelation`)을 건다 (Q61).
-    start · due 가 둘 다 null 이면 기간 미정(간트에 막대가 없다)."""
+    """계층으로 쌓인다. start · due 가 둘 다 null 이면 기간 미정(간트에 막대가 없다)."""
 
     __tablename__ = "task"
     __table_args__ = (
         CheckConstraint(f"status in {TASK_STATUSES}", name="status"),
         CheckConstraint(f"priority in {TASK_PRIORITIES}", name="priority"),
+        # 자기 자신을 부모로 두는 것만 DB 가 막는다. 더 긴 고리는 서비스가 막는다
+        CheckConstraint("parent_id is null or parent_id <> id", name="parent_not_self"),
         UniqueConstraint("project_id", "key"),
-        # 링크 · 선행 · 연관이 같은 프로젝트에서만 서게 복합 FK 가 참조할 유니크 (API.md Q13 · Q16)
+        # 부모는 같은 프로젝트여야 한다 (API.md Q16) — 복합 FK 가 참조할 유니크가 필요하다.
+        # 넘어가면 화면에 에러가 안 뜨고 계층만 조용히 틀어진다
         UniqueConstraint("id", "project_id"),
+        ForeignKeyConstraint(["parent_id", "project_id"], ["task.id", "task.project_id"]),
         # 파트도 같은 프로젝트의 것만 단다 (docs/api/part.md)
         ForeignKeyConstraint(["part_id", "project_id"], ["part.id", "part.project_id"]),
         Index("ix_task_project_id_status", "project_id", "status"),
+        Index("ix_task_parent_id", "parent_id"),
         trgm_index("task", "title"),
     )
 
@@ -51,12 +55,14 @@ class Task(Base):
     # 화면에 보이는 번호 — HW-4
     key: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(Text)
+    # FK 는 위의 복합 FK 하나뿐이다 — 부모 id 만으로는 프로젝트를 못 지킨다
+    parent_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="todo")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     start: Mapped[date | None] = mapped_column(Date)
     due: Mapped[date | None] = mapped_column(Date)
     priority: Mapped[str] = mapped_column(String(16), default="normal")
-    # null 이면 프로젝트 공통 (docs/api/part.md)
+    # null 이면 프로젝트 공통. 계층과 떼어 둔다 — 상위의 파트를 바꿔도 하위는 그대로다
     part_id: Mapped[str | None] = mapped_column(String(36))
     # AI 정리로 [등록] 했으면 그 회의록. 회의록을 지우면 비고 줄은 남는다 (docs/api/minutes.md)
     minutes_id: Mapped[str | None] = mapped_column(
@@ -73,19 +79,6 @@ class Task(Base):
         order_by="TaskLine.sort_order",
         lazy="selectin",
     )
-    # 이 작업이 건 연관 작업 — 건 순서. 걸린 쪽에서는 안 보인다(한 방향, Q61)
-    relations: Mapped[list["TaskRelation"]] = relationship(
-        primaryjoin="Task.id == TaskRelation.task_id",
-        foreign_keys="TaskRelation.task_id",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-        order_by="(TaskRelation.created_at, TaskRelation.related_id)",
-        lazy="selectin",
-    )
-
-    @property
-    def related_ids(self) -> list[str]:
-        return [relation.related_id for relation in self.relations]
 
 
 class TaskLine(Base):
@@ -131,32 +124,6 @@ class TaskThreadLink(Base):
     project_id: Mapped[str] = mapped_column(String(36))
 
 
-class TaskRelation(Base):
-    """연관 작업 — `task_id` 가 `related_id` 를 건다. 한 방향이다 (Q61 · docs/api/task-flow.md).
-
-    링크와 같이 같은 프로젝트 안에서만 선다 — 복합 FK 둘. 어느 쪽이 지워져도 줄이 같이 지워진다.
-    """
-
-    __tablename__ = "task_relation"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
-        ),
-        ForeignKeyConstraint(
-            ["related_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
-        ),
-        CheckConstraint("task_id <> related_id", name="not_self"),
-        # '나를 건 작업'(챗봇 get_task 의 relatedBy) · cascade 가 걸린 쪽으로 줄을 찾는다
-        Index("ix_task_relation_related_id", "related_id"),
-        Index("ix_task_relation_project_id", "project_id"),
-    )
-
-    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    related_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(36))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
 class TaskComment(Base):
     """작업에 붙는 댓글. 작업을 지우면 같이 지워진다.
 
@@ -182,7 +149,7 @@ class TaskDependency(Base):
     """선행 작업 — `task_id` 를 하려면 `depends_on_id` 가 먼저 (docs/api/task-flow.md).
 
     링크와 같이 같은 프로젝트 안에서만 선다 — 복합 FK 둘. 막지 않는다: 선행이 안 끝나도
-    뒤 작업을 시작 · 완료할 수 있다. 순환은 서비스가 막는다.
+    뒤 작업을 시작 · 완료할 수 있다. 상하위 · 순환은 서비스가 막는다.
     """
 
     __tablename__ = "task_dependency"

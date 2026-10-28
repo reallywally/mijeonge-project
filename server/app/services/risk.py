@@ -101,6 +101,7 @@ class _Task:
     id: str
     key: str
     title: str
+    parent_id: str | None
     status: str
     owner_id: str | None
     part_id: str | None
@@ -124,9 +125,19 @@ class _Thread:
     task_ids: list[str] = field(default_factory=list)
 
 
-def _impact(blocked_ids: Iterable[str], tasks: dict[str, _Task]) -> set[str]:
-    """막힌 작업 중 완료가 아닌 것. 작업 계층을 걷어(Q61) 하위로 퍼지지 않는다."""
-    return {task_id for task_id in blocked_ids if tasks[task_id].status != "done"}
+def _impact(
+    blocked_ids: Iterable[str], children: dict[str, list[str]], tasks: dict[str, _Task]
+) -> set[str]:
+    """막힌 작업과 그 하위 중 완료가 아닌 것. 고리는 방문 집합으로 한 번 더 막는다."""
+    seen: set[str] = set()
+    stack = list(blocked_ids)
+    while stack:
+        task_id = stack.pop()
+        if task_id in seen:
+            continue
+        seen.add(task_id)
+        stack.extend(children.get(task_id, ()))
+    return {task_id for task_id in seen if tasks[task_id].status != "done"}
 
 
 def _level(score: int, rule: RiskSettings) -> RiskLevel:
@@ -186,6 +197,7 @@ async def _read(
             Task.id,
             Task.key,
             Task.title,
+            Task.parent_id,
             Task.status,
             Task.owner_id,
             Task.part_id,
@@ -218,6 +230,10 @@ async def decision_risks(
     rule = await load_settings(session, project_id)
     threads, tasks, links = await _read(session, project_id)
 
+    children: dict[str, list[str]] = defaultdict(list)
+    for task in tasks.values():
+        if task.parent_id is not None:
+            children[task.parent_id].append(task.id)
     task_threads: dict[str, list[str]] = defaultdict(list)
     for task_id, thread_id in links:
         threads[thread_id].task_ids.append(task_id)
@@ -231,7 +247,7 @@ async def decision_risks(
         linked = _by_seq(thread.task_ids, tasks)
         blocked = [t for t in linked if tasks[t].status == "blocked"]
         waiting = [t for t in linked if tasks[t].status in ("todo", "doing")]
-        impact = _impact(blocked, tasks)
+        impact = _impact(blocked, children, tasks)
         impacts[thread.id] = impact
         task_dues = [
             due for t in linked if tasks[t].status != "done" and (due := tasks[t].due) is not None

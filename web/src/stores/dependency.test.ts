@@ -49,8 +49,8 @@ describe('선행 작업', () => {
   })
 
   it('quiet 면 까닭만 돌려주고 토스트는 안 띄운다', async () => {
-    const failure = await useTaskStore().addDependency('k19', 'k21', { quiet: true })
-    expect(failure).toBe('선행 작업이 이미 이 작업을 기다리고 있어 순환이 생깁니다.')
+    const failure = await useTaskStore().addDependency('k20', 'k4', { quiet: true })
+    expect(failure).toBe('자기 자신이나 상위 · 하위 작업은 선행 작업으로 둘 수 없습니다.')
     expect(toastError).not.toHaveBeenCalled()
   })
 
@@ -60,11 +60,9 @@ describe('선행 작업', () => {
     expect(pairs()).not.toContain('k20>k21')
   })
 
-  it('고르기 목록 — 자기 · 이미 건 것은 없고, 순환이 되는 것은 까닭이 붙는다', () => {
+  it('고르기 목록 — 상하위 · 이미 건 것은 없고, 순환이 되는 것은 까닭이 붙는다', () => {
     const choices = useTaskStore().dependencyChoicesFor('k19')
-    expect(choices.some((c) => c.task.id === 'k19')).toBe(false)
-    /* 연관 작업(HW-4)도 선행으로 고를 수 있다 (Q61) */
-    expect(choices.find((c) => c.task.id === 'k4')!.problem).toBeNull()
+    expect(choices.some((c) => c.task.id === 'k4')).toBe(false)
     expect(choices.find((c) => c.task.id === 'k21')!.problem).toBe('cycle')
   })
 
@@ -126,6 +124,7 @@ describe('상태 기록', () => {
     const task = useTaskStore()
     const id = await task.addTask({
       title: '새 작업',
+      parentId: null,
       body: [],
       status: 'doing',
       ownerId: null,
@@ -141,7 +140,8 @@ describe('상태 기록', () => {
     const batch = await task.addTaskBatch([
       {
         tempId: 't1',
-        relatedId: null,
+        parentTempId: null,
+        parentId: null,
         title: '초안',
         ownerId: null,
         start: null,

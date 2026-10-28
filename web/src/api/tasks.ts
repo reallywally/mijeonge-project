@@ -5,6 +5,7 @@ import { mockDb } from '@/api/mockAuth'
 import { projects, tasks } from '@/fixtures'
 import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
+import { inheritedPartId } from '@/lib/part'
 import type {
   Task,
   TaskBatchInput,
@@ -51,7 +52,7 @@ function takeMockKey(projectId: string) {
   return `${prefix}-${no}`
 }
 
-/** 검사 규칙 위반을 서버처럼 한 번에 모은다 — detail 키는 `tasks.1.title` 처럼 몇 번째의 어느 칸인지 */
+/** 검사 규칙 위반을 서버처럼 한 번에 모은다 — detail 키는 `tasks.1.parentTempId` 처럼 몇 번째의 어느 칸인지 */
 function batchErrors(input: TaskBatchInput): Record<string, string> {
   const detail: Record<string, string> = {}
   if (input.tasks.length < 1 || input.tasks.length > MAX_BATCH)
@@ -59,6 +60,10 @@ function batchErrors(input: TaskBatchInput): Record<string, string> {
   const seen = new Set<string>()
   input.tasks.forEach((t, i) => {
     if (seen.has(t.tempId)) detail[`tasks.${i}.tempId`] = '임시 이름이 겹칩니다.'
+    if (t.parentTempId !== null && !seen.has(t.parentTempId))
+      detail[`tasks.${i}.parentTempId`] = '상위 작업은 앞에 있는 항목이어야 합니다.'
+    if (t.parentTempId !== null && t.parentId !== null)
+      detail[`tasks.${i}.parentId`] = '상위는 parentTempId 와 parentId 중 하나만 둡니다.'
     if (!t.title.trim()) detail[`tasks.${i}.title`] = '제목을 적어 주세요.'
     if (t.start && t.due && t.start > t.due)
       detail[`tasks.${i}.due`] = '끝나는 날이 시작하는 날보다 앞입니다.'
@@ -86,39 +91,49 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       message: '담당자를 찾을 수 없습니다.',
     })
 
-  /* 연관 작업 — 픽스처에서 찾는다. 다른 프로젝트의 작업이면 서버처럼 거절한다.
+  /* 이미 있는 상위 — 픽스처에서 찾는다. 다른 프로젝트의 작업이면 서버처럼 거절한다.
      화면에서 새로 만든 목업 작업은 여기서 알 수 없어 그대로 받는다 */
-  const foreign = input.tasks.findIndex((t) => {
-    const projectOf = t.relatedId ? tasks.find((k) => k.id === t.relatedId)?.projectId : undefined
-    return projectOf !== undefined && projectOf !== projectId
-  })
+  const existing = (parentId: string) => tasks.find((k) => k.id === parentId)
+  const foreign = input.tasks.findIndex(
+    (t) =>
+      t.parentId !== null &&
+      existing(t.parentId)?.projectId !== undefined &&
+      existing(t.parentId)?.projectId !== projectId,
+  )
   if (foreign >= 0)
     throw new ApiError(400, {
-      code: 'TASK_RELATED_NOT_FOUND',
-      message: '연관 작업을 찾을 수 없습니다.',
-      detail: { [`tasks.${foreign}.relatedId`]: '연관 작업을 찾을 수 없습니다.' },
+      code: 'TASK_PARENT_NOT_FOUND',
+      message: '상위 작업을 찾을 수 없습니다.',
+      detail: { [`tasks.${foreign}.parentId`]: '상위 작업을 찾을 수 없습니다.' },
     })
 
   const taskIdByTempId: Record<string, string> = {}
+  const madeByTempId: Record<string, Task> = {}
   const createdAt = nowIso()
   const made = input.tasks.map((t): Task => {
     mockSeq += 1
     const taskId = `bt${mockSeq}`
     taskIdByTempId[t.tempId] = taskId
-    return {
+    const parent =
+      t.parentTempId !== null
+        ? madeByTempId[t.parentTempId]
+        : t.parentId !== null
+          ? (existing(t.parentId) ?? null)
+          : null
+    const task: Task = {
       id: taskId,
       projectId,
       key: takeMockKey(projectId),
       title: t.title.trim(),
-      relatedIds: t.relatedId ? [t.relatedId] : [],
+      parentId: t.parentTempId === null ? t.parentId : taskIdByTempId[t.parentTempId],
       body: [],
       status: 'todo',
       ownerId: t.ownerId,
       start: t.start,
       due: t.due,
       priority: t.priority,
-      /* 초안은 partId 를 싣지 않는다 — 공통이다 (Q61) */
-      partId: null,
+      /* 초안은 partId 를 싣지 않는다 — 부모를 따른다 (docs/api/part.md) */
+      partId: inheritedPartId(undefined, parent),
       createdAt,
       commentCount: 0,
       minutesId: null,
@@ -126,6 +141,8 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       statusChangedAt: createdAt,
       statusSinceBackfill: false,
     }
+    madeByTempId[t.tempId] = task
+    return task
   })
   for (const t of made) recordMockHistory('task', t.id, [change('created', null, null)])
   return { tasks: made, taskIdByTempId }

@@ -17,6 +17,7 @@ import { canDeleteComment, canEditComment, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
+import { inheritedPartId } from '@/lib/part'
 import type {
   Entry,
   Me,
@@ -315,7 +316,7 @@ function reject(code: string, message: string, detail: Record<string, string>) {
 }
 
 /**
- * 서버와 같은 순서로 본다 — 404 회의록 → 422 모양 → 400 안건 → 400 담당자(안건 → 이력 → 작업) → 400 연관 작업.
+ * 서버와 같은 순서로 본다 — 404 회의록 → 422 모양 → 400 안건 → 400 담당자(안건 → 이력 → 작업) → 400 상위 작업.
  * 만들 때는 새 안건(queued · 공통) → 그 이력 → 기존 안건의 이력 → 작업(todo · 본문 [] · key 배열 순) → 링크.
  * 만든 것에는 minutesId 를 달고, 회의록 요약을 저장한다(목업 서버의 것).
  * 안건 · 이력 · 작업 데이터는 고치지 않고 결과만 낸다 — 넣는 것은 스토어가 서버 모드와 같은 길로 한다
@@ -373,10 +374,10 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     world.tasks.find((t) => t.id === taskId && t.projectId === projectId)
   const orphans: Record<string, string> = {}
   input.tasks.forEach((t, i) => {
-    if (t.relatedId !== null && !ownTask(t.relatedId))
-      orphans[`tasks.${i}.relatedId`] = '연관 작업을 찾을 수 없습니다.'
+    if (t.parentId !== null && !ownTask(t.parentId))
+      orphans[`tasks.${i}.parentId`] = '상위 작업을 찾을 수 없습니다.'
   })
-  reject('TASK_RELATED_NOT_FOUND', '연관 작업을 찾을 수 없습니다.', orphans)
+  reject('TASK_PARENT_NOT_FOUND', '상위 작업을 찾을 수 없습니다.', orphans)
 
   const createdAt = nowIso()
   const clean = (lines: string[]) => lines.map((s) => s.trim()).filter(Boolean)
@@ -442,21 +443,28 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     .filter((t) => t.projectId === projectId)
     .reduce((max, t) => Math.max(max, Number(t.key.split('-').pop()) || 0), 0)
   const taskIdByTempId: Record<string, string> = {}
+  const madeByTempId: Record<string, Task> = {}
   const tasks: Task[] = input.tasks.map((t) => {
+    const parent =
+      t.parentTempId !== null
+        ? madeByTempId[t.parentTempId]
+        : t.parentId
+          ? ownTask(t.parentId)!
+          : null
     no += 1
     const task: Task = {
       id: nextId('mnk'),
       projectId,
       key: `${prefix}-${no}`,
       title: t.title.trim(),
-      relatedIds: t.relatedId ? [t.relatedId] : [],
+      parentId: parent?.id ?? null,
       body: [],
       status: 'todo',
       ownerId: t.ownerId,
       start: t.start,
       due: t.due,
       priority: t.priority,
-      partId: null,
+      partId: inheritedPartId(undefined, parent),
       createdAt,
       commentCount: 0,
       minutesId,
@@ -465,6 +473,7 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       statusSinceBackfill: false,
     }
     taskIdByTempId[t.tempId] = task.id
+    madeByTempId[t.tempId] = task
     return task
   })
 

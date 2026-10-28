@@ -2,10 +2,10 @@
 import { computed, nextTick, ref } from 'vue'
 import { Search, X } from 'lucide-vue-next'
 
-/* 상위 고르기 — 평소엔 지금 상위를 글처럼 보이고, 누르면 찾기 칸이 열린다.
-   번호(HW-T4)나 경로의 낱말로 찾는다. 낱말은 모두 들어가야 한다.
+/* 상위 작업 고르기 — 평소엔 지금 상위를 글처럼 보이고, 누르면 찾기 칸이 열린다.
+   작업 번호(HW-4)나 경로(개발 환경 설정 › DB 설치)의 낱말로 찾는다. 낱말은 모두 들어가야 한다.
    ↑ ↓ 로 옮기고 Enter 로 고르며, Esc · 바깥 누르기는 고르지 않고 닫는다.
-   지금은 테스트의 상위 테스트만 쓴다(작업 계층은 Q61 로 걷었다) — noun 으로 이름을 바꾼다 */
+   테스트의 상위 테스트도 같은 칸이다 — noun 만 바꾼다 */
 const props = withDefaults(
   defineProps<{
     choices: { id: string; key: string; label: string }[]
@@ -31,7 +31,7 @@ const input = ref<HTMLInputElement | null>(null)
 
 const current = computed(() => props.choices.find((c) => c.id === parentId.value) ?? null)
 
-/* 맨 위 '없음' 은 찾는 말이 없을 때만 — 고르면 최상위가 된다 */
+/* 맨 위 '없음' 은 찾는 말이 없을 때만 — 고르면 최상위 작업이 된다 */
 type Row = { id: string | null; key: string; label: string }
 const noneRow = computed<Row>(() => ({ id: null, key: '', label: `없음 (최상위 ${props.noun})` }))
 

@@ -40,7 +40,6 @@ from app.models import (
     TaskHistory,
     TaskLine,
     TaskLog,
-    TaskRelation,
     TaskThreadLink,
     TestCase,
     TestHistory,
@@ -371,7 +370,7 @@ def task(
     id_: str,
     key: str,
     title: str,
-    related: str | None,
+    parent: str | None,
     status: str,
     owner: str | None,
     start: str | None,
@@ -384,6 +383,7 @@ def task(
         project_id=project,
         key=key,
         title=title,
+        parent_id=parent,
         status=status,
         owner_id=owner,
         start=d(start),
@@ -397,17 +397,6 @@ def task(
             )
             for i, (lid, kind, text, done, level) in enumerate(lines or [])
         ],
-        # 0021 이 지난 상위를 옮긴 것과 같다 — 예전 하위가 예전 상위를 연관으로 건다 (Q61)
-        relations=[
-            TaskRelation(
-                task_id=id_,
-                related_id=related,
-                project_id=project,
-                created_at=at("2026-09-04T00:20:00Z"),
-            )
-        ]
-        if related is not None
-        else [],
     )
 
 
@@ -442,7 +431,7 @@ def tasks() -> list[Task]:
         task("k17", "HW-17", "챗봇", "k5", "todo", None, "2026-09-28", "2026-10-04"),
         # 시나리오 2 — 안건이 안 정해져 멈췄고 기간도 못 잡았다
         task("k18", "HW-18", "보험료 산출 기간계 API 개발", "k5", "blocked", "u4", None, None),
-        # 개발 환경 설정에서 나온 작업 — 연관 작업으로 HW-4 를 건다
+        # 개발 환경 설정의 하위 작업
         task(
             "k19",
             "HW-19",
@@ -998,7 +987,6 @@ async def clear(session: AsyncSession) -> None:
         TaskComment,
         TaskThreadLink,
         TaskDependency,
-        TaskRelation,
         TaskHistory,
         TaskLog,
         TaskLine,

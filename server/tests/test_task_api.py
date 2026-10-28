@@ -1,4 +1,4 @@
-"""작업 쓰기 API — 발번 · 연관 작업 · 부분 수정 · 본문 줄 · 링크.
+"""작업 쓰기 API — 발번 · 고리 금지 · 부분 수정 · 본문 줄 · 링크.
 
 응답은 스냅샷이 쓰는 `TaskOut` 그대로다. 프론트가 바뀐 레코드를 바로 꽂을 수 있어야 하므로
 키 집합을 읽기 API 와 **같은 상수**로 본다.
@@ -11,16 +11,15 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, delete, func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import create_engine, text
 
-from app.models import Task, TaskRelation
 from app.models.task import TASK_LINE_KINDS, TASK_PRIORITIES, TASK_STATUSES
 from app.schemas.task import TaskLineKindIn, TaskPriorityIn, TaskStatusIn
 from tests.test_read_api import TASK_KEYS
 
 NEW_TASK = {
     "title": "배포 파이프라인 만들기",
+    "parentId": None,
     "body": [
         # 화면이 실어 보내는 id 다 — 서버가 새 id 를 붙여 돌려줘야 한다
         {"id": "tmp1", "kind": "check", "text": "러너 등록", "done": False, "level": 0},
@@ -110,91 +109,26 @@ async def test_written_task_shows_up_at_the_end_of_the_snapshot(
     assert len(snap["tasks"]) == 23
 
 
-async def test_new_task_has_no_related_and_ignores_the_key(client: httpx.AsyncClient) -> None:
-    """등록은 relatedIds 를 받지 않는다 — 등록 뒤 상세에서 건다 (Q61). 모르는 키는 버린다."""
-    res = await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"relatedIds": ["k1"]})
-    assert res.status_code == 201
-    assert res.json()["relatedIds"] == []
-
-
-async def test_snapshot_carries_related_ids_one_way(client: httpx.AsyncClient) -> None:
-    """시드는 0021 과 같다 — 예전 하위가 예전 상위를 건다. 걸린 쪽에는 안 보인다."""
-    snap = (await client.get("/api/projects/p1/snapshot")).json()
-    by_id = {task["id"]: task for task in snap["tasks"]}
-    assert by_id["k20"]["relatedIds"] == ["k4"]
-    assert by_id["k4"]["relatedIds"] == []
-
-
-async def test_patch_related_ids_replaces_the_whole_list(client: httpx.AsyncClient) -> None:
-    first = await client.patch("/api/tasks/k20", json={"relatedIds": ["k4", "k19", "k4"]})
-    assert first.status_code == 200
-    # 중복은 한 번. 남는 줄(k4)이 먼저, 새로 건 것이 뒤에
-    assert first.json()["relatedIds"] == ["k4", "k19"]
-
-    second = await client.patch("/api/tasks/k20", json={"relatedIds": ["k21", "k19"]})
-    assert second.json()["relatedIds"] == ["k19", "k21"]
-
-    snap = (await client.get("/api/projects/p1/snapshot")).json()
-    by_id = {task["id"]: task for task in snap["tasks"]}
-    assert by_id["k20"]["relatedIds"] == ["k19", "k21"]
-    # 한 방향 — 걸린 쪽에는 안 생긴다
-    assert by_id["k21"]["relatedIds"] == ["k4"]
-
-    cleared = await client.patch("/api/tasks/k20", json={"relatedIds": []})
-    assert cleared.json()["relatedIds"] == []
-
-
-async def test_patch_without_related_ids_keeps_them(client: httpx.AsyncClient) -> None:
-    res = await client.patch("/api/tasks/k20", json={"title": "DB 설치"})
-    assert res.json()["relatedIds"] == ["k4"]
-
-
-async def test_related_null_is_422(client: httpx.AsyncClient) -> None:
-    res = await client.patch("/api/tasks/k20", json={"relatedIds": None})
-    assert res.status_code == 422
-    assert "relatedIds" in res.json()["detail"]
-
-
-async def test_related_over_twenty_is_422(client: httpx.AsyncClient) -> None:
-    ids = [f"k{n}" for n in range(1, 23) if n != 20]  # 21개
-    res = await client.patch("/api/tasks/k20", json={"relatedIds": ids})
-    assert res.status_code == 422
-    assert res.json()["detail"] == {"relatedIds": "너무 많습니다."}
-    # 중복을 빼고 세면 20개 — 통과한다
-    ok = await client.patch("/api/tasks/k20", json={"relatedIds": ids[:20] + ids[:5]})
-    assert ok.status_code == 200 and len(ok.json()["relatedIds"]) == 20
-
-
-async def test_task_cannot_relate_to_itself(client: httpx.AsyncClient) -> None:
-    res = await client.patch("/api/tasks/k4", json={"relatedIds": ["k1", "k4"]})
+async def test_task_cannot_be_its_own_parent(client: httpx.AsyncClient) -> None:
+    res = await client.patch("/api/tasks/k4", json={"parentId": "k4"})
     assert res.status_code == 400
-    assert res.json() == {
-        "code": "TASK_RELATED_SELF",
-        "message": "자기 자신은 연관 작업으로 걸 수 없습니다.",
-    }
 
 
-async def test_related_must_be_in_the_same_project(client: httpx.AsyncClient) -> None:
-    for wrong in ("x1", "없음"):
-        res = await client.patch("/api/tasks/k20", json={"relatedIds": ["k1", wrong]})
-        assert res.status_code == 400
-        assert res.json()["code"] == "TASK_RELATED_NOT_FOUND"
-        assert res.json()["message"] == "연관 작업을 찾을 수 없습니다."
-    # 실패한 수정은 아무것도 안 남긴다
-    snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert next(t for t in snap["tasks"] if t["id"] == "k20")["relatedIds"] == ["k4"]
+async def test_descendant_cannot_become_the_parent(client: httpx.AsyncClient) -> None:
+    """k5(개발) › k6(AI Biz) › k7(가상비서). 손자를 상위로 두면 고리가 생긴다."""
+    res = await client.patch("/api/tasks/k5", json={"parentId": "k7"})
+    assert res.status_code == 400
+
+    fine = await client.patch("/api/tasks/k7", json={"parentId": "k5"})
+    assert fine.status_code == 200 and fine.json()["parentId"] == "k5"
 
 
-async def test_deleting_a_task_drops_relations_both_ways(
-    client: httpx.AsyncClient, session: AsyncSession
-) -> None:
-    await client.patch("/api/tasks/k20", json={"relatedIds": ["k4", "k19"]})
-    await session.execute(delete(Task).where(Task.id == "k19"))
-    await session.commit()
-    left = await session.scalar(
-        select(func.count()).select_from(TaskRelation).where(TaskRelation.related_id == "k19")
-    )
-    assert left == 0
+async def test_parent_must_be_in_the_same_project(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"parentId": "x1"})
+    assert res.status_code == 400
+
+    missing = await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"parentId": "없음"})
+    assert missing.status_code == 400
 
 
 async def test_patch_touches_only_what_was_sent(client: httpx.AsyncClient) -> None:
@@ -394,13 +328,13 @@ async def test_line_toggle_works_on_a_kept_id(client: httpx.AsyncClient) -> None
     assert all(line["done"] for line in task["body"])
 
 
-# --- 마이그레이션 0021 — 지난 상위를 연관 작업으로 (Q61) ------------------------------------
+# --- 마이그레이션 0022 — 연관 작업을 상위로 되돌린다 (Q62) -----------------------------------
 
 
-def test_migration_moves_parents_to_relations() -> None:
+def test_migration_moves_relations_back_to_parents() -> None:
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revisions = list(reversed(list(script.walk_revisions("base", "heads"))))
-    head = next(i for i, rev in enumerate(revisions) if rev.revision == "0021_task_relation")
+    head = next(i for i, rev in enumerate(revisions) if rev.revision == "0022_task_parent_back")
 
     engine = create_engine("sqlite://")
     with engine.begin() as conn:
@@ -411,55 +345,42 @@ def test_migration_moves_parents_to_relations() -> None:
             conn.execute(
                 text("insert into project (id, name, task_key_prefix) values ('p', '피', 'P')")
             )
-            # 상위가 먼저 들어가야 복합 FK 가 선다. a › b › c, a › d
-            for number, (task_id, parent) in enumerate(
-                (("a", None), ("b", "a"), ("c", "b"), ("d", "a")), start=1
+            for number, task_id in enumerate("abcde", start=1):
+                conn.execute(
+                    text(
+                        "insert into task (id, project_id, key, title, status, priority,"
+                        " created_at, seq) values (:id, 'p', :key, '일', 'todo', 'normal',"
+                        " '2026-09-01 00:00:00', :seq)"
+                    ),
+                    {"id": task_id, "key": f"P-{number}", "seq": number},
+                )
+            # b › a 가 먼저라 뒤에 건 b › d 는 버린다. d ↔ e 는 서로 건다 — 먼저 옮긴 d 만
+            for task_id, related_id, at in (
+                ("b", "a", "2026-09-02"),
+                ("b", "d", "2026-10-01"),
+                ("c", "b", "2026-09-03"),
+                ("d", "e", "2026-09-04"),
+                ("e", "d", "2026-09-05"),
             ):
                 conn.execute(
                     text(
-                        "insert into task (id, project_id, key, title, parent_id, status,"
-                        " priority, created_at, seq) values (:id, 'p', :key, '일', :parent,"
-                        " 'todo', 'normal', :at, :seq)"
+                        "insert into task_relation (task_id, related_id, project_id, created_at)"
+                        " values (:task, :related, 'p', :at)"
                     ),
-                    {
-                        "id": task_id,
-                        "key": f"P-{number}",
-                        "parent": parent,
-                        "at": f"2026-09-0{number} 00:00:00",
-                        "seq": number,
-                    },
+                    {"task": task_id, "related": related_id, "at": f"{at} 00:00:00"},
                 )
             revisions[head].module.upgrade()
 
-            rows = conn.execute(
-                text(
-                    "select task_id, related_id, project_id, created_at from task_relation"
-                    " order by task_id"
-                )
-            ).all()
-            # 하위 → 상위 한 줄씩. 건 시각은 하위의 등록 시각
-            assert [tuple(row[:3]) for row in rows] == [
-                ("b", "a", "p"),
-                ("c", "b", "p"),
-                ("d", "a", "p"),
-            ]
-            assert [str(row[3])[:10] for row in rows] == ["2026-09-02", "2026-09-03", "2026-09-04"]
-            columns = {row[1] for row in conn.execute(text("pragma table_info(task)")).all()}
-            assert "parent_id" not in columns
-            # 작업은 그대로 남는다
-            assert conn.execute(text("select count(*) from task")).scalar() == 4
-
-            # 되돌리면 건 순서의 첫 줄이 상위가 된다
-            conn.execute(
-                text(
-                    "insert into task_relation (task_id, related_id, project_id, created_at)"
-                    " values ('b', 'd', 'p', '2026-10-01 00:00:00')"
-                )
-            )
-            revisions[head].module.downgrade()
             parents = dict(
                 conn.execute(text("select id, parent_id from task order by id")).tuples().all()
             )
-            assert parents == {"a": None, "b": "a", "c": "b", "d": "a"}
+            assert parents == {"a": None, "b": "a", "c": "b", "d": "e", "e": None}
             tables = {row[0] for row in conn.execute(text("select name from sqlite_master")).all()}
             assert "task_relation" not in tables
+
+            # 되돌리면 하위 → 상위 한 줄씩
+            revisions[head].module.downgrade()
+            rows = conn.execute(
+                text("select task_id, related_id from task_relation order by task_id")
+            ).all()
+            assert [tuple(row) for row in rows] == [("b", "a"), ("c", "b"), ("d", "e")]

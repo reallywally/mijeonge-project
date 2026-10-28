@@ -13,7 +13,6 @@ from app.models.task import (
     TaskHistory,
     TaskLine,
     TaskLog,
-    TaskRelation,
     TaskThreadLink,
 )
 from app.models.test import TestCase, TestHistory, TestRef
@@ -40,7 +39,6 @@ __all__ = [
     "TaskHistory",
     "TaskLine",
     "TaskLog",
-    "TaskRelation",
     "TaskThreadLink",
     "TestCase",
     "TestHistory",
