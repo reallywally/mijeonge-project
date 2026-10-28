@@ -123,7 +123,7 @@ afterEach(() => {
 
 describe("테스트 화면 — '지금'", () => {
   it('맨 위 숫자 카드 · 지금 테스트 중 · 손쓸 테스트가 선다', async () => {
-    await mountAt('/tests')
+    await mountAt('/tests?view=list')
     const value = (key: string) => text(`[data-test-now-card="${key}"] [data-card-value]`)
     expect(
       ['testing', 'longRunning', 'overdue', 'blocked', 'fail', 'basisChanged'].map(value),
@@ -145,7 +145,7 @@ describe("테스트 화면 — '지금'", () => {
   })
 
   it('카드를 누르면 그 테스트만 거르고, 다시 누르면 푼다', async () => {
-    await mountAt('/tests')
+    await mountAt('/tests?view=list')
     expect($$('[data-test-row]')).toHaveLength(8)
     await click($('[data-test-now-card="blocked"]'))
     expect($$('[data-test-row]').map((r) => r.dataset.testRow)).toEqual(['tc6'])
@@ -155,7 +155,7 @@ describe("테스트 화면 — '지금'", () => {
   })
 
   it('목록 줄 — 묶음은 하위에서 모은 상태 · 경로 · 태그 칩 · N일째 · 신호', async () => {
-    await mountAt('/tests')
+    await mountAt('/tests?view=list')
     const row = (id: string) => text(`[data-test-row="${id}"]`)
     expect(row('tc5')).toContain('실패')
     expect(row('tc5')).toContain('최상위 테스트 · 하위 3건')
@@ -169,7 +169,7 @@ describe("테스트 화면 — '지금'", () => {
 
 describe('테스트 상세', () => {
   it('줄을 누르면 주소가 붙고 상태 · N일째가 보인다. [성공] 으로 바꾼다', async () => {
-    await mountAt('/tests')
+    await mountAt('/tests?view=list')
     await click($('[data-test-row="tc3"]'))
     expect(window.location.pathname).toBe('/tests/tc3')
     expect(popupText()).toContain('비밀번호 5회 틀림 잠금')
@@ -281,8 +281,16 @@ describe('테스트 추가', () => {
 })
 
 describe('테스트 간트', () => {
+  it('테스트 메뉴로 들어오면 간트가 기본이고, 목록 탭은 view=list 로 간다', async () => {
+    const { w } = await mountAt('/tests')
+    const tab = (label: string) => w.findAll('a.border-b-2').find((a) => a.text() === label)!
+    expect(tab('목록').attributes('href')).toBe('/tests?view=list')
+    expect(tab('간트차트').attributes('href')).toBe('/tests')
+    expect(tab('간트차트').classes()).toContain('border-foreground')
+  })
+
   it('묶음 트리 · 기간 미정 · 늦은 막대를 넘기고, 끌면 기간을 고친다', async () => {
-    await mountAt('/tests?view=gantt')
+    await mountAt('/tests')
     const parsed = (id: string) => chart.parsed.find((t) => t.id === id)!
     expect(chart.parsed).toHaveLength(8)
     expect(parsed('tc1')).toMatchObject({ type: 'project', parent: '0', status: 'testing' })
@@ -298,7 +306,7 @@ describe('테스트 간트', () => {
   })
 
   it("줄의 '+' 는 그 묶음 아래로 추가 팝업을 연다", async () => {
-    await mountAt('/tests?view=gantt')
+    await mountAt('/tests')
     expect(chart.events.onTaskCreated({ parent: 'tc5' })).toBe(false)
     await flushPromises()
     expect(window.location.pathname).toBe('/tests/new')

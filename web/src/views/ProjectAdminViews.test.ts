@@ -126,7 +126,7 @@ describe('파트 관리 화면', () => {
   it('작업 · 안건 목록으로 가는 링크는 그 파트로 걸러진 주소다', async () => {
     await signedIn('u1@innoflow.local')
     const { w } = await mountAt('/projects/p1/parts?part=pt1')
-    expect(w.get('a[data-link="tasks"]').attributes('href')).toBe('/tasks?part=pt1')
+    expect(w.get('a[data-link="tasks"]').attributes('href')).toBe('/tasks?view=list&part=pt1')
     expect(w.get('a[data-link="tasks"]').text()).toContain('작업 5건')
     expect(w.get('a[data-link="threads"]').attributes('href')).toBe('/threads?part=pt1')
     expect(w.get('a[data-link="threads"]').text()).toContain('안건 3건')

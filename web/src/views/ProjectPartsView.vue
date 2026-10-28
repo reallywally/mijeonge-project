@@ -195,8 +195,11 @@ async function joinPicked() {
   joining.value = false
 }
 
+/* 작업은 기본이 간트라 거른 목록으로 가려면 view=list 를 단다 */
 const listLink = (path: '/tasks' | '/threads') =>
-  selected.value ? { path, query: { part: selected.value.id } } : path
+  selected.value
+    ? { path, query: { ...(path === '/tasks' ? { view: 'list' } : {}), part: selected.value.id } }
+    : path
 </script>
 
 <template>
