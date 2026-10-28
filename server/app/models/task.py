@@ -145,34 +145,6 @@ class TaskComment(Base):
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
 
 
-class TaskDependency(Base):
-    """선행 작업 — `task_id` 를 하려면 `depends_on_id` 가 먼저 (docs/api/task-flow.md).
-
-    링크와 같이 같은 프로젝트 안에서만 선다 — 복합 FK 둘. 막지 않는다: 선행이 안 끝나도
-    뒤 작업을 시작 · 완료할 수 있다. 상하위 · 순환은 서비스가 막는다.
-    """
-
-    __tablename__ = "task_dependency"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
-        ),
-        ForeignKeyConstraint(
-            ["depends_on_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
-        ),
-        CheckConstraint("task_id <> depends_on_id", name="not_self"),
-        # '이 작업을 기다리는 작업' · cascade 가 선행 쪽으로 줄을 찾는다
-        Index("ix_task_dependency_depends_on_id", "depends_on_id"),
-        Index("ix_task_dependency_project_id", "project_id"),
-    )
-
-    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    depends_on_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(String(36))
-    created_by: Mapped[str] = mapped_column(ForeignKey("member.id"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
 class TaskLog(Base):
     """작업 상태가 바뀐 한 줄. 지우지 않는다 — '진행 중이 된 지 며칠' 의 근거 (API.md Q50).
 

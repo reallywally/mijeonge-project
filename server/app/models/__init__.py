@@ -9,7 +9,6 @@ from app.models.risk import RiskSetting
 from app.models.task import (
     Task,
     TaskComment,
-    TaskDependency,
     TaskHistory,
     TaskLine,
     TaskLog,
@@ -35,7 +34,6 @@ __all__ = [
     "RiskSetting",
     "Task",
     "TaskComment",
-    "TaskDependency",
     "TaskHistory",
     "TaskLine",
     "TaskLog",

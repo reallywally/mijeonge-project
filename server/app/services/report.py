@@ -45,7 +45,7 @@ from app.time import KST, as_utc, now
 
 log = logging.getLogger(__name__)
 
-# 본문 · 하위 작업 · 선행 · 걸린 안건까지 읽어 줄 손쓸 작업 수 — 점수 위쪽부터
+# 본문 · 하위 작업 · 걸린 안건까지 읽어 줄 손쓸 작업 수 — 점수 위쪽부터
 DETAIL_TASKS = 8
 NO_TASKS = "아직 작업이 없어 리포트를 쓸 것이 없습니다."
 NO_OWNER = "담당자 없음"
@@ -71,8 +71,7 @@ SYSTEM_PROMPT = """\
 - attention: 손쓸 작업(score 내림차순). signals 는 규칙이 단 신호,
   statusDays 는 지금 상태가 된 뒤 지난 날 수(statusSinceBackfill 이 true 면 '적어도' 그만큼),
   plannedDays 는 계획 기간(start ~ due 의 날 수, 없으면 null),
-  waitingOn 은 이 작업이 기다리는 안 끝난 선행 작업, blocking 은 이 작업을 기다리는 안 끝난 작업
-  (이 작업이 늦으면 같이 밀린다), weight 는 무게(openChildren 안 끝난 하위 작업 수 ·
+  weight 는 무게(openChildren 안 끝난 하위 작업 수 ·
   openLines / totalLines 안 끝난 체크리스트 줄 / 전체 줄 · threadCount 걸린 안건 수 ·
   priority 중요도)
 - details: attention 위쪽 작업의 본문(체크리스트 줄과 체크 여부) · 하위 작업 ·
@@ -103,11 +102,10 @@ SYSTEM_PROMPT = """\
 
 - '먼저 손쓸 것' 은 최대 5개다. attention 의 score 순을 따르되 같은 원인으로 묶이는 것은 묶고,
   순서를 바꿔도 된다 — 바꾸면 왜인지 한마디 붙인다
-- 한 줄마다 무엇이 문제인지(신호를 사람 말로, 숫자 그대로) · 왜 급한지(기다리는 작업 · 무게) ·
+- 한 줄마다 무엇이 문제인지(신호를 사람 말로, 숫자 그대로) · 왜 급한지(기한 · 무게 · 걸린 안건) ·
   할 일 · 누구에게를 쓴다.
-  예: "HW-22 스테이징 DB 구성을 하려면 HW-20 DB 설치가 먼저인데, HW-20 이 진행 중이 된 지 12일째
-  (계획 3일)입니다. 스테이징 DB 구성과 개발자 계정 배포가 이것을 기다리고 있어
-  이도현 님께 진행 상황을 확인해 보세요."
+  예: "HW-20 DB 설치가 진행 중이 된 지 12일째(계획 3일)입니다. 하위 작업 2개와
+  체크리스트 8줄 중 5줄이 남아 있어 이도현 님께 진행 상황을 확인해 보세요."
 - '사람' 은 한 사람에게 손쓸 작업 · 막힘이 몰렸을 때만 쓴다
 - '지난주' 는 previous 가 있을 때만 쓴다. previous.body 는 지난 리포트의 글이다 —
   지난번에 짚은 것이 풀렸는지 그대로인지 한마디 보탠다
@@ -118,8 +116,7 @@ SYSTEM_PROMPT = """\
    statusSinceBackfill 이 true 면 "12일 이상" 처럼 '이상' 을 붙인다
 2. "어렵다 · 크다" 는 weight 로 근거를 댄다 — "하위 작업 3개 남음, 체크리스트 8줄 중 5줄 남음" 처럼.
    근거가 없으면 어렵다고 말하지 않는다
-3. 신호는 영어 이름 대신 화면의 말로 쓴다 — waitingOnPredecessor 선행 대기 ·
-   lateBlocker 뒤 작업을 막는 중 · longRunning 오래 걸림 · longBlocked 오래 막힘 ·
+3. 신호는 영어 이름 대신 화면의 말로 쓴다 — longRunning 오래 걸림 · longBlocked 오래 막힘 ·
    overdue 기한 지남 · notStarted 시작 안 함 · decidedButBlocked 풀어도 됨(걸린 안건이 다 정해졌다).
    리스크 등급은 high 높음 · medium 중간
 4. 사람을 탓하는 말투를 쓰지 않는다 —
@@ -263,8 +260,6 @@ async def _collect(
                 "statusDays": a.status_days,
                 "statusSinceBackfill": a.status_since_backfill,
                 "plannedDays": a.planned_days,
-                "waitingOn": briefs(a.waiting_on_task_ids),
-                "blocking": briefs(a.blocking_task_ids),
                 "weight": a.weight.model_dump(by_alias=True),
                 "score": a.score,
             }

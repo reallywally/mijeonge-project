@@ -265,6 +265,8 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 ## 13단계 · 선행 작업 · 작업 상태 기록 — 리포트의 바탕
 
+> 선행 작업은 2026-10-28 걷었다(Q63, 단계 표 19 줄) — 아래의 선행 대목은 지난 기록이다. 작업 상태 기록은 그대로다.
+
 계약은 `../docs/api/task-flow.md`(합의 2026-10-20 · Q49 · Q50 닫힘), 화면은 `../web/PLAN.md` 14단계다.
 리포트(`../docs/api/report.md`, 14단계)가 "A 가 먼저" · "오래 걸림" 을 말하려면 둘 다 데이터로 있어야 한다.
 
@@ -422,6 +424,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 16 테스트 | 계약 **합의** (2026-10-27) — `docs/api/test.md` · Q53 ~ Q58 닫힘. **16-1 끝남** (2026-10-27) — 리비전 `0017_test_case` · 엔드포인트 아홉 · `services/test.py`(며칠째 · 신호 여섯 · 기준 바뀜, 리스크 기준 그대로) · `require_scope` 의 `test_id` 갈래 · 시드 HW-T1 ~ T8(목업과 같은 줄) · `tests/test_test.py`. 다음은 API.md `구현` 표시와 2단계(AI) |
 | 17 변경 이력 | 계약 **합의** (2026-10-27) — `docs/api/history.md` · Q59 닫힘. **17-1 끝남** (2026-10-27) — 리비전 `0019_history`(backfill 포함) · `services/history.py` 한 곳에서 남김 · 작업 · 테스트의 쓰기 길 전부 · GET 둘 · 시드 등록 줄 + 시연 둘 · `tests/test_history.py`. API.md 두 줄 `구현`. 개발 DB 올리기는 사람이 |
 | 18 작업 계층 되살리기 | **끝남** (2026-10-28) — Q62(Q61 을 뒤집음, 사용자 결정). 연관 작업 머지를 되돌려 `Task.parentId` · 상위 · 하위 · 경로 · 하위 집계로 돌아갔다. 리비전 `0021_task_relation` 은 남기고 `0022_task_parent_back` 이 연관 줄을 상위로 되돌린다(작업마다 건 순서의 첫 줄, 고리가 되는 줄은 버림) · `tests/test_task_api.py` 마이그레이션 검사. 개발 DB 올리기는 사람이 |
+| 19 선행 작업 걷기 | **끝남** (2026-10-28) — Q63(Q49 를 뒤집음, 사용자 결정). 선행 PUT · DELETE · AI 제안(`api/dependency.py` · `services/dependency.py` · `dependency_suggest.py`) · 스냅샷 `taskDependencies` · `TASK_DEPENDENCY_*` · `DEPENDENCY_SUGGEST_FAILED` · 새 `dependsOn` 이력 줄 · 시드 · 시연 스크립트의 선행 셋을 걷음. 리포트는 신호 `waitingOnPredecessor` · `lateBlocker` · `waitingOnTaskIds` · `blockingTaskIds` · 뒤를 막는 덤을 걷고(점수 = 신호 점수의 합) Claude 에 넣던 선행 / 기다리는 작업 · 프롬프트 설명도 걷음. 저장된 리포트는 지난 이름까지 받아 그대로 읽는다. 리비전 `0023_drop_task_dependency`(표를 걷음, downgrade 는 빈 표) · `tests/test_task_flow.py` 마이그레이션 검사. 작업 상태 기록은 그대로. 개발 DB 올리기는 사람이 |
 
 ## 아직 안 정한 것
 

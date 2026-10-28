@@ -1,7 +1,7 @@
 from app.schemas.base import Schema
 from app.schemas.part import PartMemberOut, PartOut
 from app.schemas.project import ProjectOut
-from app.schemas.task import TaskDependencyOut, TaskOut, TaskThreadLinkOut
+from app.schemas.task import TaskOut, TaskThreadLinkOut
 from app.schemas.thread import EntryOut, ThreadOut
 
 
@@ -19,8 +19,6 @@ class SnapshotOut(Schema):
     entries: list[EntryOut]
     tasks: list[TaskOut]
     task_thread_links: list[TaskThreadLinkOut]
-    # 선행 작업 — (taskId, dependsOnId) 순 (docs/api/task-flow.md)
-    task_dependencies: list[TaskDependencyOut]
     # 보관한 파트까지 이름 순. 거르는 것은 화면이다 — 파트는 권한이 아니다 (docs/api/part.md)
     parts: list[PartOut]
     # (partId, memberId) 순

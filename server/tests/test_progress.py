@@ -15,7 +15,6 @@ from app.models import (
     ProjectReport,
     RiskSetting,
     Task,
-    TaskDependency,
     TaskLine,
     TaskLog,
     TaskThreadLink,
@@ -92,18 +91,6 @@ def add_task(
     )
 
 
-def wait(session: AsyncSession, task_id: str, depends_on_id: str) -> None:
-    session.add(
-        TaskDependency(
-            task_id=task_id,
-            depends_on_id=depends_on_id,
-            project_id=P,
-            created_by="u1",
-            created_at=at("2026-10-01T00:00:00Z"),
-        )
-    )
-
-
 async def facts(session: AsyncSession, project_id: str = P) -> ProgressFacts:
     await session.flush()
     return await progress.progress_facts(session, project_id, today=TODAY)
@@ -119,56 +106,6 @@ def signals(found: ProgressFacts, task_id: str) -> list[str]:
 
 
 # --- 신호 -------------------------------------------------------------------------------
-
-
-async def test_waiting_on_predecessor(db: AsyncSession) -> None:
-    """선행이 안 끝났고 시작일이 dueSoonDays(3) 안이거나 지났다."""
-    add_task(db, "a", start="2026-10-25", due="2026-10-30")
-    add_task(db, "soon", start="2026-10-23", due="2026-10-30")
-    add_task(db, "later", start="2026-10-24", due="2026-10-30")
-    add_task(db, "nostart", due="2026-10-30")
-    add_task(db, "done_pred", "done")
-    add_task(db, "after_done", start="2026-10-21", due="2026-10-30")
-    for task_id in ("soon", "later", "nostart"):
-        wait(db, task_id, "a")
-    wait(db, "after_done", "done_pred")
-    found = await facts(db)
-
-    assert signals(found, "soon") == ["waitingOnPredecessor"]
-    assert attention(found)["soon"].waiting_on_task_ids == ["a"]
-    for quiet in ("later", "nostart", "after_done", "a"):
-        assert quiet not in attention(found)
-
-
-async def test_late_blocker_and_blocking_chain(db: AsyncSession) -> None:
-    """뒤를 막는 늦은 작업 — 몇 단계 건너도 중복 없이, 끝난 작업에서는 더 타지 않는다."""
-    add_task(db, "a", "doing", start="2026-10-01", due="2026-10-19", since="2026-10-15T00:00:00Z")
-    add_task(db, "b", start="2026-10-30", due="2026-11-05")
-    add_task(db, "c", start="2026-11-06", due="2026-11-10")
-    add_task(db, "d", start="2026-11-06", due="2026-11-10")
-    add_task(db, "e", "done")
-    add_task(db, "f", start="2026-11-06", due="2026-11-10")
-    wait(db, "b", "a")
-    wait(db, "c", "b")
-    wait(db, "d", "b")
-    wait(db, "d", "a")
-    wait(db, "e", "a")
-    wait(db, "f", "e")
-    found = await facts(db)
-
-    a = attention(found)["a"]
-    assert a.signals == ["lateBlocker", "overdue"]
-    assert a.blocking_task_ids == ["b", "c", "d"]
-    # 3 + 2 + min(3, 3)
-    assert a.score == 8
-
-
-async def test_late_blocker_needs_a_late_task(db: AsyncSession) -> None:
-    add_task(db, "a", "doing", start="2026-10-19", due="2026-10-30", since="2026-10-19T00:00:00Z")
-    add_task(db, "b", start="2026-11-01", due="2026-11-05")
-    wait(db, "b", "a")
-    found = await facts(db)
-    assert "a" not in attention(found)
 
 
 @pytest.mark.parametrize(
@@ -300,8 +237,6 @@ async def test_backfill_is_at_least(db: AsyncSession) -> None:
 
 async def test_done_tasks_get_no_signals(db: AsyncSession) -> None:
     add_task(db, "a", "done", start="2026-09-01", due="2026-09-02", since="2026-09-01T00:00:00Z")
-    add_task(db, "b", start="2026-10-21", due="2026-10-30")
-    wait(db, "b", "a")
     found = await facts(db)
     assert found.attention == []
 
@@ -320,18 +255,6 @@ async def test_score_and_order(db: AsyncSession) -> None:
     order = [a.task_id for a in found.attention]
     assert order == ["same_a", "same_b", "late_nodue", "due_sooner", "due_later"]
     assert [a.score for a in found.attention] == [2, 2, 2, 1, 1]
-
-
-async def test_blocking_bonus_is_capped(db: AsyncSession) -> None:
-    add_task(db, "a", "doing", due="2026-10-19", since="2026-10-19T00:00:00Z")
-    for n in range(5):
-        add_task(db, f"w{n}", start="2026-11-01", due="2026-11-05")
-        wait(db, f"w{n}", "a")
-    found = await facts(db)
-    a = attention(found)["a"]
-    assert len(a.blocking_task_ids) == 5
-    # lateBlocker 3 + overdue 2 + min(5, 3)
-    assert a.score == 8
 
 
 async def test_attention_keeps_thirty(db: AsyncSession) -> None:
@@ -472,27 +395,27 @@ async def test_no_previous(db: AsyncSession) -> None:
 
 
 async def test_seed_hw20_is_first(db: AsyncSession) -> None:
-    """HW-20 이 진행 중이 된 지 12일째(계획 3일) — 스테이징 DB 구성 · 개발자 계정 배포가 기다린다.
-
-    계약의 예와 같다.
-    """
+    """HW-20 이 진행 중이 된 지 12일째(계획 3일). 계약의 예와 같다."""
     found = await facts(db, "p1")
     first = found.attention[0]
     assert first.task_id == "k20"
-    assert first.signals == ["lateBlocker", "longRunning", "overdue"]
+    assert first.signals == ["longRunning", "overdue"]
     assert (first.status_days, first.planned_days, first.status_since_backfill) == (12, 3, False)
-    assert first.blocking_task_ids == ["k21", "k22"]
-    assert first.score == 9
+    # 신호 점수의 합만이다 — 선행을 걷고(Q63) 뒤를 막는 덤이 없다
+    assert first.score == 4
 
     k22 = attention(found)["k22"]
-    assert k22.signals == ["waitingOnPredecessor", "decidedButBlocked"]
-    assert k22.waiting_on_task_ids == ["k20"]
+    assert k22.signals == ["decidedButBlocked"]
     assert k22.status_days == 7
     # 오래 막힘은 staleDays(7) 를 '넘어야' 한다
     assert "longBlocked" not in k22.signals
     assert found.decisions.risky_thread_ids == ["t5", "t3", "t8", "t9"]
     # 다른 프로젝트의 작업은 섞이지 않는다
     assert not {"x1", "x2"} & {a.task_id for a in found.attention}
+    # 새 리포트는 지난 리포트의 선행 칸을 키째 싣지 않는다
+    dumped = found.model_dump(mode="json", by_alias=True)
+    for row in dumped["attention"]:
+        assert "waitingOnTaskIds" not in row and "blockingTaskIds" not in row
 
 
 async def test_unknown_project_is_404(db: AsyncSession) -> None:

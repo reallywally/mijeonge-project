@@ -1,6 +1,6 @@
 """LLM 공급자 경계 — `app/llm`.
 
-AI 를 부르는 서비스(챗봇 · 회의록 초안 · 리스크 요약 · 리포트 · 선행 관계 제안)는
+AI 를 부르는 서비스(챗봇 · 회의록 초안 · 리스크 요약 · 리포트)는
 `LLMProvider` 만 본다.
 Anthropic SDK 모양을 흉내 내지 않는 가짜 공급자를 `get_llm` 에 끼워도 그대로 돌아야 한다.
 """
@@ -140,17 +140,6 @@ async def test_refused_and_errors_come_through(client: httpx.AsyncClient) -> Non
     assert events == [
         ("error", {"type": "error", "code": "CHAT_RATE_LIMITED", "message": "잠시 뒤에"})
     ]
-
-
-async def test_dependency_suggest_runs_on_any_provider(client: httpx.AsyncClient) -> None:
-    answer = {"suggestions": [{"task": "HW-21", "dependsOn": "HW-20", "reason": "DB 가 먼저"}]}
-    use(PlainProvider(json.dumps(answer, ensure_ascii=False)))
-    res = await client.post("/api/projects/p1/dependencies/suggest")
-    assert res.status_code == 200, res.text
-
-    use(PlainProvider(raises=LLMError("CHAT_UNAVAILABLE", "응답 없음")))
-    res = await client.post("/api/projects/p1/dependencies/suggest")
-    assert res.status_code == 503 and res.json()["code"] == "CHAT_UNAVAILABLE"
 
 
 async def test_no_provider_is_503(client: httpx.AsyncClient) -> None:

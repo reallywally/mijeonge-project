@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -14,7 +15,7 @@ import type { TaskAttention, TaskAttentionSignal } from '@/types/domain'
 
 /* 손쓸 작업 표 — 저장된 attention 전부를 그대로 그린다(다시 계산하지 않는다).
    작업 이름 · 담당은 지금 스냅샷에서 찾는다. 그사이 지워진 작업은 흐리게 '지워진 작업' */
-defineProps<{ attention: TaskAttention[] }>()
+const props = defineProps<{ attention: TaskAttention[] }>()
 const emit = defineEmits<{ 'open-task': [id: string] }>()
 
 const data = useDataStore()
@@ -22,6 +23,13 @@ const taskOf = (id: string) => data.allTasks.find((t) => t.id === id)
 
 /** 늦어서 남을 미는 신호 · 풀어도 되는 신호는 눈에 띄게 */
 const STRONG: TaskAttentionSignal[] = ['lateBlocker', 'decidedButBlocked']
+
+/* 선행 작업은 2026-10-28 걷었다(Q63) — 기다림 · 막음은 지난 리포트의 facts 에만 있어 그때만 칸을 세운다 */
+const waitingOf = (a: TaskAttention) => a.waitingOnTaskIds ?? []
+const blockingOf = (a: TaskAttention) => a.blockingTaskIds ?? []
+const legacy = computed(() =>
+  props.attention.some((a) => waitingOf(a).length > 0 || blockingOf(a).length > 0),
+)
 </script>
 
 <template>
@@ -36,7 +44,7 @@ const STRONG: TaskAttentionSignal[] = ['lateBlocker', 'decidedButBlocked']
           <TableHead class="h-10 w-[56px] text-right text-xs font-medium text-muted-foreground"
             >계획</TableHead
           >
-          <TableHead class="h-10 w-[168px] text-xs font-medium text-muted-foreground"
+          <TableHead v-if="legacy" class="h-10 w-[168px] text-xs font-medium text-muted-foreground"
             >기다림 / 막음</TableHead
           >
           <TableHead class="h-10 w-[76px] text-xs font-medium text-muted-foreground"
@@ -80,16 +88,16 @@ const STRONG: TaskAttentionSignal[] = ['lateBlocker', 'decidedButBlocked']
           <TableCell class="text-right text-sm text-muted-foreground">{{
             a.plannedDays !== null ? `${a.plannedDays}일` : '—'
           }}</TableCell>
-          <TableCell class="py-2.5">
+          <TableCell v-if="legacy" class="py-2.5">
             <div class="flex flex-col gap-1">
               <div
-                v-if="a.waitingOnTaskIds.length > 0"
+                v-if="waitingOf(a).length > 0"
                 class="flex flex-wrap items-center gap-1"
                 data-attention-waiting
               >
                 <span class="text-xs text-muted-foreground">기다림</span>
                 <button
-                  v-for="id in a.waitingOnTaskIds"
+                  v-for="id in waitingOf(a)"
                   :key="id"
                   type="button"
                   class="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-xs hover:bg-accent"
@@ -100,13 +108,13 @@ const STRONG: TaskAttentionSignal[] = ['lateBlocker', 'decidedButBlocked']
                 </button>
               </div>
               <div
-                v-if="a.blockingTaskIds.length > 0"
+                v-if="blockingOf(a).length > 0"
                 class="flex flex-wrap items-center gap-1"
                 data-attention-blocking
               >
                 <span class="text-xs text-muted-foreground">막음</span>
                 <button
-                  v-for="id in a.blockingTaskIds"
+                  v-for="id in blockingOf(a)"
                   :key="id"
                   type="button"
                   class="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-xs hover:bg-accent"
@@ -117,7 +125,7 @@ const STRONG: TaskAttentionSignal[] = ['lateBlocker', 'decidedButBlocked']
                 </button>
               </div>
               <span
-                v-if="a.waitingOnTaskIds.length === 0 && a.blockingTaskIds.length === 0"
+                v-if="waitingOf(a).length === 0 && blockingOf(a).length === 0"
                 class="text-sm text-muted-foreground"
                 >—</span
               >
@@ -130,7 +138,10 @@ const STRONG: TaskAttentionSignal[] = ['lateBlocker', 'decidedButBlocked']
           >
         </TableRow>
         <TableRow v-if="attention.length === 0" class="hover:bg-transparent">
-          <TableCell colspan="5" class="h-20 text-center text-sm text-muted-foreground">
+          <TableCell
+            :colspan="legacy ? 5 : 4"
+            class="h-20 text-center text-sm text-muted-foreground"
+          >
             손쓸 작업이 없습니다.
           </TableCell>
         </TableRow>

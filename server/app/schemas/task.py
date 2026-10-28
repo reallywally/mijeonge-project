@@ -145,26 +145,6 @@ class TaskThreadLinkOut(Schema):
     thread_id: str
 
 
-class TaskDependencyOut(Schema):
-    # 뒤 작업
-    task_id: str
-    # 먼저 끝나야 하는 작업
-    depends_on_id: str
-
-
-class DependencySuggestionOut(Schema):
-    task_id: str
-    depends_on_id: str
-    # 왜 — 한 문장
-    reason: str
-
-
-class DependencySuggestionsOut(Schema):
-    suggestions: list[DependencySuggestionOut]
-    # 완료 아닌 작업이 많아 앞에서 잘랐으면 true
-    truncated: bool
-
-
 # 앞뒤 공백을 떼고 비면 422 다(string_too_short)
 CommentBody = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 

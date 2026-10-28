@@ -38,7 +38,6 @@ const snapshot = (projectId: string): ProjectSnapshot => ({
   entries: [],
   tasks: [],
   taskThreadLinks: [],
-  taskDependencies: [],
   parts: [],
   partMembers: [],
 })

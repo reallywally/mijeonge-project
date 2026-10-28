@@ -1,19 +1,21 @@
 from datetime import date, datetime
 from typing import Literal
 
+from pydantic import Field
+
 from app.schemas.base import Schema, Utc
 from app.schemas.chat import ChatRef, DeltaEvent, ErrorEvent
 from app.schemas.risk import RiskSettings
 
 TaskAttentionSignal = Literal[
-    "waitingOnPredecessor",
-    "lateBlocker",
     "longRunning",
     "longBlocked",
     "overdue",
     "notStarted",
     "decidedButBlocked",
 ]
+# 선행 작업을 걷기(Q63) 전에 만든 리포트의 facts 에만 있다 — 새 리포트는 내지 않는다
+LegacyTaskAttentionSignal = Literal["waitingOnPredecessor", "lateBlocker"]
 TaskPriority = Literal["low", "normal", "high"]
 
 
@@ -51,12 +53,14 @@ class TaskWeight(Schema):
 
 class TaskAttention(Schema):
     task_id: str
-    signals: list[TaskAttentionSignal]
+    # 저장한 facts 는 기록이라 다시 계산하지 않는다 — 지난 리포트의 선행 신호 · id 목록도
+    # 그대로 읽어 돌려준다. 새 리포트는 두 목록을 싣지 않는다(키째 없음)
+    signals: list[TaskAttentionSignal | LegacyTaskAttentionSignal]
     status_days: int
     status_since_backfill: bool
     planned_days: int | None
-    waiting_on_task_ids: list[str]
-    blocking_task_ids: list[str]
+    waiting_on_task_ids: list[str] | None = Field(default=None, exclude_if=lambda v: v is None)
+    blocking_task_ids: list[str] | None = Field(default=None, exclude_if=lambda v: v is None)
     weight: TaskWeight
     score: int
 

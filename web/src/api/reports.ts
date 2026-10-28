@@ -79,7 +79,6 @@ const mock = {
       threads,
       entries: world.entries.filter((e) => threadIds.has(e.threadId)),
       links: world.taskThreads.filter((l) => taskIds.has(l.taskId)),
-      dependencies: world.taskDependencies.filter((d) => taskIds.has(d.taskId)),
       settings: risk.settings,
       today: kstToday(),
       previous: prev
@@ -145,10 +144,6 @@ async function* mockEvents(projectId: string, signal: AbortSignal): AsyncGenerat
   const body = empty
     ? REPORT_EMPTY
     : mockReportBody(facts, {
-        taskLabel: (taskId) => {
-          const t = mockWorld().tasks.find((x) => x.id === taskId)
-          return t ? `${t.key} ${t.title}` : taskId
-        },
         ownerName: (taskId) => {
           const ownerId = mockWorld().tasks.find((x) => x.id === taskId)?.ownerId
           return (ownerId && memberOf(ownerId)?.name) || '담당자 없음'

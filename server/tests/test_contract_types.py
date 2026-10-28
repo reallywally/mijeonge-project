@@ -67,7 +67,6 @@ CASES: list[tuple[str, Pick]] = [
     ("Task", lambda body: body["tasks"]),
     ("TaskLine", lambda body: [line for task in body["tasks"] for line in task["body"]]),
     ("TaskThreadLink", lambda body: body["taskThreadLinks"]),
-    ("TaskDependency", lambda body: body["taskDependencies"]),
 ]
 
 
@@ -198,7 +197,6 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
         "entries",
         "tasks",
         "taskThreadLinks",
-        "taskDependencies",
         "parts",
         "partMembers",
     }
@@ -400,27 +398,18 @@ async def test_minutes_responses_match_contract(client: AsyncClient) -> None:
             assert field in MINUTES_NULLABLE["Minutes"], f"Minutes.{field} 가 null"
 
 
-# 선행 작업 · 작업 상태 기록 — docs/api/task-flow.md. 어긋나면 계약 쪽이 기준이다.
-# null 이 나가는 자리가 없다(statusChangedAt 은 backfill 이 있어 늘 있다)
-TASK_FLOW_SHAPES: dict[str, set[str]] = {
-    "TaskDependency": {"taskId", "dependsOnId"},
-    "DependencySuggestions": {"suggestions", "truncated"},
-    "DependencySuggestion": {"taskId", "dependsOnId", "reason"},
-}
-
-
-@pytest.mark.parametrize("name", sorted(TASK_FLOW_SHAPES))
-def test_task_flow_shapes_do_not_drift_from_domain_ts(name: str) -> None:
-    declared = FIELDS[name]
-    assert set(declared) == TASK_FLOW_SHAPES[name], f"domain.ts 의 {name} 이 task-flow.md 와 다르다"
-    assert not any(declared.values()), f"domain.ts 의 {name} 에 null 자리가 있다"
+# 작업 상태 기록 — docs/api/task-flow.md.
+# 선행 작업은 걷었다(Q63) — 그 타입 · 스냅샷 칸이 남으면 깨진다
+def test_dependency_types_are_gone_from_domain_ts() -> None:
+    for name in ("TaskDependency", "DependencySuggestions", "DependencySuggestion"):
+        assert name not in FIELDS, f"domain.ts 에 걷은 {name} 이 남았다"
+    assert "taskDependencies" not in FIELDS["ProjectSnapshot"]
 
 
 def test_task_status_since_in_domain_ts() -> None:
     """둘 다 null 이 아니다 — 모든 작업에 상태 기록이 적어도 한 줄 있다."""
     assert FIELDS["Task"].get("statusChangedAt") is False
     assert FIELDS["Task"].get("statusSinceBackfill") is False
-    assert FIELDS["ProjectSnapshot"].get("taskDependencies") is False
 
 
 def test_task_status_since_in_snapshot(snapshot: dict[str, Any]) -> None:
@@ -459,8 +448,6 @@ REPORT_SHAPES: dict[str, set[str]] = {
         "statusDays",
         "statusSinceBackfill",
         "plannedDays",
-        "waitingOnTaskIds",
-        "blockingTaskIds",
         "weight",
         "score",
     },
@@ -475,6 +462,9 @@ REPORT_SHAPES: dict[str, set[str]] = {
     "ReportItem": _REPORT_ITEM,
     "Report": _REPORT_ITEM | {"facts", "body"},
 }
+# 선행 작업을 걷기(Q63) 전에 만든 리포트의 facts 에만 있는 칸 —
+# domain.ts 가 optional 로 남겨 둘 수 있다. 새 리포트는 키째 싣지 않는다
+REPORT_LEGACY: dict[str, set[str]] = {"TaskAttention": {"waitingOnTaskIds", "blockingTaskIds"}}
 REPORT_NULLABLE: dict[str, set[str]] = {
     "ProgressFacts": {"previous"},
     "TaskAttention": {"plannedDays"},
@@ -504,7 +494,10 @@ def test_report_shapes_do_not_drift_from_domain_ts(name: str) -> None:
     if name not in FIELDS:
         return
     declared = all_fields(name)
-    assert set(declared) == REPORT_SHAPES[name], f"domain.ts 의 {name} 이 report.md 와 다르다"
+    legacy = REPORT_LEGACY.get(name, set())
+    assert set(declared) - legacy == REPORT_SHAPES[name], (
+        f"domain.ts 의 {name} 이 report.md 와 다르다"
+    )
     nullable = {field for field, allowed in declared.items() if allowed}
     assert nullable == REPORT_NULLABLE.get(name, set())
 

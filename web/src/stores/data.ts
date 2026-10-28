@@ -9,7 +9,6 @@ import {
   parts as partFixtures,
   projectGrants,
   projects,
-  taskDependencies as taskDependencyFixtures,
   tasks,
   taskThreadLinks,
   threads,
@@ -30,7 +29,6 @@ import type {
   ProjectMember,
   ProjectRole,
   Task,
-  TaskDependency,
   TaskThreadLink,
   Thread,
 } from '@/types/domain'
@@ -65,18 +63,13 @@ export const useDataStore = defineStore('data', () => {
   const allEntries = ref<Entry[]>(mock ? structuredClone(entries) : [])
   const allTasks = ref<Task[]>(mock ? structuredClone(tasks) : [])
   const taskThreads = ref<TaskThreadLink[]>(mock ? structuredClone(taskThreadLinks) : [])
-  /** 선행 작업 — 서버 모드는 고른 프로젝트 하나치, 목업은 전부 */
-  const taskDependencies = ref<TaskDependency[]>(
-    mock ? structuredClone(taskDependencyFixtures) : [],
-  )
-  /* 목업의 확인 요청 보내기 · 선행 작업 검사가 화면에서 결정하거나 만든 것까지 서버처럼 따지게 */
+  /* 목업의 확인 요청 보내기가 화면에서 결정하거나 만든 것까지 서버처럼 따지게 */
   if (mock)
     api.provideMockWorld(() => ({
       threads: allThreads.value,
       entries: allEntries.value,
       tasks: allTasks.value,
       taskThreads: taskThreads.value,
-      taskDependencies: taskDependencies.value,
     }))
   /** 파트와 소속. 서버 모드는 고른 프로젝트 하나치, 목업은 전부 — 프로젝트로 거르는 것은 part 스토어다 */
   const parts = ref<Part[]>(mock ? structuredClone(partFixtures) : [])
@@ -117,7 +110,6 @@ export const useDataStore = defineStore('data', () => {
     allEntries.value = records.allEntries
     allTasks.value = records.allTasks
     taskThreads.value = records.taskThreads
-    taskDependencies.value = records.taskDependencies
     parts.value = records.parts
     partMembers.value = records.partMembers
     loadedProjectId.value = records.project.id
@@ -155,7 +147,6 @@ export const useDataStore = defineStore('data', () => {
     allEntries.value = structuredClone(entries)
     allTasks.value = structuredClone(tasks)
     taskThreads.value = structuredClone(taskThreadLinks)
-    taskDependencies.value = structuredClone(taskDependencyFixtures)
     parts.value = structuredClone(partFixtures)
     partMembers.value = structuredClone(partMemberFixtures)
     allMembers.value = await api.fetchMembers()
@@ -496,7 +487,6 @@ export const useDataStore = defineStore('data', () => {
     allEntries.value = []
     allTasks.value = []
     taskThreads.value = []
-    taskDependencies.value = []
     parts.value = []
     partMembers.value = []
     projectMembers.value = {}
@@ -523,7 +513,6 @@ export const useDataStore = defineStore('data', () => {
     allEntries,
     allTasks,
     taskThreads,
-    taskDependencies,
     parts,
     partMembers,
     projectMembers,

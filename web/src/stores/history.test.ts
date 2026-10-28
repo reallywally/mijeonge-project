@@ -55,7 +55,7 @@ describe('목업 작업 쓰기의 이력', () => {
     ])
   })
 
-  it('안건 링크 · 선행 작업은 새로 걸 때 · 있던 것을 뗄 때만', async () => {
+  it('안건 링크는 새로 걸 때 · 있던 것을 뗄 때만', async () => {
     const tasks = useTaskStore()
     tasks.linkThread('k4', 't1')
     tasks.linkThread('k3', 't1')
@@ -65,13 +65,6 @@ describe('목업 작업 쓰기의 이력', () => {
     expect((await lines('k3')).map((e) => e.changes)).toEqual([
       [change('thread', null, 't1')],
       [change('thread', 't1', null)],
-    ])
-
-    expect(await tasks.addDependency('k16', 'k15')).toBeNull()
-    expect(await tasks.removeDependency('k16', 'k15')).toBe(true)
-    expect((await lines('k16')).map((e) => e.changes)).toEqual([
-      [change('dependsOn', null, 'k15')],
-      [change('dependsOn', 'k15', null)],
     ])
   })
 

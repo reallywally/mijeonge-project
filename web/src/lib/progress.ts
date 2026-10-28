@@ -7,7 +7,6 @@ import type {
   Task,
   TaskAttention,
   TaskAttentionSignal,
-  TaskDependency,
   TaskThreadLink,
   Thread,
 } from '@/types/domain'
@@ -20,17 +19,18 @@ export const REPORT_PERIOD_DAYS = 7
 /** attention 에 싣는 작업 수 */
 export const ATTENTION_LIMIT = 30
 
-export const ATTENTION_SCORE: Record<TaskAttentionSignal, number> = {
-  lateBlocker: 3,
+/** 새 리포트가 내는 신호 — 선행 작업 둘은 2026-10-28 걷어(Q63) 지난 리포트에만 있다 */
+type LiveSignal = Exclude<TaskAttentionSignal, 'waitingOnPredecessor' | 'lateBlocker'>
+
+export const ATTENTION_SCORE: Record<LiveSignal, number> = {
   decidedButBlocked: 3,
   overdue: 2,
   longRunning: 2,
   longBlocked: 2,
-  waitingOnPredecessor: 1,
   notStarted: 1,
 }
 
-/** 신호의 화면 말 — 계약 '화면' */
+/** 신호의 화면 말 — 계약 '화면'. 선행 둘은 지난 리포트를 그대로 보여 주려고 남겨 둔다 */
 export const ATTENTION_SIGNAL_LABEL: Record<TaskAttentionSignal, string> = {
   waitingOnPredecessor: '선행 대기',
   lateBlocker: '뒤 작업을 막는 중',
@@ -42,9 +42,7 @@ export const ATTENTION_SIGNAL_LABEL: Record<TaskAttentionSignal, string> = {
 }
 
 /** signals 의 순서 — 타입 선언 순서 그대로. 같은 데이터면 같은 배열이 나오게 */
-const SIGNAL_ORDER: TaskAttentionSignal[] = [
-  'waitingOnPredecessor',
-  'lateBlocker',
+const SIGNAL_ORDER: LiveSignal[] = [
   'longRunning',
   'longBlocked',
   'overdue',
@@ -97,7 +95,6 @@ export interface ProgressInput {
   threads: Thread[]
   entries: Entry[]
   links: TaskThreadLink[]
-  dependencies: TaskDependency[]
   settings: RiskSettings
   /** 만드는 날 — KST YYYY-MM-DD */
   today: string
@@ -113,24 +110,9 @@ export function isDecidedButBlocked(task: Task, linked: Thread[]) {
   )
 }
 
-/** 기다리는 쪽으로 몇 단계를 건너 — 끝난 작업에서는 멈춘다(그 뒤는 이 작업 때문에 밀리지 않는다) */
-function blockingOf(taskId: string, dependents: Map<string, string[]>, byId: Map<string, Task>) {
-  const seen = new Set<string>()
-  const stack = [...(dependents.get(taskId) ?? [])]
-  while (stack.length > 0) {
-    const cur = stack.pop()!
-    if (seen.has(cur) || cur === taskId) continue
-    const t = byId.get(cur)
-    if (!t || t.status === 'done') continue
-    seen.add(cur)
-    stack.push(...(dependents.get(cur) ?? []))
-  }
-  return seen
-}
-
 /** 지난 7일의 진행 — 같은 데이터 · 같은 날이면 늘 같은 facts */
 export function progressFacts(input: ProgressInput): ProgressFacts {
-  const { tasks, threads, entries, links, dependencies, settings, today } = input
+  const { tasks, threads, entries, links, settings, today } = input
   const { periodStart, periodEnd } = reportPeriod(today)
   const inPeriod = (iso: string) => {
     const day = localDay(iso)
@@ -148,10 +130,6 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
     if (!th || !byId.has(l.taskId)) continue
     linkedThreads.set(l.taskId, [...(linkedThreads.get(l.taskId) ?? []), th])
   }
-  const deps = dependencies.filter((d) => byId.has(d.taskId) && byId.has(d.dependsOnId))
-  const dependents = new Map<string, string[]>()
-  for (const d of deps)
-    dependents.set(d.dependsOnId, [...(dependents.get(d.dependsOnId) ?? []), d.taskId])
   const children = new Map<string, string[]>()
   for (const t of tasks)
     if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t.id])
@@ -198,25 +176,13 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
     if (t.status === 'done') continue
     const statusDays = Math.max(0, daysBetween(t.statusChangedAt, today))
     const plannedDays = t.start && t.due ? daysBetween(t.start, t.due) + 1 : null
-    const waitingOnTaskIds = deps
-      .filter((d) => d.taskId === t.id && byId.get(d.dependsOnId)!.status !== 'done')
-      .map((d) => d.dependsOnId)
-      .sort(bySeq)
-    const blockingTaskIds = [...blockingOf(t.id, dependents, byId)].sort(bySeq)
 
     const overdue = t.due !== null && t.due < today
     const startPassed = t.start !== null && t.start < today
     const longRunning =
       t.status === 'doing' &&
       (plannedDays !== null ? statusDays > plannedDays * 1.5 : statusDays > settings.staleDays)
-    const hit: Record<TaskAttentionSignal, boolean> = {
-      waitingOnPredecessor:
-        waitingOnTaskIds.length > 0 &&
-        t.start !== null &&
-        daysBetween(today, t.start) <= settings.dueSoonDays,
-      lateBlocker:
-        blockingTaskIds.length > 0 &&
-        (overdue || (t.status === 'todo' && startPassed) || longRunning),
+    const hit: Record<LiveSignal, boolean> = {
       longRunning,
       longBlocked: t.status === 'blocked' && statusDays > settings.staleDays,
       overdue,
@@ -235,8 +201,6 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
       statusDays,
       statusSinceBackfill: t.statusSinceBackfill,
       plannedDays,
-      waitingOnTaskIds,
-      blockingTaskIds,
       weight: {
         openChildren: openDescendants(t.id),
         openLines: checks.filter((l) => !l.done).length,
@@ -244,9 +208,7 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
         threadCount: linkedThreads.get(t.id)?.length ?? 0,
         priority: t.priority,
       },
-      score:
-        signals.reduce((sum, s) => sum + ATTENTION_SCORE[s], 0) +
-        Math.min(blockingTaskIds.length, 3),
+      score: signals.reduce((sum, s) => sum + ATTENTION_SCORE[s], 0),
     })
   }
   /* score 내림차순 → 기한 이른 순(없으면 뒤) → 등록 순 */

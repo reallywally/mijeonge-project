@@ -252,8 +252,10 @@ async def test_one_call_without_tools_on_chat_settings(client: httpx.AsyncClient
     assert "한화손보 차세대" in system and "2026-10-20 (화)" in system
     heads = ("이번 주 진척", "결정", "먼저 손쓸 것", "사람", "다음 주 볼 것", "1,500자")
     assert all(head in system for head in heads)
-    words = ("선행 대기", "뒤 작업을 막는 중", "오래 걸림", "오래 막힘", "시작 안 함", "풀어도 됨")
+    words = ("오래 걸림", "오래 막힘", "기한 지남", "시작 안 함", "풀어도 됨")
     assert all(word in system for word in words)
+    # 선행 작업은 걷었다(Q63)
+    assert "선행" not in system and "waitingOn" not in system and "lateBlocker" not in system
 
 
 async def test_context_names_tasks_and_people(client: httpx.AsyncClient) -> None:
@@ -271,7 +273,7 @@ async def test_context_names_tasks_and_people(client: httpx.AsyncClient) -> None
         "part": "인프라",
     }
     assert (k20["statusDays"], k20["plannedDays"], k20["statusSinceBackfill"]) == (12, 3, False)
-    assert [t["key"] for t in k20["blocking"]] == ["HW-21", "HW-22"]
+    assert "waitingOn" not in k20 and "blocking" not in k20
     assert data["period"] == {"start": "2026-10-14", "end": "2026-10-20"}
     assert [t["id"] for t in data["decisions"]["risky"]] == ["t5", "t3", "t8", "t9"]
     assert data["decisions"]["risky"][0]["level"] == "high"
@@ -444,3 +446,29 @@ async def test_saved_facts_are_not_recomputed(
     await session.commit()
     after = (await client.get(f"/api/reports/{report_id}")).json()["facts"]
     assert after == before
+
+
+async def test_reports_before_q63_still_read(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """선행 작업을 걷기(Q63) 전에 만든 리포트 — 지난 신호 둘 · id 목록 둘이 있어도 그대로 읽힌다."""
+    report_id = await make(client)
+    row = await session.get(ProjectReport, report_id)
+    assert row is not None
+    facts = json.loads(json.dumps(row.facts))
+    first = facts["attention"][0]
+    first["signals"] = ["lateBlocker", *first["signals"]]
+    first["waitingOnTaskIds"] = []
+    first["blockingTaskIds"] = ["k21", "k22"]
+    for other in facts["attention"][1:]:
+        other["signals"] = ["waitingOnPredecessor", *other["signals"]]
+        other["waitingOnTaskIds"] = ["k20"]
+        other["blockingTaskIds"] = []
+    row.facts = facts
+    await session.commit()
+
+    one = await client.get(f"/api/reports/{report_id}")
+    assert one.status_code == 200, one.text
+    assert one.json()["facts"]["attention"] == facts["attention"]
+    rows = (await client.get(URL)).json()
+    assert rows[0]["attentionCount"] == len(facts["attention"])

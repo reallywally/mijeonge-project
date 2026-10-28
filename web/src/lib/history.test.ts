@@ -140,6 +140,7 @@ describe('화면 말', () => {
       label: '안건 걸기',
       value: '서버 OS 결정',
     })
+    // 선행 작업은 걷었지만(Q63) 지난 줄은 읽는다
     expect(task(change('dependsOn', 'k19', null))).toMatchObject({
       label: '선행 작업 떼기',
       value: 'HW-19',
