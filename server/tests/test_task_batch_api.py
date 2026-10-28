@@ -17,7 +17,7 @@ URL = "/api/projects/p3/tasks/batch"
 def item(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
     return {
         "tempId": temp_id,
-        "relatedId": None,
+        "parentTempId": None,
         "title": title,
         "ownerId": None,
         "start": None,
@@ -28,8 +28,8 @@ def item(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
 
 DRAFT = [
     item("t1", "간담회 준비"),
-    item("t2", "일정 체크", ownerId="u1", due="2026-10-16"),
-    item("t3", "준비물 체크", ownerId="u2", priority="high"),
+    item("t2", "일정 체크", parentTempId="t1", ownerId="u1", due="2026-10-16"),
+    item("t3", "준비물 체크", parentTempId="t1", ownerId="u2", priority="high"),
 ]
 
 
@@ -38,7 +38,7 @@ async def task_count(client: httpx.AsyncClient, project_id: str = "p3") -> int:
     return len(snap["tasks"])
 
 
-async def test_batch_creates_flat_list_in_order(client: httpx.AsyncClient) -> None:
+async def test_batch_creates_tree_in_order(client: httpx.AsyncClient) -> None:
     res = await client.post(URL, json={"tasks": DRAFT})
     assert res.status_code == 201
     body = res.json()
@@ -51,10 +51,8 @@ async def test_batch_creates_flat_list_in_order(client: httpx.AsyncClient) -> No
     assert [t["title"] for t in tasks] == ["간담회 준비", "일정 체크", "준비물 체크"]
     assert [t["key"] for t in tasks] == ["MG-1", "MG-2", "MG-3"]
     assert ids == {"t1": tasks[0]["id"], "t2": tasks[1]["id"], "t3": tasks[2]["id"]}
-    # 초안은 평평하다 — relatedId 가 없으면 연관 작업도 없다 (Q61)
-    assert [t["relatedIds"] for t in tasks] == [[], [], []]
-    # 파트는 안 보내면 공통
-    assert [t["partId"] for t in tasks] == [None, None, None]
+    # tempId 가 실제 id 로 바뀌어 상하위가 선다
+    assert [t["parentId"] for t in tasks] == [None, ids["t1"], ids["t1"]]
     assert [t["ownerId"] for t in tasks] == [None, "u1", "u2"]
     assert tasks[1]["due"] == "2026-10-16" and tasks[1]["start"] is None
     assert tasks[2]["priority"] == "high"
@@ -104,7 +102,7 @@ async def test_failure_midway_leaves_nothing(
 
 
 async def test_missing_owner_is_400_and_leaves_nothing(client: httpx.AsyncClient) -> None:
-    tasks = [DRAFT[0], DRAFT[1], item("t3", "준비물 체크", ownerId="없음")]
+    tasks = [DRAFT[0], DRAFT[1], item("t3", "준비물 체크", parentTempId="t1", ownerId="없음")]
     res = await client.post(URL, json={"tasks": tasks})
     assert res.status_code == 400
     body = res.json()
@@ -125,6 +123,9 @@ async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:
         ([], "tasks"),
         ([item(f"t{i}", "할 일") for i in range(21)], "tasks"),
         ([item("t1", "가"), item("t1", "나")], "tasks.1.tempId"),
+        ([item("t1", "가", parentTempId="t2"), item("t2", "나")], "tasks.0.parentTempId"),
+        ([item("t1", "가", parentTempId="t1")], "tasks.0.parentTempId"),
+        ([item("t1", "가", parentTempId="없음")], "tasks.0.parentTempId"),
         ([item("t1", "가"), item("t2", "   ")], "tasks.1.title"),
         ([item("t1", "가", start="2026-10-20", due="2026-10-19")], "tasks.0.due"),
         # 타입 오류도 몇 번째인지 짚는다
@@ -151,39 +152,38 @@ async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
     assert len(res.json()["tasks"]) == 20
 
 
-async def test_batch_related_id_hangs_one_line(client: httpx.AsyncClient) -> None:
-    """relatedId 면 새 작업 → 그 작업 한 줄이 걸린다. 걸린 쪽에는 안 보인다 (Q61)."""
-    draft = [item("t1", "화면 설계", relatedId="k1"), item("t2", "목록 화면")]
+async def test_batch_hangs_under_an_existing_task(client: httpx.AsyncClient) -> None:
+    """parentId 로 이미 있는 작업 밑에 붙는다. 그 밑의 하위는 parentTempId 로 잇는다."""
+    draft = [
+        item("t1", "화면 설계", parentId="k1"),
+        item("t2", "목록 화면", parentTempId="t1"),
+    ]
     res = await client.post("/api/projects/p1/tasks/batch", json={"tasks": draft})
     assert res.status_code == 201, res.text
     tasks = res.json()["tasks"]
-    assert [t["relatedIds"] for t in tasks] == [["k1"], []]
-
-    snap = (await client.get("/api/projects/p1/snapshot")).json()
-    by_id = {t["id"]: t for t in snap["tasks"]}
-    assert by_id[tasks[0]["id"]]["relatedIds"] == ["k1"]
-    assert by_id["k1"]["relatedIds"] == []
+    assert tasks[0]["parentId"] == "k1"
+    assert tasks[1]["parentId"] == tasks[0]["id"]
 
 
-async def test_parent_keys_are_not_part_of_the_draft(client: httpx.AsyncClient) -> None:
-    """옛 parentTempId · parentId 는 모르는 키라 버린다 — 평평하게 들어간다."""
-    res = await client.post(
-        URL, json={"tasks": [item("t1", "가"), item("t2", "나", parentTempId="t1")]}
-    )
-    assert res.status_code == 201
-    assert [t["relatedIds"] for t in res.json()["tasks"]] == [[], []]
-
-
-@pytest.mark.parametrize("related", ["x1", "nope"])
-async def test_batch_related_from_elsewhere_is_400_and_leaves_nothing(
-    client: httpx.AsyncClient, related: str
+@pytest.mark.parametrize("parent", ["x1", "nope"])
+async def test_batch_parent_from_elsewhere_is_400_and_leaves_nothing(
+    client: httpx.AsyncClient, parent: str
 ) -> None:
     before = await task_count(client, "p1")
     res = await client.post(
         "/api/projects/p1/tasks/batch",
-        json={"tasks": [item("t1", "가"), item("t2", "나", relatedId=related)]},
+        json={"tasks": [item("t1", "가"), item("t2", "나", parentId=parent)]},
     )
     assert res.status_code == 400
-    assert res.json()["code"] == "TASK_RELATED_NOT_FOUND"
-    assert res.json()["detail"] == {"tasks.1.relatedId": "연관 작업을 찾을 수 없습니다."}
+    assert res.json()["code"] == "TASK_PARENT_NOT_FOUND"
+    assert "tasks.1.parentId" in res.json()["detail"]
     assert await task_count(client, "p1") == before
+
+
+async def test_batch_two_parents_is_422(client: httpx.AsyncClient) -> None:
+    res = await client.post(
+        "/api/projects/p1/tasks/batch",
+        json={"tasks": [item("t1", "가"), item("t2", "나", parentTempId="t1", parentId="k1")]},
+    )
+    assert res.status_code == 422
+    assert "tasks.1.parentId" in res.json()["detail"]

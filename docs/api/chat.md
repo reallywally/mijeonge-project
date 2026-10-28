@@ -165,16 +165,17 @@ export interface TaskHit {
 
 ```ts
 export interface TaskProposal {
-  /** 배열 순서 = 등록 순서 = 화면 순서. 평평한 목록이다 — 초안 안끼리의 상위 · 하위는 없다 (Q61) */
+  /** 배열 순서 = 등록 순서 = 화면 순서. 상위가 늘 하위보다 앞이다 */
   tasks: ProposedTask[]
 }
 
 export interface ProposedTask {
   /** 이 초안 안에서만 쓰는 임시 이름 — 't1', 't2' … */
   tempId: string
-  /** 이미 있는 작업과 관련된 초안일 때 그 작업의 id — 등록하면 새 작업 → 그 작업 연관 한 줄이 걸린다.
-      없으면 null (2026-10-27, Q61. 그 전의 parentTempId · parentId 를 대신한다) */
-  relatedId: string | null
+  /** 같은 초안 안의 상위 작업 */
+  parentTempId: string | null
+  /** 이미 있는 작업 밑에 붙일 때 그 작업의 id (2026-10-14). parentTempId 와 같이 쓰지 않는다 */
+  parentId: string | null
   title: string
   ownerId: string | null
   /** YYYY-MM-DD. 둘 다 null 이면 기간 미정 */
@@ -185,10 +186,10 @@ export interface ProposedTask {
 ```
 
 **검사 규칙**(서버가 `propose_tasks` 에서, 그리고 `tasks/batch` 에서 똑같이 본다)
-- 1 ~ 20개. `tempId` 는 서로 다르다
+- 1 ~ 20개. `tempId` 는 서로 다르다. `parentTempId` 는 **자기보다 앞에 있는** 항목의 `tempId` 다
 - `title` 은 앞뒤 공백을 떼고 비지 않는다. `ownerId` 는 있는 멤버다. `start ≤ due`(둘 다 있을 때)
-- `relatedId` 는 **그 프로젝트의** 이미 있는 작업이다(아니면 400 `TASK_RELATED_NOT_FOUND`, `detail` 은 `tasks.N.relatedId`).
-  파트는 따르지 않는다 — 안 보내면 공통(`null`)
+- `parentId` 는 **그 프로젝트의** 작업이다(아니면 400 `TASK_PARENT_NOT_FOUND`, `detail` 은 `tasks.N.parentId`).
+  `parentTempId` 와 둘 다 두면 422(`tasks.N.parentId`). 파트는 그 상위 작업을 따른다
 
 ### 스트림에 늘어난 것 — `ChatEvent`
 
@@ -237,7 +238,7 @@ export interface TaskBatchResult {
 
 - **한 트랜잭션**이다 — 하나라도 틀리면 아무것도 안 남는다. `key` 는 배열 순서대로 발번한다
 - 오류: 없는 프로젝트 404 `PROJECT_NOT_FOUND`, 검사 규칙 위반은 422 `VALIDATION_ERROR`(`detail` 에
-  `tasks.1.title` 처럼 몇 번째의 어느 칸인지), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`, 없는 연관 작업은 400 `TASK_RELATED_NOT_FOUND`
+  `tasks.1.parentTempId` 처럼 몇 번째의 어느 칸인지), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND`
 - 구현 (2026-10-12, 서버) — `detail` 의 자리 이름: 개수(0개 · 21개 이상)는 `tasks`, `start > due` 는
   `tasks.N.due`, 날짜 형식 · `priority` 같은 타입 오류도 `tasks.N.칸` 이다. 없는 멤버의 400 에도 `detail` 이
   `tasks.N.ownerId` 로 붙는다. 검사가 끝난 뒤에만 쓰고, 쓰다 터지면 발번한 번호까지 되돌린다.
@@ -248,7 +249,7 @@ export interface TaskBatchResult {
 
 - 작업을 만들어 달라는 말에는 **초안만 낸다.** 답 본문은 짧게 — "아래처럼 등록할까요?" 정도. "등록했다" 고 말하지 않는다
 - 이름이 멤버에 없거나 여럿에 걸리면 **초안을 내지 않고 되묻는다**
-- 초안은 평평한 목록이다 — 상위 · 하위로 묶지 않는다(Q61). 이미 있는 작업과 관련된 할 일이면 `relatedId` 에 그 작업 id 를 둔다
+- 묶음 이름이 있고 할 일이 둘 이상이면 묶음을 상위 작업, 할 일을 하위 작업으로 둔다. 할 일이 하나면 상위 없이 하나다
 - 날짜("다음 주 금요일")는 오늘(KST) 기준으로 바꾼다 — 서버가 시스템 프롬프트에 오늘 날짜를 넣는다. 말하지 않은 기간 · 우선순위는 채우지 않는다(null · normal)
 - 경로의 `projectId` 안에만 만든다
 
@@ -266,15 +267,15 @@ export interface TaskBatchResult {
   앞이 영숫자 · `.` · `@` 면(이메일) 언급이 아니다. 뒤에 조사가 바로 붙어도(`@HW-4는`) 언급이다
 - `get_task` 도구의 `task_id` 는 작업 키도 받는다 — 사용자가 `@` 없이 `HW-4` 라고 말해도 읽는다
 
-## AI 챗봇 — 이미 있는 작업에 연관된 작업 초안 (2026-10-14, 2026-10-27 고침 — Q61)
+## AI 챗봇 — 이미 있는 작업 밑에 하위 작업 초안 (2026-10-14)
 
 "@HW-20 분석해서 필요한 작업 하위에 추가해줘" 를 처리한다. 저장은 여전히 사람이 [등록] 으로 한다.
 
-1. Claude 가 `get_task` 로 그 작업을 읽는다 — 제목 · 본문 · 걸어 둔 안건에 더해 **`related`(이 작업이 건 연관 작업)
-   · `relatedBy`(이 작업을 건 작업)** 의 id · 키 · 제목 · 상태가 있다(`children` 을 대신한다). 걸린 안건의 결정이 할 일을 정하면 `get_thread` 로 읽는다
-2. 그 작업을 끝내는 데 필요한데 `related` · `relatedBy` 에 아직 없는 할 일만, `relatedId` = 그 작업의 id 로 초안을 낸다.
-   왜 그렇게 나눴는지 한두 줄로 먼저 말한다
-3. 화면의 초안 카드는 `relatedId` 가 있는 줄에 '연관: HW-20' 정도를 밝힌다(들여쓰기 없음)
+1. Claude 가 `get_task` 로 그 작업을 읽는다 — 제목 · 본문 · 걸어 둔 안건에 더해 **`children`(바로 아래 하위
+   작업의 id · 키 · 제목 · 상태)** 이 늘었다. 걸린 안건의 결정이 할 일을 정하면 `get_thread` 로 읽는다
+2. 그 작업을 끝내는 데 필요한데 `children` 에 아직 없는 할 일만, `parentId` = 그 작업의 id 로 초안을 낸다.
+   하위의 하위는 `parentTempId` 로 잇는다. 왜 그렇게 나눴는지 한두 줄로 먼저 말한다
+3. 화면의 초안 카드는 위에 "`HW-20 제목` 밑에 붙습니다" 를 밝히고 그 밑으로 한 칸 들여 그린다
 
 ## AI 챗봇 — 중복 · 비슷한 작업 찾기 (2026-10-14)
 
@@ -283,13 +284,13 @@ export interface TaskBatchResult {
 
 | 도구 | 하는 일 | 화면 라벨 |
 | --- | --- | --- |
-| `list_tasks` | 프로젝트 작업 전체를 한 줄씩(id · key · title · status · relatedKeys(이 작업이 건 연관 작업 키 목록) · owner — 담당자 이름). 번호 순, 본문 없음. `status` 로 거를 수 있다. 300개 넘으면 앞에서 자르고 `truncated: true` | 작업 목록 보는 중 |
-| `find_similar_tasks` | 제목끼리 · (제목 + 본문)끼리 `pg_trgm` 유사도가 0.3 이상인 작업 쌍을 점수 순으로(기본 20, 최대 30). `taskId`(id 나 키)를 주면 그 작업이 낀 쌍만. 쌍마다 `relation`: `related`(어느 한쪽이 다른 쪽을 연관으로 걸었음) · `null` | 비슷한 작업 찾는 중 |
+| `list_tasks` | 프로젝트 작업 전체를 한 줄씩(id · key · title · status · parentKey · owner — 담당자 이름). 번호 순, 본문 없음. `status` 로 거를 수 있다. 300개 넘으면 앞에서 자르고 `truncated: true` | 작업 목록 보는 중 |
+| `find_similar_tasks` | 제목끼리 · (제목 + 본문)끼리 `pg_trgm` 유사도가 0.3 이상인 작업 쌍을 점수 순으로(기본 20, 최대 30). `taskId`(id 나 키)를 주면 그 작업이 낀 쌍만. 쌍마다 `relation`: `parent_child` · `siblings` · `null` | 비슷한 작업 찾는 중 |
 
 - 글자 유사도라 **뜻만 같은 것**(예: '계정 발급' ↔ '계정 배포')은 못 잡는다 — 그래서 Claude 가 `list_tasks` 로 제목을 훑어 보탠다
 - `find_similar_tasks` 는 모든 쌍을 견준다(작업 수의 제곱). 수백 개까지를 생각한 것이다
 - 답하는 규칙: 후보는 `get_task` 로 본문을 읽고 판단하고, 못 읽은 것은 "제목만 봤다" 고 밝힌다.
-  이미 연관으로 걸린 쌍(`related`)은 사람이 알고 있는 관계다 — 중복이라 단정하지 않는다. "중복 가능성 높음" · "확인 필요" 로 나누고 근거를 붙인다
+  상위 ↔ 하위 쌍은 중복으로 치지 않는다. "중복 가능성 높음" · "확인 필요" 로 나누고 근거를 붙인다
 - 도구 고르기를 시스템 프롬프트에 적었다 — 낱말 · 주제는 `search_tasks`, 전체를 훑을 때는 `list_tasks`,
   중복은 `find_similar_tasks`, 하나를 자세히는 `get_task`
 - 함께 고친 것: 답은 존댓말로만, 영어 문장 · "찾아보겠습니다" 같은 진행 중계를 쓰지 않는다

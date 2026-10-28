@@ -12,16 +12,17 @@ import {
 /* 서버 계약의 '검사'(docs/api/task-flow.md) — 목업 api 와 화면의 고르기 목록이 같은 함수를 쓴다 */
 const p1 = tasks.filter((t) => t.projectId === 'p1')
 const problem = (taskId: string, dependsOnId: string, deps = taskDependencies) =>
-  dependencyProblem(deps, taskId, dependsOnId)
+  dependencyProblem(p1, deps, taskId, dependsOnId)
 
 describe('선행 작업 검사', () => {
-  it('자기 자신만 거절한다 — 연관 작업은 선후를 막지 않는다 (Q61)', () => {
-    expect(problem('k20', 'k20')).toBe('self')
-    expect(DEPENDENCY_ERRORS.self).toMatchObject({ status: 400, code: 'TASK_DEPENDENCY_SELF' })
-    /* k20 은 HW-4 를 연관으로 건다 — 예전엔 상하위라 막혔다 */
-    expect(problem('k20', 'k4')).toBeNull()
-    expect(problem('k4', 'k20')).toBeNull()
-    expect(problem('k8', 'k5')).toBeNull()
+  it('자기 자신 · 조상 · 자손은 상하위로 거절한다', () => {
+    expect(problem('k20', 'k20')).toBe('hierarchy')
+    /* k20 은 개발 환경 설정(k4) 아래 */
+    expect(problem('k20', 'k4')).toBe('hierarchy')
+    expect(problem('k4', 'k20')).toBe('hierarchy')
+    /* 몇 단을 건너도 — tool01(k8) 은 개발(k5) 의 손자의 자식 */
+    expect(problem('k8', 'k5')).toBe('hierarchy')
+    expect(problem('k5', 'k8')).toBe('hierarchy')
   })
 
   it('몇 단계를 건너도 서로 기다리게 되면 순환이다', () => {
@@ -31,7 +32,7 @@ describe('선행 작업 검사', () => {
     expect(DEPENDENCY_ERRORS.cycle).toMatchObject({ status: 409, code: 'TASK_DEPENDENCY_CYCLE' })
   })
 
-  it('아무 작업끼리 걸린다', () => {
+  it('형제 · 사촌끼리는 걸린다', () => {
     expect(problem('k21', 'k19')).toBeNull()
     expect(problem('k16', 'k15')).toBeNull()
     expect(problem('k18', 'k3')).toBeNull()
@@ -54,11 +55,11 @@ describe('선행 작업 검사', () => {
 })
 
 describe('고르기 목록', () => {
-  it('자기 · 이미 건 것을 빼고, 순환이 되는 것은 까닭과 함께 둔다', () => {
+  it('자기 · 조상 · 자손 · 이미 건 것을 빼고, 순환이 되는 것은 까닭과 함께 둔다', () => {
     const choices = dependencyChoices(p1, taskDependencies, 'k19')
     const ids = choices.map((c) => c.task.id)
     expect(ids).not.toContain('k19')
-    expect(choices.find((c) => c.task.id === 'k4')!.problem).toBeNull()
+    expect(ids).not.toContain('k4')
     expect(choices.find((c) => c.task.id === 'k20')!.problem).toBe('cycle')
     expect(choices.find((c) => c.task.id === 'k22')!.problem).toBe('cycle')
     expect(choices.find((c) => c.task.id === 'k1')!.problem).toBeNull()

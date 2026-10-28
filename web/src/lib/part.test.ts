@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { partMembers, tasks, taskThreadLinks, threads } from '@/fixtures'
 import {
   defaultPartScope,
+  inheritedPartId,
   partChoices,
   partFilterOf,
   partNameProblem,
@@ -42,12 +43,12 @@ describe('내 파트 — 시드로 사람마다', () => {
     expect(u3.threads).toEqual(['t1', 't2', 't4', 't6', 't9'])
   })
 
-  it('기간계(u2) 는 담당한 AI 작업(k15)도 본다 — 그 작업이 건 연관 작업은 끌려오지 않는다', () => {
+  it('기간계(u2) 는 담당한 AI 작업(k15)도 보고, 그 조상은 길을 잇느라 흐리게 선다', () => {
     const u2 = seen('u2')
-    expect(u2.tasks).toEqual(['k1', 'k2', 'k3', 'k5', 'k15', 'k17', 'k18'])
-    /* 작업은 평평하다(Q61) — 흐리게 서는 것이 없다. k15 가 건 HW-14 도 안 보인다 */
-    expect(u2.context).toEqual([])
-    expect(u2.tasks).not.toContain('k14')
+    expect(u2.tasks).toEqual(['k1', 'k2', 'k3', 'k5', 'k6', 'k14', 'k15', 'k17', 'k18'])
+    /* k5(개발)는 공통이라 스스로 보인다 — 흐리게 서는 것은 AI 파트의 조상 둘뿐이다 */
+    expect(u2.context).toEqual(['k6', 'k14'])
+    /* 같은 묶음 아래의 다른 AI 작업은 안 보인다 */
     expect(u2.tasks).not.toContain('k16')
     expect(u2.threads).toEqual(['t5', 't6', 't9'])
   })
@@ -61,23 +62,18 @@ describe('내 파트 — 시드로 사람마다', () => {
     expect(u4.threads).toEqual(['t3', 't5', 't6', 't7', 't8', 't9'])
   })
 
-  it('다른 파트 작업을 하나 맡아도(u1 · k21) 그 작업이 건 연관 작업 · 그 안건은 안 딸려 온다', () => {
+  it('다른 파트 작업을 하나 맡아도(u1 · k21) 경로로 선 조상의 안건은 안 딸려 온다', () => {
     const u1 = seen('u1')
     expect(u1.tasks).toContain('k21')
-    expect(u1.tasks).not.toContain('k4')
-    expect(u1.context).toEqual([])
-    /* k21 이 건 k4(개발 환경 설정)는 안 보이고, 거기 걸린 서버 OS · DB 결정도 안 끌어온다 */
+    expect(u1.context).toEqual(['k4'])
+    /* k4(개발 환경 설정)는 경로를 잇느라 선 조상일 뿐이라, 거기 걸린 서버 OS · DB 결정은 안 끌어온다 */
     expect(u1.threads).toEqual(['t3', 't6', 't7', 't8', 't9'])
     expect(u1.threads).not.toContain('t1')
   })
 })
 
-/* 조상 규칙은 계층이 남은 테스트(TestCase)가 쓴다 — 작업은 parentId 를 안 싣는다 */
 describe('내 파트 — 규칙 하나씩', () => {
-  const task = (
-    id: string,
-    over: Partial<Pick<Task, 'partId' | 'ownerId'>> & { parentId?: string | null } = {},
-  ) => ({
+  const task = (id: string, over: Partial<Task> = {}) => ({
     id,
     parentId: null,
     partId: null,
@@ -167,7 +163,7 @@ describe('내 파트 — 규칙 하나씩', () => {
   })
 })
 
-describe('기본 보기 · 고르기', () => {
+describe('기본 보기 · 고르기 · 상속', () => {
   it('일반 사용자는 내 파트, 프로젝트 관리자 · 시스템 관리자는 전체로 시작한다', () => {
     expect(defaultPartScope('user')).toBe('mine')
     expect(defaultPartScope('projectAdmin')).toBe('all')
@@ -188,6 +184,13 @@ describe('기본 보기 · 고르기', () => {
   it('고를 수 있는 것은 활성 파트 — 이미 달린 보관 파트는 그 자리에서만 보인다', () => {
     expect(partChoices(parts, null).map((p) => p.id)).toEqual(['a', 'b'])
     expect(partChoices(parts, 'z').map((p) => p.id)).toEqual(['a', 'z', 'b'])
+  })
+
+  it('작업 등록에서 안 보내면 상위를 따르고, null 을 보내면 공통이다', () => {
+    expect(inheritedPartId(undefined, { partId: 'a' })).toBe('a')
+    expect(inheritedPartId(undefined, null)).toBeNull()
+    expect(inheritedPartId(null, { partId: 'a' })).toBeNull()
+    expect(inheritedPartId('b', { partId: 'a' })).toBe('b')
   })
 
   it('파트 이름은 앞뒤 공백을 떼고 1 ~ 50자', () => {

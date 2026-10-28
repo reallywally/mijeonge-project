@@ -11,7 +11,8 @@ afterEach(() => {
 
 const draft = (tempId: string, over: Partial<ProposedTask> = {}): ProposedTask => ({
   tempId,
-  relatedId: null,
+  parentTempId: null,
+  parentId: null,
   title: `작업 ${tempId}`,
   ownerId: null,
   start: null,
@@ -27,31 +28,39 @@ const lastHwNo = Math.max(
 describe('한 번에 등록 — 목업 갈래', () => {
   beforeEach(resetMockTasks)
 
-  it('relatedId 가 있으면 새 작업이 그 작업을 연관으로 건다 — 초안끼리는 묶지 않는다', async () => {
+  it('parentId 로 이미 있는 작업 밑에 붙고, 그 밑은 parentTempId 로 잇는다', async () => {
     const res = await createTasksBatch('p1', {
-      tasks: [draft('t1', { relatedId: 'k20' }), draft('t2')],
+      tasks: [draft('t1', { parentId: 'k1' }), draft('t2', { parentTempId: 't1' })],
     })
-    expect(res.tasks[0].relatedIds).toEqual(['k20'])
-    expect(res.tasks[1].relatedIds).toEqual([])
+    expect(res.tasks[0].parentId).toBe('k1')
+    expect(res.tasks[1].parentId).toBe(res.tasks[0].id)
   })
 
-  it('다른 프로젝트의 작업은 연관으로 못 건다 — 400 TASK_RELATED_NOT_FOUND', async () => {
+  it('다른 프로젝트의 작업 밑에는 못 붙는다 — 400 TASK_PARENT_NOT_FOUND', async () => {
     const error = await createTasksBatch('p1', {
-      tasks: [draft('t1'), draft('t2', { relatedId: 'x1' })],
+      tasks: [draft('t1'), draft('t2', { parentId: 'x1' })],
     }).catch((e: unknown) => e)
     expect(error).toMatchObject({
       status: 400,
-      code: 'TASK_RELATED_NOT_FOUND',
-      detail: { 'tasks.1.relatedId': '연관 작업을 찾을 수 없습니다.' },
+      code: 'TASK_PARENT_NOT_FOUND',
+      detail: { 'tasks.1.parentId': '상위 작업을 찾을 수 없습니다.' },
     })
   })
 
-  it('요청 순서대로 todo · 빈 본문 · 공통 파트로 만든다', async () => {
+  it('상위를 둘 다 두면 422', async () => {
+    const error = await createTasksBatch('p1', {
+      tasks: [draft('t1'), draft('t2', { parentTempId: 't1', parentId: 'k1' })],
+    }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ status: 422 })
+    expect((error as { detail: Record<string, string> }).detail).toHaveProperty('tasks.1.parentId')
+  })
+
+  it('요청 순서대로 todo · 빈 본문으로 만들고, 상위는 임시 이름을 id 로 바꿔 잇는다', async () => {
     const res = await createTasksBatch('p1', {
       tasks: [
         draft('t1', { title: '  간담회 준비 ' }),
-        draft('t2', { ownerId: 'u1', start: '2026-10-13', due: '2026-10-16' }),
-        draft('t3', { priority: 'high', relatedId: 'k4' }),
+        draft('t2', { parentTempId: 't1', ownerId: 'u1', start: '2026-10-13', due: '2026-10-16' }),
+        draft('t3', { parentTempId: 't1', priority: 'high' }),
       ],
     })
 
@@ -60,12 +69,11 @@ describe('한 번에 등록 — 목업 갈래', () => {
       `HW-${lastHwNo + 2}`,
       `HW-${lastHwNo + 3}`,
     ])
-    const [first, a, b] = res.tasks
-    expect(res.taskIdByTempId).toEqual({ t1: first.id, t2: a.id, t3: b.id })
-    expect(first).toMatchObject({ projectId: 'p1', title: '간담회 준비', relatedIds: [] })
+    const [parent, a, b] = res.tasks
+    expect(res.taskIdByTempId).toEqual({ t1: parent.id, t2: a.id, t3: b.id })
+    expect(parent).toMatchObject({ projectId: 'p1', title: '간담회 준비', parentId: null })
     expect(a).toMatchObject({
-      relatedIds: [],
-      partId: null,
+      parentId: parent.id,
       ownerId: 'u1',
       start: '2026-10-13',
       due: '2026-10-16',
@@ -73,8 +81,7 @@ describe('한 번에 등록 — 목업 갈래', () => {
       body: [],
       commentCount: 0,
     })
-    /* HW-4 는 기반 파트지만 따르지 않는다 (Q61) */
-    expect(b).toMatchObject({ relatedIds: ['k4'], priority: 'high', partId: null })
+    expect(b).toMatchObject({ parentId: parent.id, priority: 'high' })
     expect(a.createdAt).toMatch(/Z$/)
   })
 
@@ -88,7 +95,7 @@ describe('한 번에 등록 — 목업 갈래', () => {
   it('검사 규칙을 어기면 422 — detail 에 몇 번째의 어느 칸인지', async () => {
     const error = await createTasksBatch('p1', {
       tasks: [
-        draft('t1'),
+        draft('t1', { parentTempId: 't2' }),
         draft('t2', { title: '   ' }),
         draft('t2', { start: '2026-10-20', due: '2026-10-13' }),
       ],
@@ -96,6 +103,7 @@ describe('한 번에 등록 — 목업 갈래', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 422, code: 'VALIDATION_ERROR' })
     expect(Object.keys(error.detail).sort()).toEqual([
+      'tasks.0.parentTempId',
       'tasks.1.title',
       'tasks.2.due',
       'tasks.2.tempId',
@@ -143,7 +151,7 @@ describe('한 번에 등록 — 서버 갈래', () => {
       projectId: 'p 1',
       key: 'MG-7',
       title: '작업 t1',
-      relatedIds: [],
+      parentId: null,
       body: [],
       status: 'todo',
       ownerId: null,
@@ -171,13 +179,13 @@ describe('한 번에 등록 — 서버 갈래', () => {
       json(422, {
         code: 'VALIDATION_ERROR',
         message: '입력값이 올바르지 않습니다.',
-        detail: { 'tasks.1.title': '제목을 적어 주세요.' },
+        detail: { 'tasks.1.parentTempId': '앞에 있는 항목이어야 합니다.' },
       }),
     )
     const error = await createTasksBatch('p1', { tasks: [draft('t1')] }).catch((e) => e)
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 422, code: 'VALIDATION_ERROR' })
-    expect(error.detail).toEqual({ 'tasks.1.title': '제목을 적어 주세요.' })
+    expect(error.detail).toEqual({ 'tasks.1.parentTempId': '앞에 있는 항목이어야 합니다.' })
 
     serve(() => json(400, { code: 'TASK_OWNER_NOT_FOUND', message: '담당자를 찾을 수 없습니다.' }))
     expect(await createTasksBatch('p1', { tasks: [draft('t1')] }).catch((e) => e)).toMatchObject({

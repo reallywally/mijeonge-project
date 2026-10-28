@@ -89,9 +89,20 @@ export const usePartStore = defineStore('part', () => {
 
   const showsTask = (taskId: string) => visible.value?.taskIds.has(taskId) ?? true
   const showsThread = (threadId: string) => visible.value?.threadIds.has(threadId) ?? true
+  /** 보이는 작업의 조상이라 선 것 — 흐리게 그린다 */
+  const isContextTask = (taskId: string) => visible.value?.contextTaskIds.has(taskId) ?? false
 
   /** 작업 · 안건에 고를 수 있는 파트 — 활성 파트 + 지금 달린 파트(보관이어도) */
   const choicesFor = (current: string | null) => partChoices(parts.value, current)
+
+  /**
+   * 하위 작업을 만들 때 골라 둘 파트 — 상위 작업의 것. 보관한 파트는 새로 달 수 없어(400 PART_ARCHIVED)
+   * 공통으로 둔다. 화면은 이 값을 늘 실어 보내 서버의 상속에 기대지 않는다 (API.md Q32)
+   */
+  function partForChildOf(parentId: string | null): string | null {
+    const partId = data.allTasks.find((t) => t.id === parentId)?.partId ?? null
+    return partId && byId.value[partId]?.active ? partId : null
+  }
 
   /* 파트 관리 — 프로젝트 관리자 · 시스템 관리자. 응답을 기다렸다가 넣는다. 실패하면 알리고 false */
 
@@ -160,7 +171,9 @@ export const usePartStore = defineStore('part', () => {
     visible,
     showsTask,
     showsThread,
+    isContextTask,
     choicesFor,
+    partForChildOf,
     createPart,
     renamePart,
     setPartActive,

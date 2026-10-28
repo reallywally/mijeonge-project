@@ -42,6 +42,7 @@ class DecisionFacts(Schema):
 
 
 class TaskWeight(Schema):
+    open_children: int
     open_lines: int
     total_lines: int
     thread_count: int

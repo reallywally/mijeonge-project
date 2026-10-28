@@ -8,17 +8,17 @@ import type { Task, TaskDependency, TaskStatus } from '@/types/domain'
 /** 한 작업의 선행은 이만큼까지 */
 export const DEPENDENCY_LIMIT = 20
 
-export type DependencyProblem = 'self' | 'cycle' | 'limit'
+export type DependencyProblem = 'hierarchy' | 'cycle' | 'limit'
 
 /** 서버와 같은 상태 · 코드 · 한 줄 */
 export const DEPENDENCY_ERRORS: Record<
   DependencyProblem,
   { status: number; code: string; message: string }
 > = {
-  self: {
+  hierarchy: {
     status: 400,
-    code: 'TASK_DEPENDENCY_SELF',
-    message: '자기 자신은 선행 작업으로 둘 수 없습니다.',
+    code: 'TASK_DEPENDENCY_HIERARCHY',
+    message: '자기 자신이나 상위 · 하위 작업은 선행 작업으로 둘 수 없습니다.',
   },
   cycle: {
     status: 409,
@@ -32,13 +32,44 @@ export const DEPENDENCY_ERRORS: Record<
   },
 }
 
-/** 고르기 목록에서 흐리게 둔 줄 옆에 적는 짧은 까닭 — 자기는 목록에서 아예 빠진다 */
-export const DEPENDENCY_REASONS: Record<Exclude<DependencyProblem, 'self'>, string> = {
+/** 고르기 목록에서 흐리게 둔 줄 옆에 적는 짧은 까닭 */
+export const DEPENDENCY_REASONS: Record<DependencyProblem, string> = {
+  hierarchy: '상위 · 하위 작업',
   cycle: '이미 이 작업을 기다림',
   limit: `${DEPENDENCY_LIMIT}개까지`,
 }
 
-type Node = Pick<Task, 'id'>
+type Node = Pick<Task, 'id' | 'parentId'>
+
+/** 위로 올라가며 모은 조상 */
+function ancestorsOf(tasks: Node[], taskId: string): Set<string> {
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  const seen = new Set<string>()
+  let parent = byId.get(taskId)?.parentId ?? null
+  while (parent && !seen.has(parent)) {
+    seen.add(parent)
+    parent = byId.get(parent)?.parentId ?? null
+  }
+  return seen
+}
+
+/** 자기 · 조상 · 자손 — 하위 작업은 상위의 일부라 선후가 아니다 */
+export function hierarchyOf(tasks: Node[], taskId: string): Set<string> {
+  const ids = new Set([taskId, ...ancestorsOf(tasks, taskId)])
+  const below = new Set([taskId])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const t of tasks) {
+      if (t.parentId && below.has(t.parentId) && !below.has(t.id)) {
+        below.add(t.id)
+        ids.add(t.id)
+        grew = true
+      }
+    }
+  }
+  return ids
+}
 
 /** from 이 선행을 따라 몇 단계를 건너 to 에 닿는가 */
 function waitsFor(deps: TaskDependency[], from: string, to: string): boolean {
@@ -60,11 +91,12 @@ function waitsFor(deps: TaskDependency[], from: string, to: string): boolean {
  * 화면이 먼저 넣어 둔(낙관적 반영) 쌍이 자기 검사를 막지도 않는다
  */
 export function dependencyProblem(
+  tasks: Node[],
   deps: TaskDependency[],
   taskId: string,
   dependsOnId: string,
 ): DependencyProblem | null {
-  if (taskId === dependsOnId) return 'self'
+  if (hierarchyOf(tasks, taskId).has(dependsOnId)) return 'hierarchy'
   const others = deps.filter((d) => !(d.taskId === taskId && d.dependsOnId === dependsOnId))
   if (waitsFor(others, dependsOnId, taskId)) return 'cycle'
   if (others.filter((d) => d.taskId === taskId).length >= DEPENDENCY_LIMIT) return 'limit'
@@ -74,21 +106,22 @@ export function dependencyProblem(
 export interface DependencyChoice<T extends Node = Task> {
   task: T
   /** 걸 수 없는 까닭 — 있으면 흐리게 두고 못 고른다 */
-  problem: Exclude<DependencyProblem, 'self'> | null
+  problem: Exclude<DependencyProblem, 'hierarchy'> | null
 }
 
-/** 선행으로 고를 수 있는 작업 — 자기 · 이미 건 것은 빼고, 걸면 순환이 되는 것은 까닭과 함께 둔다 */
+/** 선행으로 고를 수 있는 작업 — 자기 · 조상 · 자손 · 이미 건 것은 빼고, 걸면 순환이 되는 것은 까닭과 함께 둔다 */
 export function dependencyChoices<T extends Node>(
   tasks: T[],
   deps: TaskDependency[],
   taskId: string,
 ): DependencyChoice<T>[] {
+  const family = hierarchyOf(tasks, taskId)
   const already = new Set(deps.filter((d) => d.taskId === taskId).map((d) => d.dependsOnId))
   return tasks
-    .filter((t) => t.id !== taskId && !already.has(t.id))
+    .filter((t) => !family.has(t.id) && !already.has(t.id))
     .map((t) => {
-      const problem = dependencyProblem(deps, taskId, t.id)
-      return { task: t, problem: problem === 'self' ? null : problem }
+      const problem = dependencyProblem(tasks, deps, taskId, t.id)
+      return { task: t, problem: problem === 'hierarchy' ? null : problem }
     })
 }
 

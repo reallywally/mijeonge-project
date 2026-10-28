@@ -14,7 +14,9 @@ import { TASK_STATUS_OPTIONS } from '@/lib/task'
 import { useTaskStore } from '@/stores/task'
 import type { TaskStatus } from '@/types/domain'
 
-/* 칸반보드 — 목록과 같은 작업을 상태로만 갈라 놓은 것이다. 작업은 평평해(Q61) 모두 카드가 된다 */
+/* 칸반보드 — 목록과 같은 작업을 상태로만 갈라 놓은 것이다.
+   묶음 작업(자식이 있는 작업)은 카드가 되지 않는다. 잎 작업만 올라온다 —
+   묶음은 자기 일이 아니라 아래 것들의 합이라 칸을 옮긴다는 말이 성립하지 않는다. */
 const emit = defineEmits<{
   (e: 'open-task', id: string): void
   (e: 'add-task', status: TaskStatus): void
@@ -32,10 +34,11 @@ const dotClass: Record<TaskStatus, string> = {
 }
 
 const columns = computed(() => {
+  const leaves = taskStore.visibleRows.filter((r) => r.childCount === 0)
   return TASK_STATUS_OPTIONS.map((o) => ({
     ...o,
     dot: dotClass[o.value],
-    cards: taskStore.visibleRows.filter((r) => r.task.status === o.value),
+    cards: leaves.filter((r) => r.task.status === o.value),
   }))
 })
 
@@ -57,7 +60,9 @@ const threadTitles = (taskId: string) =>
   <div class="flex min-h-0 grow flex-col">
     <div class="flex h-11 shrink-0 items-center gap-2 border-b border-border px-[26px]">
       <div class="grow" />
-      <span class="text-xs text-muted-foreground"> 카드의 상태를 바꾸면 칸이 옮겨집니다. </span>
+      <span class="text-xs text-muted-foreground">
+        카드의 상태를 바꾸면 칸이 옮겨집니다. 묶음 작업은 카드가 되지 않습니다.
+      </span>
     </div>
 
     <div class="flex min-h-0 grow gap-2.5 overflow-x-hidden px-4 py-3.5">
@@ -117,9 +122,7 @@ const threadTitles = (taskId: string) =>
             >
               {{ row.task.title }}
             </span>
-            <span v-if="row.relatedLabel" class="truncate text-xs text-muted-foreground">{{
-              row.relatedLabel
-            }}</span>
+            <span class="truncate text-xs text-muted-foreground">{{ row.pathLabel }}</span>
 
             <div class="flex items-center gap-2">
               <span

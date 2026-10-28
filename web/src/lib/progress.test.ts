@@ -23,7 +23,7 @@ function task(id: string, over: Partial<Task> = {}): Task {
     projectId: 'p1',
     key: `T-${id}`,
     title: id,
-    relatedIds: [],
+    parentId: null,
     body: [],
     status: 'todo',
     ownerId: null,
@@ -258,7 +258,7 @@ describe('막는 작업 · 무게 · 점수 · 정렬', () => {
     expect(f.attention.find((x) => x.taskId === 'd')!.blockingTaskIds).toEqual([])
   })
 
-  it('무게 — 체크리스트 줄(불릿은 안 셈) · 우선순위', () => {
+  it('무게 — 안 끝난 자손 · 체크리스트 줄(불릿은 안 셈) · 우선순위', () => {
     const f = facts([
       task('p', {
         due: '2026-10-01',
@@ -269,10 +269,12 @@ describe('막는 작업 · 무게 · 점수 · 정렬', () => {
           { id: 'l3', kind: 'bullet', text: '', done: false, level: 0 },
         ],
       }),
-      /* 연관으로 건 작업은 무게에 들지 않는다 — 작업은 저마다 자기 것만 (Q61) */
-      task('c1', { relatedIds: ['p'], status: 'doing' }),
+      task('c1', { parentId: 'p', status: 'done' }),
+      task('c2', { parentId: 'p', status: 'doing' }),
+      task('g1', { parentId: 'c2' }),
     ])
     expect(f.attention.find((a) => a.taskId === 'p')!.weight).toEqual({
+      openChildren: 2,
       openLines: 1,
       totalLines: 2,
       threadCount: 0,

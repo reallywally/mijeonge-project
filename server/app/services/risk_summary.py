@@ -43,7 +43,7 @@ SYSTEM_PROMPT = """\
 - report.settings: 쓴 기준(dueSoonDays 기한 임박 날 수 · deferCount 여러 번 미룸 횟수 ·
   staleDays 오래 멈춤 날 수 · highScore · mediumScore 등급 문턱)
 - report.threads: 위험한 안건(점수 내림차순). blockedTasks 는 이 안건 때문에 막힌 작업,
-  waitingTasks 는 결정을 기다리는 작업, impactTaskCount 는 막힌 작업 수
+  waitingTasks 는 결정을 기다리는 작업, impactTaskCount 는 막힌 작업과 그 하위 작업 수
 - report.tasks: 안건과 어긋난 작업(signal 하나). threads 는 근거 안건
 - report.owners: 사람별 몰림(프로젝트 전체)
 - details: 점수 위쪽 안건의 배경(description) · 후보(options) ·

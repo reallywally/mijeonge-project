@@ -74,6 +74,7 @@ def done_rate(done: int, total: int) -> float:
 @dataclass
 class _Task:
     id: str
+    parent_id: str | None
     status: str
     owner_id: str | None
     start: date | None
@@ -86,6 +87,7 @@ class _Task:
 @dataclass
 class _Graph:
     tasks: dict[str, _Task]
+    children: dict[str, list[str]]
     # 뒤 작업 → 선행들, 선행 → 뒤 작업들
     depends_on: dict[str, list[str]]
     waited_by: dict[str, list[str]]
@@ -95,6 +97,17 @@ class _Graph:
 
     def open(self, task_id: str) -> bool:
         return self.tasks[task_id].status != "done"
+
+    def open_descendants(self, task_id: str) -> int:
+        seen: set[str] = set()
+        stack = list(self.children.get(task_id, ()))
+        while stack:
+            child = stack.pop()
+            if child in seen:
+                continue
+            seen.add(child)
+            stack.extend(self.children.get(child, ()))
+        return sum(1 for child in seen if self.open(child))
 
     def blocking(self, task_id: str) -> list[str]:
         """이 작업을 (몇 단계 건너도) 기다리는 안 끝난 작업. 끝난 작업에서는 더 타지 않는다 —
@@ -114,6 +127,7 @@ async def _read_graph(session: AsyncSession, project_id: str) -> _Graph:
     rows = await session.execute(
         select(
             Task.id,
+            Task.parent_id,
             Task.status,
             Task.owner_id,
             Task.start,
@@ -126,6 +140,10 @@ async def _read_graph(session: AsyncSession, project_id: str) -> _Graph:
         .order_by(Task.seq)
     )
     tasks = {row.id: _Task(**row._asdict()) for row in rows}
+    children: dict[str, list[str]] = defaultdict(list)
+    for task in tasks.values():
+        if task.parent_id is not None and task.parent_id in tasks:
+            children[task.parent_id].append(task.id)
     depends_on: dict[str, list[str]] = defaultdict(list)
     waited_by: dict[str, list[str]] = defaultdict(list)
     edges = await session.execute(
@@ -136,7 +154,7 @@ async def _read_graph(session: AsyncSession, project_id: str) -> _Graph:
     for task_id, depends_on_id in edges.tuples():
         depends_on[task_id].append(depends_on_id)
         waited_by[depends_on_id].append(task_id)
-    return _Graph(tasks=tasks, depends_on=depends_on, waited_by=waited_by)
+    return _Graph(tasks=tasks, children=children, depends_on=depends_on, waited_by=waited_by)
 
 
 async def _lines(session: AsyncSession, project_id: str) -> dict[str, tuple[int, int]]:
@@ -328,6 +346,7 @@ async def progress_with_risks(
             waiting_on_task_ids=waiting,
             blocking_task_ids=blocking,
             weight=TaskWeight(
+                open_children=graph.open_descendants(task.id),
                 open_lines=open_lines,
                 total_lines=total_lines,
                 thread_count=thread_counts.get(task.id, 0),

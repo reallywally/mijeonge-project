@@ -10,20 +10,22 @@ import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/c
 import { periodProblem } from '@/lib/task'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 import type { TaskLine, TaskPriority, TaskStatus, Thread } from '@/types/domain'
 
 /* 작업 추가 — 작업 상세와 같은 모양의 팝업이다. 세 탭(목록 · 간트 · 칸반) 어디서든 같은 것이 뜬다.
    상세는 고치는 즉시 들어가지만 여기는 아직 작업이 없으니 골라 두었다가 '만들기'로 한꺼번에 넣는다.
-   연관 작업은 만든 뒤 상세에서 건다 — 만들면 바로 그 작업의 상세로 넘어간다.
+   하위 작업은 만든 뒤 상세에서 붙인다 — 만들면 바로 그 작업의 상세로 넘어간다.
    initialStatus 는 칸반의 칸마다 있는 '작업 추가' 가 그 칸의 상태로 열려고 넘긴다. */
-const props = defineProps<{ initialStatus?: TaskStatus | null }>()
+const props = defineProps<{ parentId: string | null; initialStatus?: TaskStatus | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ (e: 'created', id: string): void }>()
 
 const data = useDataStore()
 const taskStore = useTaskStore()
+const partStore = usePartStore()
 const threadStore = useThreadStore()
 
 const title = ref('')
@@ -33,8 +35,10 @@ const ownerId = ref<string | null>(null)
 const start = ref('')
 const due = ref('')
 const priority = ref<TaskPriority>('normal')
-/* 파트는 공통으로 연다 — 안건 추가와 같다 (Q61 — 상위를 따르는 규칙은 없어졌다) */
+const parent = ref<string | null>(null)
+/* 파트는 상위 작업의 것이 골라진 채 연다. 손으로 고르기 전까지는 상위를 바꾸면 따라 바뀐다 */
 const partId = ref<string | null>(null)
+const partPicked = ref(false)
 const threadIds = ref<string[]>([])
 const keepOpen = ref(false)
 const saving = ref(false)
@@ -57,14 +61,27 @@ function resetForm() {
   start.value = ''
   due.value = ''
   priority.value = 'normal'
-  partId.value = null
+  parent.value = props.parentId
+  partId.value = partStore.partForChildOf(props.parentId)
+  partPicked.value = false
   threadIds.value = []
   bodyKey.value += 1
   void nextTick(fitTitle)
 }
 
+function pickParent(next: string | null) {
+  parent.value = next
+  if (!partPicked.value) partId.value = partStore.partForChildOf(next)
+}
+
+function pickPart(next: string | null) {
+  partId.value = next
+  partPicked.value = true
+}
+
+/* 하위 작업 추가로 들어오면 상위 작업이 채워진 채로 열린다 */
 watch(
-  () => [open.value, props.initialStatus] as const,
+  () => [open.value, props.parentId, props.initialStatus] as const,
   ([isOpen]) => {
     if (isOpen) resetForm()
   },
@@ -85,6 +102,11 @@ const threadChoices = computed(() =>
 const toggle = (list: string[], id: string, on: boolean) =>
   on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
 
+const parentPath = computed(() => {
+  const label = taskStore.parentOptions.find((o) => o.id === parent.value)?.label
+  return label ? `${label} 아래로 들어갑니다` : '최상위 작업으로 만듭니다'
+})
+
 const blocker = computed(() => {
   if (!title.value.trim()) return '제목을 적어야 만들 수 있습니다'
   return periodProblem(start.value, due.value)
@@ -99,6 +121,7 @@ async function submit() {
   saving.value = true
   const id = await taskStore.addTask({
     title: title.value.trim(),
+    parentId: parent.value,
     body: body.value,
     status: status.value,
     ownerId: ownerId.value,
@@ -106,6 +129,7 @@ async function submit() {
     due: due.value || null,
     priority: priority.value,
     threadIds: [...threadIds.value],
+    /* 늘 보낸다 — 상위를 따르는 것도 화면이 이미 골라 두었다 */
     partId: partId.value,
   })
   saving.value = false
@@ -169,7 +193,7 @@ function onKeydown(e: KeyboardEvent) {
               @keydown="onTitleKeydown"
             />
             <DialogDescription class="text-xs text-muted-foreground">
-              연관 작업은 만든 뒤 상세에서 겁니다
+              {{ parentPath }}
             </DialogDescription>
           </header>
 
@@ -193,7 +217,11 @@ function onKeydown(e: KeyboardEvent) {
           v-model:start="start"
           v-model:due="due"
           v-model:priority="priority"
-          v-model:part-id="partId"
+          :parent-id="parent"
+          :part-id="partId"
+          :parent-choices="taskStore.parentOptions"
+          @update:parent-id="pickParent"
+          @update:part-id="pickPart"
         >
           <p
             v-if="threadIds.length && status !== 'blocked'"

@@ -23,7 +23,6 @@ from app.models import (
     ProjectReport,
     Task,
     TaskLine,
-    TaskRelation,
     TaskThreadLink,
     Thread,
     new_id,
@@ -46,7 +45,7 @@ from app.time import KST, as_utc, now
 
 log = logging.getLogger(__name__)
 
-# 본문 · 연관 작업 · 선행 · 걸린 안건까지 읽어 줄 손쓸 작업 수 — 점수 위쪽부터
+# 본문 · 하위 작업 · 선행 · 걸린 안건까지 읽어 줄 손쓸 작업 수 — 점수 위쪽부터
 DETAIL_TASKS = 8
 NO_TASKS = "아직 작업이 없어 리포트를 쓸 것이 없습니다."
 NO_OWNER = "담당자 없음"
@@ -73,10 +72,10 @@ SYSTEM_PROMPT = """\
   statusDays 는 지금 상태가 된 뒤 지난 날 수(statusSinceBackfill 이 true 면 '적어도' 그만큼),
   plannedDays 는 계획 기간(start ~ due 의 날 수, 없으면 null),
   waitingOn 은 이 작업이 기다리는 안 끝난 선행 작업, blocking 은 이 작업을 기다리는 안 끝난 작업
-  (이 작업이 늦으면 같이 밀린다), weight 는 무게(
+  (이 작업이 늦으면 같이 밀린다), weight 는 무게(openChildren 안 끝난 하위 작업 수 ·
   openLines / totalLines 안 끝난 체크리스트 줄 / 전체 줄 · threadCount 걸린 안건 수 ·
   priority 중요도)
-- details: attention 위쪽 작업의 본문(체크리스트 줄과 체크 여부) · related(이 작업이 건 연관 작업) ·
+- details: attention 위쪽 작업의 본문(체크리스트 줄과 체크 여부) · 하위 작업 ·
   걸린 안건과 마지막 이력
 - people: 사람별 진행 중 · 막힘 · 기한 지남 · 기간 안에 끝낸 수 · 손쓸 작업
 - 이력의 kind: raise 제기, defer 미룸, decide 결정, refine 세부, change 결정 변경, split 분리
@@ -117,7 +116,7 @@ SYSTEM_PROMPT = """\
 ## 규칙
 1. 숫자 · 날짜 · 날 수 · 작업 수는 받은 데이터 그대로만 쓴다. 지어내거나 고쳐 세지 않는다.
    statusSinceBackfill 이 true 면 "12일 이상" 처럼 '이상' 을 붙인다
-2. "어렵다 · 크다" 는 weight 로 근거를 댄다 — "체크리스트 8줄 중 5줄 남음, 걸린 안건 2건" 처럼.
+2. "어렵다 · 크다" 는 weight 로 근거를 댄다 — "하위 작업 3개 남음, 체크리스트 8줄 중 5줄 남음" 처럼.
    근거가 없으면 어렵다고 말하지 않는다
 3. 신호는 영어 이름 대신 화면의 말로 쓴다 — waitingOnPredecessor 선행 대기 ·
    lateBlocker 뒤 작업을 막는 중 · longRunning 오래 걸림 · longBlocked 오래 막힘 ·
@@ -172,6 +171,7 @@ async def _collect(
             Task.id,
             Task.key,
             Task.title,
+            Task.parent_id,
             Task.status,
             Task.owner_id,
             Task.part_id,
@@ -317,15 +317,6 @@ async def _details(
         .where(TaskThreadLink.project_id == project_id, TaskThreadLink.task_id.in_(task_ids))
         .order_by(Thread.seq)
     )
-    relation_rows = await session.execute(
-        select(TaskRelation.task_id, TaskRelation.related_id)
-        .where(TaskRelation.project_id == project_id, TaskRelation.task_id.in_(task_ids))
-        .order_by(TaskRelation.task_id, TaskRelation.created_at, TaskRelation.related_id)
-    )
-    related: dict[str, list[str]] = {}
-    for task_id, related_id in relation_rows.tuples():
-        related.setdefault(task_id, []).append(related_id)
-
     links = list(link_rows.tuples())
     last = await _last_entries(session, {thread_id for _, thread_id, _, _ in links})
     threads: dict[str, list[dict[str, Any]]] = {}
@@ -339,8 +330,7 @@ async def _details(
             "key": tasks[task_id].key,
             "title": tasks[task_id].title,
             "body": lines.get(task_id, []),
-            # 이 작업이 건 연관 작업 — 건 순서 (Q61)
-            "related": briefs(id_ for id_ in related.get(task_id, []) if id_ in tasks),
+            "children": briefs(t.id for t in tasks.values() if t.parent_id == task_id),
             "threads": threads.get(task_id, []),
         }
         for task_id in task_ids
