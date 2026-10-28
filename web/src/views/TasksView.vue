@@ -52,15 +52,15 @@ const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
 
-/* 세 탭은 같은 작업을 보는 방식만 다르다. 주소로 가른다 —
-   /tasks(목록) · /tasks?view=gantt(간트) · /tasks?view=board(칸반). 팝업(/tasks/:id ·
+/* 세 탭은 같은 작업을 보는 방식만 다르다. 주소로 가른다 — 기본은 간트다 —
+   /tasks(간트) · /tasks?view=list(목록) · /tasks?view=board(칸반). 팝업(/tasks/:id ·
    /tasks/new)에도 이 쿼리를 달고 다녀서, 팝업을 닫으면 열었던 탭으로 돌아간다. */
 type TaskView = 'list' | 'gantt' | 'board'
 const view = computed<TaskView>(() => {
   const q = route.query.view
-  return q === 'board' || q === 'gantt' ? q : 'list'
+  return q === 'board' || q === 'list' ? q : 'gantt'
 })
-const viewQuery = computed(() => (view.value === 'list' ? {} : { view: view.value }))
+const viewQuery = computed(() => (view.value === 'gantt' ? {} : { view: view.value }))
 
 /* 조회 조건 — 제목 · 파트 · 담당자. 안건 목록과 같은 자리, 같은 순서다. 목록 탭의 것이다.
    파트 거르기는 [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다 */
@@ -312,7 +312,7 @@ function bulkOwner(value: string) {
 
     <div class="flex h-[46px] shrink-0 items-center gap-1 border-b border-border px-[26px]">
       <RouterLink
-        :to="{ path: '/tasks' }"
+        :to="{ path: '/tasks', query: { view: 'list' } }"
         class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
         :class="
           view === 'list'
@@ -324,7 +324,7 @@ function bulkOwner(value: string) {
         목록
       </RouterLink>
       <RouterLink
-        :to="{ path: '/tasks', query: { view: 'gantt' } }"
+        :to="{ path: '/tasks' }"
         class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
         :class="
           view === 'gantt'

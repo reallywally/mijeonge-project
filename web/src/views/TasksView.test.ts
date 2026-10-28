@@ -46,7 +46,7 @@ vi.mock('dhtmlx-gantt', () => ({
 /* 화면이 실제로 떠야 잡히는 것들 — 템플릿 오류, shadcn 컴포넌트 쓰는 법, 거르기가
    화면까지 닿는지. 타입 검사만으로는 안 걸린다.
    팝업은 teleport 로 document.body 에 나가므로 목록은 wrapper 에서, 팝업은 body 에서 본다. */
-async function mountView(path = '/tasks') {
+async function mountView(path = '/tasks?view=list') {
   const router = createRouter({
     history: createWebHistory(),
     routes: [
@@ -318,7 +318,7 @@ describe('작업 상세 팝업', () => {
 
 describe('작업 추가 팝업', () => {
   it('상세와 같은 칸에 제목 · 내용을 적고 만들면 목록 건수가 늘어난다', async () => {
-    const w = await mountView('/tasks/new')
+    const w = await mountView('/tasks/new?view=list')
     const taskStore = useTaskStore()
     expect(taskStore.rows).toHaveLength(22)
 
@@ -477,8 +477,17 @@ describe('칸반보드 탭', () => {
 describe('간트차트 탭', () => {
   const parsed = (key: string) => chart.parsed.find((t) => t.key === key)!
 
+  it('작업 메뉴로 들어오면 간트가 기본이고, 목록 탭은 view=list 로 간다', async () => {
+    const w = await mountView('/tasks')
+    const list = w.findAll('a.border-b-2').find((a) => a.text() === '목록')!
+    expect(list.attributes('href')).toBe('/tasks?view=list')
+    const gantt = w.findAll('a.border-b-2').find((a) => a.text() === '간트차트')!
+    expect(gantt.attributes('href')).toBe('/tasks')
+    expect(gantt.classes()).toContain('border-foreground')
+  })
+
   it('탭 셋이 서고 간트가 골라진다', async () => {
-    const w = await mountView('/tasks?view=gantt')
+    const w = await mountView('/tasks')
     const tabs = w.findAll('a.border-b-2').map((a) => a.text())
     expect(tabs).toEqual(['목록', '간트차트', '칸반보드'])
 
@@ -491,7 +500,7 @@ describe('간트차트 탭', () => {
   })
 
   it('목록과 달리 계층을 그대로 넘긴다. 기간 미정은 막대가 없다', async () => {
-    await mountView('/tasks?view=gantt')
+    await mountView('/tasks')
     expect(chart.parsed).toHaveLength(22)
     expect(parsed('HW-8').parent).toBe('k7')
     expect(parsed('HW-1').parent).toBe('0')
@@ -500,22 +509,22 @@ describe('간트차트 탭', () => {
   })
 
   it('기본 편집창은 뜨지 않는다', async () => {
-    await mountView('/tasks?view=gantt')
+    await mountView('/tasks')
     expect(chart.events.onBeforeLightbox()).toBe(false)
   })
 
   it('줄을 누르면 작업 상세가 뜨고 주소에 간트가 남는다', async () => {
-    await mountView('/tasks?view=gantt')
+    await mountView('/tasks')
     chart.events.onTaskClick('k18', { target: document.createElement('div') })
     await flushPromises()
 
     expect(popupText()).toContain('보험료 산출 기간계 API 개발')
     expect(window.location.pathname).toBe('/tasks/k18')
-    expect(window.location.search).toContain('view=gantt')
+    expect(window.location.search).not.toContain('view=')
   })
 
   it('접기 화살표는 팝업을 열지 않는다', async () => {
-    await mountView('/tasks?view=gantt')
+    await mountView('/tasks')
     const caret = document.createElement('div')
     caret.className = 'gantt_tree_icon'
     document.body.appendChild(caret)
@@ -526,19 +535,19 @@ describe('간트차트 탭', () => {
   })
 
   it("'+' 는 상위 작업이 채워진 채로 추가 팝업을 연다", async () => {
-    await mountView('/tasks?view=gantt')
+    await mountView('/tasks')
     /* 라이브러리가 제 손으로 줄을 만들지 않게 막는다 */
     expect(chart.events.onTaskCreated({ parent: 'k4' })).toBe(false)
     await flushPromises()
 
     expect(window.location.pathname).toBe('/tasks/new')
     expect(window.location.search).toContain('parent=k4')
-    expect(window.location.search).toContain('view=gantt')
+    expect(window.location.search).not.toContain('view=')
     expect(popupText()).toContain('개발 환경 설정 아래로 들어갑니다')
   })
 
   it('막대를 끌면 스토어의 기간이 바뀐다', async () => {
-    await mountView('/tasks?view=gantt')
+    await mountView('/tasks')
     const taskStore = useTaskStore()
     /* 간트의 끝은 열린 구간이라 9/19 로 놓으면 9/18 까지다 */
     chart.dragged.k4 = { start_date: new Date(2026, 8, 10), end_date: new Date(2026, 8, 19) }
@@ -551,7 +560,7 @@ describe('간트차트 탭', () => {
   })
 
   it('탭을 떠나면 간트를 치운다', async () => {
-    const w = await mountView('/tasks?view=gantt')
+    const w = await mountView('/tasks')
     expect(chart.destroyed).toBe(0)
     w.unmount()
     expect(chart.destroyed).toBe(1)

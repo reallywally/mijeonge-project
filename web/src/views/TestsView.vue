@@ -60,11 +60,11 @@ watch(
   { immediate: true },
 )
 
-/* 두 보기는 같은 테스트를 보는 방식만 다르다 — /tests(목록) · /tests?view=gantt(간트).
+/* 두 보기는 같은 테스트를 보는 방식만 다르다 — 기본은 간트다 — /tests(간트) · /tests?view=list(목록).
    팝업(/tests/:id · /tests/new)에도 이 쿼리를 달고 다녀서, 닫으면 열었던 보기로 돌아간다 */
 type TestView = 'list' | 'gantt'
-const view = computed<TestView>(() => (route.query.view === 'gantt' ? 'gantt' : 'list'))
-const viewQuery = computed(() => (view.value === 'list' ? {} : { view: view.value }))
+const view = computed<TestView>(() => (route.query.view === 'list' ? 'list' : 'gantt'))
+const viewQuery = computed(() => (view.value === 'gantt' ? {} : { view: view.value }))
 
 const today = computed(() => kstToday())
 
@@ -76,7 +76,7 @@ function pickCard(key: TestNowKey) {
   card.value = card.value === key ? null : key
   page.value = 1
   /* 간트에서 누르면 거른 목록으로 간다 */
-  if (view.value === 'gantt') router.push({ path: '/tests' })
+  if (view.value === 'gantt') router.push({ path: '/tests', query: { view: 'list' } })
 }
 
 /* 조회 조건 — 제목 · 담당자. 작업 목록과 같은 자리 */
@@ -235,7 +235,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
 
     <div class="flex h-[46px] shrink-0 items-center gap-1 border-b border-border px-[26px]">
       <RouterLink
-        :to="{ path: '/tests' }"
+        :to="{ path: '/tests', query: { view: 'list' } }"
         class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
         :class="
           view === 'list'
@@ -247,7 +247,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
         목록
       </RouterLink>
       <RouterLink
-        :to="{ path: '/tests', query: { view: 'gantt' } }"
+        :to="{ path: '/tests' }"
         class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
         :class="
           view === 'gantt'

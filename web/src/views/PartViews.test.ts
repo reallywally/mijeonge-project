@@ -74,7 +74,7 @@ beforeEach(() => {
 describe('작업 화면의 [내 파트 | 전체]', () => {
   it('인프라(u3)는 내 파트로 열리고, 전체로 바꾸면 22건이 다 선다', async () => {
     await signedIn('u3@innoflow.local')
-    const w = await mountAt('/tasks')
+    const w = await mountAt('/tasks?view=list')
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
     expect(w.text()).toContain('총 10건 중 1–8건')
@@ -86,7 +86,7 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 
   it('파트 칩은 파트가 있는 행에만 붙는다 — 공통은 안 그린다', async () => {
     await signedIn('u3@innoflow.local')
-    const w = await mountAt('/tasks')
+    const w = await mountAt('/tasks?view=list')
     const row = (key: string) => w.findAll('tbody tr').find((r) => r.text().includes(key))!
     expect(row('HW-4').find('[data-part-chip]').text()).toBe('인프라')
     expect(row('HW-1').find('[data-part-chip]').exists()).toBe(false)
@@ -94,7 +94,7 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 
   it('조회 조건의 파트로 한 번 더 좁힌다', async () => {
     await signedIn('u1@innoflow.local')
-    const w = await mountAt('/tasks')
+    const w = await mountAt('/tasks?view=list')
     const picker = w
       .findAllComponents(Select)
       .find((s) => s.find('[aria-label="파트 거르기"]').exists())!
@@ -110,30 +110,30 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 
   it('?part= 로 들어오면 그 파트로 걸러진 채 열린다. 이 프로젝트에 없는 파트면 거르지 않는다', async () => {
     await signedIn('u1@innoflow.local')
-    const w = await mountAt('/tasks?part=pt1')
+    const w = await mountAt('/tasks?view=list&part=pt1')
     expect(w.text()).toContain('총 5건')
 
-    const other = await mountAt('/tasks?part=pt9')
+    const other = await mountAt('/tasks?view=list&part=pt9')
     expect(other.text()).toContain('총 22건')
   })
 
   it('시스템 관리자는 속한 파트가 없어 전환이 없다', async () => {
     await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
-    const w = await mountAt('/tasks')
+    const w = await mountAt('/tasks?view=list')
     expect(scopeButton('mine')).toBeNull()
     expect(w.text()).toContain('총 22건')
   })
 
   it("'내 파트' 에서 안 보이는 작업도 주소로 열면 열린다", async () => {
     await signedIn('u3@innoflow.local')
-    await mountAt('/tasks/k7')
+    await mountAt('/tasks/k7?view=list')
     expect(document.body.textContent).toContain('가상비서')
     expect(document.body.querySelector('[aria-label="파트"]')!.textContent).toContain('AI')
   })
 
   it('하위 작업 추가는 상위의 파트가 골라진 채 열리고, 그대로 만들어진다', async () => {
     await signedIn('u1@innoflow.local')
-    await mountAt('/tasks/new?parent=k7')
+    await mountAt('/tasks/new?parent=k7&view=list')
     expect(document.body.querySelector('[aria-label="파트"]')!.textContent).toContain('AI')
 
     const title = document.body.querySelector<HTMLTextAreaElement>('textarea[aria-label="제목"]')!
