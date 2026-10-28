@@ -1,38 +1,30 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Gantt, escapeHTML } from 'dhtmlx-gantt'
-import type { GanttStatic, Link, Task as GanttTask } from 'dhtmlx-gantt'
+import type { GanttStatic, Task as GanttTask } from 'dhtmlx-gantt'
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
 import { isoDay } from '@/lib/date'
 import { endToDue, weekLabel } from '@/lib/gantt'
-import type { GanttItem, GanttLink } from '@/lib/gantt'
+import type { GanttItem } from '@/lib/gantt'
 
 /* 간트차트 껍데기 — 작업 간트(TaskGantt)와 테스트 간트(TestGantt)가 같이 쓴다. 무엇을 그리는지는 모른다:
-   줄(items) · 화살표(links)를 받아 그리고, 손놀림(누르기 · + · 끌기 · 화살표)을 알리기만 한다.
-   고리는 한 방향이다: 부모의 스토어 → items → gantt.parse. 끌어 놓은 기간 · 끌어 건 화살표는 알리고,
-   부모가 스토어에 넣어 다시 내려 준다. 화살표는 간트가 제 손으로 그리지 않게 늘 막는다.
+   줄(items)을 받아 그리고, 손놀림(누르기 · + · 끌기)을 알리기만 한다.
+   고리는 한 방향이다: 부모의 스토어 → items → gantt.parse. 끌어 놓은 기간은 알리고,
+   부모가 스토어에 넣어 다시 내려 준다. 화살표(링크)는 그리지 않는다 — 선행 작업은 걷었다(Q63).
    라이브러리 기본 편집창(lightbox)은 끄고 부모가 우리 상세 팝업을 띄운다. */
-const props = withDefaults(
-  defineProps<{
-    items: GanttItem[]
-    links?: GanttLink[]
-    /** 맨 아래에 적는 전체 기간 */
-    period: string
-    /** 첫 열의 이름 — 작업 · 테스트 */
-    titleLabel: string
-    /** 맨 아래의 손놀림 안내 */
-    hint: string
-    /** 막대 끝에서 끌어 화살표를 거는가 — 선행이 있는 작업만 */
-    linkable?: boolean
-  }>(),
-  { links: () => [], linkable: false },
-)
+const props = defineProps<{
+  items: GanttItem[]
+  /** 맨 아래에 적는 전체 기간 */
+  period: string
+  /** 첫 열의 이름 — 작업 · 테스트 */
+  titleLabel: string
+  /** 맨 아래의 손놀림 안내 */
+  hint: string
+}>()
 const emit = defineEmits<{
   (e: 'open', id: string): void
   (e: 'add', parentId: string | null): void
   (e: 'move', id: string, start: string, due: string): void
-  (e: 'link-add', link: Link): void
-  (e: 'link-click', id: string): void
 }>()
 
 const host = ref<HTMLElement | null>(null)
@@ -111,8 +103,8 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.config.scale_height = 46
   g.config.grid_width = 462
   g.config.open_tree_initially = true
-  /* 진척도는 모델에 없다 — 끌어서 만들 수 없게 막는다 */
-  g.config.drag_links = props.linkable
+  /* 진척도 · 화살표는 모델에 없다 — 끌어서 만들 수 없게 막는다 */
+  g.config.drag_links = false
   g.config.drag_progress = false
   g.config.details_on_dblclick = false
   g.config.columns = [
@@ -133,7 +125,6 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.templates.task_class = (_s: Date, _e: Date, task: GanttTask) =>
     `tg-bar tg-bar-${asItem(task).status}${asItem(task).late ? ' tg-bar-late' : ''}`
   g.templates.task_text = () => ''
-  g.templates.link_class = () => 'tg-link'
   g.templates.timeline_cell_class = (_task: GanttTask, date: Date) => cellClass(date)
   g.templates.grid_row_class = (_s: Date, _e: Date, task: GanttTask) =>
     [
@@ -165,34 +156,8 @@ function setup(g: GanttStatic, el: HTMLElement) {
     return true
   })
 
-  /* 끌어 건 화살표 — 간트가 직접 넣지 않게 늘 false 를 내고 부모에게 맡긴다 */
-  g.attachEvent('onBeforeLinkAdd', (_id: string | number, link: Link) => {
-    if (syncingLinks) return true
-    if (props.linkable) emit('link-add', link)
-    return false
-  })
-  /* 화살표를 누르면 부모가 묻고 뗀다. 두 번 누르기는 라이브러리의 기본 지우기 창이 떠서 막는다 */
-  g.attachEvent('onLinkClick', (id: string | number) => {
-    emit('link-click', String(id))
-  })
-  g.attachEvent('onLinkDblClick', () => false)
-
   g.init(el)
-  g.parse({ data: props.items, links: props.links })
-}
-
-/* 바뀐 화살표만 간트에 옮긴다 — 통째로 다시 그리면 보던 자리가 처음으로 튄다.
-   여기서 넣는 addLink 는 onBeforeLinkAdd 를 거치므로 그동안은 통과시킨다 */
-let syncingLinks = false
-function syncLinks(g: GanttStatic, next: GanttLink[]) {
-  const wanted = new Set(next.map((l) => l.id))
-  syncingLinks = true
-  try {
-    for (const l of g.getLinks()) if (!wanted.has(String(l.id))) g.deleteLink(l.id)
-    for (const l of next) if (!g.isLinkExists(l.id)) g.addLink({ ...l })
-  } finally {
-    syncingLinks = false
-  }
+  g.parse({ data: props.items })
 }
 
 onMounted(() => {
@@ -212,15 +177,7 @@ watch(
   (next) => {
     if (!chart || fromChart) return
     chart.clearAll()
-    chart.parse({ data: next, links: props.links })
-  },
-)
-
-/* 막대를 옮겨도 links 는 새 배열로 다시 서므로, 걸린 쌍이 달라졌을 때만 옮긴다 */
-watch(
-  () => props.links.map((l) => l.id).join(','),
-  () => {
-    if (chart) syncLinks(chart, props.links)
+    chart.parse({ data: next })
   },
 )
 
@@ -408,14 +365,6 @@ function showToday() {
 .tg-root .tg-avatar-none {
   background: transparent;
   color: var(--muted-foreground);
-}
-
-/* 선행 관계 화살표 — 흐리게 두고 가리키면 짙게 */
-.tg-root {
-  --dhx-gantt-link-background: var(--muted-foreground);
-  --dhx-gantt-link-background-hover: var(--foreground);
-  --dhx-gantt-link-handle-border: var(--primary);
-  --dhx-gantt-link-handle-background: var(--background);
 }
 
 /* 막대 — 완료 · 성공은 채우고, 진행 중 · 테스트 중은 테두리, 해야 할 일은 옅게, 묶음은 자식들의 기간 */

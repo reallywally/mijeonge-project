@@ -345,9 +345,13 @@
 - [x] 작업 화면 위 [AI 선행 관계 찾기] → `DependencySuggestDialog` — 받는 중 · 줄마다 선행 → 뒤 작업 · 이유 · [적용] · [버리기] · [모두 적용] · 실패한 줄에 까닭 · 못 찾음 · 오류와 [다시 찾기]
 - [x] 테스트 — 검사 함수 · 며칠째 · 픽스처(`lib/dependency.test.ts`) · 목업/서버 api(`api/dependencies.test.ts`) · 스토어(걸기 · 되돌림 · 상태 기록 · 제안, `stores/dependency.test.ts`) · 작업 상세(`TaskDetailDialog.test.ts`) · 제안 창(`DependencySuggestDialog.test.ts`) · 간트 변환 · 화살표(`lib/gantt.test.ts` · `TaskGantt.test.ts`)
 
+### 2026-10-28 고침 (사용자)
+
+- [x] **선행 작업 걷기 (Q63)** — 위 표의 레코드 · 쓰기 · 검사 · 막지 않는다 · 간트 · 제안 줄과 14-1 의 선행 몫은 이제 옛 기록이다. `api/dependencies.ts` · `lib/dependency.ts` · `TaskDependencies` · `DependencySuggestDialog` · `stores/dependencySuggest.ts` 와 테스트 지움, 스냅샷 `taskDependencies` · `TaskDetail.dependsOn` · `dependents` 걷음, 간트 화살표 · 끌어 걸기 · [AI 선행 관계 찾기] 걷음, `SearchPicker` 의 `disabledReason` 걷음. 며칠째(`statusDays` · `statusSinceLabel`)는 `lib/task.ts` 로 옮겨 남긴다. 리포트 신호 `waitingOnPredecessor` · `lateBlocker` 와 `waitingOnTaskIds` · `blockingTaskIds` 는 지난 리포트의 facts 에만 있어 타입에 optional 로 두고 손쓸 작업 표는 있을 때만 '기다림 / 막음' 칸을 세운다. 이력의 `dependsOn` 줄 읽기도 둔다
+
 ### 14-2 서버에 붙이기 (서버 `구현` 뒤)
 
-- [ ] 서버 모드로 시드의 k20 상세가 '진행 중 · 12일째', 간트 화살표 셋, 끌어 건 것이 다른 계정의 스냅샷에 보이는지, [AI 선행 관계 찾기] 가 실제 답을 내는지 본다
+- [ ] 서버 모드로 시드의 k20 상세가 '진행 중 · 12일째' 인지 본다 (선행 몫은 Q63 으로 걷음)
 
 **커밋** — ① 목업 화면(서버 갈래 포함) ② 서버로 확인
 
@@ -362,7 +366,7 @@
 | --- | --- | --- |
 | 자리 | 왼쪽 메뉴 리스크 다음 **'리포트'** — `/reports` 목록(`ReportsView`, 만드는 중도 여기) · `/reports/:reportId` 상세(`ReportDetailView`) | 계약 '화면' |
 | 계산 | `lib/progress.ts` 한 벌 — 서버 `services/progress.py` 와 같은 규칙. 목업 api 만 쓰고 화면은 저장된 facts 를 그대로 그린다 | 리포트는 만든 때의 기록이다. 다시 계산하면 지난 리포트가 바뀐다 |
-| 목업 재료 | 작업 · 안건 · 이력 · 링크 · 선행은 데이터 스토어(`provideMockWorld`), 기준 · high/medium 안건은 리스크 목업 보고서(`fetchRisks`). `decidedButBlocked` 는 리스크 목업이 굳혀 둔 값이라 `lib/progress` 가 같은 판정(`isDecidedButBlocked`)으로 지금 데이터에서 본다 | 화면에서 상태를 바꾸면 리포트가 따라야 시연이 맞다 |
+| 목업 재료 | 작업 · 안건 · 이력 · 링크는 데이터 스토어(`provideMockWorld`), 기준 · high/medium 안건은 리스크 목업 보고서(`fetchRisks`). `decidedButBlocked` 는 리스크 목업이 굳혀 둔 값이라 `lib/progress` 가 같은 판정(`isDecidedButBlocked`)으로 지금 데이터에서 본다 | 화면에서 상태를 바꾸면 리포트가 따라야 시연이 맞다 |
 | 목업 글 | `fixtures/reports.ts` `mockReportBody(facts)` — 칸 순서 · 근거 칩(k20 · k22 · t3)은 고정, 숫자는 facts 에서 옮긴다. 근거가 facts 에 없으면 그 줄을 뺀다 | '숫자 · 날짜는 넣어 준 그대로' 를 날이 바뀌어도 지키려고 |
 | 스트림 | 챗봇의 `postSseMessages` · `settle` · `mockDeltas` 를 같이 쓰고 `toReportEvent` 로 읽는다. done 에서 받은 글 · facts 로 `Report` 를 만들어 byId 에 넣어 상세가 다시 받지 않는다 | 리스크 AI 요약 · 회의록과 같은 틀 |
 | 수명 | 만드는 중은 목록 화면에서만 산다 — [멈추기] · 떠남(묻는다) · 프로젝트 바꿈이면 끊고 저장 안 됨을 알린다 | 계약 '중간에 끊기면 저장하지 않는다' |
@@ -486,7 +490,7 @@
 | 11 결정 병목 리스크 | 계약 **합의** (2026-10-15) — '리스크' 메뉴 · 기준 바꾸기. **11-1 목업 끝남** (2026-10-15) · 11-2 는 서버 `구현` 뒤 · **11-3 AI 요약 끝남** (2026-10-15, 목업 · 서버 갈래 계약대로). Q36 · Q37 열림 |
 | 12 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **12-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-16) · **2026-10-19 고침 끝남**(Q42 ~ Q44, 결정 알림 · 참조) — 12-2 는 서버 `구현` 뒤 |
 | 13 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘 · Q47(녹음) 보류. **13-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-19) · **2026-10-20 고침 끝남**(Q48, 게시판 · 저장된 회의록에서 AI 정리 · 출처 `minutesId`). 13-2 는 서버로 한 번 돌려 보기 |
-| 14 선행 작업 · 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **14-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-20) — 14-2 는 서버로 한 번 돌려 보기 |
+| 14 선행 작업 · 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **14-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-20) · **2026-10-28 선행 작업 걷음**(Q63, 상태 기록만 남음) — 14-2 는 서버로 한 번 돌려 보기 |
 | 15 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **15-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-20) — 15-2 는 서버로 한 번 돌려 보기 |
 | 16 테스트 | 계약 **합의** (2026-10-27) — `docs/api/test.md` · Q53 ~ Q58 닫힘. **16-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-27, AI 없이) · **2026-10-27 고침 끝남**(성공 · 실패 버튼 + 상태 고르기, 레벨 걷음) — 16-2 는 서버로 한 번 돌려 보기 · AI 넷은 계약 뒤 |
 | 17 변경 이력 | 계약 `docs/api/history.md` · Q59 닫힘 (2026-10-27). **17-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-27) — 17-2 는 서버 `구현` 뒤 한 번 돌려 보기 |

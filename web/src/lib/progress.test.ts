@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entries, taskDependencies, tasks, taskThreadLinks, threads } from '@/fixtures'
+import { entries, tasks, taskThreadLinks, threads } from '@/fixtures'
 import { DEFAULT_RISK_SETTINGS } from '@/lib/risk'
 import {
   ATTENTION_LIMIT,
@@ -11,7 +11,7 @@ import {
   statusSpan,
   type ProgressInput,
 } from '@/lib/progress'
-import type { Task, TaskDependency, TaskThreadLink, Thread } from '@/types/domain'
+import type { Task, TaskThreadLink, Thread } from '@/types/domain'
 
 /* 리포트의 규칙 계산 — 신호마다 · 점수 · 정렬 · 30개 · KST 날 수 · previous (docs/api/report.md '규칙이 세는 것') */
 
@@ -61,7 +61,6 @@ function thread(id: string, state: Thread['state']): Thread {
 function facts(
   ts: Task[],
   more: {
-    deps?: TaskDependency[]
     links?: TaskThreadLink[]
     threads?: Thread[]
   } & Partial<ProgressInput> = {},
@@ -71,7 +70,6 @@ function facts(
     threads: more.threads ?? [],
     entries: more.entries ?? [],
     links: more.links ?? [],
-    dependencies: more.deps ?? [],
     settings: more.settings ?? DEFAULT_RISK_SETTINGS,
     today: more.today ?? TODAY,
     previous: more.previous ?? null,
@@ -112,54 +110,6 @@ describe('기간 · 날 수', () => {
 })
 
 describe('신호', () => {
-  it('waitingOnPredecessor — 안 끝난 선행이 있고 시작일이 dueSoonDays 안이거나 지났다', () => {
-    const pred = task('a', { status: 'doing' })
-    const deps = [
-      { taskId: 'soon', dependsOnId: 'a' },
-      { taskId: 'far', dependsOnId: 'a' },
-      { taskId: 'nostart', dependsOnId: 'a' },
-      { taskId: 'predDone', dependsOnId: 'd' },
-    ]
-    const f = facts(
-      [
-        pred,
-        task('d', { status: 'done' }),
-        task('soon', { start: '2026-10-23' }),
-        task('far', { start: '2026-10-24' }),
-        task('nostart'),
-        task('predDone', { start: '2026-10-21' }),
-      ],
-      { deps },
-    )
-    expect(signalsOf(f, 'soon')).toEqual(['waitingOnPredecessor'])
-    expect(signalsOf(f, 'far')).toEqual([])
-    expect(signalsOf(f, 'nostart')).toEqual([])
-    expect(signalsOf(f, 'predDone')).toEqual([])
-    expect(f.attention.find((a) => a.taskId === 'soon')!.waitingOnTaskIds).toEqual(['a'])
-  })
-
-  it('lateBlocker — 기다리는 작업이 있는데 늦다(기한 지남 · 시작 지난 해야 할 일 · 오래 걸림)', () => {
-    const deps = [
-      { taskId: 'b1', dependsOnId: 'overdue' },
-      { taskId: 'b2', dependsOnId: 'late' },
-      { taskId: 'b3', dependsOnId: 'ontime' },
-    ]
-    const f = facts(
-      [
-        task('overdue', { status: 'doing', due: '2026-10-19' }),
-        task('late', { start: '2026-10-19' }),
-        task('ontime', { status: 'doing', start: '2026-10-20', due: '2026-10-30' }),
-        task('b1', { start: '2026-11-30' }),
-        task('b2', { start: '2026-11-30' }),
-        task('b3', { start: '2026-11-30' }),
-      ],
-      { deps },
-    )
-    expect(signalsOf(f, 'overdue')).toEqual(['lateBlocker', 'overdue'])
-    expect(signalsOf(f, 'late')).toEqual(['lateBlocker', 'notStarted'])
-    expect(signalsOf(f, 'ontime')).toEqual([])
-  })
-
   it('longRunning — 계획의 1.5배를 넘음, 계획이 없으면 staleDays 를 넘음', () => {
     const f = facts([
       /* 계획 4일 → 6일까지는 괜찮고 7일째부터 */
@@ -232,32 +182,7 @@ describe('신호', () => {
   })
 })
 
-describe('막는 작업 · 무게 · 점수 · 정렬', () => {
-  it('blockingTaskIds 는 몇 단계 건너도 중복 없이, 끝난 작업에서 멈춘다', () => {
-    const deps = [
-      { taskId: 'b', dependsOnId: 'a' },
-      { taskId: 'c', dependsOnId: 'b' },
-      { taskId: 'c', dependsOnId: 'a' },
-      { taskId: 'e', dependsOnId: 'd' },
-      { taskId: 'f', dependsOnId: 'e' },
-    ]
-    const f = facts(
-      [
-        task('a', { due: '2026-10-01' }),
-        task('b'),
-        task('c'),
-        task('d', { due: '2026-10-01' }),
-        task('e', { status: 'done' }),
-        task('f'),
-      ],
-      { deps },
-    )
-    const a = f.attention.find((x) => x.taskId === 'a')!
-    expect(a.blockingTaskIds).toEqual(['b', 'c'])
-    expect(a.score).toBe(3 + 2 + 1 + 2)
-    expect(f.attention.find((x) => x.taskId === 'd')!.blockingTaskIds).toEqual([])
-  })
-
+describe('무게 · 점수 · 정렬', () => {
   it('무게 — 안 끝난 자손 · 체크리스트 줄(불릿은 안 셈) · 우선순위', () => {
     const f = facts([
       task('p', {
@@ -280,17 +205,6 @@ describe('막는 작업 · 무게 · 점수 · 정렬', () => {
       threadCount: 0,
       priority: 'high',
     })
-  })
-
-  it('막는 작업 가산은 3까지', () => {
-    const deps = ['b', 'c', 'd', 'e', 'f'].map((id) => ({ taskId: id, dependsOnId: 'a' }))
-    const f = facts(
-      [task('a', { due: '2026-10-01' }), ...['b', 'c', 'd', 'e', 'f'].map((id) => task(id))],
-      {
-        deps,
-      },
-    )
-    expect(f.attention[0]).toMatchObject({ taskId: 'a', score: 3 + 2 + 1 + 3 })
   })
 
   it('정렬 — score 내림차순 → 기한 이른 순(없으면 뒤) → 등록 순, 30개까지', () => {
@@ -403,32 +317,37 @@ describe('시드 (p1, 2026-10-20 기본 기준)', () => {
     threads: threads.filter((t) => t.projectId === 'p1'),
     entries,
     links: taskThreadLinks,
-    dependencies: taskDependencies,
     settings: DEFAULT_RISK_SETTINGS,
     today: TODAY,
     previous: null,
     riskyThreadIds: ['t5', 't3', 't8', 't9'],
   })
 
-  it('k20 — 진행 중 12일째(계획 3일) · 기한 지남 · k21 · k22 를 막는 중, 맨 위', () => {
+  it('k20 — 진행 중 12일째(계획 3일) · 기한 지남, 같은 점수 중 기한이 일러 맨 위', () => {
     expect(f.attention[0]).toMatchObject({
       taskId: 'k20',
-      signals: ['lateBlocker', 'longRunning', 'overdue'],
+      signals: ['longRunning', 'overdue'],
       statusDays: 12,
       plannedDays: 3,
-      waitingOnTaskIds: [],
-      blockingTaskIds: ['k21', 'k22'],
-      score: 9,
+      score: 4,
     })
   })
 
-  it('k22 — 선행 대기 · 풀어도 됨(막힌 지 7일이라 오래 막힘은 아직)', () => {
+  it('k22 — 풀어도 됨(막힌 지 7일이라 오래 막힘은 아직)', () => {
     expect(f.attention.find((a) => a.taskId === 'k22')).toMatchObject({
-      signals: ['waitingOnPredecessor', 'decidedButBlocked'],
+      signals: ['decidedButBlocked'],
       statusDays: 7,
-      waitingOnTaskIds: ['k20'],
-      score: 4,
+      score: 3,
     })
+  })
+
+  it('선행 작업은 걷었다(Q63) — 기다림 · 막음 칸도 선행 신호도 없다', () => {
+    for (const a of f.attention) {
+      expect(a).not.toHaveProperty('waitingOnTaskIds')
+      expect(a).not.toHaveProperty('blockingTaskIds')
+      expect(a.signals).not.toContain('waitingOnPredecessor')
+      expect(a.signals).not.toContain('lateBlocker')
+    }
   })
 
   it('진척 숫자', () => {

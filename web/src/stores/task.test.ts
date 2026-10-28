@@ -1,5 +1,8 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { resetMockAuth } from '@/api/mockAuth'
+import { MOCK_PASSWORD } from '@/fixtures'
+import { useAuthStore } from './auth'
 import { useDataStore } from './data'
 import { useTaskStore } from './task'
 
@@ -202,5 +205,59 @@ describe('기간 바꾸기', () => {
     expect(task.undatedCount).toBe(1)
     task.setPeriod('k18', '2026-09-28', '2026-10-02')
     expect(task.undatedCount).toBe(0)
+  })
+})
+
+describe('상태 기록', () => {
+  beforeEach(async () => {
+    resetMockAuth()
+    await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+  })
+
+  it('상태가 바뀌면 statusChangedAt 이 지금으로, backfill 은 false 로', () => {
+    const data = useDataStore()
+    const k20 = data.allTasks.find((t) => t.id === 'k20')!
+    k20.statusSinceBackfill = true
+    useTaskStore().setStatus('k20', 'done')
+    expect(Date.now() - Date.parse(k20.statusChangedAt)).toBeLessThan(5_000)
+    expect(k20.statusSinceBackfill).toBe(false)
+  })
+
+  it('그대로인 상태는 기록하지 않는다', () => {
+    const k22 = useDataStore().allTasks.find((t) => t.id === 'k22')!
+    useTaskStore().setStatus('k22', 'blocked')
+    expect(k22.statusChangedAt).toBe('2026-10-13T00:00:00Z')
+  })
+
+  it('목업으로 만든 작업도 만든 시각부터다', async () => {
+    const task = useTaskStore()
+    const id = await task.addTask({
+      title: '새 작업',
+      parentId: null,
+      body: [],
+      status: 'doing',
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal',
+      threadIds: [],
+    })
+    const made = useDataStore().allTasks.find((t) => t.id === id)!
+    expect(made.statusChangedAt).toBe(made.createdAt)
+    expect(made.statusSinceBackfill).toBe(false)
+
+    const batch = await task.addTaskBatch([
+      {
+        tempId: 't1',
+        parentTempId: null,
+        parentId: null,
+        title: '초안',
+        ownerId: null,
+        start: null,
+        due: null,
+        priority: 'normal',
+      },
+    ])
+    expect(batch!.tasks[0].statusChangedAt).toBe(batch!.tasks[0].createdAt)
   })
 })

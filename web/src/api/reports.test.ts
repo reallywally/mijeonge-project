@@ -60,7 +60,8 @@ describe('목업 갈래', () => {
     for (const head of ['이번 주 진척', '결정', '먼저 손쓸 것', '사람', '다음 주 볼 것'])
       expect(text).toContain(`\n\n${head}\n`)
     expect(text).toContain('1. [[task:k20]] — 진행 중이 된 지 12일째(계획 3일)')
-    expect(text).toContain('HW-21 개발자 계정 배포 · HW-22 스테이징 DB 구성')
+    /* 선행 작업은 걷었다(Q63) — 기다리는 작업 얘기는 없다 */
+    expect(text).not.toContain('기다리는 작업')
 
     const done = events.at(-1)!
     expect(done.type).toBe('done')

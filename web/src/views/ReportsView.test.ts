@@ -4,11 +4,12 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { resetMockAuth, writeMockSession } from '@/api/mockAuth'
+import { mockDb, resetMockAuth, writeMockSession } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
+import { useReportStore } from '@/stores/report'
 import ReportDetailView from './ReportDetailView.vue'
 import ReportsView from './ReportsView.vue'
 
@@ -134,7 +135,7 @@ describe('목록 · 만들기', () => {
 })
 
 describe('상세', () => {
-  it('근거 칩 · 손쓸 작업 표(신호 화면 말 · 며칠째 · 계획 · 기다림/막음 · 담당) · 사람별', async () => {
+  it('근거 칩 · 손쓸 작업 표(신호 화면 말 · 며칠째 · 계획 · 담당) · 사람별', async () => {
     await generated()
     expect($('[data-report-body] [data-ref-task="k20"]')).toBeTruthy()
     expect($('[data-report-body] [data-ref-task="k22"]')).toBeTruthy()
@@ -142,20 +143,14 @@ describe('상세', () => {
 
     const k20 = '[data-attention="k20"]'
     expect($$('[data-attention]')[0].getAttribute('data-attention')).toBe('k20')
-    expect(parts(`${k20} [data-attention-signals]`)).toEqual([
-      '뒤 작업을 막는 중',
-      '오래 걸림',
-      '기한 지남',
-    ])
+    expect(parts(`${k20} [data-attention-signals]`)).toEqual(['오래 걸림', '기한 지남'])
     expect(text(`${k20} [data-attention-days]`)).toBe('12일째')
     expect(text(k20)).toContain('3일')
-    expect(parts(`${k20} [data-attention-blocking]`)).toEqual(['막음', 'HW-21', 'HW-22'])
     expect(text(k20)).toContain('이도현')
-    expect(parts('[data-attention="k22"] [data-attention-waiting]')).toEqual(['기다림', 'HW-20'])
-    expect(parts('[data-attention="k22"] [data-attention-signals]')).toEqual([
-      '선행 대기',
-      '풀어도 됨',
-    ])
+    expect(parts('[data-attention="k22"] [data-attention-signals]')).toEqual(['풀어도 됨'])
+    /* 선행 작업은 걷었다(Q63) — 새 리포트에는 기다림 / 막음 칸이 없다 */
+    expect(document.body.textContent).not.toContain('기다림 / 막음')
+    expect($('[data-attention-blocking]')).toBeNull()
 
     expect(parts('[data-report-person="u3"]')).toEqual(['이도현', '2', '1', '2', '0', '3'])
     expect($$('[data-report-person]')[0].getAttribute('data-report-person')).toBe('none')
@@ -166,6 +161,40 @@ describe('상세', () => {
     await click($('[data-attention-task="k20"]'))
     expect(document.body.textContent).toContain('DB 설치와 초기 스키마 반영')
     expect($('[role="dialog"]')).toBeTruthy()
+  })
+
+  it('지난 리포트의 선행 신호 · 기다림 / 막음은 저장된 그대로 보여 준다 (Q63 전)', async () => {
+    const { w } = await generated()
+    w.unmount()
+    const [k20, k22] = ['k20', 'k22'].map((id) =>
+      mockDb().reports[0].facts.attention.find((a) => a.taskId === id)!,
+    )
+    k20.signals = ['lateBlocker', ...k20.signals]
+    k20.waitingOnTaskIds = []
+    k20.blockingTaskIds = ['k21', 'k22']
+    k22.signals = ['waitingOnPredecessor', ...k22.signals]
+    k22.waitingOnTaskIds = ['k20']
+    k22.blockingTaskIds = []
+    /* 들고 있던 것을 버려 서버(목업)에서 다시 받게 */
+    delete useReportStore().byId.rp1
+
+    await mountAt('/reports/rp1')
+    expect(document.body.textContent).toContain('기다림 / 막음')
+    expect(parts('[data-attention="k20"] [data-attention-signals]')).toEqual([
+      '뒤 작업을 막는 중',
+      '오래 걸림',
+      '기한 지남',
+    ])
+    expect(parts('[data-attention="k20"] [data-attention-blocking]')).toEqual([
+      '막음',
+      'HW-21',
+      'HW-22',
+    ])
+    expect(parts('[data-attention="k22"] [data-attention-waiting]')).toEqual(['기다림', 'HW-20'])
+    expect(parts('[data-attention="k22"] [data-attention-signals]')).toEqual([
+      '선행 대기',
+      '풀어도 됨',
+    ])
   })
 
   it('backfill 이면 N일 이상', async () => {

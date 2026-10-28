@@ -362,28 +362,6 @@ export interface TaskThreadLink {
   threadId: string
 }
 
-/** 선행 작업 — 뒤 작업(taskId)은 선행(dependsOnId)이 끝나야 시작한다. 막지는 않고 알려 주기만 한다 (docs/api/task-flow.md) */
-export interface TaskDependency {
-  /** 뒤 작업 */
-  taskId: string
-  /** 먼저 끝나야 하는 작업 */
-  dependsOnId: string
-}
-
-/** POST /api/projects/{projectId}/dependencies/suggest — 저장하지 않는다. 사람이 줄마다 [적용] 한다 */
-export interface DependencySuggestions {
-  suggestions: DependencySuggestion[]
-  /** 완료 아닌 작업이 많아 앞에서 잘랐으면 true */
-  truncated: boolean
-}
-
-export interface DependencySuggestion {
-  taskId: string
-  dependsOnId: string
-  /** 왜 — 한 문장 */
-  reason: string
-}
-
 /** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
 export interface TaskRow {
   task: Task
@@ -409,10 +387,6 @@ export interface TaskDetail {
   /** 이 작업을 하다가 정해야 했던 것들 */
   threads: TaskThreadRow[]
   doneChildCount: number
-  /** 이 작업의 선행 작업 */
-  dependsOn: Task[]
-  /** 이 작업을 선행으로 둔 작업 — 읽기만 한다 */
-  dependents: Task[]
 }
 
 /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
@@ -485,8 +459,6 @@ export interface ProjectSnapshot {
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
-  /** taskId · dependsOnId 순 (docs/api/task-flow.md) */
-  taskDependencies: TaskDependency[]
   /** 이름 순 · 보관 포함 */
   parts: Part[]
   /** (partId, memberId) 순 */
@@ -896,9 +868,10 @@ export interface ProgressFacts {
 }
 
 export type TaskAttentionSignal =
-  /** 이 작업이 기다리는 선행 작업이 안 끝났고, 이 작업의 시작일이 dueSoonDays 안이거나 지났다 */
+  /* 선행 작업은 2026-10-28 걷었다(Q63) — 아래 둘은 지난 리포트의 facts 에만 남는다. 새 리포트는 내지 않는다 */
+  /** 기다리는 선행 작업이 안 끝났고 시작일이 가깝거나 지났다 — 지난 리포트에만 */
   | 'waitingOnPredecessor'
-  /** 이 작업을 기다리는 작업이 있는데 이 작업이 늦다 — 기한 지남 · 시작일 지났는데 해야 할 일 · 오래 걸림 중 하나 */
+  /** 이 작업을 기다리는 작업이 있는데 이 작업이 늦다 — 지난 리포트에만 */
   | 'lateBlocker'
   /** 진행 중인 날 수가 계획(start ~ due)의 1.5배를 넘음. 계획이 없으면 staleDays 를 넘음 */
   | 'longRunning'
@@ -919,10 +892,10 @@ export interface TaskAttention {
   statusSinceBackfill: boolean
   /** start ~ due 의 날 수. 둘 중 하나라도 없으면 null */
   plannedDays: number | null
-  /** 이 작업이 기다리는 안 끝난 선행 작업 */
-  waitingOnTaskIds: string[]
-  /** 이 작업을 기다리는 안 끝난 작업 — 이 작업이 늦으면 같이 밀린다 (몇 단계 건너도, 중복 없이) */
-  blockingTaskIds: string[]
+  /** 기다리는 안 끝난 선행 작업 — 선행 작업은 2026-10-28 걷었다(Q63). 지난 리포트에만 */
+  waitingOnTaskIds?: string[]
+  /** 이 작업을 기다리는 안 끝난 작업 — 지난 리포트에만 (Q63) */
+  blockingTaskIds?: string[]
   /** 무게 — Claude 가 '어려운가' 를 판단하는 재료 */
   weight: {
     /** 완료 아닌 하위 작업 수 (자손 전부) */

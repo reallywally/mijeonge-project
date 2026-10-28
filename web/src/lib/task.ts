@@ -1,4 +1,5 @@
-import type { TaskLine, TaskPriority, TaskStatus } from '@/types/domain'
+import { kstToday, localDay } from '@/lib/date'
+import type { Task, TaskLine, TaskPriority, TaskStatus } from '@/types/domain'
 
 /* 상태 넷은 목록 · 칸반 · 추가 · 상세가 모두 같은 순서로 쓴다 */
 export const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -59,4 +60,21 @@ export function periodProblem(start: string, due: string): string {
   if (start && !due) return '기한도 정하면 기간이 잡힙니다'
   if (!start && due) return '시작 날짜도 정하면 기간이 잡힙니다'
   return ''
+}
+
+/** 지금 상태가 된 지 며칠 — 한국 시간 날짜끼리 뺀다. 시계가 어긋나 앞날이면 0 */
+export function statusDays(statusChangedAt: string, now: Date = new Date()) {
+  const from = Date.parse(`${localDay(statusChangedAt)}T00:00:00Z`)
+  const to = Date.parse(`${kstToday(now)}T00:00:00Z`)
+  return Math.max(0, Math.round((to - from) / 86_400_000))
+}
+
+/** '진행 중 · 12일째' — backfill 줄이면 실제로는 더 오래됐을 수 있어 '12일 이상' */
+export function statusSinceLabel(
+  task: Pick<Task, 'statusChangedAt' | 'statusSinceBackfill'> & { status: TaskStatus },
+  now: Date = new Date(),
+) {
+  const days = statusDays(task.statusChangedAt, now)
+  const span = days === 0 ? '오늘부터' : task.statusSinceBackfill ? `${days}일 이상` : `${days}일째`
+  return `${taskStatusLabel(task.status)} · ${span}`
 }

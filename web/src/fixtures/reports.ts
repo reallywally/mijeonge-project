@@ -12,15 +12,13 @@ import type { ProgressFacts, TaskAttention } from '@/types/domain'
 export const REPORT_EMPTY = '아직 작업이 없어 리포트를 쓸 것이 없습니다.'
 
 export interface ReportBodyContext {
-  /** 'HW-21 개발자 계정 배포' */
-  taskLabel: (taskId: string) => string
   /** 작업 담당자 이름. 없으면 '담당자 없음' */
   ownerName: (taskId: string) => string
   /** 멤버 이름. null 이면 '담당자 없음' */
   memberName: (memberId: string | null) => string
 }
 
-function why(a: TaskAttention, ctx: ReportBodyContext) {
+function why(a: TaskAttention) {
   const parts: string[] = []
   for (const s of a.signals) {
     if (s === 'longRunning')
@@ -28,9 +26,6 @@ function why(a: TaskAttention, ctx: ReportBodyContext) {
         `진행 중이 된 지 ${statusSpan(a)}${a.plannedDays !== null ? `(계획 ${a.plannedDays}일)` : ''}`,
       )
     else if (s === 'longBlocked') parts.push(`막힌 지 ${statusSpan(a)}`)
-    else if (s === 'waitingOnPredecessor')
-      parts.push(`선행 작업(${a.waitingOnTaskIds.map(ctx.taskLabel).join(' · ')})이 안 끝남`)
-    else if (s === 'lateBlocker') continue
     else parts.push(ATTENTION_SIGNAL_LABEL[s])
   }
   return parts.join(' · ')
@@ -52,7 +47,7 @@ export function mockReportBody(facts: ProgressFacts, ctx: ReportBodyContext): st
 
   out.push(
     k20
-      ? `한 줄 총평 — 완료율 ${rateLabel(progress.doneRate)}, DB 설치 한 곳이 늦어 그 뒤 작업이 같이 밀리는 것이 이번 주 가장 큰 일입니다.`
+      ? `한 줄 총평 — 완료율 ${rateLabel(progress.doneRate)}, DB 설치가 계획보다 오래 걸리는 것이 이번 주 가장 큰 일입니다.`
       : `한 줄 총평 — 완료율 ${rateLabel(progress.doneRate)}, 손쓸 작업 ${attention.length}건이 있습니다.`,
   )
 
@@ -80,24 +75,16 @@ export function mockReportBody(facts: ProgressFacts, ctx: ReportBodyContext): st
 
   const first: string[] = []
   if (k20) {
-    const waiting =
-      k20.blockingTaskIds.length > 0
-        ? ` 기다리는 작업(${k20.blockingTaskIds.map(ctx.taskLabel).join(' · ')})이 있어 늦을수록 같이 밀립니다.`
-        : ''
     first.push(
-      `${first.length + 1}. [[task:k20]] — ${why(k20, ctx)}.${waiting}${weightLine(k20)} ${ctx.ownerName('k20')} 님께 남은 일과 끝날 날을 확인해 보세요.`,
+      `${first.length + 1}. [[task:k20]] — ${why(k20)}.${weightLine(k20)} ${ctx.ownerName('k20')} 님께 남은 일과 끝날 날을 확인해 보세요.`,
     )
   }
   if (k22) {
     const unblock = k22.signals.includes('decidedButBlocked')
       ? ' 걸린 안건은 모두 정해졌으니 막힌 까닭은 풀렸습니다.'
       : ''
-    const pred =
-      k22.waitingOnTaskIds.length > 0
-        ? ` 선행이 끝나는 날에 맞춰 진행 중으로 돌릴지 정해 보세요.`
-        : ' 진행 중으로 돌려도 됩니다.'
     first.push(
-      `${first.length + 1}. [[task:k22]] — ${why(k22, ctx)}.${unblock}${pred} ${ctx.ownerName('k22')} 님께 권해 보세요.`,
+      `${first.length + 1}. [[task:k22]] — ${why(k22)}.${unblock} 진행 중으로 돌려도 됩니다. ${ctx.ownerName('k22')} 님께 권해 보세요.`,
     )
   }
   if (first.length > 0) out.push('', '먼저 손쓸 것', ...first)
@@ -113,7 +100,7 @@ export function mockReportBody(facts: ProgressFacts, ctx: ReportBodyContext): st
   }
 
   out.push('', '다음 주 볼 것')
-  if (k20) out.push(`- [[task:k20]] 이 끝나는지 — 끝나면 기다리던 뒤 작업이 같이 풀립니다.`)
+  if (k20) out.push(`- [[task:k20]] 이 끝나는지 — 계획보다 늘어진 날이 더 늘지 않는지 봅니다.`)
   out.push(`- 기한 지난 작업이 줄어드는지 — 지금 손쓸 작업 ${attention.length}건입니다.`)
   return out.join('\n')
 }

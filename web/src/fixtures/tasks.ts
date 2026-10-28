@@ -1,12 +1,5 @@
 import { taskComments } from '@/fixtures/comments'
-import type {
-  DependencySuggestion,
-  Task,
-  TaskDependency,
-  TaskLine,
-  TaskStatus,
-  TaskThreadLink,
-} from '@/types/domain'
+import type { Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
 
 /**
  * 작업. memo 의 "기본 사용법" 에 적힌 트리를 그대로 깔았다.
@@ -136,26 +129,3 @@ export const taskThreadLinks: TaskThreadLink[] = [
   { taskId: 'k3', threadId: 't9' }, // 프로그램 설계 ↔ 공통 코드 체계
   { taskId: 'k22', threadId: 't2' }, // 스테이징 DB 구성 ↔ DB 결정
 ]
-
-/** 선행 작업 (p1) — taskId · dependsOnId 순. 스냅샷 순서와 같다 */
-export const taskDependencies: TaskDependency[] = [
-  { taskId: 'k20', dependsOnId: 'k19' }, // DB 설치 ← 서버 발급 — 서버가 있어야 설치한다
-  { taskId: 'k21', dependsOnId: 'k20' }, // 개발자 계정 배포 ← DB 설치 — DB 가 떠야 계정을 만든다
-  { taskId: 'k22', dependsOnId: 'k20' }, // 스테이징 DB 구성 ← DB 설치 — 개발 DB 구성을 본떠 만든다
-]
-
-/** AI 선행 관계 찾기의 목업 답 — 시드에 없는 그럴듯한 관계 둘. 이미 걸었거나 걸 수 없게 됐으면 목업 api 가 버린다 */
-export const mockDependencySuggestions: Record<string, DependencySuggestion[]> = {
-  p1: [
-    {
-      taskId: 'k16',
-      dependsOnId: 'k15',
-      reason: '기존 상품을 분석해야 추천 모델에 넣을 상품 속성을 정할 수 있다.',
-    },
-    {
-      taskId: 'k18',
-      dependsOnId: 'k3',
-      reason: '프로그램 설계가 끝나야 기간계 API 의 입출력을 확정할 수 있다.',
-    },
-  ],
-}

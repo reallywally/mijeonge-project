@@ -32,6 +32,7 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'body',
     'lineDone',
     'thread',
+    /* 선행 작업은 2026-10-28 걷었다(Q63) — 지난 이력 줄에만 있어 읽기는 둔다 */
     'dependsOn',
   ],
   test: [
@@ -219,6 +220,7 @@ function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNam
 /** 걸기 · 떼기 칸 — 걸기는 null → id, 떼기는 id → null */
 const LINK: Record<string, { noun: string; find: keyof HistoryNames }> = {
   thread: { noun: '안건', find: 'thread' },
+  /* 선행 작업은 2026-10-28 걷었다(Q63) — 지난 이력 줄에만 */
   dependsOn: { noun: '선행 작업', find: 'task' },
   taskRef: { noun: '작업 태그', find: 'task' },
   threadRef: { noun: '안건 태그', find: 'thread' },

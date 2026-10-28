@@ -1,16 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
-import {
-  dueToEnd,
-  endToDue,
-  FINISH_TO_START,
-  linkToDependency,
-  rangeLabel,
-  toGanttItems,
-  toGanttLinks,
-  toTestGanttItems,
-  weekLabel,
-} from './gantt'
+import { dueToEnd, endToDue, rangeLabel, toGanttItems, toTestGanttItems, weekLabel } from './gantt'
 import { taskStatusLabel } from './task'
 import { useTaskStore } from '@/stores/task'
 import type { TestRow } from '@/types/domain'
@@ -89,37 +79,6 @@ describe('눈금과 기간 글씨', () => {
 
   it('기간이 잡힌 작업이 없으면 적지 않는다', () => {
     expect(rangeLabel([])).toBe('')
-  })
-})
-
-describe('선행 관계 ↔ 간트 화살표', () => {
-  const deps = [
-    { taskId: 'k20', dependsOnId: 'k19' },
-    { taskId: 'k21', dependsOnId: 'k20' },
-  ]
-
-  it('선행의 끝 → 뒤 작업의 시작(finish-to-start)으로 그린다', () => {
-    const links = toGanttLinks(deps, [{ id: 'k19' }, { id: 'k20' }, { id: 'k21' }])
-    expect(links).toEqual([
-      { id: 'k19>k20', source: 'k19', target: 'k20', type: FINISH_TO_START },
-      { id: 'k20>k21', source: 'k20', target: 'k21', type: FINISH_TO_START },
-    ])
-    expect(FINISH_TO_START).toBe('0')
-  })
-
-  it('한쪽이 간트에 없으면(거르기로 빠짐) 그리지 않는다', () => {
-    expect(toGanttLinks(deps, [{ id: 'k19' }, { id: 'k20' }]).map((l) => l.id)).toEqual(['k19>k20'])
-  })
-
-  it('끌어 만든 화살표를 선행 관계로 — 끝 → 시작만 받는다', () => {
-    expect(linkToDependency({ source: 'k15', target: 'k16', type: '0' })).toEqual({
-      taskId: 'k16',
-      dependsOnId: 'k15',
-    })
-    /* 시작 → 시작 · 끝 → 끝 · 시작 → 끝, 제자리 */
-    for (const type of ['1', '2', '3'])
-      expect(linkToDependency({ source: 'k15', target: 'k16', type })).toBeNull()
-    expect(linkToDependency({ source: 'k15', target: 'k15', type: '0' })).toBeNull()
   })
 })
 
