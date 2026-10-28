@@ -207,19 +207,12 @@ async def test_thread_link_only_when_new_or_existing(client: httpx.AsyncClient) 
     assert all(row["changedBy"] == ADMIN for row in rows[before:])
 
 
-async def test_dependency_goes_on_the_later_task(client: httpx.AsyncClient) -> None:
-    k19_before = await history(client, "tasks/k19")
-    before = len(await history(client, "tasks/k21"))
-    for _ in range(2):
-        assert (await client.put("/api/tasks/k21/dependencies/k19")).status_code == 200
-    for _ in range(2):
-        assert (await client.delete("/api/tasks/k21/dependencies/k19")).status_code == 204
-    rows = await history(client, "tasks/k21")
-    assert [row["changes"] for row in rows[before:]] == [
-        [ch("dependsOn", None, "k19")],
-        [ch("dependsOn", "k19", None)],
-    ]
-    assert await history(client, "tasks/k19") == k19_before
+async def test_dependency_leaves_no_line(client: httpx.AsyncClient) -> None:
+    """선행 작업은 걷었다(Q63) — 길이 없고 `dependsOn` 줄도 더 남지 않는다."""
+    before = await history(client, "tasks/k21")
+    assert (await client.put("/api/tasks/k21/dependencies/k19")).status_code == 404
+    assert (await client.delete("/api/tasks/k21/dependencies/k19")).status_code == 404
+    assert await history(client, "tasks/k21") == before
 
 
 async def test_changed_by_is_the_requester(client: httpx.AsyncClient, as_member: AsMember) -> None:
@@ -227,11 +220,9 @@ async def test_changed_by_is_the_requester(client: httpx.AsyncClient, as_member:
     await u2.patch("/api/tasks/k1", json={"priority": "high"})
     await u2.patch("/api/tasks/k4/lines/l3", json={"done": True})
     await u2.put("/api/tasks/k1/threads/t1")
-    await u2.put("/api/tasks/k21/dependencies/k19")
     assert (await history(client, "tasks/k1"))[-1]["changedBy"] == "u2"
     assert (await history(client, "tasks/k1"))[-2]["changedBy"] == "u2"
     assert (await history(client, "tasks/k4"))[-1]["changedBy"] == "u2"
-    assert (await history(client, "tasks/k21"))[-1]["changedBy"] == "u2"
 
 
 async def test_failed_write_leaves_no_line(client: httpx.AsyncClient) -> None:

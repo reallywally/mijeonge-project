@@ -45,7 +45,7 @@ def get_rate_limiter() -> RateLimiter:
 def get_llm(
     client: Annotated[AsyncAnthropic | None, Depends(get_chat_client)],
 ) -> LLMProvider | None:
-    """AI 를 부르는 모든 경로(챗봇 · 회의록 초안 · 리스크 요약 · 선행 관계 · 리포트)가 받는다."""
+    """AI 를 부르는 모든 경로(챗봇 · 회의록 초안 · 리스크 요약 · 리포트)가 받는다."""
     if settings.llm_provider == "anthropic":
         return AnthropicProvider(client, settings) if client is not None else None
     # GPT · Groq — 첫 요청에 한 번 만든다. 키 · 모델이 없으면 None 이고 AI 경로만 503 이다

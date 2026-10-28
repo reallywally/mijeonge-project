@@ -6,7 +6,7 @@
 한 프로젝트가 수백 줄 규모라 몇 번의 select 로 다 읽고 계산은 파이썬에서 한다(리스크와 같다).
 """
 
-from collections import defaultdict, deque
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -19,7 +19,6 @@ from app.models import (
     Entry,
     ProjectReport,
     Task,
-    TaskDependency,
     TaskLine,
     TaskLog,
     TaskThreadLink,
@@ -46,16 +45,12 @@ ATTENTION_MAX = 30
 RISKY_MAX = 10
 # 신호 점수는 고정이다. 순서가 곧 signals 배열의 순서다(계약의 타입 순서)
 SIGNAL_SCORES: dict[TaskAttentionSignal, int] = {
-    "waitingOnPredecessor": 1,
-    "lateBlocker": 3,
     "longRunning": 2,
     "longBlocked": 2,
     "overdue": 2,
     "notStarted": 1,
     "decidedButBlocked": 3,
 }
-# 뒤를 많이 막을수록 위로 오되 그것만으로 다른 신호를 덮지 않는다
-BLOCKING_CAP = 3
 PRIORITIES: dict[str, TaskPriority] = {"low": "low", "normal": "normal", "high": "high"}
 
 
@@ -88,9 +83,6 @@ class _Task:
 class _Graph:
     tasks: dict[str, _Task]
     children: dict[str, list[str]]
-    # 뒤 작업 → 선행들, 선행 → 뒤 작업들
-    depends_on: dict[str, list[str]]
-    waited_by: dict[str, list[str]]
 
     def by_seq(self, ids: Iterable[str]) -> list[str]:
         return sorted(ids, key=lambda task_id: self.tasks[task_id].seq)
@@ -108,19 +100,6 @@ class _Graph:
             seen.add(child)
             stack.extend(self.children.get(child, ()))
         return sum(1 for child in seen if self.open(child))
-
-    def blocking(self, task_id: str) -> list[str]:
-        """이 작업을 (몇 단계 건너도) 기다리는 안 끝난 작업. 끝난 작업에서는 더 타지 않는다 —
-        그 뒤 작업은 이제 끝난 선행을 기다릴 뿐이다."""
-        seen: set[str] = set()
-        queue = deque([task_id])
-        while queue:
-            for nxt in self.waited_by.get(queue.popleft(), ()):
-                if nxt in seen or nxt == task_id or not self.open(nxt):
-                    continue
-                seen.add(nxt)
-                queue.append(nxt)
-        return self.by_seq(seen)
 
 
 async def _read_graph(session: AsyncSession, project_id: str) -> _Graph:
@@ -144,17 +123,7 @@ async def _read_graph(session: AsyncSession, project_id: str) -> _Graph:
     for task in tasks.values():
         if task.parent_id is not None and task.parent_id in tasks:
             children[task.parent_id].append(task.id)
-    depends_on: dict[str, list[str]] = defaultdict(list)
-    waited_by: dict[str, list[str]] = defaultdict(list)
-    edges = await session.execute(
-        select(TaskDependency.task_id, TaskDependency.depends_on_id).where(
-            TaskDependency.project_id == project_id
-        )
-    )
-    for task_id, depends_on_id in edges.tuples():
-        depends_on[task_id].append(depends_on_id)
-        waited_by[depends_on_id].append(task_id)
-    return _Graph(tasks=tasks, children=children, depends_on=depends_on, waited_by=waited_by)
+    return _Graph(tasks=tasks, children=children)
 
 
 async def _lines(session: AsyncSession, project_id: str) -> dict[str, tuple[int, int]]:
@@ -244,8 +213,6 @@ def _signals(
     *,
     status_days: int,
     planned_days: int | None,
-    waiting: list[str],
-    blocking: list[str],
     decided_but_blocked: bool,
     rule: RiskSettings,
     today: date,
@@ -265,13 +232,8 @@ def _signals(
     else:
         long_running = status_days > rule.stale_days
     long_blocked = task.status == "blocked" and status_days > rule.stale_days
-    waiting_soon = (
-        bool(waiting) and task.start is not None and (task.start - today).days <= rule.due_soon_days
-    )
 
     hits: dict[TaskAttentionSignal, bool] = {
-        "waitingOnPredecessor": waiting_soon,
-        "lateBlocker": bool(blocking) and (overdue or start_passed or long_running),
         "longRunning": long_running,
         "longBlocked": long_blocked,
         "overdue": overdue,
@@ -321,14 +283,10 @@ async def progress_with_risks(
             if task.start is not None and task.due is not None
             else None
         )
-        waiting = graph.by_seq(p for p in graph.depends_on.get(task.id, ()) if graph.open(p))
-        blocking = graph.blocking(task.id)
         signals = _signals(
             task,
             status_days=status_days,
             planned_days=planned,
-            waiting=waiting,
-            blocking=blocking,
             decided_but_blocked=task.id in decided_but_blocked,
             rule=rule,
             today=today,
@@ -336,15 +294,13 @@ async def progress_with_risks(
         if not signals:
             continue
         open_lines, total_lines = lines.get(task.id, (0, 0))
-        score = sum(SIGNAL_SCORES[s] for s in signals) + min(len(blocking), BLOCKING_CAP)
+        score = sum(SIGNAL_SCORES[s] for s in signals)
         item = TaskAttention(
             task_id=task.id,
-            signals=signals,
+            signals=list(signals),
             status_days=status_days,
             status_since_backfill=backfilled,
             planned_days=planned,
-            waiting_on_task_ids=waiting,
-            blocking_task_ids=blocking,
             weight=TaskWeight(
                 open_children=graph.open_descendants(task.id),
                 open_lines=open_lines,

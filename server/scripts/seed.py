@@ -36,7 +36,6 @@ from app.models import (
     RiskSetting,
     Task,
     TaskComment,
-    TaskDependency,
     TaskHistory,
     TaskLine,
     TaskLog,
@@ -493,34 +492,12 @@ TASK_THREAD_LINKS = [
 ]
 
 
-# 선행 작업 (뒤 작업, 선행 작업) — docs/api/task-flow.md '시드 · 목업'
-TASK_DEPENDENCIES = [
-    ("k20", "k19"),  # 서버가 있어야 DB 를 설치한다
-    ("k21", "k20"),  # DB 가 떠야 계정을 만든다
-    ("k22", "k20"),  # 개발 DB 구성을 본떠 스테이징을 만든다
-]
-# 지어 둔 사람 — 개발 환경 설정(k4) 담당
-DEPENDENCY_BY = "u3"
-
 # 리포트 시연용으로 오래 둔 상태 — (작업, 앞 상태, 지금 상태, 바뀐 시각)
 DEMO_STATUS_CHANGES = [
     # 계획은 09-10 ~ 09-12 사흘 — 리포트의 '오래 걸림'
     ("k20", "todo", "doing", "2026-10-08T00:00:00Z"),
     ("k22", "todo", "blocked", "2026-10-13T00:00:00Z"),
 ]
-
-
-def dependencies() -> list[TaskDependency]:
-    return [
-        TaskDependency(
-            task_id=task_id,
-            depends_on_id=depends_on_id,
-            project_id="p1",
-            created_by=DEPENDENCY_BY,
-            created_at=at("2026-09-04T00:30:00Z"),
-        )
-        for task_id, depends_on_id in TASK_DEPENDENCIES
-    ]
 
 
 def demo_log(task: Task, from_status: str, to_status: str, changed_at: str) -> TaskLog:
@@ -986,7 +963,6 @@ async def clear(session: AsyncSession) -> None:
         RiskSetting,
         TaskComment,
         TaskThreadLink,
-        TaskDependency,
         TaskHistory,
         TaskLog,
         TaskLine,
@@ -1071,7 +1047,6 @@ async def seed(session: AsyncSession) -> None:
     await session.flush()
     session.add_all(in_order(comments()))
     session.add_all(in_order(task_logs()))
-    session.add_all(dependencies())
     await session.flush()
     session.add_all(in_order(await checks(session)))
     session.add_all(in_order(minutes()))
@@ -1105,7 +1080,6 @@ async def run() -> None:
         "task": len(tasks()),
         "comment": len(comments()),
         "link": len(TASK_THREAD_LINKS),
-        "dependency": len(TASK_DEPENDENCIES),
         "task_log": len(task_logs()),
         "check": len(CHECKS),
         "minutes": len(minutes()),
