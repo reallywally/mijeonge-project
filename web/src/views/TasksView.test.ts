@@ -431,7 +431,12 @@ describe('칸반보드 탭', () => {
 
     const badge = card.get('button[aria-label$="연관 안건"]')
     expect(badge.text()).toContain('안건 1')
-    expect(badge.get('div').classes()).toContain('bg-destructive')
+    expect(
+      badge
+        .get('div')
+        .classes()
+        .some((c) => c.includes('destructive')),
+    ).toBe(true)
   })
 
   it('안건 배지를 누르면 상세가 아니라 그 안건으로 간다', async () => {
@@ -483,7 +488,7 @@ describe('간트차트 탭', () => {
     expect(list.attributes('href')).toBe('/tasks?view=list')
     const gantt = w.findAll('a.border-b-2').find((a) => a.text() === '간트차트')!
     expect(gantt.attributes('href')).toBe('/tasks')
-    expect(gantt.classes()).toContain('border-foreground')
+    expect(gantt.classes()).toContain('border-primary')
   })
 
   it('탭 셋이 서고 간트가 골라진다', async () => {
@@ -492,7 +497,7 @@ describe('간트차트 탭', () => {
     expect(tabs).toEqual(['목록', '간트차트', '칸반보드'])
 
     const gantt = w.findAll('a.border-b-2').find((a) => a.text() === '간트차트')!
-    expect(gantt.classes()).toContain('border-foreground')
+    expect(gantt.classes()).toContain('border-primary')
     /* 조회 조건 · 페이징은 목록 탭의 것이라 간트에는 없다 */
     expect(w.text()).not.toContain('조회 조건에 맞는 작업이 없습니다')
     expect(w.text()).toContain('/ 22 완료')

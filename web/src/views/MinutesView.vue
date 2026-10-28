@@ -67,7 +67,7 @@ function open(id: string) {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">회의록</span>
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
     </div>
@@ -76,7 +76,7 @@ function open(id: string) {
       <div class="flex w-full max-w-[900px] flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">회의록</h1>
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">회의록</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               회의록을 남겨 두고, 회의록마다 [AI 정리] 로 새 안건 · 기존 안건에 붙일 이력 · 작업을
               골라 등록합니다. 등록한 것에는 어느 회의에서 나왔는지가 남습니다.
@@ -89,13 +89,13 @@ function open(id: string) {
         </header>
 
         <section
-          class="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+          class="flex items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
         >
           <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
           <Input
             v-model="titleDraft"
             placeholder="회의록 제목에 들어가는 말"
-            class="grow bg-background"
+            class="grow"
             aria-label="회의록 제목 찾기"
             data-minutes-search
             @keyup.enter="search"
@@ -123,10 +123,13 @@ function open(id: string) {
           회의록을 받는 중입니다.
         </div>
 
-        <div v-else class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div
+          v-else
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+        >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
                   >회의 날짜</TableHead
                 >

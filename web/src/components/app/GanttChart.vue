@@ -242,7 +242,7 @@ function showToday() {
 
 .tg-root .gantt_grid_scale,
 .tg-root .gantt_task_scale {
-  background: var(--muted);
+  background: var(--card);
   color: var(--muted-foreground);
   font-weight: 500;
   border-bottom: 1px solid var(--border);
@@ -266,7 +266,7 @@ function showToday() {
 .tg-root .gantt_grid_data .gantt_row:hover,
 .tg-root .gantt_grid_data .gantt_row.gantt_selected,
 .tg-root .gantt_task_bg .gantt_task_row.gantt_selected {
-  background: var(--muted);
+  background: var(--brand-soft);
 }
 
 .tg-root .gantt_task_cell,
@@ -278,7 +278,7 @@ function showToday() {
 
 .tg-root .gantt_task_cell.tg-weekend,
 .tg-root .gantt_scale_cell.tg-weekend {
-  background: var(--muted);
+  background: color-mix(in oklab, var(--muted) 70%, var(--background));
 }
 
 .tg-root .gantt_task_cell.tg-today,
@@ -306,46 +306,58 @@ function showToday() {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  height: 21px;
-  padding: 0 8px;
-  border-radius: var(--radius-sm);
-  background: var(--secondary);
-  color: var(--secondary-foreground);
+  height: 20px;
+  padding: 0 7px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--card);
+  color: var(--foreground);
   font-size: 11px;
+  font-weight: 500;
 }
 
 .tg-root .tg-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 9999px;
-  background: currentColor;
+  background: var(--status-todo);
 }
 
-.tg-root .tg-badge-done {
-  background: var(--primary);
-  color: var(--primary-foreground);
+/* 상태 색은 StatusPill 과 같다 — 진행 · 테스트 중은 파랑, 완료 · 성공은 초록, 막힘 · 실패는 빨강 */
+.tg-root .tg-badge-doing,
+.tg-root .tg-badge-testing {
+  border-color: color-mix(in oklab, var(--status-doing) 22%, var(--card));
+  background: color-mix(in oklab, var(--status-doing) 9%, var(--card));
+  color: color-mix(in oklab, var(--status-doing) 75%, var(--foreground));
+}
+.tg-root .tg-badge-doing .tg-dot,
+.tg-root .tg-badge-testing .tg-dot {
+  background: var(--status-doing);
 }
 
-.tg-root .tg-badge-blocked {
-  background: var(--destructive);
-  color: var(--destructive-foreground);
-}
-
-.tg-root .tg-badge-todo {
-  color: var(--muted-foreground);
-}
-
-/* 테스트 상태 — 성공은 완료처럼 채우고, 실패 · 막힘은 destructive, 작성 중 · 준비됨은 흐리게 */
+.tg-root .tg-badge-done,
 .tg-root .tg-badge-pass {
-  background: var(--primary);
-  color: var(--primary-foreground);
+  border-color: color-mix(in oklab, var(--status-done) 24%, var(--card));
+  background: color-mix(in oklab, var(--status-done) 10%, var(--card));
+  color: color-mix(in oklab, var(--status-done) 70%, var(--foreground));
+}
+.tg-root .tg-badge-done .tg-dot,
+.tg-root .tg-badge-pass .tg-dot {
+  background: var(--status-done);
 }
 
+.tg-root .tg-badge-blocked,
 .tg-root .tg-badge-fail {
-  background: var(--destructive);
-  color: var(--destructive-foreground);
+  border-color: color-mix(in oklab, var(--status-blocked) 24%, var(--card));
+  background: color-mix(in oklab, var(--status-blocked) 9%, var(--card));
+  color: color-mix(in oklab, var(--status-blocked) 80%, var(--foreground));
+}
+.tg-root .tg-badge-blocked .tg-dot,
+.tg-root .tg-badge-fail .tg-dot {
+  background: var(--status-blocked);
 }
 
+.tg-root .tg-badge-todo,
 .tg-root .tg-badge-draft,
 .tg-root .tg-badge-ready {
   color: var(--muted-foreground);
@@ -358,8 +370,10 @@ function showToday() {
   width: 24px;
   height: 24px;
   border-radius: 9999px;
-  background: var(--secondary);
+  background: var(--brand-soft);
+  color: var(--primary);
   font-size: 10.5px;
+  font-weight: 600;
 }
 
 .tg-root .tg-avatar-none {
@@ -367,35 +381,30 @@ function showToday() {
   color: var(--muted-foreground);
 }
 
-/* 막대 — 완료 · 성공은 채우고, 진행 중 · 테스트 중은 테두리, 해야 할 일은 옅게, 묶음은 자식들의 기간 */
+/* 막대 — 완료 · 성공은 초록으로 채우고, 진행 중 · 테스트 중은 옅은 파랑, 해야 할 일은 옅은 회색, 묶음은 자식들의 기간 */
 .tg-root .gantt_task_line.tg-bar {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--secondary);
+  border-radius: 5px;
+  background: var(--muted);
+  box-shadow: 0 1px 1px rgb(16 24 40 / 0.04);
 }
 
-.tg-root .gantt_task_line.tg-bar-doing {
-  border-color: var(--primary);
+.tg-root .gantt_task_line.tg-bar-doing,
+.tg-root .gantt_task_line.tg-bar-testing {
+  border-color: color-mix(in oklab, var(--status-doing) 55%, var(--card));
+  background: color-mix(in oklab, var(--status-doing) 16%, var(--card));
 }
 
-.tg-root .gantt_task_line.tg-bar-done {
-  background: var(--primary);
-  border-color: var(--primary);
+.tg-root .gantt_task_line.tg-bar-done,
+.tg-root .gantt_task_line.tg-bar-pass {
+  background: var(--status-done);
+  border-color: var(--status-done);
 }
 
 .tg-root .gantt_task_line.tg-bar-blocked,
 .tg-root .gantt_task_line.tg-bar-fail {
-  background: var(--destructive);
-  border-color: var(--destructive);
-}
-
-.tg-root .gantt_task_line.tg-bar-testing {
-  border-color: var(--primary);
-}
-
-.tg-root .gantt_task_line.tg-bar-pass {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--status-blocked);
+  border-color: var(--status-blocked);
 }
 
 /* 기간 지남 · 오래 걸림 — 막대는 상태 색 그대로 두고 테두리만 세운다 */

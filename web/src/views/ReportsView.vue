@@ -90,7 +90,7 @@ function openTask(id: string) {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">리포트</span>
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
     </div>
@@ -99,7 +99,7 @@ function openTask(id: string) {
       <div class="flex w-full max-w-[900px] flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">리포트</h1>
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">리포트</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               지난 7일의 진행을 규칙으로 세고, AI 가 무엇을 먼저 손써야 하는지 근거와 함께 씁니다.
               만든 리포트는 남아 다음 리포트가 지난번과 견줍니다.
@@ -203,10 +203,13 @@ function openTask(id: string) {
           리포트를 받는 중입니다.
         </div>
 
-        <div v-else class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div
+          v-else
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+        >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">기간</TableHead>
                 <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
                   >만든 사람</TableHead

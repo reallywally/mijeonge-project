@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChevronDown,
-  ChevronRight,
   FileChartColumn,
   FlaskConical,
   FolderClosed,
@@ -19,6 +18,7 @@ import {
   UserCog,
   Users,
 } from 'lucide-vue-next'
+import BrandMark from '@/components/app/BrandMark.vue'
 import PasswordChangeDialog from '@/components/app/PasswordChangeDialog.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
 import {
@@ -73,15 +73,13 @@ async function logout() {
 
 <template>
   <div class="flex h-screen min-h-0 flex-col bg-background text-foreground">
-    <header class="flex h-[58px] shrink-0 items-center gap-3 border-b border-border px-[22px]">
-      <div class="flex items-center gap-2.5">
-        <div class="size-[19px] rounded-sm border-[1.5px] border-foreground" />
-        <span class="text-lg font-semibold">innoFlow</span>
-      </div>
-      <ChevronRight class="size-3.5 text-muted-foreground" />
-      <div class="flex items-center gap-2 text-sm">
-        <FolderClosed class="size-3.5 text-muted-foreground" />
-        <span :class="data.currentProject ? '' : 'text-muted-foreground'">
+    <header class="flex h-12 shrink-0 items-center gap-2.5 border-b border-border bg-card px-4">
+      <RouterLink to="/tasks" class="flex w-[212px] shrink-0 items-center pl-1">
+        <BrandMark />
+      </RouterLink>
+      <div class="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+        <FolderClosed class="size-3.5" />
+        <span :class="data.currentProject ? 'font-medium text-foreground' : ''">
           {{ data.currentProject?.name ?? '고른 프로젝트 없음' }}
         </span>
         <!-- 프로젝트를 바꾸고 그 프로젝트의 레코드를 받는 동안 -->
@@ -95,7 +93,7 @@ async function logout() {
       <slot name="actions" />
       <DropdownMenu v-if="auth.me">
         <DropdownMenuTrigger
-          class="flex h-9 items-center gap-1.5 rounded-md px-1.5 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          class="flex h-8 items-center gap-1 rounded-md pr-1 pl-1.5 hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/25 focus-visible:outline-none"
           aria-label="내 메뉴"
         >
           <PersonChip :name="auth.me.name" />
@@ -124,15 +122,15 @@ async function logout() {
 
     <div class="flex min-h-0 grow">
       <aside
-        class="flex w-60 shrink-0 flex-col gap-5 overflow-hidden border-r border-border bg-muted/50 px-4 py-[22px]"
+        class="flex w-[244px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-sidebar px-3 py-3"
       >
         <label class="flex flex-col gap-1.5">
           <span class="flex items-center gap-2 px-1">
-            <span class="grow text-xs font-medium text-muted-foreground">프로젝트</span>
+            <span class="grow text-[11.5px] font-medium text-muted-foreground">프로젝트</span>
             <!-- 프로젝트를 만들고 고르는 자리. 대메뉴에 두지 않고 여기서 간다 -->
             <RouterLink
               to="/projects"
-              class="text-xs text-muted-foreground underline-offset-4 hover:underline"
+              class="text-[11.5px] text-muted-foreground hover:text-foreground"
             >
               목록
             </RouterLink>
@@ -142,7 +140,7 @@ async function logout() {
             :model-value="data.currentProjectId"
             @update:model-value="(id) => data.setProject(String(id))"
           >
-            <SelectTrigger class="h-11 w-full gap-2 bg-card text-sm font-semibold">
+            <SelectTrigger class="h-9 w-full gap-2 bg-card text-[13px] font-semibold">
               <SelectValue class="min-w-0 grow truncate text-left" />
               <Badge
                 v-if="checks.pendingElsewhere > 0"
@@ -173,59 +171,63 @@ async function logout() {
           </p>
         </label>
 
-        <nav class="flex flex-col gap-[3px]">
+        <nav class="flex flex-col gap-px">
           <RouterLink
             to="/tasks"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <SquareKanban class="size-4 shrink-0" />
             <span class="grow">작업</span>
-            <span class="text-xs text-muted-foreground">{{ taskStore.visibleRows.length }}</span>
+            <span class="text-xs text-muted-foreground tabular-nums">{{
+              taskStore.visibleRows.length
+            }}</span>
           </RouterLink>
           <RouterLink
             to="/threads"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <ListTree class="size-4 shrink-0" />
             <span class="grow">안건</span>
-            <span class="text-xs text-muted-foreground">{{ threadStore.visibleRows.length }}</span>
+            <span class="text-xs text-muted-foreground tabular-nums">{{
+              threadStore.visibleRows.length
+            }}</span>
           </RouterLink>
           <RouterLink
             to="/tests"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <FlaskConical class="size-4 shrink-0" />
             <span class="grow">테스트</span>
           </RouterLink>
           <RouterLink
             to="/risks"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <TriangleAlert class="size-4 shrink-0" />
             <span class="grow">리스크</span>
           </RouterLink>
           <RouterLink
             to="/reports"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <FileChartColumn class="size-4 shrink-0" />
             <span class="grow">리포트</span>
           </RouterLink>
           <RouterLink
             to="/checks"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <ListChecks class="size-4 shrink-0" />
             <span class="grow">확인 요청</span>
             <Badge
               v-if="checks.pendingHere > 0"
-              class="px-1.5"
+              class="h-[18px] min-w-[18px] justify-center rounded-full px-1.5 text-[11px] tabular-nums"
               :aria-label="`확인 대기 ${checks.pendingHere}건`"
               data-check-badge
               >{{ checks.pendingHere }}</Badge
@@ -233,8 +235,8 @@ async function logout() {
           </RouterLink>
           <RouterLink
             to="/minutes"
-            class="flex min-h-12 items-center gap-2.5 rounded-md px-3 py-[11px] text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <NotebookPen class="size-4 shrink-0" />
             <span class="grow">회의록</span>
@@ -242,20 +244,20 @@ async function logout() {
         </nav>
 
         <nav v-if="manageProject || manageAccounts" class="flex flex-col gap-[3px]">
-          <span class="px-1 pb-1 text-xs font-medium text-muted-foreground">관리</span>
+          <span class="px-2.5 pb-1.5 text-[11.5px] font-medium text-muted-foreground">관리</span>
           <template v-if="manageProject">
             <RouterLink
               :to="`/projects/${data.currentProjectId}/settings`"
-              class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
-              active-class="bg-accent font-medium text-accent-foreground"
+              class="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+              active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
             >
               <Settings class="size-4 shrink-0" />
               프로젝트 관리
             </RouterLink>
             <RouterLink
               :to="`/projects/${data.currentProjectId}/parts`"
-              class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
-              active-class="bg-accent font-medium text-accent-foreground"
+              class="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+              active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
             >
               <Users class="size-4 shrink-0" />
               파트 관리
@@ -264,8 +266,8 @@ async function logout() {
           <RouterLink
             v-if="manageAccounts"
             to="/admin/members"
-            class="flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
-            active-class="bg-accent font-medium text-accent-foreground"
+            class="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <UserCog class="size-4 shrink-0" />
             사용자 관리
@@ -275,7 +277,7 @@ async function logout() {
         <slot name="aside" />
       </aside>
 
-      <main class="flex min-w-0 grow flex-col overflow-hidden">
+      <main class="flex min-w-0 grow flex-col overflow-hidden bg-background">
         <slot />
       </main>
     </div>

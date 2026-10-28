@@ -60,7 +60,7 @@ const cards = computed<Card[]>(() => {
       :data-report-card="c.key"
     >
       <span class="text-xs text-muted-foreground">{{ c.label }}</span>
-      <span class="text-2xl font-semibold tracking-tight" data-card-value>{{ c.value }}</span>
+      <span class="text-[22px] font-bold tracking-[-0.025em]" data-card-value>{{ c.value }}</span>
       <span
         v-if="c.delta"
         class="text-xs"

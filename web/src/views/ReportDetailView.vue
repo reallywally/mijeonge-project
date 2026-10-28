@@ -118,7 +118,7 @@ function openTask(id: string) {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <RouterLink
         to="/reports"
         class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -154,7 +154,7 @@ function openTask(id: string) {
         <template v-else>
           <header class="flex items-start gap-4">
             <div class="flex min-w-0 grow flex-col gap-2">
-              <h1 class="text-2xl font-semibold tracking-tight" data-report-heading>
+              <h1 class="text-[22px] font-bold tracking-[-0.025em]" data-report-heading>
                 {{ periodLabel(r) }} 진행 리포트
               </h1>
               <p
@@ -208,10 +208,12 @@ function openTask(id: string) {
               <h2 class="text-base font-semibold">사람별</h2>
               <span class="text-xs text-muted-foreground">손쓸 작업이 많은 순</span>
             </div>
-            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <div
+              class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+            >
               <Table>
                 <TableHeader>
-                  <TableRow class="bg-muted/50 hover:bg-muted/50">
+                  <TableRow class="bg-muted/60 hover:bg-muted/60">
                     <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                       >담당자</TableHead
                     >

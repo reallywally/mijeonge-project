@@ -161,7 +161,7 @@ function cancel() {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <RouterLink
         to="/minutes"
         class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -173,7 +173,7 @@ function cancel() {
 
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
       <div class="flex w-full max-w-[900px] flex-col gap-4 pb-[26px]">
-        <h1 class="text-2xl font-semibold tracking-tight">
+        <h1 class="text-[22px] font-bold tracking-[-0.025em]">
           {{ editingId ? '회의록 고치기' : '새 회의록' }}
         </h1>
 

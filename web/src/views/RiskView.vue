@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Loader2, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, Square } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import StatusPill, { type StatusTone } from '@/components/app/StatusPill.vue'
 import ChatRefText from '@/components/app/ChatRefText.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
@@ -57,10 +58,10 @@ const canEditSettings = computed(
   () => data.currentProjectId !== '' && canManageProject(auth.me, data.currentProjectId),
 )
 
-const LEVEL_VARIANT: Record<RiskLevel, 'destructive' | 'secondary' | 'outline'> = {
-  high: 'destructive',
-  medium: 'secondary',
-  low: 'outline',
+const LEVEL_TONE: Record<RiskLevel, StatusTone> = {
+  high: 'blocked',
+  medium: 'warn',
+  low: 'todo',
 }
 
 const dayLabel = (day: string | null) => (day ? monthDay(day) : '—')
@@ -97,7 +98,7 @@ function openTask(id: string) {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">리스크</span>
       <span v-if="risk.report" class="text-xs text-muted-foreground">
         {{ monthDay(risk.report.asOf) }} 기준
@@ -109,7 +110,7 @@ function openTask(id: string) {
     <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
       <div class="flex w-full max-w-[900px] flex-col gap-4 pb-[26px]">
         <header class="flex flex-col gap-2.5">
-          <h1 class="text-2xl font-semibold tracking-tight">리스크</h1>
+          <h1 class="text-[22px] font-bold tracking-[-0.025em]">리스크</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             안 정해진 안건이 어떤 작업을 막고 있는지, 막기 전에 봅니다. 신호마다 점수를 매겨 합으로
             등급을 가릅니다 — 같은 데이터면 늘 같은 결과입니다.
@@ -126,12 +127,7 @@ function openTask(id: string) {
           <span v-if="risk.report" class="shrink-0 text-xs text-muted-foreground">
             {{ risk.report.asOf }}
           </span>
-          <Button
-            variant="outline"
-            class="shrink-0 bg-background"
-            :disabled="risk.loading"
-            @click="risk.load()"
-          >
+          <Button variant="outline" class="shrink-0" :disabled="risk.loading" @click="risk.load()">
             <Loader2 v-if="risk.loading" class="size-4 animate-spin" />
             <RefreshCw v-else class="size-4" />
             새로 고침
@@ -139,7 +135,7 @@ function openTask(id: string) {
           <Button
             v-if="canEditSettings"
             variant="outline"
-            class="shrink-0 bg-background"
+            class="shrink-0"
             :disabled="!risk.report"
             @click="settingsOpen = true"
           >
@@ -242,10 +238,12 @@ function openTask(id: string) {
               <h2 class="text-base font-semibold">안건 리스크</h2>
               <span class="text-xs text-muted-foreground">{{ risk.threads.length }}건</span>
             </div>
-            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <div
+              class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+            >
               <Table>
                 <TableHeader>
-                  <TableRow class="bg-muted/50 hover:bg-muted/50">
+                  <TableRow class="bg-muted/60 hover:bg-muted/60">
                     <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                       >안건</TableHead
                     >
@@ -297,9 +295,9 @@ function openTask(id: string) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge :variant="LEVEL_VARIANT[row.level]" :title="`${row.score}점`">{{
+                      <StatusPill :tone="LEVEL_TONE[row.level]" :title="`${row.score}점`">{{
                         row.level
-                      }}</Badge>
+                      }}</StatusPill>
                     </TableCell>
                     <TableCell
                       class="text-right text-sm"
@@ -337,10 +335,12 @@ function openTask(id: string) {
               <h2 class="text-base font-semibold">안건과 어긋난 작업</h2>
               <span class="text-xs text-muted-foreground">{{ risk.tasks.length }}건</span>
             </div>
-            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <div
+              class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+            >
               <Table>
                 <TableHeader>
-                  <TableRow class="bg-muted/50 hover:bg-muted/50">
+                  <TableRow class="bg-muted/60 hover:bg-muted/60">
                     <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                       >작업</TableHead
                     >
@@ -417,10 +417,12 @@ function openTask(id: string) {
               <h2 class="text-base font-semibold">사람별</h2>
               <span class="text-xs text-muted-foreground">정하면 풀리는 일이 많은 순</span>
             </div>
-            <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <div
+              class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+            >
               <Table>
                 <TableHeader>
-                  <TableRow class="bg-muted/50 hover:bg-muted/50">
+                  <TableRow class="bg-muted/60 hover:bg-muted/60">
                     <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                       >담당자</TableHead
                     >

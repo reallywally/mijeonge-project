@@ -2,15 +2,10 @@
 import { computed } from 'vue'
 import { ListTree, MessageSquare, Plus } from 'lucide-vue-next'
 import PartChip from '@/components/app/PartChip.vue'
+import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Badge } from '@/components/ui/badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { TASK_STATUS_OPTIONS } from '@/lib/task'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useTaskStore } from '@/stores/task'
 import type { TaskStatus } from '@/types/domain'
 
@@ -27,10 +22,10 @@ const taskStore = useTaskStore()
 
 /* 칸 머리의 점 — 목록에서 제목 앞에 세우는 띠와 같은 색이다 */
 const dotClass: Record<TaskStatus, string> = {
-  todo: 'bg-border',
-  doing: 'bg-primary',
-  blocked: 'bg-destructive',
-  done: 'bg-muted-foreground/40',
+  todo: 'border-[1.5px] border-status-todo',
+  doing: 'bg-status-doing',
+  blocked: 'bg-status-blocked',
+  done: 'bg-status-done',
 }
 
 const columns = computed(() => {
@@ -70,7 +65,7 @@ const threadTitles = (taskId: string) =>
         v-for="col in columns"
         :key="col.value"
         :data-column="col.value"
-        class="flex min-w-0 grow basis-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/50"
+        class="flex min-w-0 grow basis-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-muted/70"
       >
         <header class="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
           <span class="size-[7px] shrink-0 rounded-full" :class="col.dot" />
@@ -85,7 +80,7 @@ const threadTitles = (taskId: string) =>
             :data-task-id="row.task.id"
             role="button"
             tabindex="0"
-            class="group flex shrink-0 cursor-pointer flex-col gap-2 rounded-md border border-border bg-card px-3 py-2.5 shadow-sm hover:border-muted-foreground/40"
+            class="group flex shrink-0 cursor-pointer flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2.5 shadow-[0_1px_2px_rgb(16_24_40/0.05)] transition-[border-color,box-shadow] hover:border-primary/30 hover:shadow-[0_4px_12px_-4px_rgb(16_24_40/0.12)]"
             @click="emit('open-task', row.task.id)"
             @keydown.enter="emit('open-task', row.task.id)"
           >
@@ -126,7 +121,7 @@ const threadTitles = (taskId: string) =>
 
             <div class="flex items-center gap-2">
               <span
-                class="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs"
+                class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-primary"
                 :class="row.ownerName ? '' : 'text-muted-foreground'"
               >
                 {{ row.ownerName ? row.ownerName.charAt(0) : '–' }}
@@ -143,8 +138,11 @@ const threadTitles = (taskId: string) =>
                   :model-value="row.task.status"
                   @update:model-value="(v) => taskStore.setStatus(row.task.id, v as TaskStatus)"
                 >
-                  <SelectTrigger class="h-7 w-[104px] bg-background text-xs">
-                    <SelectValue />
+                  <SelectTrigger
+                    class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent hover:bg-muted focus:ring-[3px]"
+                    :aria-label="`상태 ${taskStatusLabel(row.task.status)}`"
+                  >
+                    <TaskStatusBadge :status="row.task.status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="o in TASK_STATUS_OPTIONS" :key="o.value" :value="o.value">

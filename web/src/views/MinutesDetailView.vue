@@ -187,7 +187,7 @@ function closeDetails() {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <RouterLink
         to="/minutes"
         class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -223,7 +223,10 @@ function closeDetails() {
         <template v-else>
           <header class="flex items-start gap-4">
             <div class="flex min-w-0 grow flex-col gap-2">
-              <h1 class="text-2xl font-semibold tracking-tight break-words" data-minutes-heading>
+              <h1
+                class="text-[22px] font-bold tracking-[-0.025em] break-words"
+                data-minutes-heading
+              >
                 {{ m.title }}
               </h1>
               <p

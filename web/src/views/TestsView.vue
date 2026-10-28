@@ -183,12 +183,15 @@ const STRIPE: Record<TestStatus, string> = {
 /* 간트 막대 읽는 법 — 색은 GanttChart 의 막대와 같은 토큰을 쓴다 */
 const barLegend = [
   { label: '묶음 · 하위 테스트의 기간', bar: 'h-2 rounded-full bg-border' },
-  { label: '테스트 중', bar: 'h-4 rounded-sm border border-primary bg-secondary' },
-  { label: '성공', bar: 'h-4 rounded-sm bg-primary' },
-  { label: '실패 · 막힘', bar: 'h-4 rounded-sm bg-destructive' },
+  {
+    label: '테스트 중',
+    bar: 'h-3.5 rounded-[4px] border border-status-doing/55 bg-status-doing/15',
+  },
+  { label: '성공', bar: 'h-3.5 rounded-[4px] bg-status-done' },
+  { label: '실패 · 막힘', bar: 'h-3.5 rounded-[4px] bg-status-blocked' },
   {
     label: '기간 지남 · 오래 걸림',
-    bar: 'h-4 rounded-sm border-2 border-destructive bg-secondary',
+    bar: 'h-3.5 rounded-[4px] border-2 border-destructive bg-muted',
   },
 ]
 
@@ -233,13 +236,13 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
       </div>
     </template>
 
-    <div class="flex h-[46px] shrink-0 items-center gap-1 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-card px-6">
       <RouterLink
         :to="{ path: '/tests', query: { view: 'list' } }"
-        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'list'
-            ? 'border-foreground font-medium'
+            ? 'border-primary font-semibold text-foreground [&>svg]:text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground'
         "
       >
@@ -248,10 +251,10 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
       </RouterLink>
       <RouterLink
         :to="{ path: '/tests' }"
-        class="inline-flex h-[46px] items-center gap-1.5 border-b-2 px-3 text-sm"
+        class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'gantt'
-            ? 'border-foreground font-medium'
+            ? 'border-primary font-semibold text-foreground [&>svg]:text-primary'
             : 'border-transparent text-muted-foreground hover:text-foreground'
         "
       >
@@ -300,7 +303,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
       <div class="flex w-full max-w-[1180px] flex-col gap-4 self-start">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">테스트</h1>
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">테스트</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               지금 무엇을 테스트하고 있는지, 무엇이 오래 걸리는지, 기간이 지난 것이 무엇인지를 먼저
               봅니다. 목록은 한 줄에 하나씩 놓는 게시판이고, 묶음째로 보려면 간트차트로 갑니다.
@@ -344,7 +347,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
               >
                 <span class="text-xs text-muted-foreground">{{ c.label }}</span>
                 <span
-                  class="text-2xl font-semibold tracking-tight"
+                  class="text-[22px] font-bold tracking-[-0.025em]"
                   :class="
                     c.key !== 'testing' && testStore.nowCounts[c.key] > 0 ? 'text-destructive' : ''
                   "
@@ -362,10 +365,12 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                     >{{ testStore.testingNow.length }}건 · 오래된 것부터</span
                   >
                 </div>
-                <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <div
+                  class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+                >
                   <Table>
                     <TableHeader>
-                      <TableRow class="bg-muted/50 hover:bg-muted/50">
+                      <TableRow class="bg-muted/60 hover:bg-muted/60">
                         <TableHead class="h-9 text-xs font-medium text-muted-foreground"
                           >테스트</TableHead
                         >
@@ -439,10 +444,12 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                     >{{ testStore.attention.length }}건 · 기간 지남 · 오래 막힘 · 오래 걸림 순</span
                   >
                 </div>
-                <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <div
+                  class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+                >
                   <Table>
                     <TableHeader>
-                      <TableRow class="bg-muted/50 hover:bg-muted/50">
+                      <TableRow class="bg-muted/60 hover:bg-muted/60">
                         <TableHead class="h-9 text-xs font-medium text-muted-foreground"
                           >테스트</TableHead
                         >
@@ -502,19 +509,19 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
           </section>
 
           <section
-            class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+            class="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
           >
             <div class="flex items-center gap-2.5">
               <span class="w-[52px] shrink-0 text-sm text-muted-foreground">제목</span>
               <Input
                 v-model="titleDraft"
                 placeholder="테스트 제목에 들어가는 말"
-                class="grow bg-background"
+                class="grow"
                 @keyup.enter="search"
               />
               <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
               <Select v-model="ownerFilter" @update:model-value="page = 1">
-                <SelectTrigger class="w-[132px] shrink-0 bg-background" aria-label="담당자 거르기">
+                <SelectTrigger class="w-[132px] shrink-0" aria-label="담당자 거르기">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -544,10 +551,12 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
             </div>
           </section>
 
-          <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+          <div
+            class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+          >
             <Table>
               <TableHeader>
-                <TableRow class="bg-muted/50 hover:bg-muted/50">
+                <TableRow class="bg-muted/60 hover:bg-muted/60">
                   <TableHead class="h-10 w-[72px] text-xs font-medium text-muted-foreground"
                     >번호</TableHead
                   >

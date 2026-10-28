@@ -69,7 +69,7 @@ const ghost =
         v-if="showDone"
         variant="outline"
         size="sm"
-        class="shrink-0 bg-background"
+        class="shrink-0"
         :disabled="status === 'done'"
         @click="status = 'done'"
       >

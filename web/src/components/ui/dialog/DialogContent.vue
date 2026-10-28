@@ -23,13 +23,13 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
 <template>
   <DialogPortal>
     <DialogOverlay
-      class="fixed inset-0 z-50 bg-black/80"
+      class="fixed inset-0 z-50 bg-[oklch(0.2_0.02_265/0.45)] backdrop-blur-[2px]"
     />
     <DialogContent
       v-bind="forwarded"
       :class="
         cn(
-          'fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg sm:rounded-lg',
+          'fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-card p-6 shadow-[0_24px_48px_-12px_rgb(16_24_40/0.25)] sm:rounded-xl',
           props.class,
         )"
     >

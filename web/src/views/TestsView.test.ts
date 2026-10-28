@@ -286,7 +286,7 @@ describe('테스트 간트', () => {
     const tab = (label: string) => w.findAll('a.border-b-2').find((a) => a.text() === label)!
     expect(tab('목록').attributes('href')).toBe('/tests?view=list')
     expect(tab('간트차트').attributes('href')).toBe('/tests')
-    expect(tab('간트차트').classes()).toContain('border-foreground')
+    expect(tab('간트차트').classes()).toContain('border-primary')
   })
 
   it('묶음 트리 · 기간 미정 · 늦은 막대를 넘기고, 끌면 기간을 고친다', async () => {

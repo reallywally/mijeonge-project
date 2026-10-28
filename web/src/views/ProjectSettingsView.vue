@@ -159,7 +159,7 @@ const partsOf = (memberId: string) =>
     <template #default="{ project: p }">
       <div class="flex w-full max-w-[900px] flex-col gap-4 pb-[26px]">
         <header class="flex flex-col gap-2.5">
-          <h1 class="text-2xl font-semibold tracking-tight">{{ p.name }} · 프로젝트 관리</h1>
+          <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 프로젝트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             프로젝트 정보와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고 빼는
             것은
@@ -172,14 +172,14 @@ const partsOf = (memberId: string) =>
         <section class="flex flex-col gap-3" aria-label="프로젝트 정보">
           <h2 class="text-sm font-medium">프로젝트 정보</h2>
           <div
-            class="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+            class="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
           >
             <div class="flex items-center gap-2.5">
               <span class="w-[92px] shrink-0 text-sm text-muted-foreground">이름</span>
               <Input
                 v-model="nameDraft"
                 aria-label="프로젝트 이름"
-                class="grow bg-background"
+                class="grow"
                 @keyup.enter="rename"
               />
               <Button class="shrink-0" variant="outline" :disabled="!canRename" @click="rename">
@@ -236,11 +236,11 @@ const partsOf = (memberId: string) =>
           </p>
 
           <div
-            class="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-[17px] py-[15px]"
+            class="flex items-center gap-2.5 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
           >
             <span class="w-[92px] shrink-0 text-sm text-muted-foreground">사람 더하기</span>
             <Select v-model="pickId">
-              <SelectTrigger class="grow bg-background" aria-label="더할 사람">
+              <SelectTrigger class="grow" aria-label="더할 사람">
                 <SelectValue
                   :placeholder="
                     candidates.length ? '사람을 고르세요' : '더할 수 있는 사람이 없습니다'
@@ -254,7 +254,7 @@ const partsOf = (memberId: string) =>
               </SelectContent>
             </Select>
             <Select v-model="pickRole">
-              <SelectTrigger class="w-[150px] shrink-0 bg-background" aria-label="더할 사람의 역할">
+              <SelectTrigger class="w-[150px] shrink-0" aria-label="더할 사람의 역할">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -270,10 +270,12 @@ const partsOf = (memberId: string) =>
             </Button>
           </div>
 
-          <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+          <div
+            class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+          >
             <Table>
               <TableHeader>
-                <TableRow class="bg-muted/50 hover:bg-muted/50">
+                <TableRow class="bg-muted/60 hover:bg-muted/60">
                   <TableHead class="h-10 text-xs font-medium text-muted-foreground">이름</TableHead>
                   <TableHead class="h-10 w-[200px] text-xs font-medium text-muted-foreground"
                     >역할</TableHead

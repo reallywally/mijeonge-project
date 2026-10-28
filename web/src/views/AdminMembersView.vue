@@ -54,7 +54,7 @@ function openPassword(account: MemberAccount) {
 
 <template>
   <AppShell>
-    <div class="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border px-[26px]">
+    <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">사용자 관리</span>
       <span class="text-xs text-muted-foreground">
         총 {{ admin.accounts.length }}명 · 활성 {{ activeCount }}명
@@ -65,7 +65,7 @@ function openPassword(account: MemberAccount) {
       <div class="flex w-full max-w-[1000px] flex-col gap-4 pb-[26px]">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
-            <h1 class="text-2xl font-semibold tracking-tight">사용자 관리</h1>
+            <h1 class="text-[22px] font-bold tracking-[-0.025em]">사용자 관리</h1>
             <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
               로그인할 사람을 등록하고 시스템 역할을 정합니다. 떠난 사람은 지우지 않고 끕니다 —
               맡았던 작업 · 남긴 댓글이 그 사람을 가리킵니다.
@@ -77,10 +77,12 @@ function openPassword(account: MemberAccount) {
           </Button>
         </header>
 
-        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div
+          class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+        >
           <Table>
             <TableHeader>
-              <TableRow class="bg-muted/50 hover:bg-muted/50">
+              <TableRow class="bg-muted/60 hover:bg-muted/60">
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">이름</TableHead>
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">이메일</TableHead>
                 <TableHead class="h-10 w-[128px] text-xs font-medium text-muted-foreground"

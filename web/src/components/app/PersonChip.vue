@@ -4,11 +4,9 @@ defineProps<{ name: string }>()
 </script>
 
 <template>
-  <span
-    class="inline-flex h-[26px] items-center gap-1.5 rounded-full bg-secondary py-0.5 pr-2.5 pl-1 text-xs"
-  >
+  <span class="inline-flex h-6 items-center gap-1.5 text-[13px]">
     <span
-      class="flex size-[18px] items-center justify-center rounded-full bg-background text-[10px] text-muted-foreground"
+      class="flex size-5 items-center justify-center rounded-full bg-brand-soft text-[10.5px] font-semibold text-primary"
     >
       {{ name.charAt(0) }}
     </span>

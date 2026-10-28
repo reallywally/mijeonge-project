@@ -211,7 +211,7 @@ const listLink = (path: '/tasks' | '/threads') =>
     <template #default="{ project: p }">
       <div class="flex w-full max-w-[1100px] flex-col gap-4 pb-[26px]">
         <header class="flex flex-col gap-2.5">
-          <h1 class="text-2xl font-semibold tracking-tight">{{ p.name }} · 파트 관리</h1>
+          <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 파트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
             파트는 보기 범위이지 권한이 아닙니다. '내 파트' 로 보면 공통 · 자기 파트 · 자기가 맡은
             것과 그 작업에 걸린 안건이 보입니다. 파트가 없으면 모두가 프로젝트 전체를 봅니다.
@@ -246,7 +246,7 @@ const listLink = (path: '/tasks' | '/threads') =>
 
             <ul
               v-if="activeParts.length"
-              class="flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+              class="flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
             >
               <li
                 v-for="part in activeParts"
