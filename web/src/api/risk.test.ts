@@ -31,7 +31,7 @@ const textOf = (events: ChatEvent[]) =>
 describe('목업 갈래', () => {
   beforeEach(async () => {
     resetMockAuth()
-    await login({ email: 'u1@innoflow.local', password: MOCK_PASSWORD })
+    await login({ email: 'u1@inno-ax.com', password: MOCK_PASSWORD })
     vi.useFakeTimers()
   })
 

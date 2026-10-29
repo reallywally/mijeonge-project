@@ -75,17 +75,17 @@ def projects() -> list[Project]:
 
 
 # 개발용 계정 (docs/api/auth.md '테이블'). 운영 DB 에 시드를 돌리지 않는다
-DEV_ADMIN_EMAIL = "admin@innoflow.local"
-DEV_PASSWORD = "innoflow-admin"
+DEV_ADMIN_EMAIL = "admin@inno-ax.com"
+DEV_PASSWORD = "1111"
 
 
 def members() -> list[Member]:
     return [
         Member(id="admin", name="관리자", email=DEV_ADMIN_EMAIL, system_role="admin"),
-        Member(id="u1", name="김서연", email="u1@innoflow.local"),
-        Member(id="u2", name="박지훈", email="u2@innoflow.local"),
-        Member(id="u3", name="이도현", email="u3@innoflow.local"),
-        Member(id="u4", name="정하늘", email="u4@innoflow.local"),
+        Member(id="u1", name="김서연", email="u1@inno-ax.com"),
+        Member(id="u2", name="박지훈", email="u2@inno-ax.com"),
+        Member(id="u3", name="이도현", email="u3@inno-ax.com"),
+        Member(id="u4", name="정하늘", email="u4@inno-ax.com"),
     ]
 
 
@@ -1088,7 +1088,7 @@ async def run() -> None:
         "test_history": len(test_histories()),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
-    print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@innoflow.local / 비밀번호 {DEV_PASSWORD}")
+    print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@inno-ax.com / 비밀번호 {DEV_PASSWORD}")
     await engine.dispose()
 
 

@@ -89,7 +89,7 @@ beforeEach(async () => {
   vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
   document.body.innerHTML = ''
-  await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
   await useDataStore().retry()
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 })

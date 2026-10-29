@@ -51,7 +51,7 @@ beforeEach(() => {
 
 describe('[확인 요청]', () => {
   it('t6 — 결정됨 · 안 보냄 · 받을 사람 있음이라 열린다. 곁에 받는 사람 1명, 펼치면 이름', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountDetail('t6')
 
     expect(sendButton()!.disabled).toBe(false)
@@ -64,7 +64,7 @@ describe('[확인 요청]', () => {
   })
 
   it('누르면 입력 창 없이 바로 보내고, 버튼 자리에 이 결정의 확인 현황이 선다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountDetail('t6')
 
     await click(sendButton())
@@ -82,7 +82,7 @@ describe('[확인 요청]', () => {
   })
 
   it('결정 전이면 닫히고 까닭을 한 줄로', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountDetail('t3')
     expect(sendButton()!.disabled).toBe(true)
     expect(block()).toBe('not-decided')
@@ -90,7 +90,7 @@ describe('[확인 요청]', () => {
   })
 
   it('받을 사람이 없으면 닫힌다 — 참조를 빼면 바로 PATCH 되고 버튼이 닫힌다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountDetail('t6')
     expect($$('[data-cc]').map((c) => c.dataset.cc)).toEqual(['u2'])
 
@@ -103,7 +103,7 @@ describe('[확인 요청]', () => {
   })
 
   it('결정을 바꾸면 다시 열리고, 앞 결정 묶음은 접혀서 아래에 있다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null)
     await mountDetail('t2')
 

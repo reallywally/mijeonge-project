@@ -40,7 +40,7 @@ async function as(email: string) {
 const fields = (e: { changes: { field: string }[] }) => e.changes.map((c) => c.field)
 
 describe('목업 갈래 — 시드', () => {
-  beforeEach(() => as('u2@innoflow.local'))
+  beforeEach(() => as('u2@inno-ax.com'))
 
   it('작업마다 등록 한 줄 — 바꾼 사람은 담당자, 등록 시각', async () => {
     const k4 = tasks.find((t) => t.id === 'k4')!
@@ -99,7 +99,7 @@ describe('목업 갈래 — 시드', () => {
 })
 
 describe('목업 갈래 — 한 곳에서 남기기', () => {
-  beforeEach(() => as('u2@innoflow.local'))
+  beforeEach(() => as('u2@inno-ax.com'))
 
   it('남길 칸이 없으면 줄을 안 만들고, 칸은 표 순서로 놓고 바꾼 사람은 로그인한 사람', async () => {
     recordMockHistory('task', 'k4', [])
@@ -134,7 +134,7 @@ describe('목업 갈래 — 한 곳에서 남기기', () => {
 })
 
 describe('목업 갈래 — 테스트 쓰기의 칸 규칙', () => {
-  beforeEach(() => as('u1@innoflow.local'))
+  beforeEach(() => as('u1@inno-ax.com'))
 
   const last = async (testId: string) => (await fetchTestHistory(testId)).at(-1)!
 

@@ -17,7 +17,7 @@ import type { Me } from '@/types/domain'
 const me = (over: Partial<Me> = {}): Me => ({
   id: 'u2',
   name: '박지훈',
-  email: 'u2@innoflow.local',
+  email: 'u2@inno-ax.com',
   systemRole: 'user',
   projectRoles: { p1: 'user' },
   ...over,

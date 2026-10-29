@@ -46,7 +46,7 @@ async function collect(stream: AsyncIterable<MinutesEvent>) {
 /** 처음 로그인은 u1 로, 사람을 바꿀 때는 목업 세션만 바꾼다 — 목업 저장소를 비우지 않게 */
 const signIn = async (who: string) => {
   resetMockAuth()
-  await login({ email: `${who}@innoflow.local`, password: MOCK_PASSWORD })
+  await login({ email: `${who}@inno-ax.com`, password: MOCK_PASSWORD })
 }
 const switchTo = (memberId: string) => writeMockSession(memberId)
 

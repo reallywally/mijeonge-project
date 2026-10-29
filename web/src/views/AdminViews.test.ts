@@ -69,7 +69,7 @@ beforeEach(() => {
 
 describe('사용자 관리 화면', () => {
   it('비활성까지 다 놓고 역할 · 활성 · 비밀번호 없음이 보인다', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     const { w } = await mountAt('/admin/members')
 
     expect(w.findAll('tr[data-member-id]')).toHaveLength(6)
@@ -80,18 +80,18 @@ describe('사용자 관리 화면', () => {
   })
 
   it('등록하면 표에 서고, 이메일이 겹치면 서버의 message 를 알리고 팝업을 지킨다', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     const { w } = await mountAt('/admin/members')
 
     await click(bodyButton('사용자 등록'))
     await type('#account-name', '최유진')
-    await type('#account-email', 'u2@innoflow.local')
+    await type('#account-email', 'u2@inno-ax.com')
     await type('#account-password', 'first-password')
     await click(bodyButton('등록'))
     expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'EMAIL_TAKEN' })
     expect(document.body.querySelector('#account-name')).toBeTruthy()
 
-    await type('#account-email', 'yujin@innoflow.local')
+    await type('#account-email', 'yujin@inno-ax.com')
     await click(bodyButton('등록'))
     expect(document.body.querySelector('#account-name')).toBeNull()
     expect(w.text()).toContain('최유진')
@@ -100,7 +100,7 @@ describe('사용자 관리 화면', () => {
   })
 
   it('나를 끄려 하면 마지막 시스템 관리자라 거절된다', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     const { w } = await mountAt('/admin/members')
 
     await w.get('button[aria-label="관리자 수정"]').trigger('click')
@@ -113,7 +113,7 @@ describe('사용자 관리 화면', () => {
 
 describe('프로젝트 관리 화면', () => {
   it('부여된 사람과 역할이 서고, 프로젝트 관리자가 맨 위다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/settings')
 
     const rows = w.findAll('tr[data-member-id]')
@@ -123,7 +123,7 @@ describe('프로젝트 관리 화면', () => {
   })
 
   it('역할을 바꾸고, 빼면 한 번 더 묻고 뺀다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/settings')
 
     /* reka-ui 셀렉트는 jsdom 에서 열리지 않으므로 고른 값만 흘려 넣는다 */
@@ -147,7 +147,7 @@ describe('프로젝트 관리 화면', () => {
   })
 
   it('활성 멤버 중 아직 없는 사람만 더할 수 있고, 더하면 표에 선다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/settings')
 
     const picker = w.findAllComponents(Select)[1]
@@ -158,7 +158,7 @@ describe('프로젝트 관리 화면', () => {
   })
 
   it('프로젝트 이름을 고친다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/settings')
     await w.get('input[aria-label="프로젝트 이름"]').setValue('한화손보 차세대 2기')
     await click(bodyButton('이름 바꾸기'))

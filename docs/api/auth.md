@@ -56,7 +56,7 @@ project_member    project_id → project(cascade) · member_id → member · rol
   리비전은 지금 있는 프로젝트마다 모든 활성 멤버를 `user` 로 부여한다(오늘 화면에서 보이던 그대로 시작한다)
 - 첫 시스템 관리자는 화면이 아니라 **명령으로** 만든다 —
   `uv run python -m scripts.create_admin --email a@b.com --name 홍길동` (비밀번호는 프롬프트로 받는다).
-  시드는 개발용으로 `admin@innoflow.local` / `innoflow-admin` 시스템 관리자 하나와 u1 ~ u4 에 이메일 · 같은 개발용 비밀번호를 넣는다
+  시드는 개발용으로 `admin@inno-ax.com` / `1111` 시스템 관리자 하나와 u1 ~ u4 에 이메일 · 같은 개발용 비밀번호를 넣는다
 
 ## 쿠키
 

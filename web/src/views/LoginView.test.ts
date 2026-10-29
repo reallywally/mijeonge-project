@@ -39,7 +39,7 @@ beforeEach(() => {
 describe('로그인 화면', () => {
   it('맞으면 들어가고 ?next= 의 주소로 돌아간다', async () => {
     const { w, router } = await mountLogin('/login?next=/tasks/k4')
-    await w.get('#login-email').setValue('u2@innoflow.local')
+    await w.get('#login-email').setValue('u2@inno-ax.com')
     await w.get('#login-password').setValue(MOCK_PASSWORD)
     await w.get('form').trigger('submit')
     await flushPromises()
@@ -51,7 +51,7 @@ describe('로그인 화면', () => {
 
   it('앱 밖의 주소는 따르지 않고 첫 화면으로 간다', async () => {
     const { w, router } = await mountLogin('/login?next=//evil.example')
-    await w.get('#login-email').setValue('u2@innoflow.local')
+    await w.get('#login-email').setValue('u2@inno-ax.com')
     await w.get('#login-password').setValue(MOCK_PASSWORD)
     await w.get('form').trigger('submit')
     await flushPromises()
@@ -60,7 +60,7 @@ describe('로그인 화면', () => {
 
   it('틀리면 이유를 가르지 않는 한 줄을 띄우고 비밀번호를 비운다', async () => {
     const { w, router } = await mountLogin('/login')
-    await w.get('#login-email').setValue('u2@innoflow.local')
+    await w.get('#login-email').setValue('u2@inno-ax.com')
     await w.get('#login-password').setValue('wrong-password')
     await w.get('form').trigger('submit')
     await flushPromises()
@@ -75,7 +75,7 @@ describe('로그인 화면', () => {
     const { w } = await mountLogin('/login')
     const button = w.get('button[type="submit"]')
     expect(button.attributes('disabled')).toBeDefined()
-    await w.get('#login-email').setValue('u2@innoflow.local')
+    await w.get('#login-email').setValue('u2@inno-ax.com')
     expect(button.attributes('disabled')).toBeDefined()
     await w.get('#login-password').setValue('x')
     expect(button.attributes('disabled')).toBeUndefined()

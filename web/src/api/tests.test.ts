@@ -39,7 +39,7 @@ async function as(email: string) {
 
 describe('목업 갈래 — 시드', () => {
   beforeEach(async () => {
-    await as('u2@innoflow.local')
+    await as('u2@inno-ax.com')
     /* 계약의 검사 날 — 리스크 · 리포트와 같다 */
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-15T03:00:00Z'))
@@ -75,7 +75,7 @@ describe('목업 갈래 — 시드', () => {
 
 describe('목업 갈래 — 쓰기', () => {
   beforeEach(async () => {
-    await as('u2@innoflow.local')
+    await as('u2@inno-ax.com')
   })
 
   it('만들면 다음 번호 · 작성 중 · 만든 사람이 찍히고, 파트는 상위를 따른다', async () => {
@@ -178,16 +178,16 @@ describe('목업 갈래 — 쓰기', () => {
   })
 
   it('지우기 — 만든 사람 · 관리자만, 하위가 있으면 409', async () => {
-    await as('u3@innoflow.local')
+    await as('u3@inno-ax.com')
     expect((await failure(deleteTest('tc2'))).status).toBe(403)
 
-    await as('u2@innoflow.local')
+    await as('u2@inno-ax.com')
     expect((await failure(deleteTest('tc1'))).code).toBe('TEST_HAS_CHILDREN')
     await deleteTest('tc2')
     expect((await fetchTests('p1')).map((t) => t.id)).not.toContain('tc2')
 
     /* 프로젝트 관리자는 남이 만든 것도 지운다 */
-    await as('u1@innoflow.local')
+    await as('u1@inno-ax.com')
     await deleteTest('tc4')
   })
 })

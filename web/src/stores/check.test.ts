@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe('거르기 · 정렬', () => {
   it('u1 — 받은 것은 c4 하나(대기), 보낸 것은 t2 묶음 하나(3명 중 1명 확인)', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
 
@@ -56,14 +56,14 @@ describe('거르기 · 정렬', () => {
   })
 
   it('u2 — 받은 것은 확인한 c2, 보낸 것은 없다 / u3 — 받은 c1 · 보낸 t1 묶음', async () => {
-    await signedIn('u2@innoflow.local')
+    await signedIn('u2@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(ids(checks.received)).toEqual(['c2'])
     expect(checks.receivedPending).toEqual([])
     expect(checks.sent).toEqual([])
 
-    await switchTo('u3@innoflow.local')
+    await switchTo('u3@inno-ax.com')
     const theirs = useCheckStore()
     await theirs.load()
     expect(ids(theirs.received)).toEqual(['c1'])
@@ -71,7 +71,7 @@ describe('거르기 · 정렬', () => {
   })
 
   it('다른 프로젝트로 옮기면 옛 목록을 그리지 않는다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     useDataStore().setProject('p2')
@@ -82,7 +82,7 @@ describe('거르기 · 정렬', () => {
 
 describe('안건 상세의 [확인 요청]', () => {
   it('t6 — 결정됨 · 안 보냄 · 받을 사람(참조 u2) 있음이라 누를 수 있다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(checks.forThread('t6')).toMatchObject({
@@ -95,12 +95,12 @@ describe('안건 상세의 [확인 요청]', () => {
   })
 
   it('목록을 받기 전에는 보냈는지 몰라 누를 수 없다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     expect(useCheckStore().forThread('t6')?.block).toBe('sent')
   })
 
   it('결정 전 · 이미 보냄 · 받을 사람 없음', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(checks.forThread('t3')?.block).toBe('not-decided')
@@ -115,14 +115,14 @@ describe('안건 상세의 [확인 요청]', () => {
   })
 
   it('누른 사람은 받는 사람에서 빠진다 — u2 에게 t6 은 받을 사람이 없다', async () => {
-    await signedIn('u2@innoflow.local')
+    await signedIn('u2@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(checks.forThread('t6')?.block).toBe('no-recipients')
   })
 
   it('결정을 바꾸면 다시 누를 수 있고, 앞 결정 묶음은 접힌 쪽으로 간다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null)).toBe(
@@ -145,7 +145,7 @@ describe('안건 상세의 [확인 요청]', () => {
 
 describe('보내기', () => {
   it('보낸 묶음이 보낸 것 맨 위에 선다 — 받은 사람 쪽에는 대기로 보인다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
 
@@ -156,14 +156,14 @@ describe('보내기', () => {
     ])
     expect(checks.forThread('t6')?.block).toBe('sent')
 
-    await switchTo('u2@innoflow.local')
+    await switchTo('u2@inno-ax.com')
     const theirs = useCheckStore()
     await theirs.load()
     expect(theirs.receivedPending.map((c) => [c.threadId, c.entryId])).toEqual([['t6', 'e6']])
   })
 
   it('서버가 거절하면 알리고 null — 목록은 그대로다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(await checks.send('t2')).toBeNull()
@@ -174,14 +174,14 @@ describe('보내기', () => {
 
 describe('참조', () => {
   it('통째로 바꾸고, 겹치면 하나로', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const thread = () => useDataStore().allThreads.find((t) => t.id === 't6')!
     expect(useThreadStore().updateThread('t6', { ccIds: ['u3', 'u4', 'u3'] })).toBe(true)
     expect(thread().ccIds).toEqual(['u3', 'u4'])
   })
 
   it('목업도 서버처럼 거른다 — 비부여 · 비활성은 MEMBER_NOT_IN_PROJECT, 21명은 422', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const threads = useThreadStore()
     /* u0 은 p1 에 부여되지 않았고 u5 는 비활성이다 */
     expect(threads.updateThread('t6', { ccIds: ['u3', 'u0', 'u5'] })).toBe(false)
@@ -197,7 +197,7 @@ describe('참조', () => {
   })
 
   it('검사는 새로 넣은 사람만 — 그사이 빠진 참조를 그대로 둔 수정은 통과, 걸린 자리는 겹친 곳까지', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const data = useDataStore()
     const threads = useThreadStore()
     const u2 = data.allMembers.find((m) => m.id === 'u2')!
@@ -218,7 +218,7 @@ describe('참조', () => {
   })
 
   it('새 안건은 참조를 받아 두고, 안 주면 [] — 결정하면 그 참조에게 보낼 수 있다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const threads = useThreadStore()
     const plain = await threads.addThread({ title: '참조 없는 안건' })
     const made = await threads.addThread({ title: '참조 있는 안건', ccIds: ['u4', 'u4'] })
@@ -237,7 +237,7 @@ describe('참조', () => {
 
 describe('확인', () => {
   it('확인하면 대기에서 빠지고 배지가 준다 — 두 번 해도 처음 시각 그대로(멱등)', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     await checks.loadPendingCount()
@@ -255,7 +255,7 @@ describe('확인', () => {
   })
 
   it('받은 사람이 아니면 알리고 false', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     expect(await checks.confirm('c1')).toBe(false)
@@ -266,7 +266,7 @@ describe('확인', () => {
 
 describe('배지', () => {
   it('지금 프로젝트의 수와 다른 프로젝트의 수를 가른다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const data = useDataStore()
     /* u3 에게 p1 에 하나(시드 c1 에 더해), p2 에 하나 — 참조로 붙이고 보낸다 */
     const threads = useThreadStore()
@@ -276,7 +276,7 @@ describe('배지', () => {
     threads.updateThread('t10', { ccIds: ['u3'] })
     await threads.addEntry('t10', 'decide', '여기도 정했다', '', null)
     expect(await useCheckStore().send('t10')).toBe(1)
-    await switchTo('u3@innoflow.local')
+    await switchTo('u3@inno-ax.com')
 
     const checks = useCheckStore()
     useDataStore().setProject('p1')
@@ -292,7 +292,7 @@ describe('배지', () => {
   })
 
   it('startBadge — 곧바로 · 60초마다 · 창 포커스에 받는다. 두 번 불러도 타이머는 하나, stopBadge 로 멈춘다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     vi.useFakeTimers()
     const spy = vi.spyOn(api, 'fetchCheckPendingCount')
     const checks = useCheckStore()
@@ -317,7 +317,7 @@ describe('배지', () => {
   })
 
   it('로그아웃하면 비우고 멈춘다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
     await checks.loadPendingCount()

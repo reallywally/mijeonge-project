@@ -76,7 +76,7 @@ beforeEach(() => {
 
 describe('표 셋', () => {
   it('프로젝트 관리자(u1)는 전체로 열린다 — 안건 6 · 작업 3 · 사람 5, 기준 한 줄과 신호 말', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const w = await mountRisks()
 
     expect(rows('thread')).toHaveLength(6)
@@ -101,7 +101,7 @@ describe('표 셋', () => {
   })
 
   it('일반 사용자(u3)는 내 파트로 열린다 — 사람별은 거르지 않는다. 전체로 바꾸면 다 선다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     await mountRisks()
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
@@ -115,7 +115,7 @@ describe('표 셋', () => {
   })
 
   it('[새로 고침] 은 다시 받는다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountRisks()
     const risk = useRiskStore()
     const load = vi.spyOn(risk, 'load')
@@ -129,7 +129,7 @@ describe('줄을 누르면 상세', () => {
   const dialog = () => document.body.querySelector('[role="dialog"]')
 
   it('안건 줄은 안건 상세', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountRisks()
 
     await click(rows('thread')[1])
@@ -137,7 +137,7 @@ describe('줄을 누르면 상세', () => {
   })
 
   it('작업 줄은 작업 상세', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountRisks()
 
     await click(rows('task')[0])
@@ -147,20 +147,20 @@ describe('줄을 누르면 상세', () => {
 
 describe('기준 바꾸기', () => {
   it('일반 사용자에게는 안 보인다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     await mountRisks()
     expect(button('새로 고침')).toBeTruthy()
     expect(button('기준 바꾸기')).toBeUndefined()
   })
 
   it('시스템 관리자에게는 보인다', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     await mountRisks()
     expect(button('기준 바꾸기')).toBeTruthy()
   })
 
   it('저장하면 기준 한 줄이 새 값으로 바뀐다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const w = await mountRisks()
 
     await click(button('기준 바꾸기'))
@@ -172,7 +172,7 @@ describe('기준 바꾸기', () => {
   })
 
   it('화면이 먼저 막는다 — high <= medium 이면 high 칸에 까닭, 저장이 꺼진다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountRisks()
 
     await click(button('기준 바꾸기'))
@@ -185,7 +185,7 @@ describe('기준 바꾸기', () => {
   })
 
   it('서버 422 의 detail 을 그 칸에 붙이고, 그 칸을 고치면 뗀다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountRisks()
     const risk = useRiskStore()
     risk.saveSettings = vi
@@ -220,7 +220,7 @@ describe('AI 요약', () => {
   }
 
   it('누를 때만 부른다 — 보이는 줄 그대로 보내고, 끝나면 기준일 · 건수와 [다시 요약]', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const spy = answerWith()
     await mountRisks()
 
@@ -236,7 +236,7 @@ describe('AI 요약', () => {
   })
 
   it('근거는 챗봇 칩으로 — 스냅샷에 없는 id 는 안 그리고, 누르면 상세가 뜬다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     answerWith()
     await mountRisks()
     await click(button('AI 요약'))
@@ -255,7 +255,7 @@ describe('AI 요약', () => {
   })
 
   it('[내 파트 | 전체] 를 바꾸면 흐리게 하고 다시 요약을 권한다 — 저절로 부르지 않는다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const spy = answerWith()
     await mountRisks()
     await click(button('AI 요약'))
@@ -275,7 +275,7 @@ describe('AI 요약', () => {
   })
 
   it('받는 중엔 [멈춤] — 누르면 받은 데까지 남기고 멈춘다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* (_p, _i, signal) {
       yield { type: 'delta', text: '한 줄 총평' }
       await new Promise((_, reject) =>
@@ -294,7 +294,7 @@ describe('AI 요약', () => {
   })
 
   it('보이는 줄이 0건이면 버튼이 꺼진다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     useDataStore().setProject('p3')
     await mountRisks()
 
@@ -303,7 +303,7 @@ describe('AI 요약', () => {
   })
 
   it('오류는 챗봇과 같은 문구로', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* () {
       yield* []
       throw new ApiError(429, { code: 'CHAT_RATE_LIMITED', message: '' })
@@ -317,7 +317,7 @@ describe('AI 요약', () => {
   })
 
   it('화면을 떠나면 버린다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     answerWith()
     const w = await mountRisks()
     await click(button('AI 요약'))

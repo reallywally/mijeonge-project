@@ -363,7 +363,7 @@ async def test_parent_rules(client: httpx.AsyncClient) -> None:
 async def test_owner_must_be_an_active_project_member(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    session.add(Member(id="u9", name="외부인", email="u9@innoflow.local"))
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     for owner in ("nope", "u9"):
         res = await client.post(LIST, json={"title": "t", "ownerId": owner})
@@ -534,7 +534,7 @@ async def test_members_write_but_only_the_author_deletes(
 async def test_ungranted_member_sees_404(
     client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
 ) -> None:
-    session.add(Member(id="u9", name="외부인", email="u9@innoflow.local"))
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     u9 = await as_member("u9")
     error(await u9.get(LIST), 404, "PROJECT_NOT_FOUND")

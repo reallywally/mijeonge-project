@@ -52,7 +52,7 @@ describe('작업 댓글 칸', () => {
 
   it('프로젝트 관리자는 남의 댓글에 지우기만 서고 고치기는 없다', async () => {
     /* 김서연은 p1 의 프로젝트 관리자, cm2 는 이도현의 글 */
-    await signIn('u1@innoflow.local')
+    await signIn('u1@inno-ax.com')
     const w = await mounted()
     const theirs = w.findAll('li[data-comment-id]')[1]
     expect(theirs.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
@@ -60,14 +60,14 @@ describe('작업 댓글 칸', () => {
   })
 
   it('일반 사용자에게는 남의 댓글에 아무 메뉴도 없다', async () => {
-    await signIn('u2@innoflow.local')
+    await signIn('u2@inno-ax.com')
     const w = await mounted()
     expect(w.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
     expect(w.find('button[aria-label="댓글 지우기"]').exists()).toBe(false)
   })
 
   it('⌘/Ctrl+Enter 로 남기고, 그냥 Enter 와 한글 조합 중에는 남기지 않는다', async () => {
-    await signIn('u2@innoflow.local')
+    await signIn('u2@inno-ax.com')
     const w = await mounted('k1')
     await draftOf(w).setValue('첫 댓글')
 
@@ -89,7 +89,7 @@ describe('작업 댓글 칸', () => {
   })
 
   it('자기 댓글에 고치기가 서고, 고치면 수정됨이 붙는다', async () => {
-    await signIn('u1@innoflow.local')
+    await signIn('u1@inno-ax.com')
     const w = await mounted()
     const [mine, theirs] = w.findAll('li[data-comment-id]')
     expect(theirs.find('button[aria-label="댓글 고치기"]').exists()).toBe(false)
@@ -106,7 +106,7 @@ describe('작업 댓글 칸', () => {
   })
 
   it('지우기는 한 번 더 묻고 지운다', async () => {
-    await signIn('u1@innoflow.local')
+    await signIn('u1@inno-ax.com')
     const w = await mounted()
     await w.get('button[aria-label="댓글 지우기"]').trigger('click')
     expect(w.text()).toContain('지울까요?')

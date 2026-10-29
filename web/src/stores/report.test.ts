@@ -33,7 +33,7 @@ beforeEach(async () => {
   localStorage.clear()
   vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
-  await signedIn('u2@innoflow.local')
+  await signedIn('u2@inno-ax.com')
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-20T03:00:00Z'))
 })

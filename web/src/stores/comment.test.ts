@@ -32,12 +32,12 @@ describe("'나'", () => {
   it('로그인한 사람이 나다 — 머리글에서 고르지 않는다', async () => {
     const data = useDataStore()
     expect(data.currentMemberId).toBeNull()
-    await signIn('u2@innoflow.local')
+    await signIn('u2@inno-ax.com')
     expect(data.currentMemberId).toBe('u2')
   })
 
   it('로그아웃하면 나도 댓글도 비운다', async () => {
-    await signIn('u3@innoflow.local')
+    await signIn('u3@inno-ax.com')
     const comments = useCommentStore()
     await comments.load('k4')
     await useAuthStore().logout()
@@ -66,7 +66,7 @@ describe('작업 댓글', () => {
     await comments.load('k1')
     expect(await comments.add('k1', '글')).toBe(false)
 
-    await signIn('u1@innoflow.local')
+    await signIn('u1@inno-ax.com')
     expect(await comments.add('k1', '   ')).toBe(false)
     expect(comments.commentsOf('k1')).toEqual([])
     expect(countOf('k1')).toBe(0)
@@ -74,7 +74,7 @@ describe('작업 댓글', () => {
 
   it("남기면 '나'가 작성자로 맨 뒤에 붙고 commentCount 가 하나 는다", async () => {
     const comments = useCommentStore()
-    await signIn('u3@innoflow.local')
+    await signIn('u3@inno-ax.com')
     await comments.load('k4')
 
     expect(await comments.add('k4', '  계정 다 만들었습니다\n확인 부탁드립니다 ')).toBe(true)
@@ -85,7 +85,7 @@ describe('작업 댓글', () => {
 
   it('일반 사용자는 자기 댓글만 고치고 지운다. 지우면 commentCount 가 하나 준다', async () => {
     const comments = useCommentStore()
-    await signIn('u3@innoflow.local')
+    await signIn('u3@inno-ax.com')
     await comments.load('k4')
     const [theirs, mine] = comments.commentsOf('k4')
 
@@ -107,7 +107,7 @@ describe('작업 댓글', () => {
   it('프로젝트 관리자 · 시스템 관리자는 남의 댓글을 지울 수 있지만 고칠 수는 없다', async () => {
     const comments = useCommentStore()
     /* 김서연은 한화손보 차세대(p1)의 프로젝트 관리자다. cm2 는 이도현의 글 */
-    await signIn('u1@innoflow.local')
+    await signIn('u1@inno-ax.com')
     await comments.load('k4')
     const theirs = comments.commentsOf('k4')[1]
     expect(comments.canEdit(theirs)).toBe(false)
@@ -116,7 +116,7 @@ describe('작업 댓글', () => {
     expect(await comments.remove(theirs.id)).toBe(true)
 
     await useAuthStore().logout()
-    await signIn('admin@innoflow.local')
+    await signIn('admin@inno-ax.com')
     await comments.load('k4')
     const first = comments.commentsOf('k4')[0]
     expect(comments.canEdit(first)).toBe(false)
@@ -125,7 +125,7 @@ describe('작업 댓글', () => {
 
   it('쓰기가 실패하면 알리고 목록을 다시 받는다', async () => {
     const comments = useCommentStore()
-    await signIn('u3@innoflow.local')
+    await signIn('u3@inno-ax.com')
     await comments.load('k4')
     /* 그사이 다른 곳에서 지워진 것처럼 — 목업 저장소에서만 지운다 */
     await deleteTaskComment('cm2')

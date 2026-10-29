@@ -11,7 +11,7 @@ from tests.test_contract_types import contract_keys
 URL = "/api/admin/members"
 NEW = {
     "name": "최유진",
-    "email": "YuJin@innoflow.local",
+    "email": "YuJin@inno-ax.com",
     "password": "처음-비밀번호-01",
     "systemRole": "user",
 }
@@ -50,7 +50,7 @@ async def test_list_includes_inactive_by_name(
     assert by_id["u2"]["active"] is False
     assert by_id["admin"]["systemRole"] == "admin"
     assert by_id["u1"]["hasPassword"] is True
-    assert by_id["u1"]["email"] == "u1@innoflow.local"
+    assert by_id["u1"]["email"] == "u1@inno-ax.com"
     assert by_id["u1"]["createdAt"].endswith("Z")
     assert by_id["u1"]["lastLoginAt"] is None
 
@@ -60,10 +60,10 @@ async def test_create_then_log_in(client: httpx.AsyncClient, anon: httpx.AsyncCl
     assert res.status_code == 201
     account = res.json()
     assert set(account) == contract_keys("MemberAccount")
-    assert account["email"] == "yujin@innoflow.local"  # 소문자로 저장한다
+    assert account["email"] == "yujin@inno-ax.com"  # 소문자로 저장한다
     assert account["active"] is True and account["hasPassword"] is True
 
-    assert await _login(anon, "yujin@innoflow.local", NEW["password"]) == 200
+    assert await _login(anon, "yujin@inno-ax.com", NEW["password"]) == 200
     # 프로젝트는 아직 하나도 부여받지 않았다
     assert (await anon.get("/api/projects")).json() == []
 
@@ -72,7 +72,7 @@ async def test_create_then_log_in(client: httpx.AsyncClient, anon: httpx.AsyncCl
 
 
 async def test_create_rules(client: httpx.AsyncClient) -> None:
-    taken = await client.post(URL, json=NEW | {"email": "U1@innoflow.local"})
+    taken = await client.post(URL, json=NEW | {"email": "U1@inno-ax.com"})
     assert taken.status_code == 409
     assert taken.json()["code"] == "EMAIL_TAKEN"
 
@@ -88,16 +88,14 @@ async def test_create_rules(client: httpx.AsyncClient) -> None:
 
 
 async def test_patch_name_and_email(client: httpx.AsyncClient, anon: httpx.AsyncClient) -> None:
-    res = await client.patch(
-        f"{URL}/u2", json={"name": "박지훈B", "email": "jihoon@innoflow.local"}
-    )
+    res = await client.patch(f"{URL}/u2", json={"name": "박지훈B", "email": "jihoon@inno-ax.com"})
     assert res.status_code == 200
     assert res.json()["name"] == "박지훈B"
-    assert res.json()["email"] == "jihoon@innoflow.local"
+    assert res.json()["email"] == "jihoon@inno-ax.com"
 
     # 로그인 이메일도 같이 옮겨 갔다
-    assert await _login(anon, "u2@innoflow.local", DEV_PASSWORD) == 401
-    assert await _login(anon, "jihoon@innoflow.local", DEV_PASSWORD) == 200
+    assert await _login(anon, "u2@inno-ax.com", DEV_PASSWORD) == 401
+    assert await _login(anon, "jihoon@inno-ax.com", DEV_PASSWORD) == 200
 
 
 async def test_profile_create_patch_and_clear(client: httpx.AsyncClient) -> None:
@@ -130,12 +128,12 @@ async def test_profile_create_patch_and_clear(client: httpx.AsyncClient) -> None
 
 
 async def test_patch_rules(client: httpx.AsyncClient) -> None:
-    taken = await client.patch(f"{URL}/u2", json={"email": "u3@innoflow.local"})
+    taken = await client.patch(f"{URL}/u2", json={"email": "u3@inno-ax.com"})
     assert taken.status_code == 409
     assert taken.json()["code"] == "EMAIL_TAKEN"
 
     # 자기 이메일을 그대로 보내는 것은 겹친 것이 아니다
-    same = await client.patch(f"{URL}/u2", json={"email": "u2@innoflow.local"})
+    same = await client.patch(f"{URL}/u2", json={"email": "u2@inno-ax.com"})
     assert same.status_code == 200
 
     missing = await client.patch(f"{URL}/nobody", json={"name": "누구"})
@@ -186,7 +184,7 @@ async def test_set_password(
     res = await client.put(f"{URL}/u3/password", json={"password": "관리자가-건-비밀번호"})
     assert res.status_code == 204
     assert (await u3.get("/api/auth/me")).status_code == 401  # 세션이 모두 끊긴다
-    assert await _login(anon, "u3@innoflow.local", "관리자가-건-비밀번호") == 200
+    assert await _login(anon, "u3@inno-ax.com", "관리자가-건-비밀번호") == 200
 
 
 async def test_set_password_rules(client: httpx.AsyncClient, session: AsyncSession) -> None:
@@ -206,7 +204,7 @@ async def test_set_password_rules(client: httpx.AsyncClient, session: AsyncSessi
     assert short.status_code == 422
 
     # 이메일을 넣어 주면 비밀번호를 걸 수 있고, 그때부터 들어온다
-    await client.patch(f"{URL}/noemail", json={"email": "new@innoflow.local"})
+    await client.patch(f"{URL}/noemail", json={"email": "new@inno-ax.com"})
     assert (
         await client.put(f"{URL}/noemail/password", json={"password": "비밀번호-0123456"})
     ).status_code == 204
