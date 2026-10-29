@@ -32,7 +32,7 @@ beforeEach(async () => {
   document.body.innerHTML = ''
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-20T03:00:00Z'))
-  await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
 })
 
 afterEach(() => {

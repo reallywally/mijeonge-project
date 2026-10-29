@@ -14,7 +14,7 @@ vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
 async function signIn(memberId = 'u1') {
   const auth = useAuthStore()
-  if (memberId === 'u1') await auth.login('u1@innoflow.local', MOCK_PASSWORD)
+  if (memberId === 'u1') await auth.login('u1@inno-ax.com', MOCK_PASSWORD)
   else {
     /* 목업 저장소를 비우지 않고 사람만 바꾼다 */
     writeMockSession(memberId)

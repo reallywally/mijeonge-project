@@ -24,14 +24,14 @@ export interface MockProjectGrant {
   role: ProjectRole
 }
 
-export const MOCK_ADMIN_PASSWORD = 'innoflow-admin'
+export const MOCK_ADMIN_PASSWORD = '1111'
 // 서버 시드(server/scripts/seed.py)와 같은 값 — 목업과 서버를 오갈 때 계정을 두 벌 외우지 않게
 export const MOCK_PASSWORD = MOCK_ADMIN_PASSWORD
 
 export const accounts: MockAccount[] = [
   {
     memberId: 'u0',
-    email: 'admin@innoflow.local',
+    email: 'admin@inno-ax.com',
     password: MOCK_ADMIN_PASSWORD,
     systemRole: 'admin',
     createdAt: '2026-09-01T00:00:00Z',
@@ -39,7 +39,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u1',
-    email: 'u1@innoflow.local',
+    email: 'u1@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
     createdAt: '2026-09-01T00:00:00Z',
@@ -47,7 +47,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u2',
-    email: 'u2@innoflow.local',
+    email: 'u2@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
     createdAt: '2026-09-01T00:00:00Z',
@@ -55,7 +55,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u3',
-    email: 'u3@innoflow.local',
+    email: 'u3@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
     createdAt: '2026-09-01T00:00:00Z',
@@ -72,7 +72,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u5',
-    email: 'u5@innoflow.local',
+    email: 'u5@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
     createdAt: '2026-09-01T00:00:00Z',

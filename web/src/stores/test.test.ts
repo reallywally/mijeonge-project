@@ -11,7 +11,7 @@ vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
 /* 테스트 스토어 — 묶음의 상태 · 신호, '지금' 의 숫자 · 표 정렬, 작업 · 안건별 거르기, [내 파트 | 전체] */
 /* 프로젝트 관리자(u1)는 처음부터 '전체' 를 본다 — 일반 사용자는 '내 파트' 로 시작한다 */
-async function boot(email = 'u1@innoflow.local') {
+async function boot(email = 'u1@inno-ax.com') {
   resetMockAuth()
   setActivePinia(createPinia())
   await useAuthStore().login(email, MOCK_PASSWORD)
@@ -124,10 +124,10 @@ describe('쓰기', () => {
   })
 
   it('지우기 권한 — 만든 사람 · 프로젝트 관리자', async () => {
-    let store = await boot('u3@innoflow.local')
+    let store = await boot('u3@inno-ax.com')
     expect(store.canRemove(store.byId.tc5)).toBe(true)
     expect(store.canRemove(store.byId.tc2)).toBe(false)
-    store = await boot('u1@innoflow.local')
+    store = await boot('u1@inno-ax.com')
     expect(store.canRemove(store.byId.tc2)).toBe(true)
   })
 })
@@ -135,12 +135,12 @@ describe('쓰기', () => {
 describe('[내 파트 | 전체]', () => {
   it("'내 파트' 는 공통 · 내 파트 · 내가 담당한 테스트와 그 조상을 보인다", async () => {
     /* 이도현(u3)은 인프라(pt1) — T5 묶음이 pt1, 그 밖은 공통이라 다 보인다 */
-    const store = await boot('u3@innoflow.local')
+    const store = await boot('u3@inno-ax.com')
     usePartStore().setScope('mine')
     expect(store.visibleRows).toHaveLength(8)
 
     /* 박지훈(u2)은 기간계 연동(pt3) — pt1 인 T6 · T7 · T8 은 안 보이고 T5 도 빠진다 */
-    const other = await boot('u2@innoflow.local')
+    const other = await boot('u2@inno-ax.com')
     usePartStore().setScope('mine')
     expect(keys(other.visibleRows)).toEqual(['HW-T1', 'HW-T2', 'HW-T3', 'HW-T4'])
     expect(other.nowCounts.blocked).toBe(0)
@@ -149,7 +149,7 @@ describe('[내 파트 | 전체]', () => {
   })
 
   it('프로젝트를 바꾸면 옛 목록을 그리지 않는다', async () => {
-    const store = await boot('u1@innoflow.local')
+    const store = await boot('u1@inno-ax.com')
     useDataStore().setProject('p2')
     expect(store.tests).toEqual([])
     expect(store.loaded).toBe(false)

@@ -215,7 +215,7 @@ describe('기간 바꾸기', () => {
 describe('상태 기록', () => {
   beforeEach(async () => {
     resetMockAuth()
-    await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+    await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
   })
 
   it('상태가 바뀌면 statusChangedAt 이 지금으로, backfill 은 false 로', () => {

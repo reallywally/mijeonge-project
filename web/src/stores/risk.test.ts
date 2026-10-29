@@ -33,7 +33,7 @@ beforeEach(() => {
 
 describe('보고서 받기', () => {
   it('들어올 때 받은 보고서를 그대로 둔다 — 기본 기준 · 점수 순', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const risk = useRiskStore()
     usePartStore().setScope('all')
     await risk.load()
@@ -47,7 +47,7 @@ describe('보고서 받기', () => {
   })
 
   it('내 파트면 threads · tasks 만 거르고 owners 는 그대로다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const risk = useRiskStore()
     const part = usePartStore()
     await risk.load()
@@ -63,7 +63,7 @@ describe('보고서 받기', () => {
   })
 
   it('다른 프로젝트로 옮기면 옛 보고서를 그리지 않는다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const risk = useRiskStore()
     const data = useDataStore()
     await risk.load()
@@ -78,12 +78,12 @@ describe('보고서 받기', () => {
 
 describe('기준 바꾸기', () => {
   it('바꾼 적이 없으면 기본값이다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     await expect(fetchRiskSettings('p1')).resolves.toEqual(DEFAULT_RISK_SETTINGS)
   })
 
   it('프로젝트 관리자가 바꾸면 보고서를 다시 받고 새 기준으로 등급이 선다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const risk = useRiskStore()
     usePartStore().setScope('all')
     await risk.load()
@@ -97,14 +97,14 @@ describe('기준 바꾸기', () => {
   })
 
   it('시스템 관리자도 바꾼다', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     await expect(
       useRiskStore().saveSettings({ ...DEFAULT_RISK_SETTINGS, staleDays: 14 }),
     ).resolves.toEqual({ ok: true })
   })
 
   it('일반 사용자는 403 — 알리고 칸에 붙일 것은 없다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const result = await useRiskStore().saveSettings({ ...DEFAULT_RISK_SETTINGS, staleDays: 14 })
 
     expect(result).toEqual({ ok: false, detail: {} })
@@ -112,7 +112,7 @@ describe('기준 바꾸기', () => {
   })
 
   it('범위 밖 · high <= medium 은 목업도 422 를 내고, 스토어가 detail 을 돌려준다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const bad = { ...DEFAULT_RISK_SETTINGS, staleDays: 91, highScore: 3, mediumScore: 3 }
 
     const error = await putRiskSettings('p1', bad).catch((e: unknown) => e)
@@ -143,7 +143,7 @@ describe('AI 요약', () => {
   }
 
   it('보이는 줄(내 파트로 거른 것) 그대로 보내고, 다 받으면 done 이다', async () => {
-    const risk = await ready('u3@innoflow.local')
+    const risk = await ready('u3@inno-ax.com')
     const spy = vi.spyOn(api, 'streamRiskSummary')
 
     const done = risk.summarize()
@@ -168,7 +168,7 @@ describe('AI 요약', () => {
   })
 
   it('[내 파트 | 전체] 를 바꾸면 바뀜이 서고, 저절로 다시 부르지 않는다. 되돌리면 풀린다', async () => {
-    const risk = await ready('u3@innoflow.local')
+    const risk = await ready('u3@inno-ax.com')
     const spy = vi.spyOn(api, 'streamRiskSummary')
     void risk.summarize()
     await vi.runAllTimersAsync()
@@ -183,7 +183,7 @@ describe('AI 요약', () => {
   })
 
   it('멈추면 받은 데까지 남기고 타이머도 남지 않는다', async () => {
-    const risk = await ready('u1@innoflow.local')
+    const risk = await ready('u1@inno-ax.com')
     const done = risk.summarize()
     await vi.advanceTimersByTimeAsync(api.MOCK_STEP_MS * 5)
     const partial = risk.summary?.text ?? ''
@@ -199,7 +199,7 @@ describe('AI 요약', () => {
   })
 
   it('보이는 줄이 0건이면 부르지 않는다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const risk = useRiskStore()
     useDataStore().setProject('p3')
     await risk.load()
@@ -213,7 +213,7 @@ describe('AI 요약', () => {
   })
 
   it('오류는 챗봇과 같은 문구로 단다', async () => {
-    const risk = await ready('u1@innoflow.local')
+    const risk = await ready('u1@inno-ax.com')
     vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* () {
       yield { type: 'delta', text: '한 줄 총평' }
       throw new ApiError(200, { code: 'CHAT_UNAVAILABLE', message: '' })
@@ -229,7 +229,7 @@ describe('AI 요약', () => {
   })
 
   it('프로젝트를 바꾸거나 버리면 받는 중인 요청을 끊고 비운다', async () => {
-    const risk = await ready('u1@innoflow.local')
+    const risk = await ready('u1@inno-ax.com')
     const old = risk.summarize()
     await vi.advanceTimersByTimeAsync(api.MOCK_STEP_MS * 3)
 

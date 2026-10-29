@@ -63,7 +63,7 @@ beforeEach(() => {
 
 describe('탭', () => {
   it('받은 것 — 안건 칩 · 결정 한 줄 · 보낸 사람. 보낸 것 — 묶음 한 줄에 확인 N / M', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountChecks()
 
     expect(tab('received')!.getAttribute('aria-selected')).toBe('true')
@@ -98,7 +98,7 @@ describe('탭', () => {
   })
 
   it('[확인] 을 누르면 대기에서 빠지고 확인 시각이 선다 — 메뉴 배지도 사라진다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await useCheckStore().loadPendingCount()
     await mountChecks()
     expect($('[data-check-badge]')!.textContent?.trim()).toBe('1')
@@ -113,7 +113,7 @@ describe('탭', () => {
   })
 
   it('보낸 것이 없으면 빈 줄 안내', async () => {
-    await signedIn('u2@innoflow.local')
+    await signedIn('u2@inno-ax.com')
     await mountChecks()
     expect(received()).toEqual(['c2'])
     await click(tab('sent'))
@@ -124,7 +124,7 @@ describe('탭', () => {
 
 describe('안건 칩 · 안건 상세', () => {
   it('칩을 누르면 안건 상세 — 이 결정의 확인 현황과 참조가 선다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountChecks()
     await click(tab('sent'))
 
@@ -141,7 +141,7 @@ describe('안건 칩 · 안건 상세', () => {
   })
 
   it('받은 것의 [확인] 은 안건 상세에서도 된다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     await mountChecks()
     await click($('[data-check-received="c4"] [data-check-thread="t1"]'))
     expect(dialog()?.textContent).toContain('서버 OS 결정')
@@ -152,7 +152,7 @@ describe('안건 칩 · 안건 상세', () => {
 
 describe('배지', () => {
   it('지금 프로젝트의 수는 메뉴 옆, 다른 프로젝트의 수는 프로젝트 고르기에 — 0 이면 안 그린다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const checks = useCheckStore()
     await mountChecks()
     expect($('[data-check-badge]')).toBeNull()

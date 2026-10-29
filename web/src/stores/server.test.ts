@@ -61,7 +61,7 @@ const snapshotOf = (projectId: string): ProjectSnapshot => ({
 const me: Me = {
   id: 'u0',
   name: '관리자',
-  email: 'admin@innoflow.local',
+  email: 'admin@inno-ax.com',
   systemRole: 'admin',
   projectRoles: {},
 }

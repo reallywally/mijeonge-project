@@ -14,7 +14,7 @@ import { useMinutesDraftStore } from '@/stores/minutesDraft'
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
 async function signedIn() {
-  await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
   await useDataStore().retry()
 }
 

@@ -19,8 +19,8 @@ uv run fastapi dev app/main.py        # http://localhost:8000
 `GET /api/health` → `{"status": "ok"}` 로 확인한다. 이 엔드포인트는 DB 를 찌르지 않는다.
 
 **나머지는 전부 로그인이 필요하다**(세션 쿠키 · `docs/api/auth.md`). 시드가 개발용 계정을 넣는다 —
-`admin@innoflow.local`(시스템 관리자) · `u1@innoflow.local` ~ `u4@innoflow.local`, 비밀번호는 다섯 다
-`innoflow-admin`. 시드 없이 운영 DB 에 첫 관리자를 만들 때는
+`admin@inno-ax.com`(시스템 관리자) · `u1@inno-ax.com` ~ `u4@inno-ax.com`, 비밀번호는 다섯 다
+`1111`(개발용이라 짧다 — 로그인은 길이를 안 보지만, 비밀번호 바꾸기 · 관리자 재설정은 10자 이상 규칙 그대로다). 시드 없이 운영 DB 에 첫 관리자를 만들 때는
 
 ```bash
 uv run python -m scripts.create_admin --email a@b.com --name 홍길동   # 비밀번호는 프롬프트로

@@ -34,7 +34,7 @@ async def _sessions_of(session: AsyncSession, member_id: str) -> int:
 
 
 async def test_login_sets_cookie_and_answers_me(anon: httpx.AsyncClient) -> None:
-    res = await _login(anon, "u1@innoflow.local")
+    res = await _login(anon, "u1@inno-ax.com")
     assert res.status_code == 200
     me = res.json()
     assert set(me) == contract_keys("Me")
@@ -61,7 +61,7 @@ async def test_admin_me_has_no_project_roles(anon: httpx.AsyncClient) -> None:
 
 
 async def test_email_is_case_insensitive(anon: httpx.AsyncClient) -> None:
-    assert (await _login(anon, "  U2@InnoFlow.LOCAL ")).status_code == 200
+    assert (await _login(anon, "  U2@Inno-AX.COM ")).status_code == 200
 
 
 async def test_failures_look_the_same(anon: httpx.AsyncClient, session: AsyncSession) -> None:
@@ -72,9 +72,9 @@ async def test_failures_look_the_same(anon: httpx.AsyncClient, session: AsyncSes
     await session.commit()
 
     answers = [
-        await _login(anon, "nobody@innoflow.local"),
-        await _login(anon, "u1@innoflow.local", "틀린-비밀번호-입니다"),
-        await _login(anon, "u3@innoflow.local"),
+        await _login(anon, "nobody@inno-ax.com"),
+        await _login(anon, "u1@inno-ax.com", "틀린-비밀번호-입니다"),
+        await _login(anon, "u3@inno-ax.com"),
         await _login(anon, "형식도 아님"),
     ]
     assert {res.status_code for res in answers} == {401}
@@ -92,20 +92,20 @@ async def test_member_without_email_cannot_log_in(
     u4.email = None
     await session.commit()
     # 자격 증명은 아직 옛 이메일을 들고 있지만 멤버에 이메일이 없으면 Me 를 만들 수 없다
-    res = await _login(anon, "u4@innoflow.local")
+    res = await _login(anon, "u4@inno-ax.com")
     assert res.status_code == 401
 
 
 async def test_too_many_attempts_is_429(anon: httpx.AsyncClient) -> None:
     for _ in range(10):
-        assert (await _login(anon, "nobody@innoflow.local")).status_code == 401
-    res = await _login(anon, "u1@innoflow.local")  # 맞는 비밀번호여도 막힌다
+        assert (await _login(anon, "nobody@inno-ax.com")).status_code == 401
+    res = await _login(anon, "u1@inno-ax.com")  # 맞는 비밀번호여도 막힌다
     assert res.status_code == 429
     assert res.json()["code"] == "TOO_MANY_ATTEMPTS"
 
 
 async def test_missing_fields_are_422(anon: httpx.AsyncClient) -> None:
-    res = await anon.post(LOGIN, json={"email": "u1@innoflow.local"})
+    res = await anon.post(LOGIN, json={"email": "u1@inno-ax.com"})
     assert res.status_code == 422
     assert res.json()["code"] == "VALIDATION_ERROR"
 
@@ -113,15 +113,15 @@ async def test_missing_fields_are_422(anon: httpx.AsyncClient) -> None:
 async def test_login_again_drops_the_old_session(
     anon: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    await _login(anon, "u1@innoflow.local")
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
+    await _login(anon, "u1@inno-ax.com")
     assert await _sessions_of(session, "u1") == 1
 
 
 async def test_token_is_stored_only_as_sha256(
     anon: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    await _login(anon, "u2@innoflow.local")
+    await _login(anon, "u2@inno-ax.com")
     token = anon.cookies[COOKIE]
     stored = (
         await session.scalars(select(AuthSession.token_hash).where(AuthSession.member_id == "u2"))
@@ -163,7 +163,7 @@ async def test_unknown_cookie_is_401(anon: httpx.AsyncClient) -> None:
 async def test_expired_session_is_401_and_gone(
     anon: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
     row = (await session.scalars(select(AuthSession).where(AuthSession.member_id == "u1"))).one()
     row.expires_at = now() - timedelta(seconds=1)
     await session.commit()
@@ -175,7 +175,7 @@ async def test_expired_session_is_401_and_gone(
 
 
 async def test_session_slides_once_an_hour(anon: httpx.AsyncClient, session: AsyncSession) -> None:
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
     row = (await session.scalars(select(AuthSession).where(AuthSession.member_id == "u1"))).one()
 
     # 방금 쓴 세션은 다시 쓰지 않는다 — 쿠키도 다시 굽지 않는다
@@ -199,7 +199,7 @@ async def test_session_slides_once_an_hour(anon: httpx.AsyncClient, session: Asy
 
 
 async def test_logout_ends_the_session(anon: httpx.AsyncClient, session: AsyncSession) -> None:
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
     token = anon.cookies[COOKIE]
 
     res = await anon.post("/api/auth/logout")
@@ -226,7 +226,7 @@ async def test_change_password_drops_my_other_sessions(
     anon: httpx.AsyncClient, as_member: AsMember, session: AsyncSession
 ) -> None:
     other = await as_member("u1")  # 다른 브라우저의 같은 사람
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
 
     res = await anon.post(
         "/api/auth/password",
@@ -238,12 +238,12 @@ async def test_change_password_drops_my_other_sessions(
     assert await _sessions_of(session, "u1") == 1
 
     async with httpx.AsyncClient(transport=anon._transport, base_url="http://test") as fresh:
-        assert (await _login(fresh, "u1@innoflow.local")).status_code == 401
-        assert (await _login(fresh, "u1@innoflow.local", "새-비밀번호-0123")).status_code == 200
+        assert (await _login(fresh, "u1@inno-ax.com")).status_code == 401
+        assert (await _login(fresh, "u1@inno-ax.com", "새-비밀번호-0123")).status_code == 200
 
 
 async def test_change_password_with_wrong_current_is_400(anon: httpx.AsyncClient) -> None:
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
     res = await anon.post(
         "/api/auth/password",
         json={"currentPassword": "틀린-비밀번호-입니다", "newPassword": "새-비밀번호-0123"},
@@ -253,7 +253,7 @@ async def test_change_password_with_wrong_current_is_400(anon: httpx.AsyncClient
 
 
 async def test_password_length_rule(anon: httpx.AsyncClient) -> None:
-    await _login(anon, "u1@innoflow.local")
+    await _login(anon, "u1@inno-ax.com")
     for bad in ("짧다", "x" * 201):
         res = await anon.post(
             "/api/auth/password", json={"currentPassword": DEV_PASSWORD, "newPassword": bad}

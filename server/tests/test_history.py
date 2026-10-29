@@ -396,7 +396,7 @@ async def test_missing_is_404(client: httpx.AsyncClient) -> None:
 async def test_ungranted_member_sees_404(
     client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
 ) -> None:
-    session.add(Member(id="u9", name="외부인", email="u9@innoflow.local"))
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     u9 = await as_member("u9")
     assert (await u9.get("/api/tasks/k4/history")).json()["code"] == "TASK_NOT_FOUND"

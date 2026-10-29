@@ -53,7 +53,7 @@ vi.mock('dhtmlx-gantt', () => ({
   escapeHTML: (value: string) => value,
 }))
 
-async function mountAt(path: string, email = 'u1@innoflow.local') {
+async function mountAt(path: string, email = 'u1@inno-ax.com') {
   await useAuthStore().login(email, MOCK_PASSWORD)
   const router = createRouter({
     history: createWebHistory(),
@@ -255,7 +255,7 @@ describe('테스트 상세', () => {
   })
 
   it('지우기는 만든 사람 · 관리자에게만 보인다', async () => {
-    await mountAt('/tests/tc2', 'u3@innoflow.local')
+    await mountAt('/tests/tc2', 'u3@inno-ax.com')
     expect(popupText()).toContain('올바른 계정으로 로그인')
     expect($('[data-test-remove]')).toBeNull()
   })

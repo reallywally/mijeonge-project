@@ -15,7 +15,7 @@ vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 beforeEach(async () => {
   resetMockAuth()
   setActivePinia(createPinia())
-  await useAuthStore().login('u1@innoflow.local', MOCK_PASSWORD)
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
 })
 
 afterEach(() => {

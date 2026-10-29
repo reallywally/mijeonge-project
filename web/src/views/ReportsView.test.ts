@@ -72,7 +72,7 @@ beforeEach(async () => {
   vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
   document.body.innerHTML = ''
-  await useAuthStore().login('u2@innoflow.local', MOCK_PASSWORD)
+  await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
   await useDataStore().retry()
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
   vi.setSystemTime(new Date('2026-10-20T03:00:00Z'))

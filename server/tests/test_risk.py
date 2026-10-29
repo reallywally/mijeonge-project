@@ -499,7 +499,7 @@ async def test_ungranted_member_sees_nothing(
     client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
 ) -> None:
     """부여받지 않은 프로젝트는 없는 것처럼 — 403 이 아니라 404 다 (docs/api/auth.md)."""
-    session.add(Member(id="u9", name="외부인", email="u9@innoflow.local"))
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     u9 = await as_member("u9")
     for url in ("/api/projects/p1/risks", "/api/projects/p1/risk-settings"):

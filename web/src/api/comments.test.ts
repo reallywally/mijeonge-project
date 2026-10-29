@@ -23,7 +23,7 @@ describe('목업 갈래', () => {
   beforeEach(async () => {
     resetMockComments()
     resetMockAuth()
-    await login({ email: 'u1@innoflow.local', password: MOCK_PASSWORD })
+    await login({ email: 'u1@inno-ax.com', password: MOCK_PASSWORD })
   })
 
   it('그 작업의 댓글만 오래된 것부터 낸다', async () => {
@@ -58,7 +58,7 @@ describe('목업 갈래', () => {
 
   it('남의 댓글은 고치지 못하고, 일반 사용자는 지우지도 못한다 — 403', async () => {
     resetMockAuth()
-    await login({ email: 'u2@innoflow.local', password: MOCK_PASSWORD })
+    await login({ email: 'u2@inno-ax.com', password: MOCK_PASSWORD })
     expect(await patchTaskComment('cm1', { body: '남의 글' }).catch((e) => e)).toMatchObject({
       status: 403,
       code: 'FORBIDDEN',

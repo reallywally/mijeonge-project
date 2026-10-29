@@ -27,7 +27,7 @@ const unauthenticated = () =>
 const user: Me = {
   id: 'u2',
   name: '박지훈',
-  email: 'u2@innoflow.local',
+  email: 'u2@inno-ax.com',
   systemRole: 'user',
   projectRoles: { p1: 'user', p2: 'user' },
 }

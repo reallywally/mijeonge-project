@@ -391,7 +391,7 @@ async def test_ungranted_member_sees_404(
     client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
 ) -> None:
     report_id = await make(client)
-    session.add(Member(id="u9", name="외부인", email="u9@innoflow.local"))
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     u9 = await as_member("u9")
     for res in (

@@ -40,7 +40,7 @@ const rejected = (p: Promise<unknown>) =>
 describe('목업 갈래', () => {
   beforeEach(async () => {
     resetMockAuth()
-    await login({ email: 'u2@innoflow.local', password: MOCK_PASSWORD })
+    await login({ email: 'u2@inno-ax.com', password: MOCK_PASSWORD })
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-20T03:00:00Z'))
   })

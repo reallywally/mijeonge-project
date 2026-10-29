@@ -45,7 +45,7 @@ beforeEach(() => {
 
 describe('[내 파트 | 전체]', () => {
   it('일반 사용자(u3 · 인프라)는 내 파트로 시작한다 — 목록 · 수가 같이 줄어든다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const part = usePartStore()
     const task = useTaskStore()
     const thread = useThreadStore()
@@ -69,7 +69,7 @@ describe('[내 파트 | 전체]', () => {
   })
 
   it('전체로 바꾸면 다 보이고, 그 값은 프로젝트마다 브라우저에 남는다', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     const part = usePartStore()
     part.setScope('all')
     expect(useTaskStore().visibleRows).toHaveLength(22)
@@ -77,12 +77,12 @@ describe('[내 파트 | 전체]', () => {
 
     /* 새로 들어와도(스토어를 새로 세워도) 기억한 값으로 선다 */
     setActivePinia(createPinia())
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     expect(usePartStore().scope).toBe('all')
   })
 
   it('프로젝트 관리자(u1)는 전체로 시작하고, 내 파트로 바꿀 수 있다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const part = usePartStore()
     expect(part.scope).toBe('all')
     part.setScope('mine')
@@ -91,12 +91,12 @@ describe('[내 파트 | 전체]', () => {
   })
 
   it('속한 파트가 없으면 전환이 숨고 전체다 — 시스템 관리자 · 파트 없는 프로젝트', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     expect(usePartStore().canNarrow).toBe(false)
     expect(usePartStore().scope).toBe('all')
 
     setActivePinia(createPinia())
-    await signedIn('u2@innoflow.local')
+    await signedIn('u2@inno-ax.com')
     const data = useDataStore()
     expect(usePartStore().scope).toBe('mine')
     data.setProject('p2')
@@ -106,7 +106,7 @@ describe('[내 파트 | 전체]', () => {
   })
 
   it('파트를 빼면 그 자리에서 내 파트가 다시 계산된다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const part = usePartStore()
     expect(part.myPartIds.has('pt2')).toBe(true)
     expect(await part.leavePart('pt2', 'u1')).toBe(true)
@@ -116,7 +116,7 @@ describe('[내 파트 | 전체]', () => {
 
 describe('작업 · 안건의 partId (목업 서버)', () => {
   it('작업 등록에서 partId 를 안 보내면 상위를 따르고, null 이면 공통이다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const task = useTaskStore()
     const data = useDataStore()
     const inherited = await task.addTask(blankTask({ parentId: 'k7' }))
@@ -129,7 +129,7 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
   })
 
   it('다른 프로젝트 · 없는 파트는 PART_NOT_FOUND, 보관 파트를 새로 달면 PART_ARCHIVED', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const task = useTaskStore()
     const part = usePartStore()
 
@@ -148,7 +148,7 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
   })
 
   it('상위의 파트가 보관이면 안 보낸 등록은 서버처럼 PART_ARCHIVED — 화면은 공통을 골라 싣는다 (Q32)', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const task = useTaskStore()
     const part = usePartStore()
     await part.setPartActive('pt1', false)
@@ -163,7 +163,7 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
   })
 
   it('작업의 파트를 바꿔도 하위 작업은 따라 바뀌지 않는다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const task = useTaskStore()
     const data = useDataStore()
     task.setPart('k4', 'pt2')
@@ -172,7 +172,7 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
   })
 
   it('안건은 안 보내면 공통이고, 수정으로 파트를 바꾼다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const thread = useThreadStore()
     const data = useDataStore()
     const id = await thread.addThread({ title: '배포 창구' })
@@ -189,7 +189,7 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
 
 describe('파트 관리 (목업 서버)', () => {
   it('만들면 이름 순으로 서고, 같은 이름(보관 포함)은 PART_NAME_TAKEN', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const part = usePartStore()
     expect(await part.createPart('  디자인  ')).toBe(true)
     expect(part.parts.map((p) => p.name)).toEqual(['AI', '기간계 연동', '디자인', '인프라'])
@@ -202,7 +202,7 @@ describe('파트 관리 (목업 서버)', () => {
   })
 
   it('이름 바꾸기 · 보관 · 되살리기 — 보관하면 고를 수 있는 목록에서 빠진다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const part = usePartStore()
     expect(await part.renamePart('pt1', '인프라 · 보안')).toBe(true)
     expect(part.partName('pt1')).toBe('인프라 · 보안')
@@ -215,13 +215,13 @@ describe('파트 관리 (목업 서버)', () => {
   })
 
   it('일반 사용자는 못 만든다 — FORBIDDEN', async () => {
-    await signedIn('u3@innoflow.local')
+    await signedIn('u3@inno-ax.com')
     expect(await usePartStore().createPart('디자인')).toBe(false)
     expect(lastError()).toMatchObject({ status: 403, code: 'FORBIDDEN' })
   })
 
   it('프로젝트에 부여되지 않은 사람은 파트에 못 넣는다 — MEMBER_NOT_IN_PROJECT. 넣기는 멱등', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const part = usePartStore()
     expect(await part.joinPart('pt1', 'u0')).toBe(false)
     expect(lastError()).toMatchObject({ status: 400, code: 'MEMBER_NOT_IN_PROJECT' })
@@ -234,7 +234,7 @@ describe('파트 관리 (목업 서버)', () => {
   })
 
   it('프로젝트에서 사람을 빼면 그 사람의 파트 소속도 같이 걷힌다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const data = useDataStore()
     const part = usePartStore()
     expect(part.partIdsOf('u4').has('pt2')).toBe(true)

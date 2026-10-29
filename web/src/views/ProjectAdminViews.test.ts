@@ -63,7 +63,7 @@ beforeEach(() => {
 
 describe('프로젝트 관리 화면', () => {
   it('프로젝트 정보 — 작업 키 접두사는 읽기만 되고, 한눈 정보를 센다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/settings')
 
     expect(w.get('[data-task-key-prefix]').text()).toBe('HW')
@@ -76,7 +76,7 @@ describe('프로젝트 관리 화면', () => {
   })
 
   it('사람 표의 파트는 읽기 전용 칩이고, 누르면 파트 관리의 그 파트로 간다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w, router } = await mountAt('/projects/p1/settings')
 
     const chips = w.get('tr[data-member-id="u3"]').findAll('[data-part-chip]')
@@ -90,7 +90,7 @@ describe('프로젝트 관리 화면', () => {
 
 describe('파트 관리 화면', () => {
   it('파트를 안 고르고 들어오면 첫 활성 파트를 주소에 싣는다. 없는 파트여도 같다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w, router } = await mountAt('/projects/p1/parts')
     expect(router.currentRoute.value.fullPath).toBe('/projects/p1/parts?part=pt2')
     expect(w.get('[data-selected-part]').attributes('data-selected-part')).toBe('pt2')
@@ -100,7 +100,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('왼쪽 목록은 이름 · 사람 수 · 작업/안건 수, 고르면 주소와 오른쪽이 따른다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w, router } = await mountAt('/projects/p1/parts?part=pt1')
 
     expect(w.get('[data-selected-part]').attributes('data-selected-part')).toBe('pt1')
@@ -124,7 +124,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('작업 · 안건 목록으로 가는 링크는 그 파트로 걸러진 주소다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/parts?part=pt1')
     expect(w.get('a[data-link="tasks"]').attributes('href')).toBe('/tasks?view=list&part=pt1')
     expect(w.get('a[data-link="tasks"]').text()).toContain('작업 5건')
@@ -133,7 +133,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('찾아서 여럿을 골라 한 번에 더하고, 한 사람씩 뺀다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/parts?part=pt1')
     const part = usePartStore()
 
@@ -160,7 +160,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('이름을 바꾸고, 겹치면 서버의 message 를 알리고 되돌린다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/parts?part=pt1')
     const field = w.get('input[aria-label="파트 이름"]')
 
@@ -176,7 +176,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('보관하면 아래로 접히고 사람 더하기가 닫힌다. 되살리면 돌아온다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects/p1/parts?part=pt1')
     const part = usePartStore()
 
@@ -194,7 +194,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('새 파트를 만들면 그 파트가 골라진다', async () => {
-    await signedIn('u1@innoflow.local')
+    await signedIn('u1@inno-ax.com')
     const { w, router } = await mountAt('/projects/p1/parts?part=pt1')
 
     await w.get('input[aria-label="새 파트 이름"]').setValue('디자인')
@@ -206,7 +206,7 @@ describe('파트 관리 화면', () => {
   })
 
   it('파트가 없는 프로젝트는 빈 안내를 보인다', async () => {
-    await signedIn('admin@innoflow.local', MOCK_ADMIN_PASSWORD)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     const { w, router } = await mountAt('/projects/p2/parts')
     expect(router.currentRoute.value.query.part).toBeUndefined()
     expect(w.text()).toContain('파트가 없습니다')

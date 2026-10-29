@@ -74,7 +74,7 @@ afterEach(() => {
 describe('목업 갈래', () => {
   beforeEach(async () => {
     resetMockAuth()
-    await signIn('u1@innoflow.local')
+    await signIn('u1@inno-ax.com')
   })
 
   it('시드 넷을 seq 순서로 낸다 — 다른 프로젝트는 비고, 부여받지 않은 곳은 404', async () => {
@@ -82,7 +82,7 @@ describe('목업 갈래', () => {
     expect(await fetchChecks('p2')).toEqual([])
 
     await logout()
-    await signIn('u2@innoflow.local')
+    await signIn('u2@inno-ax.com')
     expect((await failure(fetchChecks('p3'))).code).toBe('PROJECT_NOT_FOUND')
   })
 
@@ -172,7 +172,7 @@ describe('목업 갈래', () => {
     const [made] = await sendCheck('nt1')
     expect(made.projectId).toBe('p3')
     await logout()
-    await signIn('u2@innoflow.local')
+    await signIn('u2@inno-ax.com')
     expect((await failure(confirmCheck(made.id))).code).toBe('CHECK_NOT_FOUND')
     expect((await failure(sendCheck('nt1'))).code).toBe('THREAD_NOT_FOUND')
   })

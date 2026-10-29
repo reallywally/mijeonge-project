@@ -277,7 +277,7 @@ async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:
 async def test_ungranted_member_is_404(
     client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
 ) -> None:
-    session.add(Member(id="u9", name="외부인", email="u9@innoflow.local"))
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     fake = FakeClient(Turn(texts=["요약"]))
     use(fake)
