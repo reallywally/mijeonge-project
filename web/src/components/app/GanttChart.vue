@@ -101,7 +101,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.config.scale_offset_minimal = false
   g.config.row_height = 34
   g.config.scale_height = 46
-  g.config.grid_width = 462
+  g.config.grid_width = 562
   g.config.open_tree_initially = true
   /* 진척도 · 화살표는 모델에 없다 — 끌어서 만들 수 없게 막는다 */
   g.config.drag_links = false

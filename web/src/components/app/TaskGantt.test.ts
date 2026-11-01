@@ -57,11 +57,10 @@ describe('간트차트', () => {
 
   it('기간 미정 작업은 그리드에는 서고 막대는 없다', async () => {
     const w = await mountGantt()
-    /* 기간 미정(k18)만 막대가 없다 — 나머지 21줄은 다 막대가 선다(오늘 9/22 가 가운데라
-       10월의 스테이징 DB 구성(k22)까지 보이는 폭 안이다) */
+    /* 기간 미정(k18)은 막대가 없다. 보이는 폭 밖의 막대는 dhtmlx 가 그리지 않아 개수는 폭 따라
+       달라진다 — 오늘(9/22) 언저리의 막대가 서는지와 k18 이 빠지는지만 본다 */
     const bars = w.findAll('.gantt_task_line').map((b) => b.attributes('data-task-id'))
-    expect(bars).toHaveLength(21)
-    expect(bars).toContain('k22')
+    expect(bars).toEqual(expect.arrayContaining(['k3', 'k7', 'k9']))
     expect(bars).not.toContain('k18')
 
     const row = w.get('.gantt_grid_data [data-task-id="k18"]')
@@ -100,7 +99,7 @@ describe('간트차트', () => {
     const chart = spy.mock.results[0].value as GanttStatic
     const today = new Date(2026, 8, 22)
     const day = chart.posFromDate(new Date(2026, 8, 23)) - chart.posFromDate(today)
-    /* 보이는 타임라인 = 1200 - 그리드 462. 오늘 칸의 가운데가 그 가운데에 선다 */
+    /* 보이는 타임라인 = 1200 - 그리드 562. 오늘 칸의 가운데가 그 가운데에 선다 */
     const visible = 1200 - chart.config.grid_width
     expect(chart.getScrollState().x).toBe(chart.posFromDate(today) + day / 2 - visible / 2)
     spy.mockRestore()
