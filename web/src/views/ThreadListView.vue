@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
@@ -230,8 +231,8 @@ function onCreated(id: string) {
       <PartScopeToggle />
     </div>
 
-    <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
-      <div class="flex w-full max-w-[900px] flex-col gap-4">
+    <div class="flex min-h-0 grow overflow-y-auto px-6 pt-6">
+      <div class="flex w-full flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-[22px] font-bold tracking-[-0.025em]">안건</h1>
@@ -323,6 +324,9 @@ function onCreated(id: string) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
                 <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground"
                   >상태</TableHead
@@ -348,6 +352,7 @@ function onCreated(id: string) {
                 class="h-12 cursor-pointer"
                 @click="openThread(row.thread.id)"
               >
+                <TableCell><IdCell :id="row.thread.id" /></TableCell>
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <span
@@ -387,7 +392,7 @@ function onCreated(id: string) {
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="6" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="7" class="h-[110px] text-center text-sm text-muted-foreground">
                   조회 조건에 맞는 안건이 없습니다.
                 </TableCell>
               </TableRow>

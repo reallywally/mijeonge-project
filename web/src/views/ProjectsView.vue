@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import ProjectCreateDialog from '@/components/app/ProjectCreateDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -102,8 +103,8 @@ function onCreated() {
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
     </div>
 
-    <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
-      <div class="flex w-full max-w-[900px] flex-col gap-4">
+    <div class="flex min-h-0 grow overflow-y-auto px-6 pt-6">
+      <div class="flex w-full flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-[22px] font-bold tracking-[-0.025em]">프로젝트</h1>
@@ -141,6 +142,9 @@ function onCreated() {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >프로젝트</TableHead
                 >
@@ -164,6 +168,7 @@ function onCreated() {
                 class="h-12 cursor-pointer"
                 @click="pickProject(row.project.id)"
               >
+                <TableCell><IdCell :id="row.project.id" /></TableCell>
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <Check
@@ -191,7 +196,7 @@ function onCreated() {
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="4" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
                   {{
                     data.allProjects.length > 0
                       ? '조회 조건에 맞는 프로젝트가 없습니다.'

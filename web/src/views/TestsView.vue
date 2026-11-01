@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TestDetailDialog from '@/components/app/TestDetailDialog.vue'
@@ -295,12 +296,9 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
 
     <TestGantt v-if="view === 'gantt'" @open-test="openTest" @add-test="openCreate" />
 
-    <div
-      v-if="view === 'list'"
-      class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]"
-    >
+    <div v-if="view === 'list'" class="flex min-h-0 grow overflow-y-auto px-6 pt-6">
       <!-- 내용이 화면보다 길다 — 늘이지 않고(self-start) 바깥이 스크롤한다. 늘이면 표가 눌려 잘린다 -->
-      <div class="flex w-full max-w-[1180px] flex-col gap-4 self-start">
+      <div class="flex w-full flex-col gap-4 self-start">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-[22px] font-bold tracking-[-0.025em]">테스트</h1>
@@ -557,6 +555,9 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
             <Table>
               <TableHeader>
                 <TableRow class="bg-muted/60 hover:bg-muted/60">
+                  <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                    >ID</TableHead
+                  >
                   <TableHead class="h-10 w-[72px] text-xs font-medium text-muted-foreground"
                     >번호</TableHead
                   >
@@ -591,6 +592,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                   :data-test-row="row.test.id"
                   @click="openTest(row.test.id)"
                 >
+                  <TableCell><IdCell :id="row.test.id" /></TableCell>
                   <TableCell class="text-xs text-muted-foreground">{{ row.test.key }}</TableCell>
                   <TableCell class="min-w-0">
                     <div class="flex items-center gap-2.5">
@@ -653,7 +655,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                 </TableRow>
                 <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
                   <TableCell
-                    colspan="8"
+                    colspan="9"
                     class="h-[110px] text-center text-sm text-muted-foreground"
                   >
                     {{

@@ -14,6 +14,7 @@ import {
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import HideDoneToggle from '@/components/app/HideDoneToggle.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TaskBoard from '@/components/app/TaskBoard.vue'
@@ -401,11 +402,8 @@ function bulkOwner(value: string) {
       @open-thread="(id) => router.push(`/threads/${id}`)"
     />
 
-    <div
-      v-if="view === 'list'"
-      class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]"
-    >
-      <div class="flex w-full max-w-[1040px] flex-col gap-4">
+    <div v-if="view === 'list'" class="flex min-h-0 grow overflow-y-auto px-6 pt-6">
+      <div class="flex w-full flex-col gap-4">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-[22px] font-bold tracking-[-0.025em]">작업</h1>
@@ -505,6 +503,9 @@ function bulkOwner(value: string) {
                     @update:model-value="(v) => togglePage(v === true)"
                   />
                 </TableHead>
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 w-[72px] text-xs font-medium text-muted-foreground"
                   >번호</TableHead
                 >
@@ -538,6 +539,7 @@ function bulkOwner(value: string) {
                     @update:model-value="(v) => toggleRow(row.task.id, v === true)"
                   />
                 </TableCell>
+                <TableCell><IdCell :id="row.task.id" /></TableCell>
                 <TableCell class="text-xs text-muted-foreground">{{ row.task.key }}</TableCell>
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
@@ -611,7 +613,7 @@ function bulkOwner(value: string) {
                 </TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="7" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="8" class="h-[110px] text-center text-sm text-muted-foreground">
                   조회 조건에 맞는 작업이 없습니다.
                 </TableCell>
               </TableRow>
