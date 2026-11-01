@@ -61,8 +61,8 @@ function openPassword(account: MemberAccount) {
       </span>
     </div>
 
-    <div class="flex min-h-0 grow justify-center overflow-y-auto px-[26px] pt-[26px]">
-      <div class="flex w-full max-w-[1000px] flex-col gap-4 pb-[26px]">
+    <div class="flex min-h-0 grow overflow-y-auto px-6 pt-6">
+      <div class="flex w-full flex-col gap-4 pb-[26px]">
         <header class="flex items-start gap-4">
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-[22px] font-bold tracking-[-0.025em]">사용자 관리</h1>

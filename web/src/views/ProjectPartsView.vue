@@ -209,7 +209,7 @@ const listLink = (path: '/tasks' | '/threads') =>
     :meta="partStore.parts.length ? `${activeParts.length}개` : ''"
   >
     <template #default="{ project: p }">
-      <div class="flex w-full max-w-[1100px] flex-col gap-4 pb-[26px]">
+      <div class="flex w-full flex-col gap-4 pb-[26px]">
         <header class="flex flex-col gap-2.5">
           <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 파트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
