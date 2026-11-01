@@ -43,6 +43,11 @@ const chart = vi.hoisted(() => ({
   destructor() {},
   render() {},
   showDate() {},
+  /* 하루 = 26px — 처음 열 때 오늘을 가운데로 미는 셈에만 쓴다 */
+  posFromDate(d: Date) {
+    return Math.round(d.getTime() / 86_400_000) * 26
+  },
+  scrollTo() {},
   getTask(id: string) {
     return chart.dragged[id]
   },

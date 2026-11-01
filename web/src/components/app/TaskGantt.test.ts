@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { Gantt } from 'dhtmlx-gantt'
+import type { GanttStatic } from 'dhtmlx-gantt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskGantt from './TaskGantt.vue'
 import { useTaskStore } from '@/stores/task'
@@ -16,8 +18,15 @@ for (const prop of ['offsetWidth', 'clientWidth']) {
 }
 
 enableAutoUnmount(afterEach)
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 beforeEach(() => {
+  /* 처음 열면 오늘이 가운데다 — 목업의 9 · 10월이 보이게 오늘을 9/22 로 고정한다.
+     진짜 시계를 따르면 날이 갈수록 보이는 막대가 바뀌어 검사가 흔들린다 */
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 8, 22))
   /* 완료 숨기기는 처음이 켜짐이다 — 22줄 트리를 보는 검사들이라 끄고 시작한다 */
   localStorage.clear()
   localStorage.setItem('innoflow.tasks.hideDone', 'off')
@@ -48,11 +57,12 @@ describe('간트차트', () => {
 
   it('기간 미정 작업은 그리드에는 서고 막대는 없다', async () => {
     const w = await mountGantt()
-    /* 기간 미정(k18)만 막대가 없다. 스테이징 DB 구성(k22, 10월)은 막대가 있지만
-       보이는 폭(1200px) 밖이라 dhtmlx 가 그리지 않는다 — 그래서 그려진 막대는 20개다 */
+    /* 기간 미정(k18)만 막대가 없다 — 나머지 21줄은 다 막대가 선다(오늘 9/22 가 가운데라
+       10월의 스테이징 DB 구성(k22)까지 보이는 폭 안이다) */
     const bars = w.findAll('.gantt_task_line').map((b) => b.attributes('data-task-id'))
-    expect(bars).toHaveLength(20)
-    expect(bars).not.toContain('k22')
+    expect(bars).toHaveLength(21)
+    expect(bars).toContain('k22')
+    expect(bars).not.toContain('k18')
 
     const row = w.get('.gantt_grid_data [data-task-id="k18"]')
     expect(row.classes()).toContain('tg-row-unscheduled')
@@ -74,9 +84,6 @@ describe('간트차트', () => {
   })
 
   it('주말에 회색 띠가 깔리고 오늘 칸에 표가 난다', async () => {
-    /* 오늘은 진짜 시계를 본다 — 목업의 9월이 지나가도 테스트가 안 흔들리게 날을 고정한다 */
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date(2026, 8, 22))
     const w = await mountGantt()
 
     /* 주말 띠는 날짜 줄에만 — 위의 주 눈금까지 물들면 그 주가 통째로 주말로 보인다 */
@@ -85,7 +92,24 @@ describe('간트차트', () => {
     /* 오늘은 날짜 눈금 한 칸과 줄마다 한 칸 — 세로로 이어져 선이 된다 */
     expect(w.findAll('.gantt_scale_cell.tg-today')).toHaveLength(1)
     expect(w.findAll('.gantt_task_cell.tg-today')).toHaveLength(22)
-    vi.useRealTimers()
+  })
+
+  it('처음 열면 오늘이 타임라인 가운데에 온다', async () => {
+    const spy = vi.spyOn(Gantt, 'getGanttInstance')
+    await mountGantt()
+    const chart = spy.mock.results[0].value as GanttStatic
+    const today = new Date(2026, 8, 22)
+    const day = chart.posFromDate(new Date(2026, 8, 23)) - chart.posFromDate(today)
+    /* 보이는 타임라인 = 1200 - 그리드 462. 오늘 칸의 가운데가 그 가운데에 선다 */
+    const visible = 1200 - chart.config.grid_width
+    expect(chart.getScrollState().x).toBe(chart.posFromDate(today) + day / 2 - visible / 2)
+    spy.mockRestore()
+  })
+
+  it('작업이 다 지난 뒤에도 눈금이 오늘까지 늘어나 오늘 칸이 선다', async () => {
+    vi.setSystemTime(new Date(2026, 11, 15))
+    const w = await mountGantt()
+    expect(w.findAll('.gantt_scale_cell.tg-today')).toHaveLength(1)
   })
 
   it("4단 줄은 '+' 를 숨긴다 — 그 밑은 5단이다 (Q64)", async () => {

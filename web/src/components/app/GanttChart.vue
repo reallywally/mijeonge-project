@@ -3,8 +3,8 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Gantt, escapeHTML } from 'dhtmlx-gantt'
 import type { GanttStatic, Task as GanttTask } from 'dhtmlx-gantt'
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
-import { isoDay } from '@/lib/date'
-import { endToDue, weekLabel } from '@/lib/gantt'
+import { dayToDate, isoDay, shiftDays } from '@/lib/date'
+import { endToDue, ganttRange, weekLabel } from '@/lib/gantt'
 import type { GanttItem } from '@/lib/gantt'
 
 /* 간트차트 껍데기 — 작업 간트(TaskGantt)와 테스트 간트(TestGantt)가 같이 쓴다. 무엇을 그리는지는 모른다:
@@ -160,7 +160,39 @@ function setup(g: GanttStatic, el: HTMLElement) {
   })
 
   g.init(el)
-  g.parse({ data: props.items })
+  draw(g, props.items)
+}
+
+/* 눈금의 범위는 작업 기간에 오늘을 더해 잡는다 (lib/gantt ganttRange) */
+function applyRange(g: GanttStatic, items: GanttItem[]) {
+  const { start, end } = ganttRange(items, dayToDate(isoDay(new Date())))
+  g.config.start_date = start
+  g.config.end_date = end
+}
+
+/* 오늘을 타임라인 가운데로 — 처음 열 때와 [오늘]. 라이브러리의 showDate 는 화면 안에 들이기만 해서
+   오늘이 맨 끝에 붙어 선다 */
+function centerToday(g: GanttStatic) {
+  if (!host.value) return
+  const today = dayToDate(isoDay(new Date()))
+  const visible = host.value.clientWidth - g.config.grid_width
+  const day = g.posFromDate(shiftDays(today, 1)) - g.posFromDate(today)
+  g.scrollTo(Math.max(0, g.posFromDate(today) + day / 2 - visible / 2), null)
+}
+
+/* 처음 한 번만 가운데로 맞춘다 — 스냅샷이 늦게 오면 빈 줄로 한 번, 채워져서 한 번 그려진다.
+   그 뒤의 다시 그리기(고침 · 끌기)는 보던 자리를 지킨다 */
+let centered = false
+
+function draw(g: GanttStatic, items: GanttItem[]) {
+  g.clearAll()
+  g.parse({ data: items })
+  applyRange(g, items)
+  g.render()
+  if (!centered && items.length > 0) {
+    centerToday(g)
+    centered = true
+  }
 }
 
 onMounted(() => {
@@ -179,8 +211,7 @@ watch(
   () => props.items,
   (next) => {
     if (!chart || fromChart) return
-    chart.clearAll()
-    chart.parse({ data: next })
+    draw(chart, next)
   },
 )
 
@@ -191,7 +222,7 @@ watch(scale, () => {
 })
 
 function showToday() {
-  chart?.showDate(new Date())
+  if (chart) centerToday(chart)
 }
 </script>
 

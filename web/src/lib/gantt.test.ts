@@ -1,6 +1,15 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { dueToEnd, endToDue, rangeLabel, toGanttItems, toTestGanttItems, weekLabel } from './gantt'
+import {
+  dueToEnd,
+  endToDue,
+  ganttRange,
+  rangeLabel,
+  toGanttItems,
+  toTestGanttItems,
+  weekLabel,
+} from './gantt'
+import type { GanttItem } from './gantt'
 import { taskStatusLabel } from './task'
 import { useTaskStore } from '@/stores/task'
 import type { TestRow } from '@/types/domain'
@@ -116,5 +125,38 @@ describe('테스트를 간트가 먹는 모양으로', () => {
     expect(by('a').late).toBeUndefined()
     expect(by('u').unscheduled).toBe(true)
     expect(by('e').unscheduled).toBe(true)
+  })
+})
+
+describe('ganttRange — 눈금의 범위', () => {
+  const day = (m: number, d: number) => new Date(2026, m - 1, d)
+  const item = (start: Date, end: Date) =>
+    ({
+      id: 'a',
+      text: '',
+      key: '',
+      parent: '0',
+      status: 'todo',
+      statusLabel: '',
+      ownerName: null,
+      open: true,
+      start_date: start,
+      end_date: end,
+    }) as GanttItem
+
+  it('작업 기간에 앞 2주 · 뒤 4주 여유를 둔다', () => {
+    expect(ganttRange([item(day(9, 1), day(10, 1))], day(9, 15))).toEqual({
+      start: day(8, 18),
+      end: day(10, 29),
+    })
+  })
+
+  it('작업이 다 지났으면 오늘까지 늘린다 — 오늘 칸이 서야 가운데로 둘 수 있다', () => {
+    expect(ganttRange([item(day(9, 1), day(10, 1))], day(11, 1)).end).toEqual(day(11, 29))
+  })
+
+  it('작업이 아직 안 왔으면 오늘부터 — 기간 미정 · 빈 간트도 오늘을 둘러싼다', () => {
+    expect(ganttRange([item(day(12, 1), day(12, 10))], day(11, 1)).start).toEqual(day(10, 18))
+    expect(ganttRange([], day(11, 1))).toEqual({ start: day(10, 18), end: day(11, 29) })
   })
 })
