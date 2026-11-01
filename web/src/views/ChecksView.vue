@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-vue
 import AppShell from '@/components/app/AppShell.vue'
 import CheckStateLabel from '@/components/app/CheckStateLabel.vue'
 import CheckThreadChip from '@/components/app/CheckThreadChip.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import {
@@ -150,6 +151,9 @@ function openThread(id: string) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >안건 · 결정</TableHead
                 >
@@ -172,6 +176,7 @@ function openThread(id: string) {
                 class="hover:bg-transparent"
                 :data-check-received="c.id"
               >
+                <TableCell><IdCell :id="c.id" /></TableCell>
                 <TableCell class="min-w-0 py-2.5">
                   <div class="flex min-w-0">
                     <CheckThreadChip :thread-id="c.threadId" @open="openThread" />
@@ -199,7 +204,7 @@ function openThread(id: string) {
                 </TableCell>
               </TableRow>
               <TableRow v-if="checks.received.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="4" class="h-20 text-center text-sm text-muted-foreground">
+                <TableCell colspan="5" class="h-20 text-center text-sm text-muted-foreground">
                   받은 확인 요청이 없습니다.
                 </TableCell>
               </TableRow>

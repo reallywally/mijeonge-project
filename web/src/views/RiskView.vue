@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Loader2, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, Square } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import StatusPill, { type StatusTone } from '@/components/app/StatusPill.vue'
 import ChatRefText from '@/components/app/ChatRefText.vue'
 import PartChip from '@/components/app/PartChip.vue'
@@ -244,6 +245,9 @@ function openTask(id: string) {
               <Table>
                 <TableHeader>
                   <TableRow class="bg-muted/60 hover:bg-muted/60">
+                    <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                      >ID</TableHead
+                    >
                     <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                       >안건</TableHead
                     >
@@ -271,6 +275,7 @@ function openTask(id: string) {
                     data-risk-thread
                     @click="openThread(row.threadId)"
                   >
+                    <TableCell><IdCell :id="row.threadId" /></TableCell>
                     <TableCell class="min-w-0 py-2.5">
                       <div class="flex min-w-0 items-center gap-2.5">
                         <button
@@ -320,7 +325,7 @@ function openTask(id: string) {
                     >
                   </TableRow>
                   <TableRow v-if="risk.threads.length === 0" class="hover:bg-transparent">
-                    <TableCell colspan="5" class="h-20 text-center text-sm text-muted-foreground">
+                    <TableCell colspan="6" class="h-20 text-center text-sm text-muted-foreground">
                       눈에 띄는 안건 리스크가 없습니다.
                     </TableCell>
                   </TableRow>
@@ -341,6 +346,9 @@ function openTask(id: string) {
               <Table>
                 <TableHeader>
                   <TableRow class="bg-muted/60 hover:bg-muted/60">
+                    <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                      >ID</TableHead
+                    >
                     <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                       >작업</TableHead
                     >
@@ -366,6 +374,7 @@ function openTask(id: string) {
                     data-risk-task
                     @click="openTask(row.taskId)"
                   >
+                    <TableCell><IdCell :id="row.taskId" /></TableCell>
                     <TableCell class="min-w-0 py-2.5">
                       <div class="flex min-w-0 items-center gap-2.5">
                         <span class="shrink-0 text-xs text-muted-foreground">{{ row.key }}</span>
@@ -402,7 +411,7 @@ function openTask(id: string) {
                     }}</TableCell>
                   </TableRow>
                   <TableRow v-if="risk.tasks.length === 0" class="hover:bg-transparent">
-                    <TableCell colspan="5" class="h-20 text-center text-sm text-muted-foreground">
+                    <TableCell colspan="6" class="h-20 text-center text-sm text-muted-foreground">
                       안건과 어긋난 작업이 없습니다.
                     </TableCell>
                   </TableRow>

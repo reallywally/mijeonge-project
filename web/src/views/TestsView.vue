@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TestDetailDialog from '@/components/app/TestDetailDialog.vue'
@@ -554,6 +555,9 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
             <Table>
               <TableHeader>
                 <TableRow class="bg-muted/60 hover:bg-muted/60">
+                  <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                    >ID</TableHead
+                  >
                   <TableHead class="h-10 w-[72px] text-xs font-medium text-muted-foreground"
                     >번호</TableHead
                   >
@@ -588,6 +592,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                   :data-test-row="row.test.id"
                   @click="openTest(row.test.id)"
                 >
+                  <TableCell><IdCell :id="row.test.id" /></TableCell>
                   <TableCell class="text-xs text-muted-foreground">{{ row.test.key }}</TableCell>
                   <TableCell class="min-w-0">
                     <div class="flex items-center gap-2.5">
@@ -650,7 +655,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                 </TableRow>
                 <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
                   <TableCell
-                    colspan="8"
+                    colspan="9"
                     class="h-[110px] text-center text-sm text-muted-foreground"
                   >
                     {{

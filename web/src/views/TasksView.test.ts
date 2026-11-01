@@ -183,6 +183,19 @@ describe('작업 목록 화면', () => {
     const w = await mountView()
     expect(w.text()).toContain('9/8 ~ 9/15')
   })
+
+  it('선택 칸 바로 뒤가 ID 열이고, ID 를 눌러도 상세가 뜨지 않는다', async () => {
+    const w = await mountView()
+    expect(w.findAll('thead th')[1].text()).toBe('ID')
+    const row = w.findAll('tbody tr')[3]
+    const id = row.findAll('td')[1].get('button[data-id-cell]')
+    expect(id.attributes('title')).toBe(id.text())
+
+    await id.trigger('click')
+    await flushPromises()
+    expect(w.vm.$route.fullPath).toBe('/tasks?view=list')
+    expect(popupText()).not.toContain('최상위 작업 · 하위 4건')
+  })
 })
 
 describe('작업 상세 팝업', () => {

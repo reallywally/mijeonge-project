@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, Loader2, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -130,6 +131,9 @@ function open(id: string) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
                   >회의 날짜</TableHead
                 >
@@ -154,6 +158,7 @@ function open(id: string) {
                 :data-minutes-item="m.id"
                 @click="open(m.id)"
               >
+                <TableCell><IdCell :id="m.id" /></TableCell>
                 <TableCell
                   class="text-sm"
                   :class="m.meetingDate ? '' : 'text-muted-foreground'"
@@ -180,7 +185,7 @@ function open(id: string) {
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="6" class="h-[110px] text-center text-sm text-muted-foreground">
                   {{
                     minutes.list.length === 0
                       ? '아직 남긴 회의록이 없습니다.'

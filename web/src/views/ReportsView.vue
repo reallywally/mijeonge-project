@@ -4,6 +4,7 @@ import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { ChevronLeft, ChevronRight, FileChartColumn, Loader2, Square, X } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import ChatRefText from '@/components/app/ChatRefText.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import ReportFactsCards from '@/components/app/ReportFactsCards.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
@@ -210,6 +211,9 @@ function openTask(id: string) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">기간</TableHead>
                 <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
                   >만든 사람</TableHead
@@ -235,6 +239,7 @@ function openTask(id: string) {
                 :data-report-item="r.id"
                 @click="router.push(`/reports/${r.id}`)"
               >
+                <TableCell><IdCell :id="r.id" /></TableCell>
                 <TableCell class="min-w-0">
                   <button
                     type="button"
@@ -258,7 +263,7 @@ function openTask(id: string) {
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="6" class="h-[110px] text-center text-sm text-muted-foreground">
                   아직 만든 리포트가 없습니다.
                 </TableCell>
               </TableRow>

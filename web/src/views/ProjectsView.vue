@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import ProjectCreateDialog from '@/components/app/ProjectCreateDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -141,6 +142,9 @@ function onCreated() {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >프로젝트</TableHead
                 >
@@ -164,6 +168,7 @@ function onCreated() {
                 class="h-12 cursor-pointer"
                 @click="pickProject(row.project.id)"
               >
+                <TableCell><IdCell :id="row.project.id" /></TableCell>
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <Check
@@ -191,7 +196,7 @@ function onCreated() {
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="4" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
                   {{
                     data.allProjects.length > 0
                       ? '조회 조건에 맞는 프로젝트가 없습니다.'

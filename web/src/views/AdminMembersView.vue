@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { KeyRound, Loader2, Pencil, Plus, RotateCcw } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
+import IdCell from '@/components/app/IdCell.vue'
 import MemberAccountDialog from '@/components/app/MemberAccountDialog.vue'
 import MemberPasswordDialog from '@/components/app/MemberPasswordDialog.vue'
 import { Badge } from '@/components/ui/badge'
@@ -83,6 +84,9 @@ function openPassword(account: MemberAccount) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
+                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
+                  >ID</TableHead
+                >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">이름</TableHead>
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">이메일</TableHead>
                 <TableHead class="h-10 w-[128px] text-xs font-medium text-muted-foreground"
@@ -105,6 +109,7 @@ function openPassword(account: MemberAccount) {
                 class="h-12"
                 :class="a.active ? '' : 'text-muted-foreground'"
               >
+                <TableCell><IdCell :id="a.id" /></TableCell>
                 <TableCell class="text-sm">
                   <span class="flex items-center gap-2">
                     <span class="truncate" :class="a.active ? 'font-medium' : ''">{{
@@ -157,7 +162,7 @@ function openPassword(account: MemberAccount) {
                 </TableCell>
               </TableRow>
               <TableRow v-if="admin.accounts.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="6" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="7" class="h-[110px] text-center text-sm text-muted-foreground">
                   <span
                     v-if="admin.status === 'loading' || admin.status === 'idle'"
                     class="inline-flex items-center gap-1.5"
