@@ -522,7 +522,7 @@ async def patch_task(
     task = await load_task(session, task_id)
     before = task.status
     snapshot = _history_fields(task)
-    body_before = _body_shape(task.lines)
+    body_before = _body_text(task.lines)
     # exclude_unset — 안 보낸 것과 null 로 보낸 것을 가른다. ownerId: null 은 담당자 지우기다
     changes = payload.model_dump(exclude_unset=True, exclude={"body"})
     if "body" in payload.model_fields_set:
@@ -548,10 +548,11 @@ async def patch_task(
         record_status(session, task, before, actor_id, at)
     after = dict(_history_fields(task))
     changed = history_service.diff((field, old, after[field]) for field, old in snapshot)
-    # 본문은 바뀌었다는 것만 남긴다 — 줄 단위 비교는 나중 (docs/api/history.md '긴 글')
-    if _body_shape(task.lines) != body_before:
-        changed.append(history_service.change("body", None, None))
-    history_service.record_task(session, task, changed, actor_id, at)
+    # 보이는 글로 가른다 — 불릿의 체크 값처럼 글에 안 드러나는 차이는 이력에도 안 남긴다
+    body_after = _body_text(task.lines)
+    if body_after != body_before:
+        changed.append(history_service.change("body", body_before, body_after))
+    await history_service.record_task_body(session, task, changed, actor_id, at)
     await session.commit()
     return to_task(task, await comment_count(session, task.id), await status_since(session, task))
 
@@ -570,9 +571,17 @@ def _history_fields(task: Task) -> list[tuple[str, object]]:
     ]
 
 
-def _body_shape(lines: Sequence[TaskLine]) -> list[tuple[str, str, bool, int]]:
-    """본문이 바뀌었나를 가르는 값 — 줄 글 · 종류 · 체크 · 들여쓰기 · 순서. 줄 id 는 안 본다."""
-    return [(line.text, line.kind, line.done, line.level) for line in lines]
+def _body_text(lines: Sequence[TaskLine]) -> str | None:
+    """이력에 남기는 본문 글 (docs/api/history.md '본문') — 목업이 같은 글을 만든다."""
+    if not lines:
+        return None
+    return "\n".join(f"{'  ' * line.level}{_line_mark(line)}{line.text}" for line in lines)
+
+
+def _line_mark(line: TaskLine) -> str:
+    if line.kind == "bullet":
+        return "• "
+    return "☑ " if line.done else "☐ "
 
 
 def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:

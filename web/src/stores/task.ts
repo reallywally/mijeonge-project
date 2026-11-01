@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
-import { bodyChanged, change, diffChanges } from '@/lib/history'
+import { bodyChanged, bodyText, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
 import { inheritedPartId } from '@/lib/part'
 import { recall, remember } from '@/lib/storage'
@@ -381,17 +381,11 @@ export const useTaskStore = defineStore('task', () => {
     afterWrite(taskId, done)
   }
 
-  /* 목업의 본문 이력 — 서버는 모아 보낸 한 번을 한 줄로 남긴다. 목업은 타이머 없이, 바로 앞 고침과
-     BODY_DEBOUNCE_MS 안에 이어진 고침을 같은 한 번으로 본다 */
-  const mockBodyAt = new Map<string, number>()
-
+  /* 목업의 본문 이력 — 서버처럼 전 · 후 글을 남기고, 같은 사람이 이어 고친 것은 한 줄로 합친다 (Q65) */
   function logMockBody(task: Task, body: TaskLine[]) {
     if (!data.mock || !bodyChanged(task.body, body)) return
-    const now = Date.now()
-    const last = mockBodyAt.get(task.id)
-    mockBodyAt.set(task.id, now)
-    if (last === undefined || now - last > BODY_DEBOUNCE_MS)
-      logMock(task.id, [change('body', null, null)])
+    api.recordMockBody(task.id, bodyText(task.body), bodyText(body))
+    history.touched('task', task.id)
   }
 
   function setBody(taskId: string, body: TaskLine[]) {

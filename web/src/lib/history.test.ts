@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
+  BODY_MERGE_MS,
   bodyChanged,
+  bodyText,
   change,
   changeView,
+  clipLines,
   clipText,
+  EMPTY_BODY,
   diffChanges,
   historyView,
   MISSING,
+  mergesBody,
   orderChanges,
   type HistoryNames,
 } from '@/lib/history'
@@ -77,6 +82,50 @@ describe('칸 비교', () => {
     expect(bodyChanged(a, [line('하나', { level: 1 }), line('둘')])).toBe(true)
     expect(bodyChanged(a, [line('하나', { kind: 'bullet' }), line('둘')])).toBe(true)
     expect(bodyChanged(a, [line('하나')])).toBe(true)
+  })
+})
+
+describe('본문 값 · 합치기 (Q65)', () => {
+  it('줄마다 들여쓰기 + ☐ · ☑ · • + 글을 줄바꿈으로 잇고, 빈 본문은 null', () => {
+    expect(bodyText([])).toBeNull()
+    expect(
+      bodyText([
+        line('작업1'),
+        line('작업2', { done: true }),
+        line('메모', { kind: 'bullet', level: 1 }),
+        line('', { level: 2 }),
+      ]),
+    ).toBe('☐ 작업1\n☑ 작업2\n  • 메모\n    ☐ ')
+  })
+
+  const at = '2026-11-01T01:00:00Z'
+  const now = Date.parse(at)
+  const entry = (rest: Partial<HistoryEntry> = {}): HistoryEntry => ({
+    id: 'h1',
+    changedAt: at,
+    changedBy: 'u1',
+    backfilled: false,
+    changes: [change('body', null, '☐ 작업1')],
+    ...rest,
+  })
+
+  it('같은 사람 · 본문 한 칸 · 값 있는 줄 · 10분 안이면 합친다', () => {
+    expect(mergesBody(entry(), 'u1', now + BODY_MERGE_MS)).toBe(true)
+    expect(mergesBody(entry(), 'u1', now + BODY_MERGE_MS + 1)).toBe(false)
+    expect(mergesBody(undefined, 'u1', now)).toBe(false)
+    expect(mergesBody(entry(), 'u3', now)).toBe(false)
+    expect(mergesBody(entry({ changedBy: null }), null, now)).toBe(false)
+    expect(mergesBody(entry({ changes: [change('body', null, null)] }), 'u1', now)).toBe(false)
+    expect(
+      mergesBody(entry({ changes: [change('lineDone', false, true, '작업1')] }), 'u1', now),
+    ).toBe(false)
+    expect(
+      mergesBody(
+        entry({ changes: [change('status', 'todo', 'doing'), change('body', null, 'x')] }),
+        'u1',
+        now,
+      ),
+    ).toBe(false)
   })
 })
 
@@ -160,12 +209,29 @@ describe('화면 말', () => {
     expect(changeView('task', change('created', null, null), names, true).label).toBe(
       '등록(이전 기록 없음)',
     )
-    expect(task(change('body', null, null)).label).toBe('본문 고침')
+    /* 값이 없는 지난(2026-11-01 전) 본문 줄 */
+    expect(task(change('body', null, null))).toEqual({
+      field: 'body',
+      label: '본문 고침',
+      long: false,
+    })
     expect(test(change('steps', 3, 4)).label).toBe('단계 고침 (3 → 4개)')
     expect(test(change('steps', 2, 2)).label).toBe('단계 고침 (2개)')
     expect(task(change('lineDone', false, true, 'CI 러너 붙이기')).label).toBe('☑ CI 러너 붙이기')
     expect(task(change('lineDone', true, false, 'CI 러너 붙이기')).label).toBe('☐ CI 러너 붙이기')
     expect(test(change('basis', null, null)).label).toBe('기준 그대로 맞다 확인')
+  })
+
+  it('값이 있는 본문은 전 · 후 블록, 빈 쪽은 (내용 없음)', () => {
+    expect(task(change('body', null, '☐ 작업1\n☐ 작업2'))).toEqual({
+      field: 'body',
+      label: '본문',
+      from: EMPTY_BODY,
+      to: '☐ 작업1\n☐ 작업2',
+      long: true,
+      block: true,
+    })
+    expect(task(change('body', '• 메모', null))).toMatchObject({ from: '• 메모', to: EMPTY_BODY })
   })
 
   it('같은 상태를 다시 고른 것은 다시 고름으로', () => {
@@ -242,5 +308,14 @@ describe('화면 말', () => {
     expect(clipText('한 줄\n두 줄')).toEqual({ text: '한 줄 두 줄', clipped: true })
     const long = '가'.repeat(80)
     expect(clipText(long)).toEqual({ text: `${'가'.repeat(60)}…`, clipped: true })
+  })
+
+  it('여러 줄 글은 줄을 살려 앞 세 줄만, 긴 줄은 자른다', () => {
+    expect(clipLines('☐ 하나\n☐ 둘')).toEqual({ text: '☐ 하나\n☐ 둘', clipped: false })
+    expect(clipLines('1\n2\n3\n4\n5')).toEqual({ text: '1\n2\n3\n… 외 2줄', clipped: true })
+    expect(clipLines(`${'가'.repeat(80)}\n둘`)).toEqual({
+      text: `${'가'.repeat(60)}…\n둘`,
+      clipped: true,
+    })
   })
 })

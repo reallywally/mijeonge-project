@@ -5,7 +5,7 @@
 """
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -14,11 +14,12 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, delete, func, select, text
+from sqlalchemy import create_engine, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import test as test_route
 from app.models import Member, Task, TaskHistory, TestHistory
+from app.time import now
 from tests.conftest import ADMIN, AsMember
 from tests.test_minutes import minutes, task
 
@@ -135,7 +136,7 @@ async def test_patch_writes_changed_fields_in_table_order(client: httpx.AsyncCli
         ch("parentId", "k4", "k1"),
         ch("start", "2026-09-12", None),
         ch("due", "2026-09-15", "2026-09-20"),
-        ch("body", None, None),
+        ch("body", None, "☐ 계정 넷"),
     ]
 
 
@@ -157,28 +158,219 @@ async def test_patch_without_a_change_writes_nothing(client: httpx.AsyncClient) 
     assert await history(client, "tasks/k4") == before
 
 
-@pytest.mark.parametrize(
-    "tweak",
+K4_BODY = "\n".join(
     [
-        lambda line: line | {"text": "고친 글"},
-        lambda line: line | {"kind": "bullet"},
-        lambda line: line | {"done": not line["done"]},
-        lambda line: line | {"level": 1},
+        "☑ 서버 신청서 제출",
+        "☑ 우분투 최신 버전 설치",
+        "☐ mysql 설치와 계정 발급",
+        "☐ 개발자 접속 계정 4개 만들기",
+        "  • 방화벽은 정보보안팀에 따로 신청해야 한다 (사내 포털 > 보안)",
+        "  • 백업 정책은 기간계와 같은 주기로 맞추기로 했다",
+        "☐ CI 러너 붙이기",
+    ]
+)
+
+
+def line(text: str, kind: str = "check", done: bool = False, level: int = 0) -> dict[str, Any]:
+    return {"kind": kind, "text": text, "done": done, "level": level}
+
+
+async def k4_body(c: httpx.AsyncClient) -> list[dict[str, Any]]:
+    snapshot = (await c.get("/api/projects/p1/snapshot")).json()
+    body: list[dict[str, Any]] = next(row for row in snapshot["tasks"] if row["id"] == "k4")["body"]
+    return body
+
+
+@pytest.mark.parametrize(
+    ("tweak", "third"),
+    [
+        (lambda line: line | {"text": "고친 글"}, "☐ 고친 글"),
+        (lambda line: line | {"kind": "bullet"}, "• mysql 설치와 계정 발급"),
+        (lambda line: line | {"done": not line["done"]}, "☑ mysql 설치와 계정 발급"),
+        (lambda line: line | {"level": 1}, "  ☐ mysql 설치와 계정 발급"),
     ],
 )
-async def test_body_change_is_one_flag(client: httpx.AsyncClient, tweak: Any) -> None:
-    snapshot = (await client.get("/api/projects/p1/snapshot")).json()
-    body = next(row for row in snapshot["tasks"] if row["id"] == "k4")["body"]
+async def test_body_change_keeps_both_texts(
+    client: httpx.AsyncClient, tweak: Any, third: str
+) -> None:
+    body = await k4_body(client)
     body[2] = tweak(body[2])
     await client.patch("/api/tasks/k4", json={"body": body})
-    assert await last_changes(client, "tasks/k4") == [ch("body", None, None)]
+    after = K4_BODY.split("\n")
+    after[2] = third
+    assert await last_changes(client, "tasks/k4") == [ch("body", K4_BODY, "\n".join(after))]
 
 
 async def test_body_reorder_is_a_change(client: httpx.AsyncClient) -> None:
-    snapshot = (await client.get("/api/projects/p1/snapshot")).json()
-    body = next(row for row in snapshot["tasks"] if row["id"] == "k4")["body"]
+    body = await k4_body(client)
     await client.patch("/api/tasks/k4", json={"body": [body[1], body[0], *body[2:]]})
-    assert await last_changes(client, "tasks/k4") == [ch("body", None, None)]
+    lines = K4_BODY.split("\n")
+    after = "\n".join([lines[1], lines[0], *lines[2:]])
+    assert await last_changes(client, "tasks/k4") == [ch("body", K4_BODY, after)]
+
+
+async def test_body_text_marks_and_indent(client: httpx.AsyncClient) -> None:
+    task_id = await new_task(client)
+    body = [
+        line("열기"),
+        line("닫기", done=True),
+        line("메모", kind="bullet", level=1),
+        line("더 깊은 할 일", level=2),
+    ]
+    await client.patch(f"/api/tasks/{task_id}", json={"body": body})
+    assert await last_changes(client, f"tasks/{task_id}") == [
+        ch("body", None, "☐ 열기\n☑ 닫기\n  • 메모\n    ☐ 더 깊은 할 일")
+    ]
+    # 다 지우면 null
+    await client.patch(f"/api/tasks/{task_id}", json={"title": "비움", "body": []})
+    assert (await last_changes(client, f"tasks/{task_id}"))[-1] == ch(
+        "body", "☐ 열기\n☑ 닫기\n  • 메모\n    ☐ 더 깊은 할 일", None
+    )
+
+
+async def test_invisible_body_change_writes_nothing(client: httpx.AsyncClient) -> None:
+    """불릿의 체크 값처럼 글에 드러나지 않는 차이는 이력도 없다 — 보이는 것이 같으면 같다."""
+    task_id = await new_task(client)
+    await client.patch(f"/api/tasks/{task_id}", json={"body": [line("메모", kind="bullet")]})
+    before = await history(client, f"tasks/{task_id}")
+    await client.patch(
+        f"/api/tasks/{task_id}", json={"body": [line("메모", kind="bullet", done=True)]}
+    )
+    assert await history(client, f"tasks/{task_id}") == before
+
+
+# --- 본문 합치기 (Q65) ----------------------------------------------------------------------
+
+
+async def new_task(c: httpx.AsyncClient) -> str:
+    res = await c.post("/api/projects/p1/tasks", json={"title": "본문 쓰기"})
+    assert res.status_code == 201, res.json()
+    task_id: str = res.json()["id"]
+    return task_id
+
+
+async def type_body(c: httpx.AsyncClient, task_id: str, *texts: str) -> None:
+    res = await c.patch(f"/api/tasks/{task_id}", json={"body": [line(text) for text in texts]})
+    assert res.status_code == 200, res.json()
+
+
+async def age_last_line(session: AsyncSession, task_id: str, minutes: int) -> None:
+    last = await session.scalar(
+        select(func.max(TaskHistory.seq)).where(TaskHistory.task_id == task_id)
+    )
+    await session.execute(
+        update(TaskHistory)
+        .where(TaskHistory.seq == last)
+        .values(changed_at=now() - timedelta(minutes=minutes))
+    )
+    await session.commit()
+
+
+async def test_body_edits_merge_into_one_line(client: httpx.AsyncClient) -> None:
+    task_id = await new_task(client)
+    await type_body(client, task_id, "작업1")
+    first = (await history(client, f"tasks/{task_id}"))[-1]
+    await type_body(client, task_id, "작업1", "작업2")
+    rows = await history(client, f"tasks/{task_id}")
+    assert len(rows) == 2
+    assert rows[-1]["id"] == first["id"] and rows[-1]["changedBy"] == ADMIN
+    assert rows[-1]["changes"] == [ch("body", None, "☐ 작업1\n☐ 작업2")]
+    assert rows[-1]["changedAt"] >= first["changedAt"]
+
+
+async def test_other_person_starts_a_new_line(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    task_id = await new_task(client)
+    await type_body(client, task_id, "작업1")
+    await type_body(await as_member("u2"), task_id, "작업1", "작업2")
+    rows = await history(client, f"tasks/{task_id}")
+    assert [(row["changedBy"], row["changes"]) for row in rows[1:]] == [
+        (ADMIN, [ch("body", None, "☐ 작업1")]),
+        ("u2", [ch("body", "☐ 작업1", "☐ 작업1\n☐ 작업2")]),
+    ]
+
+
+async def test_other_line_between_starts_a_new_line(client: httpx.AsyncClient) -> None:
+    task_id = await new_task(client)
+    await type_body(client, task_id, "작업1")
+    await client.patch(f"/api/tasks/{task_id}", json={"status": "doing"})
+    await type_body(client, task_id, "작업1", "작업2")
+    rows = await history(client, f"tasks/{task_id}")
+    assert [row["changes"] for row in rows[1:]] == [
+        [ch("body", None, "☐ 작업1")],
+        [ch("status", "todo", "doing")],
+        [ch("body", "☐ 작업1", "☐ 작업1\n☐ 작업2")],
+    ]
+
+
+async def test_after_ten_minutes_a_new_line(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    task_id = await new_task(client)
+    await type_body(client, task_id, "작업1")
+    await age_last_line(session, task_id, 9)
+    await type_body(client, task_id, "작업1", "작업2")
+    await age_last_line(session, task_id, 11)
+    await type_body(client, task_id, "작업1", "작업2", "작업3")
+    rows = await history(client, f"tasks/{task_id}")
+    assert [row["changes"] for row in rows[1:]] == [
+        [ch("body", None, "☐ 작업1\n☐ 작업2")],
+        [ch("body", "☐ 작업1\n☐ 작업2", "☐ 작업1\n☐ 작업2\n☐ 작업3")],
+    ]
+
+
+async def test_reverting_removes_the_line(client: httpx.AsyncClient) -> None:
+    task_id = await new_task(client)
+    before = await history(client, f"tasks/{task_id}")
+    await type_body(client, task_id, "작업1")
+    await type_body(client, task_id)
+    assert await history(client, f"tasks/{task_id}") == before
+
+    await type_body(client, task_id, "작업1")
+    await client.patch(f"/api/tasks/{task_id}", json={"status": "doing"})
+    kept = await history(client, f"tasks/{task_id}")
+    await type_body(client, task_id, "작업1", "작업2")
+    await type_body(client, task_id, "작업1")
+    assert await history(client, f"tasks/{task_id}") == kept
+
+
+async def test_old_flag_line_is_not_merged(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """2026-11-01 전의 '바뀌었다' 줄(null · null)에는 이어 붙이지 않는다."""
+    task_id = await new_task(client)
+    session.add(
+        TaskHistory(
+            project_id="p1",
+            task_id=task_id,
+            changed_by=ADMIN,
+            changed_at=now(),
+            changes=[ch("body", None, None)],
+        )
+    )
+    await session.commit()
+    await type_body(client, task_id, "작업1")
+    rows = await history(client, f"tasks/{task_id}")
+    assert [row["changes"] for row in rows[1:]] == [
+        [ch("body", None, None)],
+        [ch("body", None, "☐ 작업1")],
+    ]
+
+
+async def test_body_with_other_fields_is_not_merged(client: httpx.AsyncClient) -> None:
+    task_id = await new_task(client)
+    await type_body(client, task_id, "작업1")
+    await client.patch(
+        f"/api/tasks/{task_id}", json={"title": "새 제목", "body": [line("작업1"), line("작업2")]}
+    )
+    await type_body(client, task_id, "작업1", "작업2", "작업3")
+    rows = await history(client, f"tasks/{task_id}")
+    assert [row["changes"] for row in rows[1:]] == [
+        [ch("body", None, "☐ 작업1")],
+        [ch("title", "본문 쓰기", "새 제목"), ch("body", "☐ 작업1", "☐ 작업1\n☐ 작업2")],
+        [ch("body", "☐ 작업1\n☐ 작업2", "☐ 작업1\n☐ 작업2\n☐ 작업3")],
+    ]
 
 
 async def test_line_done_only_when_it_changes(client: httpx.AsyncClient) -> None:

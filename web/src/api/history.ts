@@ -3,7 +3,7 @@ import { later, mockDb, mockSessionMemberId, mockWorld, requireMe } from '@/api/
 import { isMockMode } from '@/api/mode'
 import { canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
-import { orderChanges, type HistoryKind } from '@/lib/history'
+import { change, mergesBody, orderChanges, type HistoryKind } from '@/lib/history'
 import type { HistoryChange, HistoryEntry } from '@/types/domain'
 
 /* 변경 이력 (docs/api/history.md). 서버는 쓰기 요청마다 스스로 줄을 남기고 여기서는 읽기만 한다.
@@ -27,6 +27,27 @@ export function recordMockHistory(kind: HistoryKind, targetId: string, changes: 
     backfilled: false,
     changes: orderChanges(structuredClone(changes), kind),
   })
+}
+
+/**
+ * 목업의 본문 이력 — 본문만 바꾼 요청. 서버처럼 같은 사람이 이어 고친 것은 마지막 줄에 합친다
+ * (docs/api/history.md '본문'): from 은 그대로 · to 와 changedAt 만 새로, 되돌려 from == to 면 그 줄을 지운다
+ */
+export function recordMockBody(taskId: string, from: string | null, to: string | null) {
+  if (from === to) return
+  const rows = (mockDb().taskHistory[taskId] ??= [])
+  const last = rows.at(-1)
+  if (!mergesBody(last, mockSessionMemberId(), Date.now())) {
+    recordMockHistory('task', taskId, [change('body', from, to)])
+    return
+  }
+  const c = last!.changes[0]
+  if (c.from === to) {
+    rows.pop()
+    return
+  }
+  c.to = to
+  last!.changedAt = nowIso()
 }
 
 /** 못 보는 프로젝트의 것도 없는 것처럼 404 — require_scope 와 같은 경계 */

@@ -112,6 +112,32 @@ export function bodyChanged(a: TaskLine[], b: TaskLine[]) {
   )
 }
 
+/**
+ * 본문을 이력 값 글로 (docs/api/history.md '본문') — 줄마다 들여쓰기(level 당 공백 두 칸) + 표시 + 글,
+ * '\n' 으로 잇는다. 줄이 없으면 null. 서버가 남기는 값과 같아야 목업 이력이 서버처럼 보인다
+ */
+export function bodyText(lines: TaskLine[]): string | null {
+  if (lines.length === 0) return null
+  const mark = (l: TaskLine) => (l.kind === 'bullet' ? '• ' : l.done ? '☑ ' : '☐ ')
+  return lines.map((l) => `${'  '.repeat(l.level)}${mark(l)}${l.text}`).join('\n')
+}
+
+/** 본문 이력을 이어 고친 것으로 합치는 시간 — 마지막 줄이 이 안이면 그 줄을 고친다 */
+export const BODY_MERGE_MS = 10 * 60_000
+
+/**
+ * 본문만 바꾼 요청이 마지막 이력 줄에 합쳐지나 — ① 같은 사람 ② 칸이 body 하나뿐 ③ 값이 있는 줄
+ * ④ BODY_MERGE_MS 안. 값이 없는(2026-11-01 전) 줄과는 합치지 않는다
+ */
+export function mergesBody(last: HistoryEntry | undefined, by: string | null, now: number) {
+  /* 누가 바꿨는지 모르면 같은 사람인지도 모른다 — 서버도 합치지 않는다 */
+  if (by === null || !last || last.backfilled || last.changedBy !== by) return false
+  if (last.changes.length !== 1) return false
+  const c = last.changes[0]
+  if (c.field !== 'body' || (c.from === null && c.to === null)) return false
+  return now - Date.parse(last.changedAt) <= BODY_MERGE_MS
+}
+
 /* ── 화면 말 ─────────────────────────────────────────── */
 
 /** 지금의 이름을 찾는 길 — 못 찾으면 null(지웠거나 못 보는 것) */
@@ -127,6 +153,8 @@ export interface HistoryNames {
 }
 
 export const MISSING = '(삭제됨)'
+/** 빈 본문 */
+export const EMPTY_BODY = '(내용 없음)'
 /** 긴 글은 이만큼만 보이고 펼친다 */
 export const HISTORY_CLIP = 60
 
@@ -137,8 +165,10 @@ export interface HistoryChangeView {
   from?: string
   to?: string
   value?: string
-  /** 긴 글(테스트 내용 · 목적 · 사전조건 · 테스트 데이터 · 결과 메모) — 줄여 보이고 펼친다 */
+  /** 긴 글(테스트 내용 · 목적 · 사전조건 · 테스트 데이터 · 결과 메모 · 본문) — 줄여 보이고 펼친다 */
   long: boolean
+  /** 여러 줄 글(본문) — 전 · 후를 한 줄에 잇지 않고 블록으로 위아래에 놓는다 */
+  block?: boolean
 }
 
 export interface HistoryEntryView {
@@ -237,7 +267,16 @@ export function changeView(
     case 'created':
       return { ...base, label: backfilled ? '등록(이전 기록 없음)' : '등록' }
     case 'body':
-      return { ...base, label: '본문 고침' }
+      /* 2026-11-01 전 줄은 값 없이 '바뀌었다' 만 남았다(Q65) */
+      if (c.from === null && c.to === null) return { ...base, label: '본문 고침' }
+      return {
+        ...base,
+        label: '본문',
+        from: c.from === null ? EMPTY_BODY : str(c.from),
+        to: c.to === null ? EMPTY_BODY : str(c.to),
+        long: true,
+        block: true,
+      }
     case 'steps': {
       const n = (v: Value) => Number(v ?? 0)
       return {
@@ -294,4 +333,19 @@ export function clipText(text: string, max = HISTORY_CLIP): { text: string; clip
   if (flat.length <= max && flat === text) return { text, clipped: false }
   if (flat.length <= max) return { text: flat, clipped: true }
   return { text: `${flat.slice(0, max).trimEnd()}…`, clipped: true }
+}
+
+/** 여러 줄 글을 줄인다 — 줄바꿈은 살려 앞 maxLines 줄만, 줄마다 HISTORY_CLIP 자에서 자른다 */
+export function clipLines(
+  text: string,
+  maxLines = 3,
+  max = HISTORY_CLIP,
+): { text: string; clipped: boolean } {
+  const rows = text.split('\n')
+  const kept = rows
+    .slice(0, maxLines)
+    .map((r) => (r.length > max ? `${r.slice(0, max).trimEnd()}…` : r))
+  const clipped = rows.length > maxLines || kept.some((r, i) => r !== rows[i])
+  if (rows.length > maxLines) kept.push(`… 외 ${rows.length - maxLines}줄`)
+  return { text: kept.join('\n'), clipped }
 }
