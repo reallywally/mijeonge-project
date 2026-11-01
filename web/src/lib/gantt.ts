@@ -35,6 +35,18 @@ export interface GanttItem {
 /** 간트의 끝 날짜는 열린 구간이다 — 9/15 까지 하는 일은 9/16 에서 끝난다 */
 export const dueToEnd = (due: string) => shiftDays(dayToDate(due), 1)
 
+/** 눈금의 범위 — 작업 기간에 오늘을 더하고 앞으로 2주 · 뒤로 4주 여유를 둔다. 라이브러리가 작업 기간만으로
+ *  범위를 잡으면 작업이 다 지난 뒤에는 오늘 칸이 아예 없어 오늘을 가운데로 둘 수 없다 */
+export function ganttRange(items: GanttItem[], today: Date) {
+  let first = today
+  let last = today
+  for (const item of items) {
+    if (item.start_date && item.start_date < first) first = item.start_date
+    if (item.end_date && item.end_date > last) last = item.end_date
+  }
+  return { start: shiftDays(first, -14), end: shiftDays(last, 28) }
+}
+
 /** 막대를 놓은 자리를 다시 우리 날짜로 — 끝에서 하루를 뺀다 */
 export const endToDue = (end: Date) => isoDay(shiftDays(end, -1))
 
