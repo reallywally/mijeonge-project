@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowUp, Loader2, MessageCircle, RotateCcw, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Loader2, MessageCircle, Minus, RotateCcw, Square, X } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import ChatProposalCard from '@/components/app/ChatProposalCard.vue'
 import ChatRefText from '@/components/app/ChatRefText.vue'
@@ -13,7 +13,8 @@ import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 
 /* 오른쪽 아래 챗봇. App.vue 에 한 번만 둔다 — 화면을 옮겨도 대화가 이어진다.
-   창을 닫으면 대화가 끝난다 (API.md Q26). 모달이 아니라 열어 둔 채 뒤 화면을 쓸 수 있다. */
+   창을 닫으면 대화가 끝난다 (API.md Q26). 최소화는 창만 내린다 — 대화 · 쓰던 글 · 받는 중인 답이 그대로다.
+   모달이 아니라 열어 둔 채 뒤 화면을 쓸 수 있다. */
 const data = useDataStore()
 const chat = useChatStore()
 const taskStore = useTaskStore()
@@ -60,7 +61,14 @@ async function pickMention(index = picked.value) {
 async function show() {
   open.value = true
   await nextTick()
+  /* 최소화했다 다시 열면 이어지던 대화의 맨 아래부터 */
+  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
   focusInput()
+}
+
+function minimize() {
+  open.value = false
+  mention.value = null
 }
 
 function close() {
@@ -141,9 +149,16 @@ watch(
       size="icon-lg"
       class="fixed right-6 bottom-6 z-40 size-12 rounded-full shadow-lg"
       aria-label="AI 도우미 열기"
+      :title="chat.empty ? undefined : '이어지는 대화가 있습니다'"
       @click="show"
     >
       <MessageCircle class="size-5" />
+      <!-- 최소화해 둔 대화가 있다는 표 -->
+      <span
+        v-if="!chat.empty"
+        class="absolute top-0.5 right-0.5 size-3 rounded-full border-2 border-background bg-destructive"
+        data-chat-minimized
+      />
     </Button>
 
     <section
@@ -161,7 +176,10 @@ watch(
             {{ data.currentProject?.name }}의 안건 · 작업에서 찾아 답합니다
           </p>
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label="닫기" @click="close">
+        <Button variant="ghost" size="icon-sm" aria-label="최소화" title="최소화" @click="minimize">
+          <Minus />
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label="닫기" title="닫기" @click="close">
           <X />
         </Button>
       </header>
@@ -171,7 +189,7 @@ watch(
           <p class="text-sm text-muted-foreground">
             정해 둔 것, 아직 못 정한 것, 막힌 작업을 물어보세요.
             <br />
-            창을 닫으면 대화는 지워집니다.
+            창을 닫으면 대화는 지워집니다. 최소화하면 대화가 이어집니다.
           </p>
           <div class="flex flex-col items-start gap-2">
             <Button

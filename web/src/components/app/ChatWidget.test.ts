@@ -105,6 +105,44 @@ describe('챗봇 창', () => {
     await vi.runAllTimersAsync()
   })
 
+  it('최소화는 창만 내린다 — 대화 · 쓰던 글이 남고, 버튼에 이어지는 대화 표가 선다', async () => {
+    const w = await opened()
+    expect(w.find('[data-chat-minimized]').exists()).toBe(false)
+    await textarea(w).setValue('서버 OS 뭐로 정했지?')
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await vi.runAllTimersAsync()
+    await textarea(w).setValue('쓰던 글')
+
+    await w.get('button[aria-label="최소화"]').trigger('click')
+    expect(w.find('[role="dialog"]').exists()).toBe(false)
+    expect(useChatStore().lines).not.toEqual([])
+    expect(w.find('[data-chat-minimized]').exists()).toBe(true)
+
+    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    await nextTick()
+    expect(w.text()).toContain(chatReplies[0].answer.split('\n')[0])
+    expect((textarea(w).element as HTMLTextAreaElement).value).toBe('쓰던 글')
+  })
+
+  it('최소화 버튼은 닫기 왼쪽에 선다', async () => {
+    const w = await opened()
+    const labels = w.findAll('header button').map((b) => b.attributes('aria-label'))
+    expect(labels.slice(-2)).toEqual(['최소화', '닫기'])
+  })
+
+  it('최소화하는 동안에도 답은 계속 받는다', async () => {
+    const w = await opened()
+    await textarea(w).setValue('서버 OS 뭐로 정했지?')
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await w.get('button[aria-label="최소화"]').trigger('click')
+    await vi.runAllTimersAsync()
+
+    expect(useChatStore().receiving).toBe(false)
+    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    await nextTick()
+    expect(w.text()).toContain(chatReplies[0].answer.split('\n')[0])
+  })
+
   it('@ 를 치면 작업 목록이 뜨고, 화살표 · Enter 로 골라 @키 로 넣는다', async () => {
     const w = await opened()
     const el = textarea(w).element as HTMLTextAreaElement
