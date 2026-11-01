@@ -7,7 +7,7 @@
 """
 
 from collections.abc import Iterable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import not_found
 from app.models import Task, TaskHistory, TestCase, TestHistory, new_id
 from app.schemas.history import HistoryEntry, HistoryValue
+from app.time import as_utc
 
 Change = dict[str, HistoryValue]
+
+# 본문만 이어 고친 줄을 하나로 합치는 창 — 화면이 입력을 멈출 때마다 저장한다 (Q65)
+BODY_MERGE_WINDOW = timedelta(minutes=10)
 
 
 def _value(value: object) -> HistoryValue:
@@ -63,6 +67,48 @@ def record_task(
             backfilled=False,
         )
     )
+
+
+async def record_task_body(
+    session: AsyncSession,
+    task: Task,
+    changes: list[Change],
+    actor_id: str | None,
+    at: datetime,
+) -> None:
+    """작업 `PATCH` 의 한 줄 — 본문만 이어 고쳤으면 마지막 줄에 합친다 (Q65).
+
+    남길 칸이 `body` 하나뿐이고 마지막 줄이 같은 사람의 본문 한 칸 · 10분 안이면 그 줄의
+    `to` 와 시각만 고친다. 되돌려서 `from == to` 가 되면 그 줄을 지운다. 아니면 `record_task`.
+    """
+    if len(changes) == 1 and changes[0]["field"] == "body" and actor_id is not None:
+        last = await session.scalar(
+            select(TaskHistory)
+            .where(TaskHistory.task_id == task.id)
+            .order_by(TaskHistory.seq.desc())
+            .limit(1)
+        )
+        if last is not None and _merges_body(last, actor_id, at):
+            after = changes[0]["to"]
+            if last.changes[0]["from"] == after:
+                await session.delete(last)
+            else:
+                # JSON 칸은 안을 고쳐도 SQLAlchemy 가 모른다 — 새 리스트를 대입한다
+                last.changes = [{**last.changes[0], "to": after}]
+                last.changed_at = at
+            return
+    record_task(session, task, changes, actor_id, at)
+
+
+def _merges_body(last: TaskHistory, actor_id: str, at: datetime) -> bool:
+    if last.backfilled or last.changed_by != actor_id or len(last.changes) != 1:
+        return False
+    only = last.changes[0]
+    # 2026-11-01 전의 '바뀌었다' 줄(null · null)은 값이 없어 이어 붙일 수 없다.
+    # 빈 본문 → 빈 본문은 남지 않으니 둘 다 null 이면 옛 줄이다
+    if only.get("field") != "body" or (only.get("from") is None and only.get("to") is None):
+        return False
+    return at - as_utc(last.changed_at) <= BODY_MERGE_WINDOW
 
 
 def record_test(
