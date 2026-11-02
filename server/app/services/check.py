@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, not_found
 from app.models import CheckRequest, Entry, ProjectMember, Task, TaskThreadLink, Thread, new_id
 from app.schemas.check import CheckPendingCount, CheckRequestOut
-from app.services.access import Scope, active_project_members, forbidden
+from app.services.access import Scope, active_project_members, forbidden, live_project_ids
 from app.services.thread import DECIDING_KINDS
 from app.time import now
 
@@ -213,14 +213,17 @@ async def confirm_check(session: AsyncSession, check_id: str, scope: Scope) -> C
 
 
 async def pending_count(session: AsyncSession, member_id: str) -> CheckPendingCount:
-    """내 대기 수. 지금 부여된 프로젝트만 센다 — 시스템 관리자도 부여된 것만."""
+    """내 대기 수. 지금 부여된 프로젝트만 센다 — 시스템 관리자도 부여된 것만, 지운 것은 빼고."""
     rows = await session.execute(
         select(CheckRequest.project_id, func.count())
         .where(
             CheckRequest.recipient_id == member_id,
             CheckRequest.confirmed_at.is_(None),
             CheckRequest.project_id.in_(
-                select(ProjectMember.project_id).where(ProjectMember.member_id == member_id)
+                select(ProjectMember.project_id).where(
+                    ProjectMember.member_id == member_id,
+                    ProjectMember.project_id.in_(live_project_ids()),
+                )
             ),
         )
         .group_by(CheckRequest.project_id)

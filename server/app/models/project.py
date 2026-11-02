@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -18,10 +19,18 @@ from app.time import now
 
 # 시스템 역할과 프로젝트 역할은 둘 다 이 둘이다 — 권한 셋은 그 조합으로 나온다 (docs/api/auth.md)
 ROLES = ("admin", "user")
+# 준비 · 종료는 표시만 한다 — 쓰기를 막지 않는다 (docs/api/auth.md '프로젝트 관리')
+PROJECT_STATUSES = ("planned", "active", "closed")
 
 
 class Project(Base):
     __tablename__ = "project"
+    __table_args__ = (
+        CheckConstraint(f"status in {PROJECT_STATUSES}", name="status"),
+        CheckConstraint(
+            "start_date is null or end_date is null or end_date >= start_date", name="date_range"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(200))
@@ -37,6 +46,14 @@ class Project(Base):
     next_test_no: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1", default=1
     )
+    description: Mapped[str | None] = mapped_column(Text)
+    start_date: Mapped[date | None] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(16), default="active", server_default="active")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 소프트 삭제 — 레코드 · 접두사를 그대로 두어 되살릴 여지를 남긴다.
+    # 찍힌 프로젝트는 어디서도 없는 것처럼 보인다(access.py · project.py 가 거른다)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Member(Base):

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adminHome,
   canCreateProject,
   canDeleteComment,
   canEditComment,
   canManageAccounts,
   canManageProject,
   canOpen,
+  canOpenAdmin,
   canSeeProject,
   emptyProjectsHome,
   gradeOf,
@@ -102,6 +104,23 @@ describe('라우터 가드의 판단', () => {
     expect(safeNext('//evil.example')).toBe('/')
     expect(safeNext('/\\evil.example')).toBe('/')
     expect(safeNext('/login?next=/tasks')).toBe('/')
+  })
+})
+
+describe('관리자 페이지', () => {
+  it('시스템 관리자나 어느 프로젝트든 관리자면 들어간다', () => {
+    expect(canOpenAdmin(systemAdmin)).toBe(true)
+    expect(canOpenAdmin(projectAdmin)).toBe(true)
+    expect(canOpenAdmin(user)).toBe(false)
+    expect(canOpenAdmin(null)).toBe(false)
+  })
+
+  it('/admin 첫 화면 — 지금 프로젝트 관리 > 사용자 관리 > 다른 프로젝트 관리 > 업무 화면', () => {
+    expect(adminHome(projectAdmin, 'p1', ['p1', 'p2'])).toBe('/admin/projects/p1/settings')
+    expect(adminHome(systemAdmin, 'p2', ['p1', 'p2'])).toBe('/admin/projects/p2/settings')
+    expect(adminHome(systemAdmin, '', [])).toBe('/admin/members')
+    expect(adminHome(projectAdmin, 'p2', ['p1', 'p2'])).toBe('/admin/projects/p1/settings')
+    expect(adminHome(user, 'p1', ['p1'])).toBe('/tasks')
   })
 })
 

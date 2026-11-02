@@ -7,6 +7,17 @@
 import httpx
 
 # domain.ts 가 들고 있는 필드 그대로. 하나라도 어긋나면 화면이 조용히 빈칸을 그린다
+PROJECT_KEYS = {
+    "id",
+    "name",
+    "taskKeyPrefix",
+    # 프로젝트 관리 — docs/api/snapshot.md 'Project'
+    "description",
+    "startDate",
+    "endDate",
+    "status",
+    "closedAt",
+}
 THREAD_KEYS = {
     "id",
     "projectId",
@@ -58,11 +69,14 @@ TASK_KEYS = {
 async def test_projects(client: httpx.AsyncClient) -> None:
     res = await client.get("/api/projects")
     assert res.status_code == 200
-    assert res.json() == [
-        {"id": "p1", "name": "한화손보 차세대", "taskKeyPrefix": "HW"},
-        {"id": "p2", "name": "삼성생명 PAS", "taskKeyPrefix": "PAS"},
-        {"id": "p3", "name": "경영지원 파트", "taskKeyPrefix": "MG"},
+    rows = res.json()
+    assert [(p["id"], p["name"], p["taskKeyPrefix"]) for p in rows] == [
+        ("p1", "한화손보 차세대", "HW"),
+        ("p2", "삼성생명 PAS", "PAS"),
+        ("p3", "경영지원 파트", "MG"),
     ]
+    assert all(set(p) == PROJECT_KEYS for p in rows)
+    assert all(p["status"] == "active" and p["closedAt"] is None for p in rows)
 
 
 async def test_members(client: httpx.AsyncClient) -> None:
@@ -86,7 +100,7 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
         "parts",
         "partMembers",
     }
-    assert set(snap["project"]) == {"id", "name", "taskKeyPrefix"}
+    assert set(snap["project"]) == PROJECT_KEYS
     assert set(snap["threads"][0]) == THREAD_KEYS
     assert set(snap["entries"][0]) == ENTRY_KEYS
     assert set(snap["tasks"][0]) == TASK_KEYS

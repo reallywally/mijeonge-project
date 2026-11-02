@@ -68,8 +68,19 @@ def projects() -> list[Project]:
             last_task_no=22,
             # 시드 테스트가 HW-T1 ~ T8 을 썼다 — 다음은 HW-T9
             next_test_no=9,
+            # 설명 · 기간은 web 픽스처에 없다 — 프로젝트 관리 화면이 비어 보이지 않게 둘만 채운다
+            description="한화손해보험 차세대 시스템 구축 — 계약 · 보상 · 상품 업무 재구축",
+            start_date=date(2026, 7, 1),
+            end_date=date(2027, 6, 30),
         ),
-        Project(id="p2", name="삼성생명 PAS", task_key_prefix="PAS", last_task_no=2),
+        Project(
+            id="p2",
+            name="삼성생명 PAS",
+            task_key_prefix="PAS",
+            last_task_no=2,
+            description="상품 정의 엔진(PAS) 고도화",
+            start_date=date(2026, 9, 1),
+        ),
         Project(id="p3", name="경영지원 파트", task_key_prefix="MG", last_task_no=0),
     ]
 

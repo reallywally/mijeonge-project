@@ -129,7 +129,19 @@ export interface Project {
   name: string
   /** 작업 키의 접두사 — 'HW' 면 그 프로젝트의 작업이 HW-1 · HW-2 … 가 된다. 프로젝트끼리 겹치지 않는다 */
   taskKeyPrefix: string
+  /** 여러 줄 설명 · 2000자 이하. 없으면 null */
+  description: string | null
+  /** YYYY-MM-DD. 둘 다 있으면 endDate >= startDate (아니면 400 PROJECT_DATE_RANGE) */
+  startDate: string | null
+  endDate: string | null
+  /** 표시만 — 어느 상태든 쓰기를 막지 않는다. 서버 목록은 active → planned → closed */
+  status: ProjectStatus
+  /** closed 가 된 때(ISO UTC). 다른 상태면 null */
+  closedAt: string | null
 }
+
+/** 화면 이름 준비 · 진행 · 종료. 새 프로젝트는 active */
+export type ProjectStatus = 'planned' | 'active' | 'closed'
 
 export interface Thread {
   id: string
@@ -440,15 +452,22 @@ export interface TaskPatch {
   partId?: string | null
 }
 
-/** PATCH /api/projects/{projectId} — 프로젝트 관리자 · 시스템 관리자 */
+/** PATCH /api/projects/{projectId} — 프로젝트 관리자 · 시스템 관리자. 보낸 것만 바뀌고 null 은 지운다 */
 export interface ProjectPatch {
-  name: string
+  name?: string
+  description?: string | null
+  startDate?: string | null
+  endDate?: string | null
+  status?: ProjectStatus
 }
 
 /** 프로젝트를 등록할 때 넘기는 것. 접두사를 비우면 서버가 만들어 준다 (API.md Q20 · Q24) */
 export interface ProjectInput {
   name: string
   taskKeyPrefix?: string
+  description?: string | null
+  startDate?: string | null
+  endDate?: string | null
 }
 
 /** 안건 이력 한 줄을 남길 때 넘기는 것 — POST /api/threads/{id}/entries */

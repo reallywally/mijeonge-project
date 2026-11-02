@@ -52,7 +52,7 @@ Windows 에서 깐 `node_modules` 는 WSL node 로 못 쓴다(네이티브 바�
 | `src/api/*.ts` | fetch 래퍼(`ApiError` — code · message · detail · status)와 도메인별 함수. 스냅샷 키 → 스토어 이름 매핑도 여기 |
 | `src/stores/*.ts` | Pinia. `data` 가 부팅(프로젝트 · 멤버 → 스냅샷)과 쓰기 동기화(낙관적 반영 · 레코드별 마지막 응답만 · 실패 시 스냅샷으로 되돌리기)를 맡고, 목업 모드면 픽스처로 돈다 |
 | `src/components/ui/*` | shadcn-vue 컴포넌트 (직접 고쳐도 되는 사본) |
-| `src/components/app/*` | 이 앱 것 — AppShell(3분할 레이아웃), ThreadStateBadge |
+| `src/components/app/*` | 이 앱 것 — AppShell(업무 화면 틀), AdminShell(관리자 페이지 틀, `/admin/*`), ThreadStateBadge |
 | `src/views/*` | 화면 |
 
 ## shadcn-vue 컴포넌트 추가하기

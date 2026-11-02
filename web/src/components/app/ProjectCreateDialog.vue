@@ -11,10 +11,11 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { taskKeyPrefixError } from '@/lib/project'
+import { Textarea } from '@/components/ui/textarea'
+import { PROJECT_DESCRIPTION_MAX, projectDateRangeError, taskKeyPrefixError } from '@/lib/project'
 import { useDataStore } from '@/stores/data'
 
-/* 프로젝트 등록 — 목록 위 팝업. 접두사는 선택이고, 비우면 겹치지 않는 값이 붙는다 (API.md Q20) */
+/* 프로젝트 등록 — 목록 위 팝업. 접두사 · 설명 · 기간은 선택이고, 접두사를 비우면 겹치지 않는 값이 붙는다 (API.md Q20) */
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ (e: 'created', id: string): void }>()
 
@@ -22,14 +23,27 @@ const data = useDataStore()
 
 const name = ref('')
 const prefix = ref('')
+const description = ref('')
+const startDate = ref('')
+const endDate = ref('')
 const saving = ref(false)
 
 watch(open, (isOpen) => {
   if (isOpen) {
     name.value = ''
     prefix.value = ''
+    description.value = ''
+    startDate.value = ''
+    endDate.value = ''
   }
 })
+
+const descriptionError = computed(() =>
+  description.value.length > PROJECT_DESCRIPTION_MAX
+    ? `설명은 ${PROJECT_DESCRIPTION_MAX}자 이하로 적어 주세요.`
+    : null,
+)
+const rangeError = computed(() => projectDateRangeError(startDate.value, endDate.value))
 
 const takenPrefixes = computed(() => data.allProjects.map((p) => p.taskKeyPrefix))
 const prefixError = computed(() => taskKeyPrefixError(prefix.value, takenPrefixes.value))
@@ -44,14 +58,23 @@ const keyPreview = computed(() => {
 })
 
 const canSubmit = computed(
-  () => name.value.trim() !== '' && prefixError.value === null && !saving.value,
+  () =>
+    name.value.trim() !== '' &&
+    prefixError.value === null &&
+    descriptionError.value === null &&
+    rangeError.value === null &&
+    !saving.value,
 )
 
 /* 팝업을 여기서 닫지 않는다 — 주소가 팝업을 여닫으므로 만든 뒤 어디로 갈지는 화면이 정한다 */
 async function submit() {
   if (!canSubmit.value) return
   saving.value = true
-  const id = await data.addProject(name.value.trim(), prefix.value)
+  const id = await data.addProject(name.value.trim(), prefix.value, {
+    description: description.value,
+    startDate: startDate.value,
+    endDate: endDate.value,
+  })
   saving.value = false
   if (id) emit('created', id)
 }
@@ -70,7 +93,12 @@ async function submit() {
       <div class="flex flex-col gap-3.5 py-1">
         <div class="flex flex-col gap-2">
           <Label>이름</Label>
-          <Input v-model="name" placeholder="예: 한화손보 차세대" @keyup.enter="submit" />
+          <Input
+            v-model="name"
+            aria-label="프로젝트 이름"
+            placeholder="예: 한화손보 차세대"
+            @keyup.enter="submit"
+          />
         </div>
 
         <div class="flex flex-col gap-2">
@@ -93,6 +121,47 @@ async function submit() {
           </p>
           <p v-else class="text-xs leading-relaxed text-muted-foreground text-pretty">
             대화에서 작업을 한 마디로 가리키는 값입니다. 비워 두면 저장할 때 자동으로 붙습니다.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <Label for="project-create-description">설명 (선택)</Label>
+          <Textarea
+            id="project-create-description"
+            v-model="description"
+            rows="3"
+            placeholder="무엇을 하는 프로젝트인지"
+            :aria-invalid="!!descriptionError"
+          />
+          <p v-if="descriptionError" class="text-xs leading-relaxed text-destructive">
+            {{ descriptionError }}
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <Label>기간 (선택)</Label>
+          <div class="flex items-center gap-2">
+            <Input
+              v-model="startDate"
+              type="date"
+              aria-label="시작일"
+              class="w-[170px]"
+              :class="startDate ? '' : 'text-muted-foreground'"
+              :max="endDate || undefined"
+            />
+            <span class="text-sm text-muted-foreground">~</span>
+            <Input
+              v-model="endDate"
+              type="date"
+              aria-label="종료일"
+              class="w-[170px]"
+              :class="endDate ? '' : 'text-muted-foreground'"
+              :min="startDate || undefined"
+              :aria-invalid="!!rangeError"
+            />
+          </div>
+          <p v-if="rangeError" class="text-xs leading-relaxed text-destructive" data-range-error>
+            {{ rangeError }}
           </p>
         </div>
       </div>

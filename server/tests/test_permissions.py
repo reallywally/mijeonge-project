@@ -124,7 +124,8 @@ async def test_project_admin_manages_only_their_project(as_member: AsMember) -> 
     u1 = await as_member("u1")
     renamed = await u1.patch("/api/projects/p1", json={"name": " 한화손보 차세대 (2기) "})
     assert renamed.status_code == 200
-    assert renamed.json() == {"id": "p1", "name": "한화손보 차세대 (2기)", "taskKeyPrefix": "HW"}
+    assert renamed.json()["name"] == "한화손보 차세대 (2기)"
+    assert renamed.json()["taskKeyPrefix"] == "HW"
 
     promoted = await u1.put("/api/projects/p1/members/u2", json={"role": "admin"})
     assert promoted.status_code == 200

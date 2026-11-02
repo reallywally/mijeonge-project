@@ -13,11 +13,11 @@ import {
   taskThreadLinks,
   threads,
 } from '@/fixtures'
-import { canCreateProject, canManageProject, canSeeProject } from '@/lib/access'
+import { canSeeProject } from '@/lib/access'
 import { CC_MAX } from '@/lib/check'
 import { assignableMembers, memberLabel } from '@/lib/member'
 import { toastError } from '@/lib/notify'
-import { makeTaskKeyPrefix } from '@/lib/project'
+import { makeTaskKeyPrefix, orderProjects } from '@/lib/project'
 import { recall, remember } from '@/lib/storage'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -26,7 +26,9 @@ import type {
   Part,
   PartMember,
   Project,
+  ProjectInput,
   ProjectMember,
+  ProjectPatch,
   ProjectRole,
   Task,
   TaskThreadLink,
@@ -48,8 +50,6 @@ function grantsOfFixtures(): Record<string, ProjectMember[]> {
     (byProject[g.projectId] ??= []).push({ memberId: g.memberId, role: g.role })
   return byProject
 }
-
-const forbidden = () => new ApiError(403, { code: 'FORBIDDEN', message: '권한이 없습니다.' })
 
 export const useDataStore = defineStore('data', () => {
   const mock = api.isMockMode()
@@ -139,10 +139,9 @@ export const useDataStore = defineStore('data', () => {
 
   let booting: Promise<void> | null = null
 
-  /** 목업 — 픽스처를 새로 들이고 서버처럼 내가 볼 수 있는 프로젝트만 남긴다 */
+  /** 목업 — 픽스처를 새로 들이고, 프로젝트는 목업 서버에서 받는다(내가 볼 수 있고 지우지 않은 것 · 진행 → 준비 → 종료) */
   async function bootMock() {
-    const me = auth.me
-    allProjects.value = structuredClone(projects).filter((p) => canSeeProject(me, p.id))
+    allProjects.value = await api.fetchProjects()
     allThreads.value = structuredClone(threads)
     allEntries.value = structuredClone(entries)
     allTasks.value = structuredClone(tasks)
@@ -240,31 +239,23 @@ export const useDataStore = defineStore('data', () => {
 
   /**
    * 프로젝트를 만들고 그 자리에서 고른다. 접두사를 비우면 겹치지 않는 값이 붙는다.
-   * 실패하면 알리고 null 이다.
+   * 설명 · 기간은 선택이고 비우면 싣지 않는다. 실패하면 알리고 null 이다.
    */
-  async function addProject(name: string, taskKeyPrefix: string): Promise<string | null> {
-    if (mock) {
-      /* 목업도 서버처럼 시스템 관리자만 — 메뉴를 숨긴 것은 편의다 */
-      if (!canCreateProject(auth.me)) {
-        toastError(forbidden())
-        return null
-      }
-      const id = nextId('np')
-      const wanted = taskKeyPrefix.trim().toUpperCase()
-      const prefix = wanted || makeTaskKeyPrefix(allProjects.value.map((p) => p.taskKeyPrefix))
-      allProjects.value.push({ id, name, taskKeyPrefix: prefix })
-      projectMembers.value[id] = []
-      nextTaskNo.value[id] = 1
-      currentProjectId.value = id
-      return id
-    }
+  async function addProject(
+    name: string,
+    taskKeyPrefix: string,
+    extra: Pick<ProjectInput, 'description' | 'startDate' | 'endDate'> = {},
+  ): Promise<string | null> {
+    const input: ProjectInput = { name, taskKeyPrefix: taskKeyPrefix.trim().toUpperCase() }
+    const description = extra.description?.trim()
+    if (description) input.description = description
+    if (extra.startDate) input.startDate = extra.startDate
+    if (extra.endDate) input.endDate = extra.endDate
     try {
-      const project = await api.createProject({
-        name,
-        taskKeyPrefix: taskKeyPrefix.trim().toUpperCase(),
-      })
+      const project = await api.createProject(input)
       allProjects.value.push(project)
       projectMembers.value[project.id] = []
+      if (mock) nextTaskNo.value[project.id] = 1
       setProject(project.id)
       return project.id
     } catch (e) {
@@ -299,28 +290,48 @@ export const useDataStore = defineStore('data', () => {
     }
   }
 
-  /** 이름 고치기 — 프로젝트 관리자 · 시스템 관리자. 실패하면 알리고 false */
+  function putProject(project: Project) {
+    const at = allProjects.value.findIndex((p) => p.id === project.id)
+    if (at >= 0) allProjects.value[at] = project
+  }
+
+  /**
+   * 이름 · 설명 · 기간 · 상태 — 프로젝트 관리자 · 시스템 관리자. 보낸 것만 바뀐다.
+   * 실패하면 ApiError 를 던진다 — 기간 오류(PROJECT_DATE_RANGE)를 칸 옆에 띄우는 것은 화면 몫이다
+   */
+  async function updateProject(projectId: string, patch: ProjectPatch): Promise<Project> {
+    const project = await api.patchProject(projectId, patch)
+    putProject(project)
+    return project
+  }
+
+  /** 이름만 고치기. 실패하면 알리고 false */
   async function renameProject(projectId: string, name: string): Promise<boolean> {
-    const at = allProjects.value.findIndex((p) => p.id === projectId)
     const trimmed = name.trim()
-    if (at < 0 || !trimmed) return false
-    if (mock) {
-      if (!canManageProject(auth.me, projectId)) {
-        toastError(forbidden())
-        return false
-      }
-      allProjects.value[at] = { ...allProjects.value[at], name: trimmed }
-      return true
-    }
+    if (!trimmed || !allProjects.value.some((p) => p.id === projectId)) return false
     try {
-      const project = await api.patchProject(projectId, { name: trimmed })
-      const now = allProjects.value.findIndex((p) => p.id === projectId)
-      if (now >= 0) allProjects.value[now] = project
+      await updateProject(projectId, { name: trimmed })
       return true
     } catch (e) {
       toastError(e)
       return false
     }
+  }
+
+  /**
+   * 지우기 — 시스템 관리자만(소프트 삭제). 목록에서 걷고, 지금 프로젝트였으면 남은 것(진행 → 준비 → 종료 순 첫째)으로 옮긴다.
+   * 남은 게 없으면 currentProjectId 가 '' 이 된다 — 갈 곳은 화면이 정한다. 실패하면 알리고 false
+   */
+  async function deleteProject(projectId: string): Promise<boolean> {
+    try {
+      await api.deleteProject(projectId)
+    } catch (e) {
+      toastError(e)
+      return false
+    }
+    auth.setProjectRole(projectId, null)
+    forgetProject(projectId)
+    return true
   }
 
   /** 프로젝트에 사람을 부여하거나 역할을 바꾼다 (멱등) */
@@ -368,7 +379,7 @@ export const useDataStore = defineStore('data', () => {
     allProjects.value = allProjects.value.filter((p) => p.id !== projectId)
     delete projectMembers.value[projectId]
     if (currentProjectId.value !== projectId) return
-    const next = allProjects.value[0]
+    const next = orderProjects(allProjects.value)[0]
     if (next) setProject(next.id)
     else currentProjectId.value = ''
   }
@@ -531,6 +542,8 @@ export const useDataStore = defineStore('data', () => {
     reloadSnapshot,
     setProject,
     addProject,
+    updateProject,
+    deleteProject,
     suggestTaskKeyPrefix,
     takeTaskKey,
     save,

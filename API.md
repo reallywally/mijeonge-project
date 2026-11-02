@@ -42,7 +42,7 @@
 | 스코프 | 경로에 프로젝트를 둔다 — `/api/projects/{projectId}/...`. 프로젝트 목록만 예외 |
 | 인증 | **세션 쿠키** — `/api/health` · `POST /api/auth/login` 말고는 전부 로그인이 필요하다. 권한은 시스템 관리자 · 프로젝트 관리자 · 일반 사용자 셋 (`docs/api/auth.md`, 8단계 · 구현) |
 | 집계 타입 | `ThreadRow` · `ThreadDetail` · `TaskRow` 는 서버가 주지 않는다 — 프론트 스토어가 계산한다 |
-| 빈 값 | 빈 문자열은 `''`, 빈 배열은 `[]`. **`null` 은 정해진 여섯 이름에서만 나간다** — `docs/api/snapshot.md` 의 '빈 값은 `null` 이 아니다' (Q17 닫힘) |
+| 빈 값 | 빈 문자열은 `''`, 빈 배열은 `[]`. **`null` 은 정해진 이름에서만 나간다** — `docs/api/snapshot.md` 의 '빈 값은 `null` 이 아니다' (Q17 닫힘) |
 | 에러 | HTTP 상태 + 본문 `{ code, message, detail? }` 한 가지 — 아래 '에러' (Q14 닫힘) |
 
 ## 에러
@@ -68,6 +68,7 @@
 | 404 | `PROJECT_NOT_FOUND` | 없는 `projectId` 로 스냅샷을 부를 때 |
 | 422 | `VALIDATION_ERROR` | 요청이 스키마와 안 맞을 때. `detail` 에 필드별 메시지 |
 | 409 | `PROJECT_PREFIX_TAKEN` | 이미 쓰는 `taskKeyPrefix` 로 프로젝트를 만들 때. 접두사는 프로젝트 사이에 유일하다 (Q20) |
+| 400 | `PROJECT_DATE_RANGE` | 프로젝트의 `endDate` 가 `startDate` 보다 앞설 때 — 등록 · 수정 모두, 수정은 바뀐 뒤의 값으로 본다 (`docs/api/auth.md` '프로젝트 관리') |
 | 500 | `INTERNAL_ERROR` | 그 밖. `message` 는 고정된 한국어 한 줄이고 속사정을 싣지 않는다 |
 
 쓰기 API 의 `code` 는 아래와 같다. 화면이 갈라 볼 수 있게 '없다' 와 '규칙에 어긋난다' 를 나눠 둔다.
@@ -102,8 +103,8 @@
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/health` | 앱이 떠 있는지 | `{ status }` | 구현 |
-| GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18) | `Project[]` (Q9 로 `taskKeyPrefix` 가 늘었다) | 연결 |
-| POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18) | `Project` · 201 | 연결 |
+| GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18). **지운 프로젝트는 빠지고, `active` → `planned` → `closed`**(그 안은 전과 같은 순서) | `Project[]` (Q9 로 `taskKeyPrefix`, 2026-11-02 `description` · `startDate` · `endDate` · `status` · `closedAt` 이 늘었다) | 연결 (2026-11-02 늘림 — 구현, 같은 날 `status` 에 `planned` 늘림 — 구현) |
+| POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18). `description` · `startDate` · `endDate` 는 선택 | `Project` · 201 | 연결 (2026-11-02 늘림 — 구현) |
 | GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 연결 |
 | GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 연결 |
 
@@ -149,7 +150,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | PUT | `/api/admin/members/{memberId}/password` | 비밀번호 새로 걸기 (시스템 관리자) | 204 | 구현 |
 | GET | `/api/projects/{projectId}/members` | 프로젝트에 부여된 사람 · 역할 | `ProjectMember[]` | 구현 |
 | PUT · DELETE | `/api/projects/{projectId}/members/{memberId}` | 부여 · 역할 변경 · 빼기 (프로젝트 관리자 · 시스템 관리자) | `ProjectMember` · 204 | 구현 |
-| PATCH | `/api/projects/{projectId}` | 프로젝트 이름 수정 (프로젝트 관리자 · 시스템 관리자) | `Project` | 구현 |
+| PATCH | `/api/projects/{projectId}` | 프로젝트 정보 수정 — `name` · `description` · `startDate` · `endDate` · `status`(`planned` · `active` · `closed`), 보낸 필드만. 설명 · 날짜의 null 은 비우기 (프로젝트 관리자 · 시스템 관리자, `docs/api/auth.md` '프로젝트 관리') | `Project` | 구현 (2026-11-02 늘림) |
+| DELETE | `/api/projects/{projectId}` | 프로젝트 삭제 — **소프트 삭제**. 그 뒤로 그 프로젝트를 가리키는 모든 경로가 404 (시스템 관리자만) | 204 | 구현 |
 
 파트(`server/PLAN.md` 9단계 · `web/PLAN.md` 9단계). **보기 범위지 권한이 아니다** — 거르는 것은 화면이다. 모양은 `docs/api/part.md`.
 **이미 있는 API 도 바뀐다** — 작업 · 안건 등록 · 수정의 `partId`, 스냅샷의 `parts` · `partMembers`.

@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppShell from '@/components/app/AppShell.vue'
-import { canManageProject } from '@/lib/access'
+import AdminShell from '@/components/app/AdminShell.vue'
+import {
+  canManageProject,
+  emptyProjectsHome,
+  projectPartsPath,
+  projectSettingsPath,
+} from '@/lib/access'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 
-/* 프로젝트 관리 · 파트 관리가 같이 쓰는 틀. 주소의 프로젝트가 곧 고른 프로젝트다 —
+/* 프로젝트 관리 · 파트 관리가 같이 쓰는 틀(관리자 페이지 안). 주소의 프로젝트가 곧 고른 프로젝트다 —
    옆의 프로젝트 선택을 바꾸면 그 프로젝트의 같은 관리 화면으로 옮기고,
-   나를 내리거나 뺐으면 이 화면에 있을 수 없다 */
+   나를 내리거나 뺐으면 이 화면에 있을 수 없다 — /admin 이 다음에 열 수 있는 관리 화면(없으면 업무 화면)을 고른다.
+   프로젝트를 지웠거나 나를 빼서 목록에서 사라졌으면 /admin 으로, 남은 프로젝트가 없으면 빈 상태의 첫 화면으로 */
 const props = defineProps<{
   section: 'settings' | 'parts'
   label: string
@@ -36,9 +42,13 @@ watch(
 watch(
   () => data.currentProjectId,
   (id) => {
-    if (id === projectId.value) return
+    if (id === projectId.value || !project.value) return
+    if (!id || !canManageProject(auth.me, id)) {
+      void router.replace('/admin')
+      return
+    }
     void router.replace(
-      id && canManageProject(auth.me, id) ? `/projects/${id}/${props.section}` : '/tasks',
+      props.section === 'settings' ? projectSettingsPath(id) : projectPartsPath(id),
     )
   },
 )
@@ -46,13 +56,21 @@ watch(
 watch(
   () => canManageProject(auth.me, projectId.value),
   (can) => {
-    if (!can) void router.replace('/tasks')
+    if (!can && project.value) void router.replace('/admin')
+  },
+)
+
+watch(
+  () => project.value !== null,
+  (has, had) => {
+    if (had && !has)
+      void router.replace(data.allProjects.length > 0 ? '/admin' : emptyProjectsHome(auth.me))
   },
 )
 </script>
 
 <template>
-  <AppShell>
+  <AdminShell>
     <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">{{ label }}</span>
       <span v-if="meta" class="text-xs text-muted-foreground">{{ meta }}</span>
@@ -64,5 +82,5 @@ watch(
       </div>
       <slot v-else :project="project" />
     </div>
-  </AppShell>
+  </AdminShell>
 </template>

@@ -335,8 +335,8 @@ memo의 "안건 상세에서는 맵핑 불가"는 **화면 권한**이지 모델
 
 | | 결정 | 왜 |
 | --- | --- | --- |
-| 주소 | `/projects/:projectId/settings` · `/projects/:projectId/parts?part=<id>`. 옛 `/members` 는 settings 로 redirect. 둘 다 `access: 'projectAdmin'` | 고른 파트가 주소에 있어야 새로고침 · 공유가 산다. 옛 링크는 살린다 |
-| 공통 틀 | `components/app/ProjectAdminFrame.vue` — 주소의 프로젝트 = 고른 프로젝트 맞추기, 옆에서 프로젝트를 바꾸면 같은 관리 화면으로, 권한을 잃으면 `/tasks` | 두 화면이 같은 감시를 따로 들면 한쪽만 고쳐진다 |
+| 주소 | `/projects/:projectId/settings` · `/projects/:projectId/parts?part=<id>`. 옛 `/members` 는 settings 로 redirect. 둘 다 `access: 'projectAdmin'`. **2026-11-02 `/admin/projects/:projectId/settings` · `/admin/projects/:projectId/parts` 로 옮김 — 옛 주소는 모두 redirect (`PLAN.md` 10단계)** | 고른 파트가 주소에 있어야 새로고침 · 공유가 산다. 옛 링크는 살린다 |
+| 공통 틀 | `components/app/ProjectAdminFrame.vue` — 주소의 프로젝트 = 고른 프로젝트 맞추기, 옆에서 프로젝트를 바꾸면 같은 관리 화면으로, 권한을 잃으면 `/tasks` (2026-11-02 부터 틀은 AdminShell, 권한을 잃으면 `/admin` — 다음에 열 수 있는 관리 화면, 없으면 `/tasks`) | 두 화면이 같은 감시를 따로 들면 한쪽만 고쳐진다 |
 | 파트 관리 모양 | 왼쪽 파트 목록(이름 · 사람 수 · 작업/안건 수, 보관은 접어서 아래) · 오른쪽 고른 파트 상세. `lg` 아래는 위아래 | 한 번에 한 파트만 다루면 사람이 늘어도 표가 안 커진다 |
 | 고른 파트 | 주소가 정본. 없거나 이 프로젝트에 없는 id 면 첫 활성 파트로 `replace`. 스냅샷을 받기 전에는 고치지 않는다 | 서버 모드에서 받기 전에 '없는 파트' 로 보고 주소를 덮으면 공유 링크가 깨진다 |
 | 사람 더하기 | 프로젝트에 부여된 **활성** 멤버 중 아직 없는 사람. 이름으로 찾고 체크해서 여럿을 한 번에 — 하나씩 `PUT`, 실패한 사람만 고른 채로 남는다. 보관한 파트에는 안 보인다 | 계약에 일괄 넣기가 없다. 보관한 파트에 사람을 더할 일은 없다(9단계에도 막혀 있었다) |

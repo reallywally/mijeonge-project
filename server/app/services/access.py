@@ -59,7 +59,13 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
 }
 
 
+def live_project_ids() -> Select[tuple[str]]:
+    """지우지 않은 프로젝트. 여러 프로젝트를 훑는 자리(배지 · Me)가 `in_()` 으로 건다."""
+    return select(Project.id).where(Project.deleted_at.is_(None))
+
+
 async def _project_of(session: AsyncSession, param: str, value: str) -> str | None:
+    """그 레코드의 프로젝트. 지운 프로젝트 소속이면 없는 것과 같다 — 원래 없을 때의 404 로 간다."""
     stmt: Select[tuple[str]]
     match param:
         case "project_id":
@@ -86,6 +92,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             )
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")
+    # 레코드마다 프로젝트를 다시 잇지 않고 여기 한 줄로 거른다 — 새 경로 이름이 늘어도 빠지지 않는다
+    stmt = stmt.where(stmt.selected_columns[0].in_(live_project_ids()))
     found: str | None = (await session.execute(stmt)).scalar_one_or_none()
     return found
 
@@ -126,11 +134,14 @@ async def resolve_scope(
 
 
 async def visible_project_ids(session: AsyncSession, actor: Actor) -> list[str] | None:
-    """내가 볼 수 있는 프로젝트. 시스템 관리자는 전부라 None."""
+    """내가 볼 수 있는 프로젝트. 시스템 관리자는 전부라 None — 지운 것은 부르는 쪽이 거른다."""
     if actor.is_admin:
         return None
     found = await session.scalars(
-        select(ProjectMember.project_id).where(ProjectMember.member_id == actor.id)
+        select(ProjectMember.project_id).where(
+            ProjectMember.member_id == actor.id,
+            ProjectMember.project_id.in_(live_project_ids()),
+        )
     )
     return list(found.all())
 
