@@ -31,6 +31,7 @@ function task(id: string, over: Partial<Task> = {}): Task {
     due: null,
     priority: 'normal',
     partId: null,
+    creatorId: null,
     createdAt: '2026-09-01T00:00:00Z',
     commentCount: 0,
     minutesId: null,

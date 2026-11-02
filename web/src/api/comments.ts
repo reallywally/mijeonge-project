@@ -17,6 +17,11 @@ export function resetMockComments() {
   mockSeq = 0
 }
 
+/** 작업을 지우면 그 댓글도 같이 사라진다 (서버는 cascade) */
+export function forgetMockCommentsOf(taskId: string) {
+  mockRows = mockRows.filter((c) => c.taskId !== taskId)
+}
+
 const emptyBody = () =>
   new ApiError(422, {
     code: 'VALIDATION_ERROR',

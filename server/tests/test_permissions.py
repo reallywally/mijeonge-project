@@ -4,6 +4,8 @@
 부여받지 않은 프로젝트는 **없는 것처럼** 404, 부여는 받았는데 모자라면 403.
 """
 
+from typing import Any
+
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +51,7 @@ HIDDEN = [
     ("PATCH", "/api/projects/p1", {"name": "몰래"}, "PROJECT_NOT_FOUND"),
     ("PATCH", "/api/tasks/k4", {"title": "몰래"}, "TASK_NOT_FOUND"),
     ("PATCH", "/api/tasks/k4/lines/x", {"done": True}, "TASK_NOT_FOUND"),
+    ("DELETE", "/api/tasks/k4", None, "TASK_NOT_FOUND"),
     ("GET", "/api/tasks/k4/comments", None, "TASK_NOT_FOUND"),
     ("POST", "/api/tasks/k4/comments", {"body": "몰래"}, "TASK_NOT_FOUND"),
     ("PATCH", "/api/threads/t1", {"title": "몰래"}, "THREAD_NOT_FOUND"),
@@ -359,3 +362,127 @@ async def test_who_can_delete(client: httpx.AsyncClient, as_member: AsMember) ->
     u1 = await as_member("u1")  # p1 관리자 — cm2 는 u3 가 썼다
     assert (await u1.delete("/api/comments/cm2")).status_code == 204
     assert (await client.delete("/api/comments/cm3")).status_code == 204  # 시스템 관리자
+
+
+# --- 작업 — 고치기 · 지우기 (docs/api/auth.md '작업') ------------------------------
+
+
+async def _task_by(c: httpx.AsyncClient, owner_id: str | None) -> dict[str, Any]:
+    res = await c.post(
+        "/api/projects/p1/tasks",
+        json={
+            "title": "권한 보기",
+            "ownerId": owner_id,
+            "body": [{"kind": "check", "text": "확인", "done": False, "level": 0}],
+        },
+    )
+    assert res.status_code == 201, res.json()
+    task: dict[str, Any] = res.json()
+    return task
+
+
+async def _edits(c: httpx.AsyncClient, task: dict[str, Any], done: bool) -> list[int]:
+    """작업 하나를 고치는 넷 — PATCH · 체크박스 · 링크 걸기 · 떼기."""
+    task_id, line_id = task["id"], task["body"][0]["id"]
+    return [
+        (await c.patch(f"/api/tasks/{task_id}", json={"priority": "high"})).status_code,
+        (await c.patch(f"/api/tasks/{task_id}/lines/{line_id}", json={"done": done})).status_code,
+        (await c.put(f"/api/tasks/{task_id}/threads/t1")).status_code,
+        (await c.delete(f"/api/tasks/{task_id}/threads/t1")).status_code,
+    ]
+
+
+async def test_task_edit_is_for_creator_owner_and_admins(as_member: AsMember) -> None:
+    """u2 가 만들고 u4 가 맡은 작업 — u1 은 p1 관리자, admin 은 시스템 관리자, u3 는 남."""
+    task = await _task_by(await as_member("u2"), "u4")
+    assert task["creatorId"] == "u2" and task["ownerId"] == "u4"
+    for who, done in (("u2", True), ("u4", False), ("u1", True), ("admin", False)):
+        assert await _edits(await as_member(who), task, done) == [200, 200, 200, 204], who
+
+    u3 = await as_member("u3")
+    for res in (
+        await u3.patch(f"/api/tasks/{task['id']}", json={"title": "남이 고침"}),
+        await u3.patch(
+            f"/api/tasks/{task['id']}/lines/{task['body'][0]['id']}", json={"done": True}
+        ),
+        await u3.put(f"/api/tasks/{task['id']}/threads/t1"),
+        await u3.delete(f"/api/tasks/{task['id']}/threads/t1"),
+    ):
+        assert res.status_code == 403
+        assert res.json()["code"] == "FORBIDDEN"
+
+
+async def test_task_edit_judges_the_task_before_the_change(as_member: AsMember) -> None:
+    """담당자가 남에게 넘기는 수정은 된다 — 넘긴 뒤에는 그 사람이 남이다."""
+    task = await _task_by(await as_member("u2"), "u4")
+    u3 = await as_member("u3")
+    # 남이 자기를 담당자로 넣는 것도 바꾸기 전 작업으로 본다 — 막힌다
+    assert (await u3.patch(f"/api/tasks/{task['id']}", json={"ownerId": "u3"})).status_code == 403
+    u4 = await as_member("u4")
+    handed = await u4.patch(f"/api/tasks/{task['id']}", json={"ownerId": "u3"})
+    assert handed.status_code == 200 and handed.json()["ownerId"] == "u3"
+    again = await u4.patch(f"/api/tasks/{task['id']}", json={"ownerId": "u4"})
+    assert again.status_code == 403
+    # 넘겨받은 사람은 이제 고친다
+    assert (
+        await u3.patch(f"/api/tasks/{task['id']}", json={"title": "새 담당"})
+    ).status_code == 200
+
+
+async def test_creator_cannot_be_changed(as_member: AsMember) -> None:
+    task = await _task_by(await as_member("u2"), None)
+    res = await (await as_member("u2")).patch(
+        f"/api/tasks/{task['id']}", json={"creatorId": "u3", "title": "그대로"}
+    )
+    assert res.status_code == 200
+    assert res.json()["creatorId"] == "u2"
+
+
+async def test_task_without_a_creator_is_for_owner_and_admins(as_member: AsMember) -> None:
+    """시드 k17 은 등록한 사람 기록이 없고(null) 담당도 없다 — 관리자만 고친다."""
+    u2 = await as_member("u2")
+    assert (await u2.patch("/api/tasks/k17", json={"priority": "high"})).status_code == 403
+    assert (await (await as_member("u1")).patch("/api/tasks/k17", json={})).status_code == 200
+
+
+async def test_sub_task_needs_no_edit_right_on_the_parent(as_member: AsMember) -> None:
+    """하위 작업 등록은 상위를 고치는 것이 아니다 — k1 을 못 고치는 u2 도 밑에 단다."""
+    res = await (await as_member("u2")).post(
+        "/api/projects/p1/tasks", json={"title": "하위", "parentId": "k21"}
+    )
+    assert res.status_code == 201
+    assert res.json()["creatorId"] == "u2"
+
+
+async def test_who_can_delete_a_task(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    """지우기는 생성자 · 그 프로젝트 관리자 · 시스템 관리자. 담당자는 못 지운다.
+
+    시드: k18 은 u3 가 만들고 u4 가 맡았다. k3 은 u1(p1 관리자)이 만들고 u2 가 맡았다.
+    """
+    for who in ("u4", "u2"):  # 담당자 · 남
+        denied = await (await as_member(who)).delete("/api/tasks/k18")
+        assert denied.status_code == 403, who
+        assert denied.json()["code"] == "FORBIDDEN"
+    assert (await (await as_member("u2")).delete("/api/tasks/k3")).status_code == 403
+    assert (await (await as_member("u3")).delete("/api/tasks/k18")).status_code == 204
+
+    own = await _task_by(await as_member("u3"), "u3")
+    assert (await (await as_member("u1")).delete(f"/api/tasks/{own['id']}")).status_code == 204
+    assert (await client.delete("/api/tasks/k16")).status_code == 204  # 시스템 관리자
+    for gone in ("k18", own["id"], "k16"):
+        assert (await client.patch(f"/api/tasks/{gone}", json={})).status_code == 404
+
+
+async def test_task_with_children_is_409(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    # 권한이 먼저다 — 못 지우는 사람에게는 하위가 있는지보다 403 이 나간다
+    assert (await (await as_member("u2")).delete("/api/tasks/k1")).status_code == 403
+    res = await client.delete("/api/tasks/k1")
+    assert res.status_code == 409
+    assert res.json() == {
+        "code": "TASK_HAS_CHILDREN",
+        "message": "하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮기세요.",
+    }
+    # 하위를 다 지우면 지워진다 — k12 밑의 k13 하나
+    assert (await client.delete("/api/tasks/k12")).status_code == 409
+    assert (await client.delete("/api/tasks/k13")).status_code == 204
+    assert (await client.delete("/api/tasks/k12")).status_code == 204

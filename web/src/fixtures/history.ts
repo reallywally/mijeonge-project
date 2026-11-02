@@ -17,7 +17,7 @@ const created = (prefix: string, id: string, at: string, by: string | null): His
 })
 
 export const taskHistory: Record<string, HistoryEntry[]> = Object.fromEntries(
-  tasks.map((t) => [t.id, [created('th', t.id, t.createdAt, t.ownerId)]]),
+  tasks.map((t) => [t.id, [created('th', t.id, t.createdAt, t.creatorId)]]),
 )
 taskHistory.k20.push({
   id: 'th-k20-2',

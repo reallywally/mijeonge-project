@@ -80,6 +80,21 @@ export interface Project {
 
 지운 프로젝트(소프트 삭제)는 응답에 나오지 않는다 — 삭제 여부를 나타내는 필드는 없다.
 
+### `Task` 가 한 필드 늘었다 (2026-11-02, 생성자)
+
+스냅샷의 `tasks` · 작업 쓰기 응답(등록 · 일괄 · 수정 · 줄 · 회의록 반영) 모두 같은 모양이다. 권한 규칙은 `docs/api/auth.md` '작업'.
+
+```ts
+export interface Task {
+  // … 그대로
+  /** 등록한 사람. 등록할 때 서버가 요청한 사람으로 찍고 바꿀 수 없다. 기록이 없던 지난 작업은 null */
+  creatorId: string | null
+}
+```
+
+지난 작업은 리비전 `0027_task_creator` 가 남은 기록으로 채운다 — 변경 이력의 '등록' 줄(2026-10-27 이후 등록), 없으면
+상태 기록의 첫 줄(2026-10-20 이후). 둘 다 마이그레이션이 넣은 backfill 줄이면 누가 했는지 모르니 null 로 둔다.
+
 ### 중첩은 접어서 낸다
 
 서버 테이블은 행으로 펴 두지만(`server/PLAN.md` 1-1) 응답은 `domain.ts` 모양으로 다시 접는다.
@@ -97,8 +112,8 @@ export interface Project {
 | --- | --- |
 | `threads` | `thread.projectId === projectId` |
 | `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
-| `tasks` | `task.projectId === projectId` |
-| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지) |
+| `tasks` | `task.projectId === projectId` — **지운 작업(논리 삭제, 2026-11-02)은 빠진다**. 삭제 여부를 나타내는 필드는 없다 |
+| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지). 지운 작업의 링크는 DB 에 남지만 나가지 않는다 |
 | `parts` | `part.projectId === projectId` — 보관(`active=false`)도 싣는다 |
 | `partMembers` | `partId` 가 위 `parts` 안에 있는 것 |
 
@@ -132,14 +147,14 @@ export interface Project {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리', `Task.creatorId` 는 2026-11-02 · `auth.md` '작업'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
 | `Project` | `description` · `startDate` · `endDate` · `closedAt` |
 | `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
 | `Entry` | `ownerId` · `minutesId` |
-| `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` · `minutesId` |
+| `Task` | `parentId` · `ownerId` · `creatorId` · `start` · `due` · `partId` · `minutesId` |
 | `MinutesItem` · `Minutes` | `meetingDate` (스냅샷 밖 — `GET /api/projects/{projectId}/minutes` 등으로만 나간다, `minutes.md`) |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
 | `CheckRequest` | `confirmedAt` (스냅샷 밖 — `GET /api/projects/{projectId}/checks` 로만 나간다, `check.md`) |
@@ -223,6 +238,7 @@ export interface ProjectInput {
 ### `task.key` 발번 (Q19)
 
 번호는 **프로젝트별**로 세고 **지운 번호를 다시 쓰지 않는다**. `key` 는 `{taskKeyPrefix}-{번호}` 다.
+작업 삭제는 논리 삭제라(2026-11-02) 지운 작업도 행과 번호를 그대로 쥐고 있다.
 
 `project` 에 `next_task_no` 열을 두고 작업을 만들 때 한 문장으로 잠가 올린다 —
 `UPDATE project SET next_task_no = next_task_no + 1 WHERE id = :id RETURNING next_task_no - 1`.

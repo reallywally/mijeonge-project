@@ -9,9 +9,12 @@ import { useTaskStore } from './task'
 
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
-beforeEach(() => {
+/* 고치기는 작성자 · 담당자 · 관리자만이다 — 계산을 보는 검사들이라 프로젝트 관리자(u1)로 들어온다 */
+beforeEach(async () => {
   vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
+  resetMockAuth()
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
 })
 
 describe('작업 목록', () => {
@@ -346,5 +349,57 @@ describe('완료 숨기기 (Q64)', () => {
     task.setHideDone(false)
     expect(task.doneHiddenIds.size).toBe(0)
     expect(task.shownRows).toHaveLength(22)
+  })
+})
+
+describe('고치기 · 지우기 권한', () => {
+  const asU2 = async () => {
+    resetMockAuth()
+    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+  }
+
+  it('목업에서 등록하면 등록한 사람이 찍힌다', async () => {
+    const task = useTaskStore()
+    const id = await task.addTask({
+      title: '새 작업',
+      parentId: null,
+      body: [],
+      status: 'todo',
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal',
+      threadIds: [],
+    })
+    expect(useDataStore().allTasks.find((t) => t.id === id)!.creatorId).toBe('u1')
+  })
+
+  it('못 고치는 사람이 고치면 목업도 403 FORBIDDEN 으로 알리고 그대로 둔다', async () => {
+    await asU2()
+    const task = useTaskStore()
+    const k18 = useDataStore().allTasks.find((t) => t.id === 'k18')!
+    task.setTitle('k18', '바꾼 제목')
+    task.setPeriod('k18', '2026-10-01', '2026-10-02')
+    task.linkThread('k18', 't1')
+    expect(k18.title).toBe('보험료 산출 기간계 API 개발')
+    expect(k18.start).toBeNull()
+    expect(task.threadsOfTask('k18').map((t) => t.id)).toEqual(['t5'])
+    expect(vi.mocked(toastError)).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 403, code: 'FORBIDDEN' }),
+    )
+    expect(task.canEdit(k18)).toBe(false)
+    expect(task.canDelete(k18)).toBe(false)
+  })
+
+  it('지우면 작업과 그 안건 연결을 뺀다. 하위가 있으면 ApiError 409 를 던지고 남긴다', async () => {
+    const task = useTaskStore()
+    const data = useDataStore()
+    await expect(task.deleteTask('k4')).rejects.toMatchObject({ code: 'TASK_HAS_CHILDREN' })
+    expect(data.allTasks.some((t) => t.id === 'k4')).toBe(true)
+
+    await task.deleteTask('k22')
+    expect(data.allTasks.some((t) => t.id === 'k22')).toBe(false)
+    expect(data.taskThreads.some((l) => l.taskId === 'k22')).toBe(false)
+    expect(task.taskDetail('k4')!.children.map((c) => c.task.key)).not.toContain('HW-22')
   })
 })

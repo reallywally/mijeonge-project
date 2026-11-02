@@ -30,6 +30,8 @@ export interface GanttItem {
   noAdd?: boolean
   /** 기간 지남 · 오래 걸림 — 막대 테두리를 세운다(테스트) */
   late?: boolean
+  /** 막대를 끌 수 없다 — 고칠 권한이 없는 작업. dhtmlx 가 이 이름(config.readonly_property)을 그대로 읽는다 */
+  readonly?: boolean
 }
 
 /** 간트의 끝 날짜는 열린 구간이다 — 9/15 까지 하는 일은 9/16 에서 끝난다 */

@@ -5,7 +5,7 @@ import PartChip from '@/components/app/PartChip.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
-import { TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
+import { READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useTaskStore } from '@/stores/task'
 import type { TaskStatus } from '@/types/domain'
 
@@ -134,13 +134,16 @@ const threadTitles = (taskId: string) =>
               </span>
               <div class="grow" />
               <div class="shrink-0" @click.stop>
+                <!-- 고칠 권한이 없는 카드(작성자 · 담당자 · 관리자가 아님)는 상태를 보기만 한다 -->
                 <Select
                   :model-value="row.task.status"
+                  :disabled="!taskStore.canEdit(row.task)"
                   @update:model-value="(v) => taskStore.setStatus(row.task.id, v as TaskStatus)"
                 >
                   <SelectTrigger
-                    class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent hover:bg-muted focus:ring-[3px]"
+                    class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent enabled:hover:bg-muted focus:ring-[3px] disabled:cursor-default disabled:opacity-100"
                     :aria-label="`상태 ${taskStatusLabel(row.task.status)}`"
+                    :title="taskStore.canEdit(row.task) ? undefined : READONLY_HINT"
                   >
                     <TaskStatusBadge :status="row.task.status" />
                   </SelectTrigger>

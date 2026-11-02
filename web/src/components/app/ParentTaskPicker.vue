@@ -13,8 +13,10 @@ const props = withDefaults(
     choices: ParentChoice[]
     /** 무엇의 상위인가 — 작업 · 테스트 */
     noun?: string
+    /** 보기만 — 고칠 권한이 없을 때 */
+    disabled?: boolean
   }>(),
-  { noun: '작업' },
+  { noun: '작업', disabled: false },
 )
 const parentId = defineModel<string | null>({ required: true })
 
@@ -59,6 +61,7 @@ function step(from: number, by: 1 | -1) {
 const firstEnabled = () => Math.max(step(-1, 1), 0)
 
 async function open() {
+  if (props.disabled) return
   editing.value = true
   query.value = ''
   active.value = firstEnabled()
@@ -103,7 +106,8 @@ function onKeydown(e: KeyboardEvent) {
       <button
         type="button"
         :aria-label="`상위 ${noun}`"
-        class="flex h-8 min-w-0 grow items-center gap-1.5 rounded-md px-2 text-left text-xs hover:bg-accent"
+        :disabled="disabled"
+        class="flex h-8 min-w-0 grow items-center gap-1.5 rounded-md px-2 text-left text-xs enabled:hover:bg-accent"
         @click="open"
       >
         <template v-if="current">
@@ -113,7 +117,7 @@ function onKeydown(e: KeyboardEvent) {
         <span v-else class="text-muted-foreground">없음 (최상위)</span>
       </button>
       <button
-        v-if="current"
+        v-if="current && !disabled"
         type="button"
         :aria-label="`상위 ${noun} 빼기`"
         :title="`상위 ${noun} 빼기 — 최상위 ${nounSubject} 됩니다`"

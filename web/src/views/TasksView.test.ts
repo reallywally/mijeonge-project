@@ -3,7 +3,11 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
+import { resetMockAuth } from '@/api/mockAuth'
 import { Select } from '@/components/ui/select'
+import { MOCK_PASSWORD } from '@/fixtures'
+import { useAuthStore } from '@/stores/auth'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import TasksView from './TasksView.vue'
 
@@ -126,7 +130,9 @@ enableAutoUnmount(afterEach)
    켜짐 그대로는 '완료 숨기기' 묶음이 따로 본다 */
 const HIDE_DONE_KEY = 'innoflow.tasks.hideDone'
 
-beforeEach(() => {
+/* 고치기는 작성자 · 담당자 · 관리자만이다 — 화면의 손놀림을 보는 검사들이라 프로젝트 관리자(u1)로 들어온다.
+   권한이 없는 사람은 '고치기 권한' 묶음이 따로 본다 */
+beforeEach(async () => {
   localStorage.clear()
   localStorage.setItem(HIDE_DONE_KEY, 'off')
   setActivePinia(createPinia())
@@ -135,6 +141,8 @@ beforeEach(() => {
   chart.parsed = []
   chart.dragged = {}
   chart.destroyed = 0
+  resetMockAuth()
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
 })
 
 describe('작업 목록 화면', () => {
@@ -683,5 +691,66 @@ describe('4단 제한 (Q64)', () => {
     expect(chart.events.onTaskCreated({ parent: 'k9' })).toBe(false)
     await flushPromises()
     expect(window.location.pathname).toBe('/tasks')
+  })
+})
+
+describe('고치기 권한 — 목록 · 칸반 · 간트', () => {
+  /* 박지훈(u2)은 p1 의 일반 사용자다. HW-3 은 담당, HW-4 는 등록(담당은 이도현)이라 고칠 수 있고,
+     HW-18(담당 정하늘 · 등록 이도현) · HW-21(담당 김서연 · 등록 이도현)은 못 고친다 */
+  beforeEach(async () => {
+    resetMockAuth()
+    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    usePartStore().setScope('all')
+  })
+
+  const selectNear = (w: Awaited<ReturnType<typeof mountView>>, sel: string) =>
+    w.findAllComponents(Select).find((s) => (s.element as HTMLElement)?.closest?.(sel))
+
+  it('목록 — 못 고치는 줄은 상태 셀렉트 · 선택 칸이 잠기고, 일괄 바꾸기는 고칠 수 있는 줄만', async () => {
+    const w = await mountView()
+    const rowOf = (key: string) => w.findAll('tbody tr').find((r) => r.text().includes(key))!
+    const hw3 = rowOf('HW-3')
+    const hw2 = rowOf('HW-2')
+    expect(hw3.get('[aria-label^="상태"]').attributes('disabled')).toBeUndefined()
+    expect(hw2.get('[aria-label^="상태"]').attributes('disabled')).toBeDefined()
+    expect(hw2.get('[aria-label^="상태"]').attributes('title')).toBe(
+      '작성자 · 담당자 · 관리자만 고칠 수 있습니다',
+    )
+    expect(hw2.get('[role="checkbox"]').attributes('disabled')).toBeDefined()
+
+    /* 이 쪽 전체 선택은 고칠 수 있는 줄만 고른다 */
+    await w.get('thead [role="checkbox"]').trigger('click')
+    await flushPromises()
+    expect(w.text()).toMatch(/\d+건 선택/)
+    const picked = Number(/(\d+)건 선택/.exec(w.text())![1])
+    const editable = useTaskStore()
+      .rows.slice(0, 8)
+      .filter((r) => useTaskStore().canEdit(r.task)).length
+    expect(picked).toBe(editable)
+  })
+
+  it('칸반 — 못 고치는 카드는 상태 셀렉트가 잠긴다', async () => {
+    const w = await mountView('/tasks?view=board')
+    expect(selectNear(w, '[data-task-id="k21"]')!.props('disabled')).toBe(true)
+    expect(selectNear(w, '[data-task-id="k3"]')!.props('disabled')).toBe(false)
+  })
+
+  it('간트 — 못 고치는 작업은 readonly 로 넘기고, 끌기를 받지 않는다', async () => {
+    await mountView('/tasks')
+    const item = (key: string) =>
+      chart.parsed.find((t) => t.key === key) as { id: string; readonly?: boolean }
+    expect(item('HW-18').readonly).toBe(true)
+    expect(item('HW-4').readonly).toBeUndefined()
+    expect(chart.events.onBeforeTaskDrag('k18')).toBe(false)
+    expect(chart.events.onBeforeTaskDrag('k4')).toBe(true)
+  })
+
+  it('목업도 서버처럼 403 으로 막는다 — 스토어를 바로 불러도 안 바뀐다', async () => {
+    await mountView()
+    const taskStore = useTaskStore()
+    taskStore.setStatus('k21', 'done')
+    expect(taskStore.rows.find((r) => r.task.id === 'k21')!.task.status).toBe('todo')
+    taskStore.setStatus('k3', 'done')
+    expect(taskStore.rows.find((r) => r.task.id === 'k3')!.task.status).toBe('done')
   })
 })

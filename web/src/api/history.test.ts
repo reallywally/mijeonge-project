@@ -42,19 +42,19 @@ const fields = (e: { changes: { field: string }[] }) => e.changes.map((c) => c.f
 describe('목업 갈래 — 시드', () => {
   beforeEach(() => as('u2@inno-ax.com'))
 
-  it('작업마다 등록 한 줄 — 바꾼 사람은 담당자, 등록 시각', async () => {
+  it('작업마다 등록 한 줄 — 바꾼 사람은 작성자(서버 시드와 같다), 등록 시각', async () => {
     const k4 = tasks.find((t) => t.id === 'k4')!
     expect(await fetchTaskHistory('k4')).toEqual([
       {
         id: expect.any(String),
         changedAt: k4.createdAt,
-        changedBy: 'u3',
+        changedBy: 'u2',
         backfilled: false,
         changes: [{ field: 'created', from: null, to: null, subject: '' }],
       },
     ])
-    /* 담당자가 없는 작업은 바꾼 사람도 없다 */
-    expect((await fetchTaskHistory('k1'))[0].changedBy).toBeNull()
+    /* 작성자 기록이 없는 옛 작업은 바꾼 사람도 없다 */
+    expect((await fetchTaskHistory('k2'))[0].changedBy).toBeNull()
   })
 
   it('k20 — 등록 뒤에 10/8 의 상태 todo → doing', async () => {

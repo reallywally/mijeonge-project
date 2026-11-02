@@ -83,6 +83,8 @@
 | 400 | `TASK_LINE_NOT_CHECKABLE` | 체크박스가 아닌 줄을 켜고 끄려 할 때 |
 | 404 | `COMMENT_NOT_FOUND` | 경로의 댓글이 없을 때(수정 · 삭제). 댓글 목록 · 등록에서 작업이 없으면 `TASK_NOT_FOUND` |
 | ~~400~~ | ~~`COMMENT_AUTHOR_NOT_FOUND`~~ | **8단계부터 안 나온다** — 작성자는 로그인한 사람이고 `authorId` 를 받지 않는다(`docs/api/auth.md`). 빈 `body`(앞뒤 공백을 뗀 뒤)는 422 `VALIDATION_ERROR` |
+| 409 | `TASK_HAS_CHILDREN` | 하위 작업이 있는 작업을 지우려 할 때 — 하위를 먼저 지우거나 옮긴다. 지운 하위는 세지 않는다 (2026-11-02) |
+| 403 | `FORBIDDEN` | 작업을 고치거나(생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자가 아닐 때) 지우려 할 때(생성자 · 관리자가 아닐 때) — `docs/api/auth.md` '작업' (2026-11-02) |
 | 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때 — **8단계부터는 그 프로젝트의 활성 멤버가 아닐 때**(이미 걸린 담당자를 그대로 두는 수정은 통과). `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
@@ -112,11 +114,12 @@
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19) | `Task` · 201 | 연결 |
+| POST | `/api/projects/{projectId}/tasks` | 작업 등록. `key` 는 서버가 발번한다 (Q19). **`creatorId` 는 요청한 사람** — 보내도 무시하고 바꿀 수 없다 (2026-11-02, 일괄 · 회의록 반영도 같다) | `Task` · 201 | 연결 (2026-11-02 `creatorId` — 구현) |
 | POST | `/api/projects/{projectId}/tasks/batch` | 챗봇 초안을 한 번에 등록 — **한 트랜잭션**, `tempId` → 실제 id 치환, `key` 는 배열 순서대로 발번. 검사 규칙 위반은 422(`detail` 에 `tasks.1.parentTempId`), 없는 멤버는 400 `TASK_OWNER_NOT_FOUND` (`docs/api/chat.md` '작업 초안') | `TaskBatchResult` · 201 | 구현 |
-| PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다 | `Task` | 연결 |
-| PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기 | `Task` | 연결 |
-| PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등) | 링크 · 204 | 연결 |
+| PATCH | `/api/tasks/{taskId}` | 제목 · 상태 · 담당자 · 기간 · 상위 작업 · 우선순위 · **본문** 부분 수정. `body` 는 줄 전체를 통째로 갈아끼운다(`[]` 는 비우기, `null` 은 422). 줄의 `id` 는 선택 — 이 작업의 기존 줄 id 면 유지하고 아니면 서버가 새로 붙인다. **생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자만** — 그 밖은 403 `FORBIDDEN`, 담당자를 바꾸는 수정도 바꾸기 전 작업으로 본다 (2026-11-02) | `Task` | 연결 (2026-11-02 권한 — 구현) |
+| PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기. 권한은 위 PATCH 와 같다 | `Task` | 연결 (2026-11-02 권한 — 구현) |
+| PUT · DELETE | `/api/tasks/{taskId}/threads/{threadId}` | 작업 ↔ 안건 링크 (멱등). 권한은 위 PATCH 와 같다(작업 쪽으로 본다) | 링크 · 204 | 연결 (2026-11-02 권한 — 구현) |
+| DELETE | `/api/tasks/{taskId}` | 작업 삭제 — **논리 삭제**(2026-11-02 하드 → 논리, 응답은 그대로). 서버가 `is_deleted` · `deleted_at` · `deleted_by` 를 찍고 이력에 `deleted` 줄을 남긴다. 본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 변경 이력 · 테스트 참조 태그는 DB 에 남지만 **어디서도 없는 것처럼** 나간다 — 스냅샷 `tasks` · `taskThreadLinks`, 테스트 `refs`, 검색 · 챗봇 도구 · 리스크 · 리포트에서 빠지고, 그 작업으로 가는 경로(PATCH · 줄 · 링크 · 댓글 · 이력 · 다시 지우기)는 404 `TASK_NOT_FOUND`(댓글 id 경로는 `COMMENT_NOT_FOUND`), `parentId` 로 주면 400 `TASK_PARENT_NOT_FOUND`. 되살리는 API 는 없다. 작업 번호는 다시 쓰지 않는다. **생성자 · 프로젝트 관리자 · 시스템 관리자만**(담당자는 못 지운다) — 그 밖은 403 `FORBIDDEN`. 하위 작업이 있으면 409 `TASK_HAS_CHILDREN`. 없으면 404 `TASK_NOT_FOUND` (2026-11-02) | 204 | 구현 |
 | POST | `/api/projects/{projectId}/threads` | 안건 등록 — `title` 만 필수. `ownerId` · `description` · `options` · `dueDate` · `ccIds`(참조, `check.md`) 는 선택 (빈 줄 거르기는 프론트가 한다) | `Thread` · 201 | 연결 |
 | PATCH | `/api/threads/{threadId}` | 안건 부분 수정 — `title` · `ownerId` · `description` · `options` · `dueDate` · `ccIds`. 보낸 필드만 바꾼다. `ownerId` · `dueDate` 는 `null` 로 비우고, `options` · `ccIds` 는 통째로 갈아끼운다(`ccIds` 에 `null` 도 422). 빈 제목은 422. `title` · `description` · `options` 에 `null` 을 보내도 422 — 이 셋의 빈 값은 `''` · `[]` 다. **`state` 는 못 바꾼다** — 상태는 이력으로만 바뀐다 | `Thread` | 연결 |
 | GET | `/api/tasks/{taskId}/comments` | 작업 댓글 목록 — **등록 순(`seq` 오름차순, 오래된 것 먼저)**. 없는 작업은 404 `TASK_NOT_FOUND` | `TaskComment[]` | 구현 |

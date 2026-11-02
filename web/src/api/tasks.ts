@@ -1,8 +1,10 @@
-import { ApiError, id, request } from '@/api/client'
+import { ApiError, id, mockError, request } from '@/api/client'
+import { forgetMockCommentsOf } from '@/api/comments'
 import { recordMockHistory } from '@/api/history'
 import { isMockMode } from '@/api/mode'
-import { mockDb } from '@/api/mockAuth'
+import { forbidden, later, mockDb, mockSessionMemberId, mockWorld, requireMe } from '@/api/mockAuth'
 import { projects, tasks } from '@/fixtures'
+import { canDeleteTask, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { inheritedPartId } from '@/lib/part'
@@ -30,6 +32,31 @@ export const linkTaskThread = (taskId: string, threadId: string) =>
 
 export const unlinkTaskThread = (taskId: string, threadId: string) =>
   request<void>('DELETE', `/tasks/${id(taskId)}/threads/${id(threadId)}`)
+
+/* 목업 갈래 — 작업 · 안건 연결은 데이터 스토어가 들고 있어 거기서 걷는다(스토어가 응답 뒤에 뺀다).
+   여기서는 서버처럼 권한 · 하위 작업을 보고, 목업 서버가 따로 든 댓글 · 테스트 태그 · 이력을 정리한다 */
+function mockDelete(taskId: string) {
+  const me = requireMe()
+  const world = mockWorld()
+  const task = world.tasks.find((t) => t.id === taskId)
+  if (!task || !canSeeProject(me, task.projectId))
+    throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
+  if (!canDeleteTask(me, task, task.projectId)) throw forbidden()
+  if (world.tasks.some((t) => t.parentId === taskId))
+    throw mockError(
+      409,
+      'TASK_HAS_CHILDREN',
+      '하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮겨 주세요.',
+    )
+  forgetMockCommentsOf(taskId)
+  const db = mockDb()
+  for (const t of db.tests) t.refs = t.refs.filter((r) => !(r.kind === 'task' && r.id === taskId))
+  delete db.taskHistory[taskId]
+}
+
+/** 지우기 — 본문 · 댓글 · 안건 연결 · 테스트 태그가 같이 사라진다. 하위 작업이 있으면 409 TASK_HAS_CHILDREN */
+export const deleteTask = (taskId: string) =>
+  isMockMode() ? later(() => mockDelete(taskId)) : request<void>('DELETE', `/tasks/${id(taskId)}`)
 
 /* 목업 갈래 — 서버의 검사 규칙(API.md '한 번에 등록')을 그대로 본다. 키 번호는 픽스처에서 이어 센다.
    화면에서 만든 목업 프로젝트는 여기서 알 수 없어 404 를 내지 않는다 — 목업 데이터 스토어가 키를 다시 붙인다 */
@@ -144,6 +171,8 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       priority: t.priority,
       /* 초안은 partId 를 싣지 않는다 — 부모를 따른다 (docs/api/part.md) */
       partId: inheritedPartId(undefined, parent),
+      /* 등록한 사람은 로그인한 사람이다 */
+      creatorId: mockSessionMemberId(),
       createdAt,
       commentCount: 0,
       minutesId: null,

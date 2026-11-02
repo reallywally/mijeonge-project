@@ -55,13 +55,14 @@ async def test_seed_has_a_created_line_per_task(client: httpx.AsyncClient) -> No
     assert k4 == {
         "id": "th-k4-1",
         "changedAt": "2026-09-04T00:20:00Z",
-        "changedBy": "u3",
+        # 등록 줄의 사람은 등록한 사람이다 — k4 는 u3 담당 · u2 등록
+        "changedBy": "u2",
         "backfilled": False,
         "changes": CREATED,
     }
-    # 담당이 없는 작업은 바꾼 사람도 비어 있다
-    (k1,) = await history(client, "tasks/k1")
-    assert k1["changedBy"] is None and k1["backfilled"] is False
+    # 등록한 사람 기록이 없는 작업은 바꾼 사람도 비어 있다 — k2 는 u1 담당
+    (k2,) = await history(client, "tasks/k2")
+    assert k2["changedBy"] is None and k2["backfilled"] is False
 
 
 async def test_seed_demo_lines(client: httpx.AsyncClient) -> None:
@@ -242,8 +243,8 @@ async def test_invisible_body_change_writes_nothing(client: httpx.AsyncClient) -
 # --- 본문 합치기 (Q65) ----------------------------------------------------------------------
 
 
-async def new_task(c: httpx.AsyncClient) -> str:
-    res = await c.post("/api/projects/p1/tasks", json={"title": "본문 쓰기"})
+async def new_task(c: httpx.AsyncClient, owner_id: str | None = None) -> str:
+    res = await c.post("/api/projects/p1/tasks", json={"title": "본문 쓰기", "ownerId": owner_id})
     assert res.status_code == 201, res.json()
     task_id: str = res.json()["id"]
     return task_id
@@ -281,7 +282,8 @@ async def test_body_edits_merge_into_one_line(client: httpx.AsyncClient) -> None
 async def test_other_person_starts_a_new_line(
     client: httpx.AsyncClient, as_member: AsMember
 ) -> None:
-    task_id = await new_task(client)
+    # u2 가 담당이라 고칠 수 있다
+    task_id = await new_task(client, owner_id="u2")
     await type_body(client, task_id, "작업1")
     await type_body(await as_member("u2"), task_id, "작업1", "작업2")
     rows = await history(client, f"tasks/{task_id}")
@@ -408,12 +410,13 @@ async def test_dependency_leaves_no_line(client: httpx.AsyncClient) -> None:
 
 
 async def test_changed_by_is_the_requester(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    # u2 는 k3 의 담당자 · k4 의 생성자다 — 고칠 수 있는 사람이어야 줄이 남는다
     u2 = await as_member("u2")
-    await u2.patch("/api/tasks/k1", json={"priority": "high"})
-    await u2.patch("/api/tasks/k4/lines/l3", json={"done": True})
-    await u2.put("/api/tasks/k1/threads/t1")
-    assert (await history(client, "tasks/k1"))[-1]["changedBy"] == "u2"
-    assert (await history(client, "tasks/k1"))[-2]["changedBy"] == "u2"
+    assert (await u2.patch("/api/tasks/k3", json={"priority": "high"})).status_code == 200
+    assert (await u2.patch("/api/tasks/k4/lines/l3", json={"done": True})).status_code == 200
+    assert (await u2.put("/api/tasks/k3/threads/t1")).status_code == 200
+    assert (await history(client, "tasks/k3"))[-1]["changedBy"] == "u2"
+    assert (await history(client, "tasks/k3"))[-2]["changedBy"] == "u2"
     assert (await history(client, "tasks/k4"))[-1]["changedBy"] == "u2"
 
 

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
+import { canDeleteTask, canEditTask } from '@/lib/access'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { bodyChanged, bodyText, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
@@ -14,9 +15,11 @@ import {
   subtreeHeights,
   taskDepths,
 } from '@/lib/task'
+import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
+import { useTestStore } from '@/stores/test'
 import { useThreadStore } from '@/stores/thread'
 import type {
   HistoryChange,
@@ -47,6 +50,8 @@ export const useTaskStore = defineStore('task', () => {
   const threadStore = useThreadStore()
   const partStore = usePartStore()
   const history = useHistoryStore()
+  const auth = useAuthStore()
+  const testStore = useTestStore()
 
   const tasks = computed<Task[]>(() =>
     data.allTasks.filter((t) => t.projectId === data.currentProjectId),
@@ -219,6 +224,18 @@ export const useTaskStore = defineStore('task', () => {
   const logPatch = (task: Task, next: TaskPatch) =>
     logMock(task.id, diffChanges(task, next, 'task'))
 
+  /** 고칠 수 있나 — 등록한 사람 · 담당자 · 프로젝트 관리자 · 시스템 관리자. 상세 · 목록 · 칸반 · 간트가 같이 본다 */
+  const canEdit = (task: Task) => canEditTask(auth.me, task, task.projectId)
+  /** 지울 수 있나 — 등록한 사람 · 프로젝트 관리자 · 시스템 관리자(담당자는 못 지운다) */
+  const canDelete = (task: Task) => canDeleteTask(auth.me, task, task.projectId)
+
+  /** 목업은 서버가 없어 고치기 권한도 여기서 흉내 낸다 — 서버의 403 FORBIDDEN 과 같은 모양 */
+  function rejectEdit(task: Task) {
+    if (!data.mock || canEdit(task)) return false
+    toastError(new ApiError(403, { code: 'FORBIDDEN', message: '권한이 없습니다.' }))
+    return true
+  }
+
   /* 작업 상세는 보는 자리가 곧 고치는 자리다 — 칸 하나를 고치면 그 값만 바로 들어간다.
      화면에 먼저 반영하고 서버에 보낸 뒤, 돌아온 레코드로 갈아끼운다. */
   const findTask = (taskId: string) => data.allTasks.find((t) => t.id === taskId)
@@ -247,7 +264,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function setStatus(taskId: string, status: TaskStatus) {
     const task = findTask(taskId)
-    if (!task) return
+    if (!task || rejectEdit(task)) return
     /* 상태가 바뀌면 기록이 한 줄 는다 — 목업은 여기서, 서버는 응답의 값으로 갈아끼운다.
        그대로인 것은 남기지 않는다 (docs/api/task-flow.md) */
     logPatch(task, { status })
@@ -261,7 +278,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function setOwner(taskId: string, ownerId: string | null) {
     const task = findTask(taskId)
-    if (!task) return
+    if (!task || rejectEdit(task)) return
     if (data.rejectOwner(ownerId, 'TASK_OWNER_NOT_FOUND', task.ownerId)) return
     logPatch(task, { ownerId })
     task.ownerId = ownerId
@@ -271,7 +288,7 @@ export const useTaskStore = defineStore('task', () => {
   /** 간트에서 막대를 끌거나 늘렸을 때 되돌아오는 자리. 둘 다 null 이면 기간 미정이다. */
   function setPeriod(taskId: string, start: string | null, due: string | null) {
     const task = findTask(taskId)
-    if (!task) return
+    if (!task || rejectEdit(task)) return
     /* 한쪽만 아는 기간은 기간 미정과 구분이 안 된다 — 둘 다 있을 때만 기간으로 친다 */
     const both = start !== null && due !== null
     logPatch(task, { start: both ? start : null, due: both ? due : null })
@@ -328,7 +345,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function setTitle(taskId: string, title: string) {
     const task = findTask(taskId)
-    if (!task || !title.trim()) return
+    if (!task || !title.trim() || rejectEdit(task)) return
     logPatch(task, { title: title.trim() })
     task.title = title.trim()
     patch(taskId, { title: task.title })
@@ -337,7 +354,7 @@ export const useTaskStore = defineStore('task', () => {
   /** 자기나 자기 아래 작업을 상위로 고르면 계층이 고리가 되니 받지 않는다 */
   function setParent(taskId: string, parentId: string | null) {
     const task = findTask(taskId)
-    if (!task) return
+    if (!task || rejectEdit(task)) return
     if (parentId && selfAndDescendants(taskId).has(parentId)) return
     if (parentId !== task.parentId && rejectDepth(parentId, heightOf.value[taskId] ?? 1)) return
     logPatch(task, { parentId })
@@ -348,7 +365,7 @@ export const useTaskStore = defineStore('task', () => {
   /** 파트를 바꾼다(null 은 공통). 하위 작업은 따라 바뀌지 않는다 — 계약이 그렇다 */
   function setPart(taskId: string, partId: string | null) {
     const task = findTask(taskId)
-    if (!task || task.partId === partId) return
+    if (!task || task.partId === partId || rejectEdit(task)) return
     if (data.rejectPart(partId, task.partId)) return
     logPatch(task, { partId })
     task.partId = partId
@@ -357,7 +374,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function setPriority(taskId: string, priority: TaskPriority) {
     const task = findTask(taskId)
-    if (!task) return
+    if (!task || rejectEdit(task)) return
     logPatch(task, { priority })
     task.priority = priority
     patch(taskId, { priority })
@@ -390,7 +407,7 @@ export const useTaskStore = defineStore('task', () => {
 
   function setBody(taskId: string, body: TaskLine[]) {
     const task = findTask(taskId)
-    if (!task) return
+    if (!task || rejectEdit(task)) return
     logMockBody(task, body)
     task.body = body
     if (data.mock) return
@@ -405,8 +422,9 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function toggleBodyLine(taskId: string, lineId: string) {
-    const line = findTask(taskId)?.body.find((l) => l.id === lineId)
-    if (!line || line.kind !== 'check') return
+    const task = findTask(taskId)
+    const line = task?.body.find((l) => l.id === lineId)
+    if (!task || !line || line.kind !== 'check' || rejectEdit(task)) return
     line.done = !line.done
     logMock(taskId, [change('lineDone', !line.done, line.done, line.text)])
     if (data.mock) return
@@ -466,6 +484,8 @@ export const useTaskStore = defineStore('task', () => {
       due: input.due,
       priority: input.priority,
       partId,
+      /* 목업에서는 등록한 사람을 여기서 찍는다 — 서버 모드는 서버가 찍어 돌려준다 */
+      creatorId: data.currentMemberId,
       createdAt,
       commentCount: 0,
       minutesId: null,
@@ -502,6 +522,8 @@ export const useTaskStore = defineStore('task', () => {
 
   /** 작업 상세에서 안건을 걸고 뗀다. 안건 화면에서는 이 링크를 읽기만 한다. */
   function linkThread(taskId: string, threadId: string) {
+    const task = findTask(taskId)
+    if (!task || rejectEdit(task)) return
     if (!data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId))
       logMock(taskId, [change('thread', null, threadId)])
     addLink(taskId, threadId)
@@ -517,6 +539,8 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function unlinkThread(taskId: string, threadId: string) {
+    const task = findTask(taskId)
+    if (!task || rejectEdit(task)) return
     if (data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId))
       logMock(taskId, [change('thread', threadId, null)])
     data.taskThreads = data.taskThreads.filter(
@@ -531,6 +555,21 @@ export const useTaskStore = defineStore('task', () => {
         () => {},
       ),
     )
+  }
+
+  /**
+   * 지운다 — 본문 · 댓글 · 안건 연결 · 테스트 태그는 서버가 같이 걷는다. 하위 작업이 있으면 409 TASK_HAS_CHILDREN.
+   * 실패하면 ApiError 를 던진다 — 이유를 확인 다이얼로그에 띄우는 것은 화면 몫이다
+   */
+  async function deleteTask(taskId: string) {
+    await api.deleteTask(taskId)
+    /* 모아 두던 본문이 지운 작업에 늦게 날아가지 않게 */
+    clearTimeout(bodyTimers.get(taskId))
+    bodyTimers.delete(taskId)
+    data.allTasks = data.allTasks.filter((t) => t.id !== taskId)
+    data.taskThreads = data.taskThreads.filter((l) => l.taskId !== taskId)
+    /* 테스트의 태그도 서버에서 빠졌다 — 받아 둔 목록이 있으면 다시 받는다 */
+    if (testStore.loaded) void testStore.load()
   }
 
   /** 어느 작업에 걸린 안건인지 — 안건 이력에서 읽기 전용으로 보여준다 */
@@ -562,6 +601,9 @@ export const useTaskStore = defineStore('task', () => {
     threadRow,
     threadsOfTask,
     tasksOfThread,
+    canEdit,
+    canDelete,
+    deleteTask,
     setStatus,
     setOwner,
     setPeriod,

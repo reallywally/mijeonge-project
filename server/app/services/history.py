@@ -41,6 +41,11 @@ def created() -> list[Change]:
     return [change("created", None, None)]
 
 
+def deleted() -> list[Change]:
+    """논리 삭제 — 지운 작업의 이력은 API 로 안 나가니 DB 에 남는 기록이다."""
+    return [change("deleted", None, None)]
+
+
 def diff(pairs: Iterable[tuple[str, object, object]]) -> list[Change]:
     """(칸, 전, 후) 가운데 값이 바뀐 것만 — 넘긴 순서(= 계약 표의 순서)를 지킨다."""
     return [change(field, before, after) for field, before, after in pairs if before != after]
@@ -140,7 +145,8 @@ def _entry(row: TaskHistory | TestHistory) -> HistoryEntry:
 
 async def list_task_history(session: AsyncSession, task_id: str) -> list[HistoryEntry]:
     # 없는 작업이면 404 — 빈 배열은 '이력이 없는 작업' 과 구분이 안 된다(댓글과 같다)
-    if await session.scalar(select(Task.id).where(Task.id == task_id)) is None:
+    live = select(Task.id).where(Task.id == task_id, Task.is_deleted.is_(False))
+    if await session.scalar(live) is None:
         raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
     rows = await session.scalars(
         select(TaskHistory).where(TaskHistory.task_id == task_id).order_by(TaskHistory.seq)

@@ -23,6 +23,7 @@ from app.schemas.project import ProjectOut
 from app.schemas.snapshot import SnapshotOut
 from app.schemas.task import TaskThreadLinkOut
 from app.services import project as project_service
+from app.services.access import live_task_ids
 from app.services.part import to_part
 from app.services.task import comment_counts, since_or_created, status_since_map, to_task
 from app.services.thread import to_entry, to_thread
@@ -47,7 +48,10 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
         .order_by(Entry.seq),
     )
     tasks = await _all(
-        session, select(Task).where(Task.project_id == project_id).order_by(Task.seq)
+        session,
+        select(Task)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
+        .order_by(Task.seq),
     )
     counts = await comment_counts(session, project_id)
     since = await status_since_map(session, project_id)
@@ -55,7 +59,11 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
     task_threads = await _all(
         session,
         select(TaskThreadLink)
-        .where(TaskThreadLink.project_id == project_id)
+        .where(
+            TaskThreadLink.project_id == project_id,
+            # 지운 작업의 링크는 남아 있다 — 화면에는 없는 것처럼
+            TaskThreadLink.task_id.in_(live_task_ids()),
+        )
         .order_by(TaskThreadLink.task_id, TaskThreadLink.thread_id),
     )
     parts = await _all(

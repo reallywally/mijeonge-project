@@ -145,6 +145,19 @@ TASK_PARTS = {
     **dict.fromkeys((f"k{n}" for n in range(6, 17)), "pt2"),
     "k18": "pt3",
 }
+# 등록한 사람 — `fixtures/tasks.ts` 의 CREATOR_OF 그대로. 표에 없는 작업은 이 칸이 생기기 전의
+# 것이라 null 이다. 담당자와 다른 사람을 섞어 둔다:
+# k4 는 u3 담당 · u2 등록, k18 은 u4 담당 · u3 등록
+TASK_CREATORS = {
+    "k1": "u1",
+    "k3": "u1",
+    "k4": "u2",
+    "k5": "u1",
+    "k18": "u3",
+    "k20": "u3",
+    "k21": "u3",
+    "x1": "u2",
+}
 # 참조 — docs/api/check.md '시드 · 목업' 표 그대로. 표에 없는 안건은 []
 THREAD_CC = {"t1": ["u1"], "t2": ["u2", "u4"], "t6": ["u2"]}
 THREAD_PARTS = {
@@ -397,6 +410,7 @@ def task(
         parent_id=parent,
         status=status,
         owner_id=owner,
+        creator_id=TASK_CREATORS.get(id_),
         start=d(start),
         due=d(due),
         priority="normal",
@@ -540,7 +554,7 @@ def task_logs() -> list[TaskLog]:
                     task_id=task.id,
                     from_status=None,
                     to_status=before,
-                    changed_by=task.owner_id,
+                    changed_by=task.creator_id,
                     changed_at=task.created_at,
                     backfilled=False,
                 )
@@ -554,7 +568,7 @@ def task_logs() -> list[TaskLog]:
                 task_id=task.id,
                 from_status=None,
                 to_status=task.status,
-                changed_by=task.owner_id,
+                changed_by=task.creator_id,
                 changed_at=since,
                 backfilled=False,
             )
@@ -569,7 +583,7 @@ CREATED_CHANGES: list[dict[str, str | int | bool | None]] = [
 
 
 def task_histories() -> list[TaskHistory]:
-    """작업마다 '등록' 한 줄(등록 시각 · 담당자, 담당 없으면 null) + k20 의 상태 바뀜 하나.
+    """작업마다 '등록' 한 줄(등록 시각 · 등록한 사람) + k20 의 상태 바뀜 하나.
 
     k20 의 줄은 task_log 시연 줄(DEMO_STATUS_CHANGES)과 같은 때 · 같은 사람이다.
     """
@@ -578,7 +592,7 @@ def task_histories() -> list[TaskHistory]:
             id=f"th-{task.id}-1",
             project_id=task.project_id,
             task_id=task.id,
-            changed_by=task.owner_id,
+            changed_by=task.creator_id,
             changed_at=task.created_at,
             changes=CREATED_CHANGES,
             backfilled=False,

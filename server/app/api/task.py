@@ -41,25 +41,31 @@ async def patch_task(
     task_id: str, payload: TaskPatch, scope: ProjectScope, session: Session
 ) -> TaskOut:
     """부분 수정 — 상태 · 담당자 · 기간 · 상위 작업이 다 이 하나로 들어온다."""
-    return await task_service.patch_task(session, task_id, payload, scope.actor.id)
+    return await task_service.patch_task(session, task_id, payload, scope)
+
+
+@router.delete("/tasks/{task_id}", status_code=204)
+async def delete_task(task_id: str, scope: ProjectScope, session: Session) -> None:
+    """생성자 · 프로젝트 관리자 · 시스템 관리자만. 하위 작업이 있으면 409."""
+    await task_service.delete_task(session, task_id, scope)
 
 
 @router.patch("/tasks/{task_id}/lines/{line_id}")
 async def patch_task_line(
     task_id: str, line_id: str, payload: TaskLinePatch, scope: ProjectScope, session: Session
 ) -> TaskOut:
-    return await task_service.set_line_done(session, task_id, line_id, payload.done, scope.actor.id)
+    return await task_service.set_line_done(session, task_id, line_id, payload.done, scope)
 
 
 @router.put("/tasks/{task_id}/threads/{thread_id}")
 async def link_thread(
     task_id: str, thread_id: str, scope: ProjectScope, session: Session
 ) -> TaskThreadLinkOut:
-    return await task_service.link_thread(session, task_id, thread_id, scope.actor.id)
+    return await task_service.link_thread(session, task_id, thread_id, scope)
 
 
 @router.delete("/tasks/{task_id}/threads/{thread_id}", status_code=204)
 async def unlink_thread(
     task_id: str, thread_id: str, scope: ProjectScope, session: Session
 ) -> None:
-    await task_service.unlink_thread(session, task_id, thread_id, scope.actor.id)
+    await task_service.unlink_thread(session, task_id, thread_id, scope)

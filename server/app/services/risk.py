@@ -30,6 +30,7 @@ from app.schemas.risk import (
     ThreadRiskSignal,
 )
 from app.services import project as project_service
+from app.services.access import live_task_ids
 from app.time import KST, as_utc, now
 
 # 신호 점수는 고정이다 — 바꿀 수 있는 것은 문턱값 다섯뿐이다. 순서가 곧 signals 배열의 순서다
@@ -204,14 +205,16 @@ async def _read(
             Task.due,
             Task.seq,
         )
-        .where(Task.project_id == project_id)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .order_by(Task.seq)
     )
     tasks = {row.id: _Task(**row._asdict()) for row in task_rows}
     # 링크는 양쪽이 같은 프로젝트라 project_id 하나로 갈린다 (API.md Q13)
     link_rows = await session.execute(
         select(TaskThreadLink.task_id, TaskThreadLink.thread_id).where(
-            TaskThreadLink.project_id == project_id
+            TaskThreadLink.project_id == project_id,
+            # 지운 작업의 링크는 남아 있다 — 위 tasks 에 없는 id 를 끌고 오지 않게
+            TaskThreadLink.task_id.in_(live_task_ids()),
         )
     )
     links = [(row.task_id, row.thread_id) for row in link_rows]

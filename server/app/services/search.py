@@ -237,7 +237,7 @@ async def search_tasks(
     await _pin_threshold(session)
 
     def scoped(owner: Select[Any]) -> Select[Any]:
-        owner = owner.where(Task.project_id == project_id)
+        owner = owner.where(Task.project_id == project_id, Task.is_deleted.is_(False))
         return owner.where(Task.status == status) if status is not None else owner
 
     title_hit, title_score = _match(Task.title, query)
@@ -297,7 +297,11 @@ async def get_thread(session: AsyncSession, project_id: str, thread_id: str) -> 
     tasks = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
         .join(TaskThreadLink, TaskThreadLink.task_id == Task.id)
-        .where(TaskThreadLink.thread_id == thread.id, TaskThreadLink.project_id == project_id)
+        .where(
+            TaskThreadLink.thread_id == thread.id,
+            TaskThreadLink.project_id == project_id,
+            Task.is_deleted.is_(False),
+        )
         .order_by(Task.seq)
     )
     return ThreadDoc(
@@ -318,7 +322,9 @@ async def tasks_by_key(
     if not wanted:
         return {}
     found = await session.scalars(
-        select(Task).where(Task.project_id == project_id, Task.key.in_(wanted))
+        select(Task).where(
+            Task.project_id == project_id, Task.key.in_(wanted), Task.is_deleted.is_(False)
+        )
     )
     return {task.key: task for task in found.all()}
 
@@ -329,6 +335,7 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
         select(Task).where(
             Task.project_id == project_id,
             or_(Task.id == task_id, Task.key == task_id.strip().upper()),
+            Task.is_deleted.is_(False),
         )
     )
     task = found.scalar_one_or_none()
@@ -343,7 +350,11 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
     )
     children = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
-        .where(Task.parent_id == task.id, Task.project_id == project_id)
+        .where(
+            Task.parent_id == task.id,
+            Task.project_id == project_id,
+            Task.is_deleted.is_(False),
+        )
         .order_by(Task.seq)
     )
     return TaskDoc(
@@ -386,7 +397,9 @@ async def list_tasks(
     tasks = (
         (
             await session.execute(
-                select(Task).where(Task.project_id == project_id).order_by(Task.seq)
+                select(Task)
+                .where(Task.project_id == project_id, Task.is_deleted.is_(False))
+                .order_by(Task.seq)
             )
         )
         .scalars()
@@ -433,7 +446,7 @@ async def similar_tasks(
             (Task.title + " " + func.coalesce(body.c.body, "")).label("doc"),
         )
         .outerjoin(body, body.c.task_id == Task.id)
-        .where(Task.project_id == project_id)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .cte("docs")
     )
     a, b = aliased(docs), aliased(docs)
@@ -456,7 +469,13 @@ async def similar_tasks(
         return []
 
     tasks = (
-        (await session.execute(select(Task).where(Task.project_id == project_id))).scalars().all()
+        (
+            await session.execute(
+                select(Task).where(Task.project_id == project_id, Task.is_deleted.is_(False))
+            )
+        )
+        .scalars()
+        .all()
     )
     by_id = {t.id: t for t in tasks}
     key_of = {t.id: t.key for t in tasks}

@@ -64,6 +64,12 @@ def live_project_ids() -> Select[tuple[str]]:
     return select(Project.id).where(Project.deleted_at.is_(None))
 
 
+def live_task_ids() -> Select[tuple[str]]:
+    """지우지 않은 작업. 작업을 잇지 않고 `task_id` 만 쥔 표(링크 · 상태 기록 · 테스트 참조)가
+    `in_()` 으로 건다. 작업을 직접 읽는 자리는 `Task.is_deleted.is_(False)` 를 바로 건다."""
+    return select(Task.id).where(Task.is_deleted.is_(False))
+
+
 async def _project_of(session: AsyncSession, param: str, value: str) -> str | None:
     """그 레코드의 프로젝트. 지운 프로젝트 소속이면 없는 것과 같다 — 원래 없을 때의 404 로 간다."""
     stmt: Select[tuple[str]]
@@ -71,7 +77,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
         case "project_id":
             stmt = select(Project.id).where(Project.id == value)
         case "task_id":
-            stmt = select(Task.project_id).where(Task.id == value)
+            # 지운 작업은 없는 것과 같다 — 그 아래 경로(줄 · 링크 · 댓글 · 이력)가 전부 404 로 간다
+            stmt = select(Task.project_id).where(Task.id == value, Task.is_deleted.is_(False))
         case "thread_id":
             stmt = select(Thread.project_id).where(Thread.id == value)
         case "part_id":
@@ -88,7 +95,7 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             stmt = (
                 select(Task.project_id)
                 .join(TaskComment, TaskComment.task_id == Task.id)
-                .where(TaskComment.id == value)
+                .where(TaskComment.id == value, Task.is_deleted.is_(False))
             )
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")
@@ -162,3 +169,17 @@ async def active_project_members(
 
 async def is_assignable(session: AsyncSession, project_id: str, member_id: str) -> bool:
     return bool(await active_project_members(session, project_id, [member_id]))
+
+
+def can_edit_task(scope: Scope, task: Task) -> bool:
+    """작업 하나를 고칠 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
+
+    담당자를 바꾸는 수정도 바꾸기 **전** 작업으로 본다 — 부르는 쪽이 고치기 전에 부른다.
+    """
+    me = scope.actor.id
+    return scope.can_manage or me in (task.creator_id, task.owner_id)
+
+
+def can_delete_task(scope: Scope, task: Task) -> bool:
+    """지우기는 담당자에게 주지 않는다 — 맡은 일을 맡은 사람이 없앨 수 있으면 기록이 사라진다."""
+    return scope.can_manage or task.creator_id == scope.actor.id

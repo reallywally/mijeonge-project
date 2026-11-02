@@ -10,7 +10,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
@@ -84,6 +84,11 @@ class _Entry:
     seq: int
 
 
+def _live_ref() -> ColumnElement[bool]:
+    """지운 작업에 건 태그는 남아 있다 — 목록 · 기준 · 개수 어디서도 없는 것처럼 거른다."""
+    return or_(TestRef.task_id.is_(None), TestRef.task_id.in_(access.live_task_ids()))
+
+
 async def _refs(session: AsyncSession, test_ids: Collection[str]) -> dict[str, list[_Ref]]:
     """테스트마다 태그 — task 먼저, 그 안은 작업 · 안건의 seq 순 (계약 '모양')."""
     if not test_ids:
@@ -98,7 +103,7 @@ async def _refs(session: AsyncSession, test_ids: Collection[str]) -> dict[str, l
         )
         .outerjoin(Task, Task.id == TestRef.task_id)
         .outerjoin(Thread, Thread.id == TestRef.thread_id)
-        .where(TestRef.test_id.in_(test_ids))
+        .where(TestRef.test_id.in_(test_ids), _live_ref())
     )
     found: dict[str, list[_Ref]] = defaultdict(list)
     for test_id, task_id, thread_id, task_seq, thread_seq in rows.tuples():
@@ -333,7 +338,9 @@ async def _guard_target(
 ) -> None:
     """같은 프로젝트의 작업 · 안건만 건다. 다른 프로젝트 것은 '없다' 로 본다."""
     if kind == "task":
-        owner = await session.scalar(select(Task.project_id).where(Task.id == target_id))
+        owner = await session.scalar(
+            select(Task.project_id).where(Task.id == target_id, Task.is_deleted.is_(False))
+        )
         if owner != project_id:
             raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
     else:
@@ -544,7 +551,7 @@ async def put_ref(
     )
     if exists is None:
         count = await session.scalar(
-            select(func.count()).select_from(TestRef).where(TestRef.test_id == test.id)
+            select(func.count()).select_from(TestRef).where(TestRef.test_id == test.id, _live_ref())
         )
         if (count or 0) >= REFS_MAX:
             raise _ref_limit()
@@ -559,11 +566,11 @@ async def put_ref(
 async def delete_ref(
     session: AsyncSession, test_id: str, kind: TestRefKind, target_id: str, actor_id: str
 ) -> None:
-    """멱등 — 없는 태그도 성공이다."""
+    """멱등 — 없는 태그도 성공이다. 지운 작업에 건 태그도 없는 것으로 본다."""
     test = await load_test(session, test_id)
     column = TestRef.task_id if kind == "task" else TestRef.thread_id
     found = await session.scalar(
-        select(TestRef).where(TestRef.test_id == test.id, column == target_id)
+        select(TestRef).where(TestRef.test_id == test.id, column == target_id, _live_ref())
     )
     if found is None:
         return

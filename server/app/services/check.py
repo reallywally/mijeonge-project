@@ -65,6 +65,7 @@ async def recipient_loads(
             Task.project_id == project_id,
             Task.owner_id.in_(member_ids),
             Task.status != "done",
+            Task.is_deleted.is_(False),
         )
         .group_by(Task.owner_id)
     )
@@ -124,6 +125,7 @@ async def recipients_of(session: AsyncSession, thread: Thread, sender_id: str) -
             TaskThreadLink.thread_id == thread.id,
             Task.project_id == thread.project_id,
             Task.owner_id.is_not(None),
+            Task.is_deleted.is_(False),
         )
         .order_by(Task.seq)
     )

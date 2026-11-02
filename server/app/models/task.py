@@ -46,6 +46,14 @@ class Task(Base):
         # 파트도 같은 프로젝트의 것만 단다 (docs/api/part.md)
         ForeignKeyConstraint(["part_id", "project_id"], ["part.id", "part.project_id"]),
         Index("ix_task_project_id_status", "project_id", "status"),
+        # 읽는 자리마다 지운 작업을 거른다 — 살아 있는 줄만 모은 부분 인덱스로 목록을 뽑는다
+        Index(
+            "ix_task_project_id_live",
+            "project_id",
+            "seq",
+            postgresql_where=text("not is_deleted"),
+            sqlite_where=text("not is_deleted"),
+        ),
         Index("ix_task_parent_id", "parent_id"),
         trgm_index("task", "title"),
     )
@@ -59,6 +67,9 @@ class Task(Base):
     parent_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="todo")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    # 등록한 사람 — 수정 · 삭제 권한의 근거라 바꾸지 않는다. 기록이 없던 지난 작업은 null.
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    creator_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     start: Mapped[date | None] = mapped_column(Date)
     due: Mapped[date | None] = mapped_column(Date)
     priority: Mapped[str] = mapped_column(String(16), default="normal")
@@ -72,6 +83,12 @@ class Task(Base):
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    # 논리 삭제 — 판단은 이 칸 하나로 한다. 본문 · 댓글 · 링크 · 기록은 그대로 두고
+    # 읽는 쪽이 거른다. 번호(key)는 계속 쥐고 있어 다시 나가지 않는다
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 누가 지웠는지. 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    deleted_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
 
     lines: Mapped[list["TaskLine"]] = relationship(
         back_populates="task",
