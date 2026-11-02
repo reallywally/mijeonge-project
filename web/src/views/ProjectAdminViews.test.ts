@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import { toast } from 'vue-sonner'
 import { mockDb, resetMockAuth } from '@/api/mockAuth'
 import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
@@ -16,6 +17,7 @@ import ProjectSettingsView from './ProjectSettingsView.vue'
 /* 프로젝트 관리 · 파트 관리 두 화면이 목업 갈래로 떠서 스토어까지 닿는지 본다.
    멤버 부여 · 역할 · 빼기 · 이름은 AdminViews.test 가 본다 */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
+vi.mock('vue-sonner', () => ({ toast: { success: vi.fn() } }))
 
 const Blank = defineComponent({ template: '<div />' })
 
@@ -166,6 +168,7 @@ describe('프로젝트 관리 — 기본 정보(상태 포함) · 삭제', () =>
     await click(w.get('button[data-save-info]').element)
 
     expect(spy).toHaveBeenCalledWith('p1', { status: 'planned' })
+    expect(toast.success).toHaveBeenCalledWith('저장이 완료되었습니다.')
     expect(data.currentProject).toMatchObject({ status: 'planned', closedAt: null })
     expect(w.find('[data-closed-at]').exists()).toBe(false)
     expect(w.get('button[data-save-info]').attributes('disabled')).toBeDefined()

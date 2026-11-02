@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { toast } from 'vue-sonner'
 import { Loader2, Lock, Plus, Trash2, UserMinus, X } from 'lucide-vue-next'
 import { ApiError, messageOf } from '@/api'
 import PersonChip from '@/components/app/PersonChip.vue'
@@ -158,6 +159,7 @@ async function saveInfo() {
   saveError.value = null
   try {
     await data.updateProject(projectId.value, patch.value)
+    toast.success('저장이 완료되었습니다.')
   } catch (e) {
     saveError.value = {
       code: e instanceof ApiError ? e.code : '',
