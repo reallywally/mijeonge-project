@@ -44,6 +44,7 @@ def _account(member: Member, identity: AuthIdentity | None) -> MemberAccountOut:
     return MemberAccountOut.model_validate(
         {
             "id": member.id,
+            "no": member.no,
             "name": member.name,
             "email": member.email,
             "system_role": member.system_role,

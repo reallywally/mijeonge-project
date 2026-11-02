@@ -145,7 +145,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | POST | `/api/auth/logout` | 이 세션 끝내기 (멱등) | 204 | 구현 |
 | GET | `/api/auth/me` | 지금 로그인한 사람 · 내 프로젝트 역할 | `Me` | 구현 |
 | POST | `/api/auth/password` | 내 비밀번호 바꾸기 | 204 | 구현 |
-| GET · POST | `/api/admin/members` | 사용자 목록 · 등록 (시스템 관리자) | `MemberAccount[]` · `MemberAccount` 201 | 구현 |
+| GET · POST | `/api/admin/members` | 사용자 목록 · 등록 (시스템 관리자). 응답에 사람이 부르는 번호 `no`(2026-11-02) | `MemberAccount[]` · `MemberAccount` 201 | 구현 |
 | PATCH | `/api/admin/members/{memberId}` | 이름 · 이메일 · 시스템 역할 · 활성 (시스템 관리자) | `MemberAccount` | 구현 |
 | PUT | `/api/admin/members/{memberId}/password` | 비밀번호 새로 걸기 (시스템 관리자) | 204 | 구현 |
 | GET | `/api/projects/{projectId}/members` | 프로젝트에 부여된 사람 · 역할 | `ProjectMember[]` | 구현 |

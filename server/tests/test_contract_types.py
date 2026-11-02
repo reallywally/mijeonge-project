@@ -163,6 +163,7 @@ AUTH_SHAPES: dict[str, set[str]] = {
     "Me": {"id", "name", "email", "systemRole", "projectRoles"},
     "MemberAccount": {
         "id",
+        "no",
         "name",
         "email",
         "systemRole",

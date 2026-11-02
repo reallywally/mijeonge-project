@@ -79,6 +79,37 @@ describe('사용자 관리 화면', () => {
     expect(w.text()).toContain('마지막 로그인')
   })
 
+  it('맨 앞 열은 사용자 번호이고 번호 순으로 선다 — uuid 는 목록에 없다', async () => {
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
+    const { w } = await mountAt('/admin/members')
+
+    expect(w.findAll('th')[0].text()).toBe('번호')
+    const rows = w.findAll('tr[data-member-id]')
+    expect(rows.map((r) => r.get('[data-member-no]').text())).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+    ])
+    expect(rows.map((r) => r.attributes('data-member-id'))).toEqual([
+      'u0',
+      'u1',
+      'u2',
+      'u3',
+      'u4',
+      'u5',
+    ])
+    expect(w.find('[data-id-cell]').exists()).toBe(false)
+
+    /* 수정 팝업 제목에 번호가 서고, uuid 복사는 거기 남는다 */
+    await w.get('button[aria-label="김서연 수정"]').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('사용자 수정 — 2번 · 김서연')
+    expect(document.body.querySelector('[data-id-cell]')?.getAttribute('title')).toBe('u1')
+  })
+
   it('등록하면 표에 서고, 이메일이 겹치면 서버의 message 를 알리고 팝업을 지킨다', async () => {
     await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     const { w } = await mountAt('/admin/members')
@@ -95,6 +126,10 @@ describe('사용자 관리 화면', () => {
     await click(bodyButton('등록'))
     expect(document.body.querySelector('#account-name')).toBeNull()
     expect(w.text()).toContain('최유진')
+    /* 새 사람은 다음 번호를 받아 맨 아래에 선다 */
+    const last = w.findAll('tr[data-member-id]').at(-1)!
+    expect(last.text()).toContain('최유진')
+    expect(last.get('[data-member-no]').text()).toBe('7')
     /* 담당자 이름을 찍는 멤버 목록에도 바로 선다 */
     expect(useDataStore().allMembers.some((m) => m.name === '최유진')).toBe(true)
   })

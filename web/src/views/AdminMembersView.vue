@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { KeyRound, Loader2, Pencil, Plus, RotateCcw } from 'lucide-vue-next'
 import AdminShell from '@/components/app/AdminShell.vue'
-import IdCell from '@/components/app/IdCell.vue'
 import MemberAccountDialog from '@/components/app/MemberAccountDialog.vue'
 import MemberPasswordDialog from '@/components/app/MemberPasswordDialog.vue'
 import { Badge } from '@/components/ui/badge'
@@ -16,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { dayTime } from '@/lib/date'
-import { systemRoleLabel } from '@/lib/member'
+import { byMemberNo, systemRoleLabel } from '@/lib/member'
 import { useAdminStore } from '@/stores/admin'
 import { useAuthStore } from '@/stores/auth'
 import type { MemberAccount } from '@/types/domain'
@@ -29,6 +28,9 @@ const auth = useAuthStore()
 onMounted(() => {
   void admin.load()
 })
+
+/* 관리자끼리 번호로 부르니 번호 순으로 놓는다 — 새로 등록한 사람이 맨 아래에 선다 */
+const rows = computed(() => [...admin.accounts].sort(byMemberNo))
 
 const activeCount = computed(() => admin.accounts.filter((a) => a.active).length)
 
@@ -84,8 +86,9 @@ function openPassword(account: MemberAccount) {
           <Table>
             <TableHeader>
               <TableRow class="bg-muted/60 hover:bg-muted/60">
-                <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
-                  >ID</TableHead
+                <TableHead
+                  class="h-10 w-[64px] text-right text-xs font-medium text-muted-foreground"
+                  >번호</TableHead
                 >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">이름</TableHead>
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">이메일</TableHead>
@@ -103,13 +106,15 @@ function openPassword(account: MemberAccount) {
             </TableHeader>
             <TableBody>
               <TableRow
-                v-for="a in admin.accounts"
+                v-for="a in rows"
                 :key="a.id"
                 :data-member-id="a.id"
                 class="h-12"
                 :class="a.active ? '' : 'text-muted-foreground'"
               >
-                <TableCell><IdCell :id="a.id" /></TableCell>
+                <TableCell data-member-no class="text-right font-mono text-xs tabular-nums">{{
+                  a.no
+                }}</TableCell>
                 <TableCell class="text-sm">
                   <span class="flex items-center gap-2">
                     <span class="truncate" :class="a.active ? 'font-medium' : ''">{{

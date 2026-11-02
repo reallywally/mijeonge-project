@@ -49,6 +49,8 @@ interface MockDb {
   deletedProjectIds: string[]
   members: Member[]
   accounts: MockAccount[]
+  /** 마지막으로 준 사용자 번호 — 다음 등록은 여기에 1을 더한다(다시 쓰지 않는다) */
+  memberNoSeq: number
   grants: MockProjectGrant[]
   parts: Part[]
   partMembers: PartMember[]
@@ -79,6 +81,7 @@ const fresh = (): MockDb => ({
   deletedProjectIds: [],
   members: structuredClone(members),
   accounts: structuredClone(accounts),
+  memberNoSeq: Math.max(0, ...accounts.map((a) => a.no)),
   grants: structuredClone(projectGrants),
   parts: structuredClone(parts),
   partMembers: structuredClone(partMembers),
@@ -208,6 +211,7 @@ export function toAccount(memberId: string): MemberAccount {
   const account = accountOf(memberId)!
   return {
     id: member.id,
+    no: account.no,
     name: member.name,
     email: account.email,
     systemRole: account.systemRole,

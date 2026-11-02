@@ -73,9 +73,12 @@ const mock = {
     const email = checkEmail(input.email, null)
     mockSeq += 1
     const memberId = `mu${mockSeq}`
-    mockDb().members.push({ id: memberId, name, active: true })
-    mockDb().accounts.push({
+    const db = mockDb()
+    db.memberNoSeq += 1
+    db.members.push({ id: memberId, name, active: true })
+    db.accounts.push({
       memberId,
+      no: db.memberNoSeq,
       email,
       password: input.password,
       systemRole: input.systemRole,

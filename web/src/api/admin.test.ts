@@ -111,12 +111,37 @@ describe('사용자 관리', () => {
       password: 'first-password',
       systemRole: 'user',
     })
-    expect(made).toMatchObject({ active: true, hasPassword: true, lastLoginAt: null })
+    expect(made).toMatchObject({ no: 7, active: true, hasPassword: true, lastLoginAt: null })
     await logout()
     expect(await login({ email: 'yujin@inno-ax.com', password: 'first-password' })).toMatchObject({
       id: made.id,
       projectRoles: {},
     })
+  })
+
+  it('사용자 번호 — 픽스처는 1부터, 새 번호는 마지막으로 준 번호 + 1 이고 비활성으로 꺼도 다시 쓰지 않는다', async () => {
+    await asAdmin()
+    const list = await fetchMemberAccounts()
+    expect(Object.fromEntries(list.map((a) => [a.id, a.no]))).toEqual({
+      u0: 1,
+      u1: 2,
+      u2: 3,
+      u3: 4,
+      u4: 5,
+      u5: 6,
+    })
+    const input = (n: number) => ({
+      name: `새사람${n}`,
+      email: `new${n}@inno-ax.com`,
+      password: 'first-password',
+      systemRole: 'user' as const,
+    })
+    const first = await createMemberAccount(input(1))
+    await patchMemberAccount(first.id, { active: false })
+    const second = await createMemberAccount(input(2))
+    expect([first.no, second.no]).toEqual([7, 8])
+    /* 이름 · 이메일을 고쳐도 번호는 그대로다 */
+    expect(await patchMemberAccount(second.id, { name: '바뀐이름' })).toMatchObject({ no: 8 })
   })
 
   it('경력 · 기술 스펙 · 기타 사항을 적고 고치고 비운다 — 빈 글은 null', async () => {

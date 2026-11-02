@@ -6,6 +6,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Identity,
     Index,
     Integer,
     String,
@@ -63,6 +64,9 @@ class Member(Base):
     __table_args__ = (CheckConstraint(f"system_role in {ROLES}", name="system_role"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    # 사람이 부르는 번호 — "5번 사용자". DB 시퀀스가 매겨 동시 등록에도 안 겹치고,
+    # 비활성화해도 그대로 두며 다시 쓰지 않는다
+    no: Mapped[int] = mapped_column(Integer, Identity(), unique=True)
     name: Mapped[str] = mapped_column(String(100))
     # 소문자로만 저장한다. 없으면 로그인할 수 없다 — 옛 멤버는 관리자가 넣어 줘야 들어온다
     email: Mapped[str | None] = mapped_column(String(254), unique=True)

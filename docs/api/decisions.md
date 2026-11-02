@@ -105,6 +105,7 @@
 
 | 날짜 | 무엇을 | 왜 |
 | --- | --- | --- |
+| 2026-11-02 | **`MemberAccount` 에 사람이 부르는 번호 `no` 를 더한다** — 1부터 전역 순번 · 유일 · 다시 쓰지 않는다(비활성화해도 그대로). DB identity 가 매기고 입력으로는 못 바꾼다. 공개용 `Member` 에는 싣지 않는다 (`docs/api/auth.md`) | 사용자 결정. 관리자들이 "5번 사용자 비활성화" 처럼 번호로 말하고 싶어 한다 — uuid 는 소리 내어 부를 수 없다. 사용자 번호는 전역 하나라 작업 번호처럼 행 카운터를 둘 자리가 없고, 시퀀스가 동시 등록에도 겹치지 않는다. 롤백된 등록은 번호를 건너뛸 수 있다 — 빈 번호는 괜찮고 겹치는 번호가 안 된다 |
 | 2026-11-01 | **본문 변경 이력에 전 · 후 글을 남기고, 이어 고친 것은 한 줄로 합친다** (Q65, `docs/api/history.md` '본문') | 사용자 결정. 화면이 입력을 0.5초 멈출 때마다 저장해 글자마다 '본문 고침' 줄이 쌓였고, 무엇이 바뀌었는지도 안 보였다. 화면의 저장 간격을 늘리는 것만으로는 쉬어 가며 쓰는 동안 또 쌓인다 — 서버가 합친다 |
 | 2026-10-28 | **작업 계층을 4단까지로 막고, 작업 목록 · 간트에 '완료 숨기기'(기본 켜짐)를 더했다** (Q64) — 400 `TASK_DEPTH_EXCEEDED`. 지난 데이터는 그대로 | 사용자 결정. 후속 작업을 새 작업으로 만들면 작업이 늘어난다 — 개수를 막는 대신 깊이를 막고 보이는 범위를 줄인다. 하위 '개수' 제한은 일이 줄지 않고 엉뚱한 곳에 붙어 구조만 어색해진다 |
 | 2026-10-28 | **선행 작업을 통째로 걷었다** (Q63, Q49 를 뒤집음) — `PUT · DELETE /api/tasks/{taskId}/dependencies/{dependsOnId}` · `POST /api/projects/{projectId}/dependencies/suggest` 는 404, 스냅샷의 `taskDependencies`, `TASK_DEPENDENCY_*` · `DEPENDENCY_SUGGEST_FAILED`, 변경 이력의 새 `dependsOn` 줄, 새 리포트의 신호 `waitingOnPredecessor` · `lateBlocker` · `TaskAttention.waitingOnTaskIds` · `blockingTaskIds` 와 점수의 '뒤를 막는 덤'(점수는 신호 점수의 합만), Claude 에 넣던 선행 / 기다리는 작업. `0023_drop_task_dependency` 가 `task_dependency` 를 걷는다(걸려 있던 줄은 버림). 작업 상태 기록은 그대로. 저장된 리포트의 `facts` · 지난 `dependsOn` 이력 줄은 기록이라 그대로 읽힌다 | 사용자 결정 |
