@@ -1,34 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
 import {
-  ChevronDown,
   FileChartColumn,
   FlaskConical,
   FolderClosed,
-  KeyRound,
   ListChecks,
   ListTree,
   NotebookPen,
   Loader2,
-  LogOut,
-  Settings,
+  ShieldCheck,
   SquareKanban,
   TriangleAlert,
-  UserCog,
-  Users,
 } from 'lucide-vue-next'
+import AccountMenu from '@/components/app/AccountMenu.vue'
 import BrandMark from '@/components/app/BrandMark.vue'
-import PasswordChangeDialog from '@/components/app/PasswordChangeDialog.vue'
-import PersonChip from '@/components/app/PersonChip.vue'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Select,
   SelectContent,
@@ -37,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { canManageAccounts, canManageProject, GRADE_LABEL, gradeOf } from '@/lib/access'
+import { canOpenAdmin } from '@/lib/access'
 import { useAuthStore } from '@/stores/auth'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
@@ -45,30 +30,16 @@ import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
 
 /* 대메뉴는 작업 · 안건 · 테스트 · 리스크 · 리포트 · 확인 요청 · 회의록이다. 위에서 프로젝트를 고르면 모두 그 프로젝트 안에서만 돈다.
-   관리 메뉴는 권한이 있는 사람에게만 보인다 — 숨기는 것은 편의이고 막는 것은 서버다.
+   관리 메뉴는 관리자 페이지(AdminShell)로 뺐다 — 여기는 관리 권한이 있는 사람에게만 그리로 가는 링크 하나를 둔다.
+   숨기는 것은 편의이고 막는 것은 서버다.
    확인 요청 배지는 지금 프로젝트의 내 대기 수, 프로젝트 고르기에는 다른 프로젝트의 수 — 0 이면 안 그린다 (Q38) */
 const data = useDataStore()
 const auth = useAuthStore()
 const taskStore = useTaskStore()
 const threadStore = useThreadStore()
 const checks = useCheckStore()
-const router = useRouter()
 
-const manageProject = computed(
-  () => data.currentProjectId !== '' && canManageProject(auth.me, data.currentProjectId),
-)
-const manageAccounts = computed(() => canManageAccounts(auth.me))
-const gradeLabel = computed(() => {
-  const grade = gradeOf(auth.me, data.currentProjectId)
-  return grade ? GRADE_LABEL[grade] : ''
-})
-
-const passwordOpen = ref(false)
-
-async function logout() {
-  await auth.logout()
-  await router.replace('/login')
-}
+const openAdmin = computed(() => canOpenAdmin(auth.me))
 </script>
 
 <template>
@@ -91,33 +62,7 @@ async function logout() {
       </div>
       <div class="grow" />
       <slot name="actions" />
-      <DropdownMenu v-if="auth.me">
-        <DropdownMenuTrigger
-          class="flex h-8 items-center gap-1 rounded-md pr-1 pl-1.5 hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/25 focus-visible:outline-none"
-          aria-label="내 메뉴"
-        >
-          <PersonChip :name="auth.me.name" />
-          <ChevronDown class="size-3.5 text-muted-foreground" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-56">
-          <DropdownMenuLabel class="flex flex-col gap-0.5">
-            <span>{{ auth.me.name }}</span>
-            <span class="truncate text-xs font-normal text-muted-foreground">
-              {{ auth.me.email }}
-            </span>
-            <span class="text-xs font-normal text-muted-foreground">{{ gradeLabel }}</span>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem @select="passwordOpen = true">
-            <KeyRound />
-            비밀번호 바꾸기
-          </DropdownMenuItem>
-          <DropdownMenuItem @select="logout">
-            <LogOut />
-            로그아웃
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <AccountMenu />
     </header>
 
     <div class="flex min-h-0 grow">
@@ -243,45 +188,23 @@ async function logout() {
           </RouterLink>
         </nav>
 
-        <nav v-if="manageProject || manageAccounts" class="flex flex-col gap-[3px]">
-          <span class="px-2.5 pb-1.5 text-[11.5px] font-medium text-muted-foreground">관리</span>
-          <template v-if="manageProject">
-            <RouterLink
-              :to="`/projects/${data.currentProjectId}/settings`"
-              class="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
-              active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
-            >
-              <Settings class="size-4 shrink-0" />
-              프로젝트 관리
-            </RouterLink>
-            <RouterLink
-              :to="`/projects/${data.currentProjectId}/parts`"
-              class="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
-              active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
-            >
-              <Users class="size-4 shrink-0" />
-              파트 관리
-            </RouterLink>
-          </template>
-          <RouterLink
-            v-if="manageAccounts"
-            to="/admin/members"
-            class="flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
-            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
-          >
-            <UserCog class="size-4 shrink-0" />
-            사용자 관리
-          </RouterLink>
-        </nav>
-
         <slot name="aside" />
+
+        <!-- 관리 메뉴는 관리자 페이지에 모았다. 맨 아래에 두어 대메뉴와 섞이지 않게 한다 -->
+        <RouterLink
+          v-if="openAdmin"
+          to="/admin"
+          class="mt-auto flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+          data-admin-link
+        >
+          <ShieldCheck class="size-4 shrink-0" />
+          관리자 페이지
+        </RouterLink>
       </aside>
 
       <main class="flex min-w-0 grow flex-col overflow-hidden bg-background">
         <slot />
       </main>
     </div>
-
-    <PasswordChangeDialog v-model:open="passwordOpen" />
   </div>
 </template>

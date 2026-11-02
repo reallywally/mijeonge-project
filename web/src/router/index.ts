@@ -1,6 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { setUnauthenticatedHandler } from '@/api'
-import { canOpen, emptyProjectsHome, safeNext, type RouteAccess } from '@/lib/access'
+import {
+  adminHome,
+  canOpen,
+  emptyProjectsHome,
+  projectPartsPath,
+  projectSettingsPath,
+  safeNext,
+  type RouteAccess,
+} from '@/lib/access'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { clearSession } from '@/stores/session'
@@ -37,28 +45,57 @@ const router = createRouter({
       component: () => import('@/views/ProjectsView.vue'),
       meta: { access: 'systemAdmin' },
     },
+    /* 관리 화면은 업무 화면과 다른 틀(AdminShell)을 쓴다. /admin 은 그 사람이 열 수 있는 첫 관리 화면으로 넘긴다 —
+       프로젝트 목록 · 현재 프로젝트를 알아야 하므로 부팅을 기다리는 전역 가드 뒤(beforeEnter)에서 고른다 */
     {
-      path: '/projects/:projectId/settings',
+      path: '/admin',
+      name: 'admin',
+      component: { render: () => null },
+      beforeEnter: () => {
+        const data = useDataStore()
+        return adminHome(
+          useAuthStore().me,
+          data.currentProjectId,
+          data.allProjects.map((p) => p.id),
+        )
+      },
+    },
+    {
+      path: '/admin/projects/:projectId/settings',
       name: 'project-settings',
       component: () => import('@/views/ProjectSettingsView.vue'),
       meta: { access: 'projectAdmin' },
     },
     {
-      path: '/projects/:projectId/parts',
+      path: '/admin/projects/:projectId/parts',
       name: 'project-parts',
       component: () => import('@/views/ProjectPartsView.vue'),
       meta: { access: 'projectAdmin' },
-    },
-    /* 옛 주소 — 멤버는 프로젝트 관리로 옮겼다. 걸어 둔 링크가 살게 넘긴다 */
-    {
-      path: '/projects/:projectId/members',
-      redirect: (to) => ({ path: `/projects/${String(to.params.projectId)}/settings` }),
     },
     {
       path: '/admin/members',
       name: 'admin-members',
       component: () => import('@/views/AdminMembersView.vue'),
       meta: { access: 'systemAdmin' },
+    },
+    /* 옛 주소 — 관리 화면은 /admin 아래로 옮겼고, 멤버는 프로젝트 관리로 옮겼다. 걸어 둔 링크가 살게 넘긴다(쿼리는 그대로) */
+    {
+      path: '/projects/:projectId/settings',
+      redirect: (to) => ({
+        path: projectSettingsPath(String(to.params.projectId)),
+        query: to.query,
+      }),
+    },
+    {
+      path: '/projects/:projectId/parts',
+      redirect: (to) => ({ path: projectPartsPath(String(to.params.projectId)), query: to.query }),
+    },
+    {
+      path: '/projects/:projectId/members',
+      redirect: (to) => ({
+        path: projectSettingsPath(String(to.params.projectId)),
+        query: to.query,
+      }),
     },
     {
       path: '/tasks',

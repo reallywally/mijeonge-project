@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { projectPartsPath, projectSettingsPath } from '@/lib/access'
 import { memberLabel } from '@/lib/member'
 import { partNameProblem } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
@@ -33,7 +34,7 @@ const route = useRoute()
 const router = useRouter()
 
 const projectId = computed(() => String(route.params.projectId ?? ''))
-const basePath = computed(() => `/projects/${projectId.value}/parts`)
+const basePath = computed(() => projectPartsPath(projectId.value))
 const ready = computed(() => !data.syncing && data.holdsRecordsOf(projectId.value))
 
 const activeParts = computed(() => partStore.parts.filter((p) => p.active))
@@ -456,7 +457,7 @@ const listLink = (path: '/tasks' | '/threads') =>
               <p v-else class="text-xs leading-relaxed text-muted-foreground text-pretty">
                 프로젝트에 부여된 사람이 모두 이 파트에 있습니다. 새 사람은
                 <RouterLink
-                  :to="`/projects/${projectId}/settings`"
+                  :to="projectSettingsPath(projectId)"
                   class="text-foreground underline-offset-4 hover:underline"
                   >프로젝트 관리</RouterLink
                 >에서 먼저 부여합니다.

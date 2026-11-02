@@ -44,6 +44,27 @@ export function canOpen(me: Me | null, access: RouteAccess | undefined, projectI
   return true
 }
 
+/** 관리자 페이지(/admin)에 들어갈 수 있나 — 시스템 관리자이거나 어느 프로젝트든 관리자 */
+export const canOpenAdmin = (me: Me | null) =>
+  isSystemAdmin(me) || Object.values(me?.projectRoles ?? {}).includes('admin')
+
+/** 관리 화면 주소 — 프로젝트 관리 · 파트 관리 · 사용자 관리 */
+export const projectSettingsPath = (projectId: string) => `/admin/projects/${projectId}/settings`
+export const projectPartsPath = (projectId: string) => `/admin/projects/${projectId}/parts`
+export const ADMIN_MEMBERS_PATH = '/admin/members'
+
+/**
+ * /admin 으로 들어왔을 때 갈 첫 관리 화면 — 지금 프로젝트를 관리할 수 있으면 그 프로젝트 관리,
+ * 아니면 사용자 관리(시스템 관리자), 아니면 관리할 수 있는 다른 프로젝트, 다 아니면 업무 화면
+ */
+export function adminHome(me: Me | null, currentProjectId: string, projectIds: string[]): string {
+  if (currentProjectId && canManageProject(me, currentProjectId))
+    return projectSettingsPath(currentProjectId)
+  if (canManageAccounts(me)) return ADMIN_MEMBERS_PATH
+  const other = projectIds.find((id) => canManageProject(me, id))
+  return other ? projectSettingsPath(other) : '/tasks'
+}
+
 /** 볼 프로젝트가 하나도 없을 때 갈 곳 — 등록할 수 있는 사람만 등록 화면으로 */
 export const emptyProjectsHome = (me: Me | null) =>
   canCreateProject(me) ? '/projects/new' : '/projects'

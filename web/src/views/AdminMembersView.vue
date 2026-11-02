@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { KeyRound, Loader2, Pencil, Plus, RotateCcw } from 'lucide-vue-next'
-import AppShell from '@/components/app/AppShell.vue'
+import AdminShell from '@/components/app/AdminShell.vue'
 import IdCell from '@/components/app/IdCell.vue'
 import MemberAccountDialog from '@/components/app/MemberAccountDialog.vue'
 import MemberPasswordDialog from '@/components/app/MemberPasswordDialog.vue'
@@ -22,7 +22,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { MemberAccount } from '@/types/domain'
 
 /* 사용자 관리 — 시스템 관리자만 (라우터 가드 · 메뉴가 같은 판단을 쓴다, 막는 것은 서버다).
-   사용자는 지우지 않고 끈다. 프로젝트 부여는 프로젝트 멤버 화면에서 한다 */
+   사용자는 지우지 않고 끈다. 프로젝트 부여는 프로젝트 관리에서 한다 */
 const admin = useAdminStore()
 const auth = useAuthStore()
 
@@ -54,7 +54,7 @@ function openPassword(account: MemberAccount) {
 </script>
 
 <template>
-  <AppShell>
+  <AdminShell>
     <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">사용자 관리</span>
       <span class="text-xs text-muted-foreground">
@@ -191,5 +191,5 @@ function openPassword(account: MemberAccount) {
 
     <MemberAccountDialog v-model:open="accountOpen" :account="editing" />
     <MemberPasswordDialog v-model:open="passwordOpen" :account="passwordFor" />
-  </AppShell>
+  </AdminShell>
 </template>

@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { projectPartsPath } from '@/lib/access'
 import { PROJECT_ROLE_OPTIONS, memberLabel } from '@/lib/member'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
@@ -36,7 +37,7 @@ const route = useRoute()
 
 const projectId = computed(() => String(route.params.projectId ?? ''))
 const project = computed(() => data.allProjects.find((p) => p.id === projectId.value) ?? null)
-const partsPath = computed(() => `/projects/${projectId.value}/parts`)
+const partsPath = computed(() => projectPartsPath(projectId.value))
 
 /* 서버 모드는 프로젝트를 바꾸면 스냅샷과 같이 멤버를 받는다 — 받기 전에는 비어 있다 */
 const loading = computed(() => data.syncing || data.projectMembers[projectId.value] === undefined)

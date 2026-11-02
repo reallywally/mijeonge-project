@@ -148,7 +148,15 @@
 
 ## 10단계 · 프로젝트 관리 · 파트 관리 나누기
 
-**끝났다.** '프로젝트 멤버' 한 화면을 **프로젝트 관리**(`/projects/:projectId/settings`)와 **파트 관리**(`/projects/:projectId/parts?part=`)로 나눴다. 자세한 기록은 `PLAN.done.md` 의 같은 제목 절에 있다.
+**끝났다.** '프로젝트 멤버' 한 화면을 **프로젝트 관리**(`/admin/projects/:projectId/settings`)와 **파트 관리**(`/admin/projects/:projectId/parts?part=`)로 나눴다. 자세한 기록은 `PLAN.done.md` 의 같은 제목 절에 있다.
+
+**2026-11-02 관리자 페이지로 옮김.** 관리 화면 셋(프로젝트 관리 · 파트 관리 · 사용자 관리)을 업무 화면 틀(AppShell)에서 떼어 관리자 페이지 틀(`components/app/AdminShell.vue`)로 옮겼다.
+
+- 주소 — `/admin/projects/:projectId/settings` · `/admin/projects/:projectId/parts?part=` · `/admin/members`. 옛 `/projects/:projectId/settings` · `/parts` · `/members` 는 새 주소로 넘긴다(쿼리 그대로)
+- `/admin` — 지금 프로젝트 관리 > 사용자 관리(시스템 관리자) > 관리할 수 있는 다른 프로젝트 > `/tasks` 순으로 첫 화면을 고른다(`lib/access.ts` 의 `adminHome`)
+- 사이드바 — 맨 위 '업무 화면으로', 프로젝트 묶음(관리할 수 있는 프로젝트만 고르기 + 프로젝트 관리 · 파트 관리) · 시스템 묶음(사용자 관리). 권한 없는 묶음은 숨긴다
+- 업무 화면 사이드바의 '관리' 묶음은 걷고, 관리 권한(시스템 관리자 또는 어느 프로젝트든 관리자)이 있으면 맨 아래에 '관리자 페이지' 링크 하나만 둔다
+- 프로젝트 목록(`/projects`) · 등록(`/projects/new`)은 업무 화면 그대로
 
 남겨 둔 것
 

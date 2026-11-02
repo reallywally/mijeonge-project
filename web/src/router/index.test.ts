@@ -51,6 +51,9 @@ beforeEach(async () => {
   me = user
   visible = projects.filter((p) => p.id !== 'p3')
   sessionAlive = true
+  /* 기억해 둔 프로젝트가 /admin 첫 화면을 바꾸지 않게 */
+  localStorage.clear()
+  sessionStorage.clear()
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -121,11 +124,13 @@ describe('권한 가드', () => {
     expect(path()).toBe('/tasks')
     await router.push('/projects/new')
     expect(path()).toBe('/projects')
-    await router.push('/projects/p1/settings')
+    await router.push('/admin/projects/p1/settings')
     expect(path()).toBe('/tasks')
-    await router.push('/projects/p1/parts?part=pt1')
+    await router.push('/admin/projects/p1/parts?part=pt1')
     expect(path()).toBe('/tasks')
     /* 옛 주소도 넘긴 뒤 같은 가드에 걸린다 */
+    await router.push('/projects/p1/settings')
+    expect(path()).toBe('/tasks')
     await router.push('/projects/p1/members')
     expect(path()).toBe('/tasks')
   })
@@ -133,22 +138,29 @@ describe('권한 가드', () => {
   it('프로젝트 관리자는 그 프로젝트의 관리 화면 둘만 연다', async () => {
     me = { ...user, projectRoles: { p1: 'admin', p2: 'user' } }
     setActivePinia(createPinia())
-    await router.push('/projects/p1/settings')
-    expect(path()).toBe('/projects/p1/settings')
-    await router.push('/projects/p1/parts?part=pt1')
-    expect(path()).toBe('/projects/p1/parts?part=pt1')
-    await router.push('/projects/p2/settings')
+    await router.push('/admin/projects/p1/settings')
+    expect(path()).toBe('/admin/projects/p1/settings')
+    await router.push('/admin/projects/p1/parts?part=pt1')
+    expect(path()).toBe('/admin/projects/p1/parts?part=pt1')
+    await router.push('/admin/projects/p2/settings')
     expect(path()).toBe('/tasks')
-    await router.push('/projects/p2/parts')
+    await router.push('/admin/projects/p2/parts')
+    expect(path()).toBe('/tasks')
+    await router.push('/admin/members')
     expect(path()).toBe('/tasks')
   })
 
-  it('옛 멤버 주소(/projects/:id/members)는 프로젝트 관리로 넘긴다', async () => {
+  it('옛 관리 주소는 /admin 아래 새 주소로 넘긴다 — 쿼리는 그대로, 멤버는 프로젝트 관리로', async () => {
     me = { ...user, projectRoles: { p1: 'admin', p2: 'user' } }
     setActivePinia(createPinia())
-    await router.push('/projects/p1/members')
-    expect(path()).toBe('/projects/p1/settings')
+    await router.push('/projects/p1/settings')
+    expect(path()).toBe('/admin/projects/p1/settings')
     expect(router.currentRoute.value.name).toBe('project-settings')
+    await router.push('/projects/p1/parts?part=pt1')
+    expect(path()).toBe('/admin/projects/p1/parts?part=pt1')
+    expect(router.currentRoute.value.name).toBe('project-parts')
+    await router.push('/projects/p1/members')
+    expect(path()).toBe('/admin/projects/p1/settings')
   })
 
   it('시스템 관리자는 다 연다', async () => {
@@ -156,10 +168,10 @@ describe('권한 가드', () => {
     setActivePinia(createPinia())
     await router.push('/admin/members')
     expect(path()).toBe('/admin/members')
-    await router.push('/projects/p2/settings')
-    expect(path()).toBe('/projects/p2/settings')
-    await router.push('/projects/p2/parts')
-    expect(path()).toBe('/projects/p2/parts')
+    await router.push('/admin/projects/p2/settings')
+    expect(path()).toBe('/admin/projects/p2/settings')
+    await router.push('/admin/projects/p2/parts')
+    expect(path()).toBe('/admin/projects/p2/parts')
   })
 
   it('부여받은 프로젝트가 없으면 일반 사용자는 프로젝트 목록(안내)으로, 시스템 관리자는 등록으로', async () => {
@@ -177,5 +189,34 @@ describe('권한 가드', () => {
   it('로그인해 있으면 로그인 화면을 거치지 않고 next 로 간다', async () => {
     await router.push('/login?next=/threads')
     expect(path()).toBe('/threads')
+  })
+})
+
+describe('/admin 첫 화면', () => {
+  it('지금 프로젝트를 관리할 수 있으면 그 프로젝트 관리로 간다', async () => {
+    me = { ...user, projectRoles: { p1: 'admin', p2: 'user' } }
+    setActivePinia(createPinia())
+    await router.push('/admin')
+    expect(path()).toBe('/admin/projects/p1/settings')
+  })
+
+  it('지금 프로젝트는 못 다루고 시스템 관리자면 사용자 관리로 간다', async () => {
+    me = { ...user, systemRole: 'admin', projectRoles: {} }
+    visible = []
+    setActivePinia(createPinia())
+    await router.push('/admin')
+    expect(path()).toBe('/admin/members')
+  })
+
+  it('지금 프로젝트는 못 다루지만 다른 프로젝트의 관리자면 그 프로젝트 관리로 간다', async () => {
+    me = { ...user, projectRoles: { p1: 'user', p2: 'admin' } }
+    setActivePinia(createPinia())
+    await router.push('/admin')
+    expect(path()).toBe('/admin/projects/p2/settings')
+  })
+
+  it('관리 권한이 하나도 없으면 업무 화면으로 간다', async () => {
+    await router.push('/admin')
+    expect(path()).toBe('/tasks')
   })
 })
