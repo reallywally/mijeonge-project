@@ -175,7 +175,7 @@ async def _collect(
             Task.start,
             Task.due,
         )
-        .where(Task.project_id == project_id)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .order_by(Task.seq)
     )
     tasks = {row.id: row for row in task_rows}

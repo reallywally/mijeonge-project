@@ -197,7 +197,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | `POST /api/tasks/{taskId}/comments` | **`authorId` 를 받지 않는다** — 작성자는 로그인한 사람이다. 보내도 무시한다 |
 | `PATCH` · `DELETE /api/comments/{commentId}` | 고치기는 **작성자만**, 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자. 그 밖은 403 `FORBIDDEN` |
 | 작업 고치기 — `PATCH /api/tasks/{taskId}` · `PATCH …/lines/{lineId}` · `PUT` · `DELETE …/threads/{threadId}` | **생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 작업으로 본다 — 담당자는 남에게 넘길 수 있고, 남은 자기를 담당자로 넣을 수 없다. 하위 작업 등록(`parentId`)은 상위를 고치는 것이 아니라 권한을 안 본다. 댓글 · 확인 요청 규칙은 그대로 |
-| 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. 권한을 먼저 보고 그다음 하위 작업(409 `TASK_HAS_CHILDREN`)을 본다 |
+| 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. 권한을 먼저 보고 그다음 하위 작업(409 `TASK_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 작업은 없는 작업과 같은 404 로 간다 (`API.md` 엔드포인트 표) |
 | 챗봇 `propose_tasks` · `list_members` 도구 | 그 프로젝트의 활성 멤버만 담당자 후보로 본다 |
 | `GET /api/members` | `Member` 에 `active` 가 늘어난다. 로그인만 하면 누구나 부를 수 있다 |
 

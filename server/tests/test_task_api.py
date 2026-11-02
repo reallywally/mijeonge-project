@@ -7,6 +7,7 @@
 from typing import get_args
 
 import httpx
+import pytest
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -14,9 +15,11 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import TaskComment, TaskHistory, TaskLine, TaskLog, TaskThreadLink, TestRef
+from app.errors import ApiError
+from app.models import Task, TaskComment, TaskHistory, TaskLine, TaskLog, TaskThreadLink, TestRef
 from app.models.task import TASK_LINE_KINDS, TASK_PRIORITIES, TASK_STATUSES
 from app.schemas.task import TaskLineKindIn, TaskPriorityIn, TaskStatusIn
+from app.services import search as search_service
 from tests.test_read_api import TASK_KEYS
 
 NEW_TASK = {
@@ -389,38 +392,101 @@ def test_migration_moves_relations_back_to_parents() -> None:
             assert [tuple(row) for row in rows] == [("b", "a"), ("c", "b"), ("d", "e")]
 
 
-async def test_delete_takes_its_records_with_it(
-    client: httpx.AsyncClient, session: AsyncSession
-) -> None:
-    """본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조가 같이 간다.
-
-    번호는 다시 안 쓴다.
+async def test_delete_is_logical(client: httpx.AsyncClient, session: AsyncSession) -> None:
+    """지우기는 `is_deleted` · `deleted_at` · `deleted_by` 를 찍기만 한다 — 행과 딸린 줄은 남고,
+    API 로는 어디서도 없는 것처럼 보인다. 번호는 다시 안 쓴다.
     """
     made = (
         await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"threadIds": ["t1"]})
     ).json()
     task_id = made["id"]
-    assert (
-        await client.post(f"/api/tasks/{task_id}/comments", json={"body": "남김"})
-    ).status_code == 201
+    comment = await client.post(f"/api/tasks/{task_id}/comments", json={"body": "남김"})
+    assert comment.status_code == 201
     assert (await client.put(f"/api/tests/tc1/refs/task/{task_id}")).status_code in (200, 204)
 
     assert (await client.delete(f"/api/tasks/{task_id}")).status_code == 204
-    gone = await client.delete(f"/api/tasks/{task_id}")
-    assert gone.status_code == 404 and gone.json()["code"] == "TASK_NOT_FOUND"
-    assert (await client.get(f"/api/tasks/{task_id}/comments")).status_code == 404
-    assert (await client.get(f"/api/tasks/{task_id}/history")).status_code == 404
 
+    # 행은 남고 세 칸이 찍힌다. 이력 끝에는 '삭제' 줄
+    session.expire_all()
+    row = await session.get(Task, task_id)
+    assert row is not None
+    assert row.is_deleted is True and row.deleted_by == "admin" and row.deleted_at is not None
     for model in (TaskLine, TaskComment, TaskThreadLink, TaskLog, TaskHistory, TestRef):
         left = await session.scalar(
             select(func.count()).select_from(model).where(model.task_id == task_id)
         )
-        assert left == 0, model.__name__
+        assert left, model.__name__
+    last = await session.scalar(
+        select(TaskHistory)
+        .where(TaskHistory.task_id == task_id)
+        .order_by(TaskHistory.seq.desc())
+        .limit(1)
+    )
+    assert last is not None and last.changed_by == "admin"
+    assert last.changes == [{"field": "deleted", "from": None, "to": None, "subject": ""}]
+
+    # 작업으로 가는 길은 전부 404
+    line_id = made["body"][0]["id"]
+    for method, url, body in [
+        ("DELETE", f"/api/tasks/{task_id}", None),
+        ("PATCH", f"/api/tasks/{task_id}", {"title": "살리기"}),
+        ("PATCH", f"/api/tasks/{task_id}/lines/{line_id}", {"done": True}),
+        ("PUT", f"/api/tasks/{task_id}/threads/t2", None),
+        ("DELETE", f"/api/tasks/{task_id}/threads/t1", None),
+        ("GET", f"/api/tasks/{task_id}/comments", None),
+        ("POST", f"/api/tasks/{task_id}/comments", {"body": "또"}),
+        ("GET", f"/api/tasks/{task_id}/history", None),
+        ("PUT", f"/api/tests/tc1/refs/task/{task_id}", None),
+    ]:
+        res = await client.request(method, url, json=body)
+        assert res.status_code == 404, (method, url)
+        assert res.json()["code"] == "TASK_NOT_FOUND", (method, url)
+    for method in ("PATCH", "DELETE"):
+        res = await client.request(
+            method, f"/api/comments/{comment.json()['id']}", json={"body": "고침"}
+        )
+        assert res.status_code == 404 and res.json()["code"] == "COMMENT_NOT_FOUND", method
+
     snap = (await client.get("/api/projects/p1/snapshot")).json()
     assert task_id not in {t["id"] for t in snap["tasks"]}
     assert all(link["taskId"] != task_id for link in snap["taskThreadLinks"])
-    # 테스트는 남고 태그만 빠진다
-    assert (await client.get("/api/tests/tc1")).status_code == 200
+    # 테스트는 남고 태그만 안 보인다 — 줄은 DB 에 남아 있다
+    test = await client.get("/api/tests/tc1")
+    assert test.status_code == 200
+    assert {"kind": "task", "id": task_id} not in test.json()["refs"]
+    tests = (await client.get("/api/projects/p1/tests")).json()
+    assert all(ref["id"] != task_id for row in tests for ref in row["refs"])
+    # 지운 작업을 다시 지우는 태그 떼기도 '없는 태그' 다 — 이력이 안 는다
+    assert (await client.delete(f"/api/tests/tc1/refs/task/{task_id}")).status_code == 204
+    assert (
+        await session.scalar(
+            select(func.count()).select_from(TestRef).where(TestRef.task_id == task_id)
+        )
+        == 1
+    )
+    # 리스크 · 진행 셈도 이 작업을 끌고 오지 않는다
+    risks = await client.get("/api/projects/p1/risks")
+    assert risks.status_code == 200 and task_id not in risks.text
+    # 챗봇 도구도 못 읽는다
+    with pytest.raises(ApiError) as caught:
+        await search_service.get_task(session, "p1", made["key"])
+    assert caught.value.code == "TASK_NOT_FOUND"
+    listed = await search_service.list_tasks(session, "p1")
+    assert task_id not in {t.id for t in listed.tasks}
+    assert made["key"] not in await search_service.tasks_by_key(session, "p1", [made["key"]])
+    thread = await search_service.get_thread(session, "p1", "t1")
+    assert task_id not in {t.id for t in thread.tasks}
+
+    # 상위로도 못 쓴다 — 단건 · 일괄 모두 원래 없을 때와 같은 400
+    res = await client.post("/api/projects/p1/tasks", json={"title": "밑", "parentId": task_id})
+    assert res.status_code == 400 and res.json()["code"] == "TASK_PARENT_NOT_FOUND"
+    res = await client.patch("/api/tasks/k2", json={"parentId": task_id})
+    assert res.status_code == 400 and res.json()["code"] == "TASK_PARENT_NOT_FOUND"
+    res = await client.post(
+        "/api/projects/p1/tasks/batch",
+        json={"tasks": [{"tempId": "a", "title": "밑", "parentId": task_id}]},
+    )
+    assert res.status_code == 400 and res.json()["code"] == "TASK_PARENT_NOT_FOUND"
 
     again = (await client.post("/api/projects/p1/tasks", json={"title": "다음"})).json()
     assert int(again["key"].split("-")[1]) == int(made["key"].split("-")[1]) + 1

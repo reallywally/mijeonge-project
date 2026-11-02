@@ -8,9 +8,11 @@
 
 import httpx
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError
+from app.models import Task
 from app.services import search as search_service
 from scripts.seed import seed
 
@@ -194,6 +196,22 @@ async def test_other_project_does_not_leak(pg_client: httpx.AsyncClient) -> None
 
     # 거꾸로 — p2 에서는 p1 의 안건이 안 나온다
     assert await _search(pg_client, "OS", project="p2") == {"threads": [], "tasks": []}
+
+
+async def test_deleted_task_is_not_found(
+    pg_client: httpx.AsyncClient, pg_session: AsyncSession
+) -> None:
+    """지운 작업은 제목 · 본문 줄 어디로도 안 걸리고, 비슷한 작업 쌍에도 안 낀다."""
+    before = await search_service.similar_tasks(pg_session, "p1")
+    assert any("k2" in (p.a.id, p.b.id) for p in before)
+    # 하위가 있어 API 로는 못 지운다 — 읽는 쪽 거르기만 보려고 칸을 바로 찍는다
+    await pg_session.execute(update(Task).where(Task.id.in_(("k4", "k2"))).values(is_deleted=True))
+    await pg_session.commit()
+
+    body = await _search(pg_client, "우분투")
+    assert "k4" not in {hit["id"] for hit in body["tasks"]}
+    after = await search_service.similar_tasks(pg_session, "p1")
+    assert all("k2" not in (p.a.id, p.b.id) for p in after)
 
 
 async def test_no_hit_is_empty_not_404(pg_client: httpx.AsyncClient) -> None:

@@ -38,6 +38,7 @@ from app.schemas.report import (
 from app.schemas.risk import DecisionRiskReport, RiskSettings
 from app.services import risk as risk_service
 from app.services import task as task_service
+from app.services.access import live_task_ids
 from app.time import KST, as_utc
 
 PERIOD_DAYS = 7
@@ -115,7 +116,7 @@ async def _read_graph(session: AsyncSession, project_id: str) -> _Graph:
             Task.created_at,
             Task.seq,
         )
-        .where(Task.project_id == project_id)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .order_by(Task.seq)
     )
     tasks = {row.id: _Task(**row._asdict()) for row in rows}
@@ -131,7 +132,7 @@ async def _lines(session: AsyncSession, project_id: str) -> dict[str, tuple[int,
     rows = await session.execute(
         select(TaskLine.task_id, TaskLine.done, func.count())
         .join(Task, Task.id == TaskLine.task_id)
-        .where(Task.project_id == project_id, TaskLine.kind == "check")
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False), TaskLine.kind == "check")
         .group_by(TaskLine.task_id, TaskLine.done)
     )
     found: dict[str, tuple[int, int]] = {}
@@ -144,7 +145,10 @@ async def _lines(session: AsyncSession, project_id: str) -> dict[str, tuple[int,
 async def _thread_counts(session: AsyncSession, project_id: str) -> dict[str, int]:
     rows = await session.execute(
         select(TaskThreadLink.task_id, func.count())
-        .where(TaskThreadLink.project_id == project_id)
+        .where(
+            TaskThreadLink.project_id == project_id,
+            TaskThreadLink.task_id.in_(live_task_ids()),
+        )
         .group_by(TaskThreadLink.task_id)
     )
     return dict(rows.tuples().all())
@@ -158,6 +162,7 @@ async def _period_logs(
     rows = await session.execute(
         select(TaskLog.task_id, TaskLog.to_status, TaskLog.changed_at).where(
             TaskLog.project_id == project_id,
+            TaskLog.task_id.in_(live_task_ids()),
             TaskLog.backfilled.is_(False),
             TaskLog.to_status.in_(("done", "doing")),
         )

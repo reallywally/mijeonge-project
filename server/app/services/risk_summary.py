@@ -272,7 +272,11 @@ async def _linked_tasks(
             Task.owner_id,
         )
         .join(Task, Task.id == TaskThreadLink.task_id)
-        .where(TaskThreadLink.project_id == project_id, TaskThreadLink.thread_id.in_(thread_ids))
+        .where(
+            TaskThreadLink.project_id == project_id,
+            TaskThreadLink.thread_id.in_(thread_ids),
+            Task.is_deleted.is_(False),
+        )
         .order_by(Task.seq)
     )
     found: dict[str, list[dict[str, Any]]] = {}
@@ -297,7 +301,7 @@ async def _tasks_by_id(
         return {}
     rows = await session.execute(
         select(Task.id, Task.key, Task.title).where(
-            Task.project_id == project_id, Task.id.in_(task_ids)
+            Task.project_id == project_id, Task.id.in_(task_ids), Task.is_deleted.is_(False)
         )
     )
     return {row.id: (row.key, row.title) for row in rows}

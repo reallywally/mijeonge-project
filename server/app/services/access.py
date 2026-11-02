@@ -64,6 +64,12 @@ def live_project_ids() -> Select[tuple[str]]:
     return select(Project.id).where(Project.deleted_at.is_(None))
 
 
+def live_task_ids() -> Select[tuple[str]]:
+    """지우지 않은 작업. 작업을 잇지 않고 `task_id` 만 쥔 표(링크 · 상태 기록 · 테스트 참조)가
+    `in_()` 으로 건다. 작업을 직접 읽는 자리는 `Task.is_deleted.is_(False)` 를 바로 건다."""
+    return select(Task.id).where(Task.is_deleted.is_(False))
+
+
 async def _project_of(session: AsyncSession, param: str, value: str) -> str | None:
     """그 레코드의 프로젝트. 지운 프로젝트 소속이면 없는 것과 같다 — 원래 없을 때의 404 로 간다."""
     stmt: Select[tuple[str]]
@@ -71,7 +77,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
         case "project_id":
             stmt = select(Project.id).where(Project.id == value)
         case "task_id":
-            stmt = select(Task.project_id).where(Task.id == value)
+            # 지운 작업은 없는 것과 같다 — 그 아래 경로(줄 · 링크 · 댓글 · 이력)가 전부 404 로 간다
+            stmt = select(Task.project_id).where(Task.id == value, Task.is_deleted.is_(False))
         case "thread_id":
             stmt = select(Thread.project_id).where(Thread.id == value)
         case "part_id":
@@ -88,7 +95,7 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             stmt = (
                 select(Task.project_id)
                 .join(TaskComment, TaskComment.task_id == Task.id)
-                .where(TaskComment.id == value)
+                .where(TaskComment.id == value, Task.is_deleted.is_(False))
             )
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")

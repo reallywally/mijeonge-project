@@ -146,7 +146,7 @@ async def comment_counts(session: AsyncSession, project_id: str) -> dict[str, in
     rows = await session.execute(
         select(TaskComment.task_id, func.count())
         .join(Task, Task.id == TaskComment.task_id)
-        .where(Task.project_id == project_id)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .group_by(TaskComment.task_id)
     )
     return {task_id: count for task_id, count in rows.tuples().all()}
@@ -160,7 +160,10 @@ async def comment_count(session: AsyncSession, task_id: str) -> int:
 
 
 async def load_task(session: AsyncSession, task_id: str) -> Task:
-    found = await session.execute(select(Task).where(Task.id == task_id))
+    """지운 작업은 없는 것과 같다 — 다시 지우기 · 고치기 · 댓글이 다 404 다."""
+    found = await session.execute(
+        select(Task).where(Task.id == task_id, Task.is_deleted.is_(False))
+    )
     task = found.scalar_one_or_none()
     if task is None:
         raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
@@ -203,7 +206,9 @@ async def _guard_parent(
     if parent_id == task_id:
         raise bad_request("TASK_PARENT_SELF", "작업을 자기 자신의 상위로 둘 수 없습니다.")
 
-    parent = await session.execute(select(Task).where(Task.id == parent_id))
+    parent = await session.execute(
+        select(Task).where(Task.id == parent_id, Task.is_deleted.is_(False))
+    )
     found = parent.scalar_one_or_none()
     if found is None:
         raise bad_request("TASK_PARENT_NOT_FOUND", "상위 작업을 찾을 수 없습니다.")
@@ -233,7 +238,9 @@ async def _subtree_height(session: AsyncSession, task_id: str, limit: int) -> in
         children = [
             child
             for child in (
-                await session.scalars(select(Task.id).where(Task.parent_id.in_(frontier)))
+                await session.scalars(
+                    select(Task.id).where(Task.parent_id.in_(frontier), Task.is_deleted.is_(False))
+                )
             ).all()
             if child not in seen  # 망가진 고리는 한 번만 센다
         ]
@@ -401,7 +408,11 @@ async def missing_parents(
     found = set(
         (
             await session.scalars(
-                select(Task.id).where(Task.project_id == project_id, Task.id.in_(wanted))
+                select(Task.id).where(
+                    Task.project_id == project_id,
+                    Task.id.in_(wanted),
+                    Task.is_deleted.is_(False),
+                )
             )
         ).all()
     )
@@ -423,7 +434,9 @@ async def too_deep(
         parent_of: dict[str, str | None] = {}
     else:
         rows = await session.execute(
-            select(Task.id, Task.parent_id).where(Task.project_id == project_id)
+            select(Task.id, Task.parent_id).where(
+                Task.project_id == project_id, Task.is_deleted.is_(False)
+            )
         )
         parent_of = dict(rows.tuples().all())
 
@@ -699,21 +712,27 @@ async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str, sco
 
 
 async def delete_task(session: AsyncSession, task_id: str, scope: Scope) -> None:
-    """하드 삭제. 본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조는
-    FK cascade 로 같이 간다.
+    """논리 삭제 — `is_deleted` · `deleted_at` · `deleted_by` 를 찍고 이력에 '삭제' 줄을 남긴다.
 
-    하위 작업은 같이 지우지 않는다 — 한 번 누름에 줄기째 날아가면 되돌릴 길이 없다.
-    작업 번호는 다시 쓰지 않는다(`project.last_task_no` 는 그대로다).
+    본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조는 그대로 두고 읽는 쪽이 거른다.
+    하위 작업이 남아 있으면 지우지 않는다 — 한 번 누름에 줄기째 사라지면 되돌릴 길이 없다.
+    작업 번호는 그대로 쥐고 있어 다시 나가지 않는다(`project.last_task_no`).
     """
     task = await load_task(session, task_id)
     if not access.can_delete_task(scope, task):
         raise access.forbidden()
-    child = await session.scalar(select(Task.id).where(Task.parent_id == task.id).limit(1))
+    child = await session.scalar(
+        select(Task.id).where(Task.parent_id == task.id, Task.is_deleted.is_(False)).limit(1)
+    )
     if child is not None:
         raise ApiError(
             409,
             "TASK_HAS_CHILDREN",
             "하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮기세요.",
         )
-    await session.delete(task)
+    at = now()
+    task.is_deleted = True
+    task.deleted_at = at
+    task.deleted_by = scope.actor.id
+    history_service.record_task(session, task, history_service.deleted(), scope.actor.id, at)
     await session.commit()

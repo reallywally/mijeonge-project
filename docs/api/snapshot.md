@@ -112,8 +112,8 @@ export interface Task {
 | --- | --- |
 | `threads` | `thread.projectId === projectId` |
 | `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
-| `tasks` | `task.projectId === projectId` |
-| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지) |
+| `tasks` | `task.projectId === projectId` — **지운 작업(논리 삭제, 2026-11-02)은 빠진다**. 삭제 여부를 나타내는 필드는 없다 |
+| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지). 지운 작업의 링크는 DB 에 남지만 나가지 않는다 |
 | `parts` | `part.projectId === projectId` — 보관(`active=false`)도 싣는다 |
 | `partMembers` | `partId` 가 위 `parts` 안에 있는 것 |
 
@@ -238,6 +238,7 @@ export interface ProjectInput {
 ### `task.key` 발번 (Q19)
 
 번호는 **프로젝트별**로 세고 **지운 번호를 다시 쓰지 않는다**. `key` 는 `{taskKeyPrefix}-{번호}` 다.
+작업 삭제는 논리 삭제라(2026-11-02) 지운 작업도 행과 번호를 그대로 쥐고 있다.
 
 `project` 에 `next_task_no` 열을 두고 작업을 만들 때 한 문장으로 잠가 올린다 —
 `UPDATE project SET next_task_no = next_task_no + 1 WHERE id = :id RETURNING next_task_no - 1`.
