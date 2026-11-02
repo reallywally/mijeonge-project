@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Loader2 } from 'lucide-vue-next'
+import IdCell from '@/components/app/IdCell.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -22,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  accountLabel,
   looksLikeEmail,
   normalizeEmail,
   passwordProblem,
@@ -122,7 +124,9 @@ async function submit() {
   <Dialog v-model:open="open">
     <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-[520px]">
       <DialogHeader>
-        <DialogTitle>{{ creating ? '사용자 등록' : '사용자 수정' }}</DialogTitle>
+        <DialogTitle>{{
+          account ? `사용자 수정 — ${accountLabel(account)}` : '사용자 등록'
+        }}</DialogTitle>
         <DialogDescription class="text-pretty">
           {{
             creating
@@ -130,6 +134,10 @@ async function submit() {
               : '사용자는 지우지 않고 끕니다. 끄면 로그인할 수 없고 담당자로 고를 수 없습니다.'
           }}
         </DialogDescription>
+        <!-- 목록은 번호만 보인다 — 서버 로그 · 문의에 uuid 가 필요할 때 여기서 복사한다 -->
+        <p v-if="account" class="flex items-center gap-1.5 text-xs text-muted-foreground">
+          ID <IdCell :id="account.id" />
+        </p>
       </DialogHeader>
 
       <form class="flex flex-col gap-3.5 py-1" @submit.prevent="submit">

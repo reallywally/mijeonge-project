@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { passwordProblem } from '@/lib/member'
+import { accountLabel, passwordProblem } from '@/lib/member'
 import { useAdminStore } from '@/stores/admin'
 import type { MemberAccount } from '@/types/domain'
 
@@ -53,7 +53,8 @@ async function submit() {
       <DialogHeader>
         <DialogTitle>비밀번호 새로 걸기</DialogTitle>
         <DialogDescription class="text-pretty">
-          {{ account?.name }}의 비밀번호를 바꿉니다. 로그인해 있던 곳은 모두 끊깁니다.
+          {{ account ? accountLabel(account) : '' }}의 비밀번호를 바꿉니다. 로그인해 있던 곳은 모두
+          끊깁니다.
         </DialogDescription>
       </DialogHeader>
 

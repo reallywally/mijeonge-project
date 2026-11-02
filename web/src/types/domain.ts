@@ -43,6 +43,8 @@ export interface Me {
 /** 관리 화면용 — GET /api/admin/members */
 export interface MemberAccount {
   id: string
+  /** 사용자 번호 — 1부터, 전역, 다시 쓰지 않고 바꿀 수 없다. 관리자끼리 '5번 사용자' 로 부른다 */
+  no: number
   name: string
   email: string | null
   systemRole: SystemRole

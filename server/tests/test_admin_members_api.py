@@ -4,6 +4,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Member
+from scripts.create_admin import create_admin
 from scripts.seed import DEV_PASSWORD
 from tests.conftest import AsMember
 from tests.test_contract_types import contract_keys
@@ -210,3 +211,39 @@ async def test_set_password_rules(client: httpx.AsyncClient, session: AsyncSessi
     ).status_code == 204
     rows = {row["id"]: row for row in (await client.get(URL)).json()}
     assert rows["noemail"]["hasPassword"] is True
+
+
+async def test_member_no_counts_up_and_stays(client: httpx.AsyncClient) -> None:
+    """사람이 부르는 번호 — 전역 순번, 비활성화해도 그대로, 입력으로는 못 바꾼다."""
+    listed = {row["id"]: row["no"] for row in (await client.get(URL)).json()}
+    assert listed == {"admin": 1, "u1": 2, "u2": 3, "u3": 4, "u4": 5}
+
+    # 입력의 no 는 모르는 키라 버린다 — 다른 입력 키와 같은 관례다
+    first = (await client.post(URL, json=NEW | {"no": 1})).json()
+    second = (await client.post(URL, json=NEW | {"email": "two@inno-ax.com"})).json()
+    assert (first["no"], second["no"]) == (6, 7)
+
+    off = await client.patch(f"{URL}/{first['id']}", json={"active": False, "no": 99})
+    assert off.status_code == 200
+    assert off.json()["no"] == 6 and off.json()["active"] is False
+
+    third = (await client.post(URL, json=NEW | {"email": "three@inno-ax.com"})).json()
+    assert third["no"] == 8  # 비활성 번호를 다시 쓰지 않는다
+
+
+async def test_public_member_has_no_number(client: httpx.AsyncClient) -> None:
+    rows = (await client.get("/api/members")).json()
+    assert rows and all("no" not in row for row in rows)
+
+
+async def test_member_no_on_postgres(
+    pg_client: httpx.AsyncClient, pg_session: AsyncSession
+) -> None:
+    """진짜 Postgres 에서 — Identity 가 시드 뒤 번호부터 잇고, create_admin 도 번호를 받는다."""
+    made = (await pg_client.post(URL, json=NEW)).json()
+    assert made["no"] == 6
+
+    admin = await create_admin(pg_session, "boss@inno-ax.com", "대표", "관리자-비밀번호-01")
+    assert admin.no == 7
+    listed = {row["id"]: row["no"] for row in (await pg_client.get(URL)).json()}
+    assert listed[admin.id] == 7

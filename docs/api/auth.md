@@ -35,7 +35,7 @@
 ## 테이블
 
 ```
-member            id · name · email(unique, 소문자로 저장) · system_role('admin'|'user') · active
+member            id · no(사람이 부르는 번호, unique, identity) · name · email(unique, 소문자로 저장) · system_role('admin'|'user') · active
                   · career · skills · notes(자유 글, 비면 null) · created_at
 auth_identity     id · member_id → member · provider('password' | 훗날 'oidc:<이름>') · subject
                   · password_hash(password 일 때만) · created_at · last_login_at
@@ -86,6 +86,9 @@ export interface Me {
 /** 관리 화면용 — GET /api/admin/members */
 export interface MemberAccount {
   id: string
+  /** 사람이 부르는 번호 — "5번 사용자". 1부터 전역 순번, 유일, 비활성화해도 그대로이고 다시 쓰지 않는다.
+   *  서버가 매기고 바꿀 수 없다(등록 · 수정 입력에 없다 — 보내도 버린다) (2026-11-02) */
+  no: number
   name: string
   email: string | null
   systemRole: SystemRole
@@ -107,6 +110,8 @@ export interface ProjectMember {
 }
 ```
 
+- `MemberAccount.no` 는 관리 화면에만 나간다 — 공개용 `Member`(`/api/members`)에는 싣지 않는다.
+  있던 사용자는 리비전 `0026_member_no` 가 `created_at`, 같으면 `id` 순으로 1.. 을 매겼다
 - `Member`(`id` · `name`)는 그대로다. **`GET /api/members` 는 비활성 멤버까지 이름을 다 낸다** —
   옛 작업의 담당자 이름을 찍으려면 필요하다. 담당자를 **고르는** 자리는 `ProjectMember` 로 거른다
 - `Member` 에 `active: boolean` 이 늘어난다 — 고르는 자리에서 비활성 멤버를 빼고, 이름 옆에 '(비활성)' 을 찍는다

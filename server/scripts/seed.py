@@ -91,12 +91,13 @@ DEV_PASSWORD = "1111"
 
 
 def members() -> list[Member]:
+    # 번호(no)를 박아 둔다 — 시드를 다시 돌려도 시퀀스를 따라 6 · 7 … 로 밀리지 않게
     return [
-        Member(id="admin", name="관리자", email=DEV_ADMIN_EMAIL, system_role="admin"),
-        Member(id="u1", name="김서연", email="u1@inno-ax.com"),
-        Member(id="u2", name="박지훈", email="u2@inno-ax.com"),
-        Member(id="u3", name="이도현", email="u3@inno-ax.com"),
-        Member(id="u4", name="정하늘", email="u4@inno-ax.com"),
+        Member(id="admin", no=1, name="관리자", email=DEV_ADMIN_EMAIL, system_role="admin"),
+        Member(id="u1", no=2, name="김서연", email="u1@inno-ax.com"),
+        Member(id="u2", no=3, name="박지훈", email="u2@inno-ax.com"),
+        Member(id="u3", no=4, name="이도현", email="u3@inno-ax.com"),
+        Member(id="u4", no=5, name="정하늘", email="u4@inno-ax.com"),
     ]
 
 
@@ -1019,22 +1020,27 @@ async def advance_identity(session: AsyncSession) -> None:
     """
     if session.get_bind().dialect.name != "postgresql":
         return  # sqlite 는 Identity 를 무시한다 — 테스트는 늘 seq 를 직접 넣는다
-    for table in (
-        "thread",
-        "entry",
-        "task",
-        "task_comment",
-        "check_request",
-        "minutes",
-        "task_log",
-        "test_case",
-        "task_history",
-        "test_history",
-    ):
+    seqs = [
+        (table, "seq")
+        for table in (
+            "thread",
+            "entry",
+            "task",
+            "task_comment",
+            "check_request",
+            "minutes",
+            "task_log",
+            "test_case",
+            "task_history",
+            "test_history",
+        )
+    ]
+    # 멤버 번호는 열 이름이 no 다. 따옴표로 감싼다 — NO 는 SQL 키워드다
+    for table, column in [*seqs, ("member", "no")]:
         await session.execute(
             text(
-                f"select setval(pg_get_serial_sequence('{table}', 'seq'),"
-                f" coalesce((select max(seq) from {table}), 1),"
+                f"select setval(pg_get_serial_sequence('{table}', '{column}'),"
+                f' coalesce((select max("{column}") from {table}), 1),'
                 f" (select count(*) from {table}) > 0)"
             )
         )

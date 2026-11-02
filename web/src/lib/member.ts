@@ -1,8 +1,16 @@
-import type { Member, ProjectMember, ProjectRole, SystemRole } from '@/types/domain'
+import type { Member, MemberAccount, ProjectMember, ProjectRole, SystemRole } from '@/types/domain'
 
 /** 이름을 찍는 자리 — 비활성 멤버도 이름은 남기되 표시를 단다 */
 export const memberLabel = (member: Member) =>
   member.active ? member.name : `${member.name} (비활성)`
+
+/** 관리 화면에서 사람을 부르는 이름 — 관리자끼리 '5번' 으로 말한다 */
+export const accountLabel = (account: Pick<MemberAccount, 'no' | 'name'>) =>
+  `${account.no}번 · ${account.name}`
+
+/** 사용자 관리 표의 순서 — 번호 오름차순(서버는 이름 순으로 준다) */
+export const byMemberNo = (a: Pick<MemberAccount, 'no'>, b: Pick<MemberAccount, 'no'>) =>
+  a.no - b.no
 
 /**
  * 담당자로 고를 수 있는 사람 — 그 프로젝트에 부여된 활성 멤버만 (docs/api/auth.md).

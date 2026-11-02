@@ -61,6 +61,7 @@ class MeOut(Schema):
 
 class MemberAccountOut(Schema):
     id: str
+    no: int
     name: str
     email: str | None
     system_role: SystemRole

@@ -8,6 +8,8 @@ import type { ProjectRole, SystemRole } from '@/types/domain'
 
 export interface MockAccount {
   memberId: string
+  /** 사용자 번호 — 1부터, 다시 쓰지 않는다 */
+  no: number
   email: string | null
   password: string | null
   systemRole: SystemRole
@@ -31,6 +33,7 @@ export const MOCK_PASSWORD = MOCK_ADMIN_PASSWORD
 export const accounts: MockAccount[] = [
   {
     memberId: 'u0',
+    no: 1,
     email: 'admin@inno-ax.com',
     password: MOCK_ADMIN_PASSWORD,
     systemRole: 'admin',
@@ -39,6 +42,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u1',
+    no: 2,
     email: 'u1@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
@@ -47,6 +51,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u2',
+    no: 3,
     email: 'u2@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
@@ -55,6 +60,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u3',
+    no: 4,
     email: 'u3@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
@@ -64,6 +70,7 @@ export const accounts: MockAccount[] = [
   /* 로그인이 생기기 전부터 있던 사람 — 이메일 · 비밀번호가 없어 관리자가 넣어 줘야 들어온다 */
   {
     memberId: 'u4',
+    no: 5,
     email: null,
     password: null,
     systemRole: 'user',
@@ -72,6 +79,7 @@ export const accounts: MockAccount[] = [
   },
   {
     memberId: 'u5',
+    no: 6,
     email: 'u5@inno-ax.com',
     password: MOCK_PASSWORD,
     systemRole: 'user',
