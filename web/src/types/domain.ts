@@ -134,13 +134,14 @@ export interface Project {
   /** YYYY-MM-DD. 둘 다 있으면 endDate >= startDate (아니면 400 PROJECT_DATE_RANGE) */
   startDate: string | null
   endDate: string | null
-  /** 종료는 표시만 — 쓰기를 막지 않는다. 서버 목록은 active 먼저 */
+  /** 표시만 — 어느 상태든 쓰기를 막지 않는다. 서버 목록은 active → planned → closed */
   status: ProjectStatus
-  /** 종료한 때(ISO UTC). 진행 중이면 null */
+  /** closed 가 된 때(ISO UTC). 다른 상태면 null */
   closedAt: string | null
 }
 
-export type ProjectStatus = 'active' | 'closed'
+/** 화면 이름 준비 · 진행 · 종료. 새 프로젝트는 active */
+export type ProjectStatus = 'planned' | 'active' | 'closed'
 
 export interface Thread {
   id: string

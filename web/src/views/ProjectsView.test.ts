@@ -62,27 +62,35 @@ beforeEach(() => {
 })
 
 describe('프로젝트 목록', () => {
-  it('종료한 프로젝트는 뒤로 가고 종료 배지가 붙는다. 기간 · 설명 한 줄이 보인다', async () => {
+  it('진행 → 준비 → 종료 순이고 준비 · 종료 배지가 붙는다. 기간 · 설명 한 줄이 보인다', async () => {
     await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/projects')
     const rows = () => w.findAll('tr[data-project-row]')
 
     expect(rows().map((r) => r.attributes('data-project-row'))).toEqual(['p1', 'p2', 'p3'])
     expect(rows()[2].attributes('data-closed')).toBe('true')
-    expect(rows()[2].find('[data-closed-badge]').text()).toBe('종료')
-    expect(rows()[0].find('[data-closed-badge]').exists()).toBe(false)
+    expect(rows()[2].get('[data-status-badge]').text()).toBe('종료')
+    expect(rows()[1].get('[data-status-badge]').attributes('data-status-badge')).toBe('planned')
+    expect(rows()[1].get('[data-status-badge]').text()).toBe('준비')
+    expect(rows()[0].find('[data-status-badge]').exists()).toBe(false)
 
     expect(rows()[0].get('[data-project-period]').text()).toBe('2026-03-02 ~ 2026-12-31')
-    expect(rows()[1].get('[data-project-period]').text()).toBe('2026-07-01 ~')
+    expect(rows()[1].get('[data-project-period]').text()).toBe('2026-12-01 ~')
     expect(rows()[2].get('[data-project-period]').text()).toBe('—')
     expect(rows()[0].get('[data-project-description]').text()).toContain('한화손해보험')
     expect(rows()[1].find('[data-project-description]').exists()).toBe(false)
 
-    /* 화면에서 종료하면 받은 순서와 상관없이 뒤로 간다 */
-    expect(await useDataStore().setProjectStatus('p1', 'closed')).toBe(true)
+    /* 화면에서 상태를 바꾸면 받은 순서와 상관없이 다시 줄 선다 */
+    await useDataStore().updateProject('p1', { status: 'closed' })
     await flushPromises()
     expect(rows().map((r) => r.attributes('data-project-row'))).toEqual(['p2', 'p1', 'p3'])
-    expect(rows()[1].find('[data-closed-badge]').exists()).toBe(true)
+    expect(rows()[1].get('[data-status-badge]').text()).toBe('종료')
+
+    /* 같은 준비끼리는 받은 순서 그대로 */
+    await useDataStore().updateProject('p1', { status: 'planned' })
+    await flushPromises()
+    expect(rows().map((r) => r.attributes('data-project-row'))).toEqual(['p1', 'p2', 'p3'])
+    expect(rows()[0].get('[data-status-badge]').text()).toBe('준비')
   })
 })
 

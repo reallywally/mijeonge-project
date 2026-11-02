@@ -71,9 +71,9 @@ export interface Project {
   /** YYYY-MM-DD. 둘 다 있으면 endDate >= startDate */
   startDate: string | null
   endDate: string | null
-  /** 종료는 표시만 한다 — 쓰기를 막지 않는다 */
-  status: 'active' | 'closed'
-  /** ISO 8601 UTC · Z. closed 로 바뀐 시각, active 면 null */
+  /** 준비 · 진행 · 종료. 준비 · 종료는 표시만 한다 — 쓰기를 막지 않는다 */
+  status: 'planned' | 'active' | 'closed'
+  /** ISO 8601 UTC · Z. closed 로 바뀐 시각, closed 가 아니면 null */
   closedAt: string | null
 }
 ```

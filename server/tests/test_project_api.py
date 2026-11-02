@@ -178,7 +178,13 @@ async def test_null_and_blank_clear(client: httpx.AsyncClient) -> None:
 async def test_patch_rejects_null_name_status_and_long_description(
     client: httpx.AsyncClient,
 ) -> None:
-    for body in ({"name": None}, {"status": None}, {"name": "  "}, {"status": "archived"}):
+    for body in (
+        {"name": None},
+        {"status": None},
+        {"name": "  "},
+        {"status": "archived"},
+        {"status": "PLANNED"},
+    ):
         res = await client.patch("/api/projects/p1", json=body)
         assert res.status_code == 422, body
         assert res.json()["code"] == "VALIDATION_ERROR"
@@ -209,6 +215,29 @@ async def test_close_and_reopen(client: httpx.AsyncClient) -> None:
     reopened = (await client.patch("/api/projects/p1", json={"status": "active"})).json()
     assert (reopened["status"], reopened["closedAt"]) == ("active", None)
     assert [p["id"] for p in (await client.get("/api/projects")).json()] == ["p1", "p2", "p3"]
+
+
+async def test_planned_status(client: httpx.AsyncClient) -> None:
+    planned = (await client.patch("/api/projects/p1", json={"status": "planned"})).json()
+    assert (planned["status"], planned["closedAt"]) == ("planned", None)
+
+    closed = (await client.patch("/api/projects/p1", json={"status": "closed"})).json()
+    assert closed["status"] == "closed" and closed["closedAt"] is not None
+
+    # 종료에서 준비로 돌려도 닫힌 시각은 지운다
+    back = (await client.patch("/api/projects/p1", json={"status": "planned"})).json()
+    assert (back["status"], back["closedAt"]) == ("planned", None)
+
+
+async def test_list_orders_active_planned_closed(client: httpx.AsyncClient) -> None:
+    await client.patch("/api/projects/p1", json={"status": "closed"})
+    await client.patch("/api/projects/p2", json={"status": "planned"})
+    listed = (await client.get("/api/projects")).json()
+    assert [(p["id"], p["status"]) for p in listed] == [
+        ("p3", "active"),
+        ("p2", "planned"),
+        ("p1", "closed"),
+    ]
 
 
 async def test_only_system_admin_deletes(client: httpx.AsyncClient, as_member: AsMember) -> None:

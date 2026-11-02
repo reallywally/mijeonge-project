@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import type { ProjectStatus } from '@/types/domain'
 import {
+  PROJECT_STATUS_OPTIONS,
+  isProjectStatus,
   makeTaskKeyPrefix,
   orderProjects,
   projectDateRangeError,
   projectPeriod,
+  projectStatusLabel,
   taskKeyPrefixError,
 } from './project'
 
@@ -45,14 +49,23 @@ describe('projectDateRangeError', () => {
 })
 
 describe('orderProjects', () => {
-  it('진행 중이 먼저, 같은 상태끼리는 받은 순서 그대로', () => {
-    const list = [
-      { id: 'a', status: 'closed' as const },
-      { id: 'b', status: 'active' as const },
-      { id: 'c', status: 'closed' as const },
-      { id: 'd', status: 'active' as const },
+  it('진행 → 준비 → 종료, 같은 상태끼리는 받은 순서 그대로', () => {
+    const list: { id: string; status: ProjectStatus }[] = [
+      { id: 'a', status: 'closed' },
+      { id: 'b', status: 'planned' },
+      { id: 'c', status: 'active' },
+      { id: 'd', status: 'closed' },
+      { id: 'e', status: 'planned' },
+      { id: 'f', status: 'active' },
     ]
-    expect(orderProjects(list).map((p) => p.id)).toEqual(['b', 'd', 'a', 'c'])
+    expect(orderProjects(list).map((p) => p.id)).toEqual(['c', 'f', 'b', 'e', 'a', 'd'])
+  })
+
+  it('화면 이름은 준비 · 진행 · 종료', () => {
+    expect(PROJECT_STATUS_OPTIONS.map((o) => o.label)).toEqual(['준비', '진행', '종료'])
+    expect(projectStatusLabel('planned')).toBe('준비')
+    expect(isProjectStatus('closed')).toBe(true)
+    expect(isProjectStatus('archived')).toBe(false)
   })
 })
 

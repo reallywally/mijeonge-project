@@ -1,4 +1,4 @@
-import type { Project } from '@/types/domain'
+import type { Project, ProjectStatus } from '@/types/domain'
 
 /**
  * 작업 키 접두사(`HW-4` 의 `HW`).
@@ -40,12 +40,28 @@ export function projectDateRangeError(startDate: string, endDate: string): strin
   return null
 }
 
-/** 진행 중 먼저, 같은 상태끼리는 받은 순서 그대로 — 서버 목록과 같은 순서다 */
+/** 화면 이름 — 준비 · 진행 · 종료. 고르는 칸의 순서도 이것이다 */
+export const PROJECT_STATUS_OPTIONS: readonly { value: ProjectStatus; label: string }[] = [
+  { value: 'planned', label: '준비' },
+  { value: 'active', label: '진행' },
+  { value: 'closed', label: '종료' },
+]
+
+export const projectStatusLabel = (status: ProjectStatus) =>
+  PROJECT_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status
+
+export const isProjectStatus = (value: unknown): value is ProjectStatus =>
+  PROJECT_STATUS_OPTIONS.some((o) => o.value === value)
+
+/* 목록 순서 — 서버와 같다. 진행 → 준비 → 종료 */
+const STATUS_RANK: Record<ProjectStatus, number> = { active: 0, planned: 1, closed: 2 }
+
+/** 진행 → 준비 → 종료, 같은 상태끼리는 받은 순서 그대로 — 서버 목록과 같은 순서다 */
 export function orderProjects<T extends Pick<Project, 'status'>>(list: readonly T[]): T[] {
-  return [
-    ...list.filter((p) => p.status !== 'closed'),
-    ...list.filter((p) => p.status === 'closed'),
-  ]
+  return list
+    .map((p, at) => ({ p, at }))
+    .sort((a, b) => STATUS_RANK[a.p.status] - STATUS_RANK[b.p.status] || a.at - b.at)
+    .map(({ p }) => p)
 }
 
 /** 표에 찍는 기간 한 줄 — 2026-03-02 ~ 2026-12-31. 한쪽만 있으면 그쪽만, 둘 다 없으면 '' */

@@ -17,11 +17,14 @@ _PREFIX_TRIES = 20
 
 
 async def list_projects(session: AsyncSession, actor: Actor) -> list[ProjectOut]:
-    """지운 것은 빼고, 진행 중인 것을 먼저 — 그 안에서는 전과 같은 순서(id)."""
+    """지운 것은 빼고, 진행 → 준비 → 종료 — 그 안에서는 전과 같은 순서(id)."""
     stmt = (
         select(Project)
         .where(Project.deleted_at.is_(None))
-        .order_by(case((Project.status == "active", 0), else_=1), Project.id)
+        .order_by(
+            case((Project.status == "active", 0), (Project.status == "planned", 1), else_=2),
+            Project.id,
+        )
     )
     visible = await access.visible_project_ids(session, actor)
     if visible is not None:

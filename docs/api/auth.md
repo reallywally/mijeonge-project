@@ -158,13 +158,13 @@ export interface ProjectMember {
 | DELETE | `/api/projects/{projectId}` | **소프트 삭제** — `deleted_at` 만 찍는다 | 시스템 관리자 | 204 |
 
 ```ts
-export type ProjectStatus = 'active' | 'closed'
+export type ProjectStatus = 'planned' | 'active' | 'closed'   // 준비 · 진행 · 종료 (2026-11-02 planned 늘림)
 
 // Project 에 늘어난 것 (docs/api/snapshot.md 'Project')
 description: string | null   // 2000자 이하
 startDate: string | null     // YYYY-MM-DD
 endDate: string | null       // YYYY-MM-DD
-status: ProjectStatus        // 기본 'active'
+status: ProjectStatus        // 기본 'active'. 등록(POST)은 status 를 받지 않는다
 closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 ```
 
@@ -172,9 +172,9 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 - PATCH 에서 `description` · `startDate` · `endDate` 의 **null 은 비우기**다. `name` · `status` 는 null 을 받지 않는다(422)
 - 두 날짜가 다 있으면 `endDate >= startDate`(같은 날 허용). 아니면 400 `PROJECT_DATE_RANGE`
   ("종료일은 시작일보다 앞설 수 없습니다."). PATCH 는 **바뀐 뒤의 값**으로 본다 — 한쪽만 보내도 남은 쪽과 견준다
-- `status` 를 `closed` 로 바꾸면 `closedAt` 을 찍고, `active` 로 되돌리면 null. 같은 상태를 다시 보내면 그대로다(처음 닫은 시각을 지킨다)
-- **종료는 표시만 한다** — 닫힌 프로젝트에도 쓰기는 그대로 된다 (막는 것은 나중에 정한다)
-- `GET /api/projects` 는 `active` 를 먼저, 그 안에서는 전과 같은 순서로 낸다
+- `status` 는 셋 사이를 어느 쪽으로든 바꿀 수 있다. `closed` 로 바꾸면 `closedAt` 을 찍고, `closed` 가 아닌 값(`active` · `planned`)으로 바꾸면 null. 같은 상태를 다시 보내면 그대로다(처음 닫은 시각을 지킨다)
+- **준비 · 종료는 표시만 한다** — 준비 중 · 닫힌 프로젝트에도 쓰기는 그대로 된다 (막는 것은 나중에 정한다)
+- `GET /api/projects` 는 `active` → `planned` → `closed` 순서로, 그 안에서는 전과 같은 순서(id)로 낸다
 - **지운 프로젝트는 어디서도 없는 것이다** — 목록에서 빠지고, 그 프로젝트를 가리키는 모든 경로
   (`/api/projects/{id}/...` · 그 소속의 `/api/tasks/...` · `/threads/...` · `/comments/...` · `/parts/...` ·
   `/checks/...` · `/minutes/...` · `/reports/...` · `/tests/...`)가 **시스템 관리자에게도** 원래 없을 때와 같은 404 다.

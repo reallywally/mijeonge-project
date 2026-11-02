@@ -103,7 +103,7 @@
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/health` | 앱이 떠 있는지 | `{ status }` | 구현 |
-| GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18). **지운 프로젝트는 빠지고, `active` 가 먼저**(그 안은 전과 같은 순서) | `Project[]` (Q9 로 `taskKeyPrefix`, 2026-11-02 `description` · `startDate` · `endDate` · `status` · `closedAt` 이 늘었다) | 연결 (2026-11-02 늘림 — 구현) |
+| GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18). **지운 프로젝트는 빠지고, `active` → `planned` → `closed`**(그 안은 전과 같은 순서) | `Project[]` (Q9 로 `taskKeyPrefix`, 2026-11-02 `description` · `startDate` · `endDate` · `status` · `closedAt` 이 늘었다) | 연결 (2026-11-02 늘림 — 구현, 같은 날 `status` 에 `planned` 늘림 — 구현) |
 | POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18). `description` · `startDate` · `endDate` 는 선택 | `Project` · 201 | 연결 (2026-11-02 늘림 — 구현) |
 | GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 연결 |
 | GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 연결 |
@@ -150,7 +150,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | PUT | `/api/admin/members/{memberId}/password` | 비밀번호 새로 걸기 (시스템 관리자) | 204 | 구현 |
 | GET | `/api/projects/{projectId}/members` | 프로젝트에 부여된 사람 · 역할 | `ProjectMember[]` | 구현 |
 | PUT · DELETE | `/api/projects/{projectId}/members/{memberId}` | 부여 · 역할 변경 · 빼기 (프로젝트 관리자 · 시스템 관리자) | `ProjectMember` · 204 | 구현 |
-| PATCH | `/api/projects/{projectId}` | 프로젝트 정보 수정 — `name` · `description` · `startDate` · `endDate` · `status`, 보낸 필드만. 설명 · 날짜의 null 은 비우기 (프로젝트 관리자 · 시스템 관리자, `docs/api/auth.md` '프로젝트 관리') | `Project` | 구현 (2026-11-02 늘림) |
+| PATCH | `/api/projects/{projectId}` | 프로젝트 정보 수정 — `name` · `description` · `startDate` · `endDate` · `status`(`planned` · `active` · `closed`), 보낸 필드만. 설명 · 날짜의 null 은 비우기 (프로젝트 관리자 · 시스템 관리자, `docs/api/auth.md` '프로젝트 관리') | `Project` | 구현 (2026-11-02 늘림) |
 | DELETE | `/api/projects/{projectId}` | 프로젝트 삭제 — **소프트 삭제**. 그 뒤로 그 프로젝트를 가리키는 모든 경로가 404 (시스템 관리자만) | 204 | 구현 |
 
 파트(`server/PLAN.md` 9단계 · `web/PLAN.md` 9단계). **보기 범위지 권한이 아니다** — 거르는 것은 화면이다. 모양은 `docs/api/part.md`.

@@ -99,7 +99,7 @@ describe('관리자 페이지 사이드바', () => {
   })
 })
 
-describe('프로젝트 고르기의 종료 표시', () => {
+describe('프로젝트 고르기의 상태 표시', () => {
   /* reka-ui 셀렉트는 jsdom 에서 열리지 않는다 — 고른 항목의 글이 찍히는 트리거로 본다. 순서는 lib/project 의 orderProjects 검사가 본다 */
   it('업무 화면 — 종료한 프로젝트를 고르면 이름 뒤에 · 종료 가 붙는다', async () => {
     await signedIn('u1@inno-ax.com')
@@ -113,9 +113,13 @@ describe('프로젝트 고르기의 종료 표시', () => {
     await flushPromises()
     expect(trigger().text()).toContain('경영지원 파트')
     expect(trigger().text()).toContain('· 종료')
+
+    data.setProject('p2')
+    await flushPromises()
+    expect(trigger().get('[data-status-mark]').text()).toBe('· 준비')
   })
 
-  it('관리자 페이지 — 종료한 프로젝트를 고르면 · 종료 가 붙고, 다시 열면 걷힌다', async () => {
+  it('관리자 페이지 — 종료한 프로젝트를 고르면 · 종료 가 붙고, 진행으로 바꾸면 걷힌다', async () => {
     await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
     const data = useDataStore()
     data.setProject('p3')
@@ -124,7 +128,7 @@ describe('프로젝트 고르기의 종료 표시', () => {
     expect(trigger().text()).toContain('경영지원 파트')
     expect(trigger().text()).toContain('· 종료')
 
-    expect(await data.setProjectStatus('p3', 'active')).toBe(true)
+    await data.updateProject('p3', { status: 'active' })
     await flushPromises()
     expect(trigger().text()).not.toContain('종료')
   })

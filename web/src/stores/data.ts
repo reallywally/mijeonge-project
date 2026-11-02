@@ -30,7 +30,6 @@ import type {
   ProjectMember,
   ProjectPatch,
   ProjectRole,
-  ProjectStatus,
   Task,
   TaskThreadLink,
   Thread,
@@ -140,7 +139,7 @@ export const useDataStore = defineStore('data', () => {
 
   let booting: Promise<void> | null = null
 
-  /** 목업 — 픽스처를 새로 들이고, 프로젝트는 목업 서버에서 받는다(내가 볼 수 있고 지우지 않은 것 · 진행 중 먼저) */
+  /** 목업 — 픽스처를 새로 들이고, 프로젝트는 목업 서버에서 받는다(내가 볼 수 있고 지우지 않은 것 · 진행 → 준비 → 종료) */
   async function bootMock() {
     allProjects.value = await api.fetchProjects()
     allThreads.value = structuredClone(threads)
@@ -319,19 +318,8 @@ export const useDataStore = defineStore('data', () => {
     }
   }
 
-  /** 종료 · 다시 열기. 표시만 바뀌고 쓰기는 그대로 된다. 실패하면 알리고 false */
-  async function setProjectStatus(projectId: string, status: ProjectStatus): Promise<boolean> {
-    try {
-      await updateProject(projectId, { status })
-      return true
-    } catch (e) {
-      toastError(e)
-      return false
-    }
-  }
-
   /**
-   * 지우기 — 시스템 관리자만(소프트 삭제). 목록에서 걷고, 지금 프로젝트였으면 남은 것(진행 중 먼저)으로 옮긴다.
+   * 지우기 — 시스템 관리자만(소프트 삭제). 목록에서 걷고, 지금 프로젝트였으면 남은 것(진행 → 준비 → 종료 순 첫째)으로 옮긴다.
    * 남은 게 없으면 currentProjectId 가 '' 이 된다 — 갈 곳은 화면이 정한다. 실패하면 알리고 false
    */
   async function deleteProject(projectId: string): Promise<boolean> {
@@ -555,7 +543,6 @@ export const useDataStore = defineStore('data', () => {
     setProject,
     addProject,
     updateProject,
-    setProjectStatus,
     deleteProject,
     suggestTaskKeyPrefix,
     takeTaskKey,

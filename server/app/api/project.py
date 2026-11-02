@@ -33,7 +33,7 @@ async def create_project(payload: ProjectCreate, _: SystemAdmin, session: Sessio
 async def patch_project(
     project_id: str, payload: ProjectPatch, _: ProjectAdmin, session: Session
 ) -> ProjectOut:
-    """보낸 필드만 바꾼다. 종료(closed)는 표시만 한다 — 쓰기를 막지 않는다."""
+    """보낸 필드만 바꾼다. 준비(planned) · 종료(closed)는 표시만 한다 — 쓰기를 막지 않는다."""
     return await project_service.patch_project(session, project_id, payload)
 
 

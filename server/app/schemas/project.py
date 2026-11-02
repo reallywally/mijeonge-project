@@ -28,7 +28,7 @@ DESCRIPTION_MAX = 2000
 DescriptionIn = Annotated[
     Annotated[str, Field(max_length=DESCRIPTION_MAX)] | None, BeforeValidator(_blank_is_none)
 ]
-ProjectStatus = Literal["active", "closed"]
+ProjectStatus = Literal["planned", "active", "closed"]
 NameIn = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
@@ -40,7 +40,7 @@ class ProjectOut(Schema):
     description: str | None
     start_date: date | None
     end_date: date | None
-    # 종료는 표시만 한다 — 쓰기를 막지 않는다
+    # 준비 · 종료는 표시만 한다 — 쓰기를 막지 않는다
     status: ProjectStatus
     closed_at: Utc | None
 

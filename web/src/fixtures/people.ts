@@ -35,14 +35,15 @@ export const projects: Project[] = [
     status: 'active',
     closedAt: null,
   },
+  /* 준비 중인 프로젝트 — 진행 다음에 서고 '준비' 가 붙는다 */
   {
     id: 'p2',
     name: '삼성생명 PAS',
     taskKeyPrefix: 'PAS',
     description: null,
-    startDate: '2026-07-01',
+    startDate: '2026-12-01',
     endDate: null,
-    status: 'active',
+    status: 'planned',
     closedAt: null,
   },
   /* 종료한 프로젝트 — 목록 · 고르기에서 뒤로 가고 '종료' 가 붙는다. 쓰기는 막지 않는다 */

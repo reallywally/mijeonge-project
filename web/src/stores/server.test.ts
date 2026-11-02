@@ -420,7 +420,7 @@ describe('만드는 것', () => {
         : json(closed),
     )
 
-    expect(await data.setProjectStatus('p1', 'closed')).toBe(true)
+    expect(await data.updateProject('p1', { status: 'closed' })).toMatchObject({ status: 'closed' })
     expect(calls.at(-1)).toEqual({ route: 'PATCH /api/projects/p1', body: { status: 'closed' } })
     expect(data.currentProject).toMatchObject({ status: 'closed', closedAt: closed.closedAt })
 

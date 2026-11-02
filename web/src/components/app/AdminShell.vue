@@ -17,7 +17,7 @@ import {
   projectPartsPath,
   projectSettingsPath,
 } from '@/lib/access'
-import { orderProjects } from '@/lib/project'
+import { orderProjects, projectStatusLabel } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 
@@ -27,7 +27,7 @@ import { useDataStore } from '@/stores/data'
 const data = useDataStore()
 const auth = useAuthStore()
 
-/* 종료한 프로젝트는 뒤로 */
+/* 진행 → 준비 → 종료 */
 const managedProjects = computed(() =>
   orderProjects(data.allProjects).filter((p) => canManageProject(auth.me, p.id)),
 )
@@ -87,15 +87,15 @@ const manageAccounts = computed(() => canManageAccounts(auth.me))
               class="mb-1 h-9 w-full gap-2 bg-card text-[13px] font-semibold"
               aria-label="관리할 프로젝트"
             >
-              <!-- 고른 항목의 글을 베끼지 않고 직접 그린다 — 종료 · 다시 열기가 바로 따라오게 -->
+              <!-- 고른 항목의 글을 베끼지 않고 직접 그린다 — 상태를 바꾸면 바로 따라오게. 진행은 표시 없음 -->
               <SelectValue class="min-w-0 grow truncate text-left">
                 <template v-if="manageProject && data.currentProject">
                   {{ data.currentProject.name
                   }}<span
-                    v-if="data.currentProject.status === 'closed'"
+                    v-if="data.currentProject.status !== 'active'"
                     class="ml-1 text-xs font-normal text-muted-foreground"
-                    data-closed-mark
-                    >· 종료</span
+                    :data-status-mark="data.currentProject.status"
+                    >· {{ projectStatusLabel(data.currentProject.status) }}</span
                   >
                 </template>
                 <span v-else class="text-muted-foreground">프로젝트 고르기</span>
@@ -112,10 +112,10 @@ const manageAccounts = computed(() => canManageAccounts(auth.me))
                   p.name
                 }}</span>
                 <span
-                  v-if="p.status === 'closed'"
+                  v-if="p.status !== 'active'"
                   class="ml-1 text-xs text-muted-foreground"
-                  data-closed-mark
-                  >· 종료</span
+                  :data-status-mark="p.status"
+                  >· {{ projectStatusLabel(p.status) }}</span
                 >
               </SelectItem>
             </SelectContent>

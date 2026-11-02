@@ -62,17 +62,16 @@ beforeEach(() => {
 })
 
 describe('프로젝트 관리 화면', () => {
-  it('프로젝트 정보 — 작업 키 접두사는 읽기만 되고, 한눈 정보를 센다', async () => {
+  it('프로젝트 정보 — 작업 키 접두사는 읽기만 되고, 한눈 정보(수 세기) 칸은 없다', async () => {
     await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/admin/projects/p1/settings')
 
     expect(w.get('[data-task-key-prefix]').text()).toBe('HW')
     expect(w.find('input[aria-label="작업 키 접두사"]').exists()).toBe(false)
-    expect(w.get('[data-stat="tasks"]').text()).toContain('22')
-    expect(w.get('[data-stat="threads"]').text()).toContain('9')
-    expect(w.get('[data-stat="parts"]').text()).toContain('3')
-    expect(w.get('[data-stat="members"]').text()).toContain('4')
-    expect(w.get('[data-stat="members"]').text()).toContain('관리자 1')
+    expect(w.find('[data-stat]').exists()).toBe(false)
+    expect(w.find('section[aria-label="프로젝트 상태"]').exists()).toBe(false)
+    /* 멤버 목록은 그대로 */
+    expect(w.findAll('section[aria-label="프로젝트 멤버"] tr[data-member-id]')).toHaveLength(4)
   })
 
   it('사람 표의 파트는 읽기 전용 칩이고, 누르면 파트 관리의 그 파트로 간다', async () => {
@@ -88,7 +87,7 @@ describe('프로젝트 관리 화면', () => {
   })
 })
 
-describe('프로젝트 관리 — 기본 정보 · 상태 · 삭제', () => {
+describe('프로젝트 관리 — 기본 정보(상태 포함) · 삭제', () => {
   const field = (selector: string) => document.body.querySelector<HTMLInputElement>(selector)!
 
   it('이름 · 설명 · 기간을 한 번에 저장하고, 비운 칸은 지운다', async () => {
@@ -151,25 +150,53 @@ describe('프로젝트 관리 — 기본 정보 · 상태 · 삭제', () => {
     expect(w.find('[data-range-error]').exists()).toBe(false)
   })
 
-  it('종료는 한 번 묻고, 종료 시각을 보인다. 다시 열기는 바로 된다', async () => {
+  it('상태는 프로젝트 정보 안에서 고르고, 같은 저장으로 status 만 보낸다', async () => {
     await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/admin/projects/p1/settings')
     const data = useDataStore()
-    expect(w.get('[data-project-status]').text()).toContain('진행 중')
+    const option = (status: string) => w.get(`button[data-status-option="${status}"]`)
 
-    await click(bodyButton('프로젝트 종료'))
-    expect(document.body.textContent).toContain('프로젝트를 종료할까요?')
-    await click(document.body.querySelector('[data-close-confirm]'))
+    expect(w.findAll('[data-status-option]').map((b) => b.text())).toEqual(['준비', '진행', '종료'])
+    expect(option('active').attributes('aria-pressed')).toBe('true')
+    expect(w.get('button[data-save-info]').attributes('disabled')).toBeDefined()
+
+    await option('planned').trigger('click')
+    expect(option('planned').attributes('aria-pressed')).toBe('true')
+    const spy = vi.spyOn(data, 'updateProject')
+    await click(w.get('button[data-save-info]').element)
+
+    expect(spy).toHaveBeenCalledWith('p1', { status: 'planned' })
+    expect(data.currentProject).toMatchObject({ status: 'planned', closedAt: null })
+    expect(w.find('[data-closed-at]').exists()).toBe(false)
+    expect(w.get('button[data-save-info]').attributes('disabled')).toBeDefined()
+  })
+
+  it('종료로 저장하면 종료 시각이 칸 옆에 작게 보이고, 진행으로 되돌리면 걷힌다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/settings')
+    const data = useDataStore()
+
+    await w.get('button[data-status-option="closed"]').trigger('click')
+    /* 저장 전에는 시각이 없다 — 아직 닫지 않았다 */
+    expect(w.find('[data-closed-at]').exists()).toBe(false)
+    await click(w.get('button[data-save-info]').element)
 
     expect(data.currentProject!.status).toBe('closed')
     expect(data.currentProject!.closedAt).toBeTruthy()
-    expect(w.get('[data-project-status]').attributes('data-project-status')).toBe('closed')
-    expect(w.get('[data-project-status]').text()).toContain('종료')
-    expect(w.find('[data-closed-at]').exists()).toBe(true)
+    expect(w.get('[data-closed-at]').text()).toContain('종료')
 
-    await click(bodyButton('다시 열기'))
+    await w.get('button[data-status-option="active"]').trigger('click')
+    await click(w.get('button[data-save-info]').element)
     expect(data.currentProject).toMatchObject({ status: 'active', closedAt: null })
     expect(w.find('[data-closed-at]').exists()).toBe(false)
+  })
+
+  it('이미 종료한 프로젝트를 열면 종료가 골라져 있고 종료 시각이 보인다', async () => {
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
+    const { w } = await mountAt('/admin/projects/p3/settings')
+
+    expect(w.get('button[data-status-option="closed"]').attributes('aria-pressed')).toBe('true')
+    expect(w.get('[data-closed-at]').text()).toMatch(/에 종료$/)
   })
 
   it('위험 구역은 시스템 관리자에게만 보인다', async () => {

@@ -14,6 +14,7 @@ import { nowIso } from '@/lib/date'
 import {
   PROJECT_DESCRIPTION_MAX,
   TASK_KEY_PREFIX_RE,
+  isProjectStatus,
   makeTaskKeyPrefix,
   orderProjects,
   projectDateRangeError,
@@ -104,6 +105,8 @@ const mockProjects = {
     const project = mockDb().projects.find((p) => p.id === projectId)
     if (!project) throw mockError(404, 'PROJECT_NOT_FOUND', '프로젝트를 찾을 수 없습니다.')
     if (patch.name !== undefined && !patch.name.trim()) throw invalid('name', '이름을 적어 주세요.')
+    if (patch.status !== undefined && !isProjectStatus(patch.status))
+      throw invalid('status', '상태는 planned · active · closed 중 하나여야 합니다.')
     checkFields(patch)
     const next: Project = { ...project }
     if (patch.name !== undefined) next.name = patch.name.trim()
@@ -112,6 +115,7 @@ const mockProjects = {
     if (patch.endDate !== undefined) next.endDate = blankToNull(patch.endDate) ?? null
     /* 보낸 것과 남은 것을 합친 결과로 앞뒤를 본다 — 한쪽만 고쳐도 어긋날 수 있다 */
     checkRange(next.startDate, next.endDate)
+    /* closedAt 은 closed 로 들어설 때 찍고, 다른 상태로 나가면 지운다. 같은 값을 다시 보내면 그대로 */
     if (patch.status !== undefined && patch.status !== project.status) {
       next.status = patch.status
       next.closedAt = patch.status === 'closed' ? nowIso() : null
@@ -127,7 +131,7 @@ const mockProjects = {
   },
 }
 
-/** 볼 수 있는 프로젝트 — 진행 중이 먼저다. 지운 것은 빠진다 */
+/** 볼 수 있는 프로젝트 — 진행 → 준비 → 종료. 지운 것은 빠진다 */
 export const fetchProjects = () =>
   isMockMode() ? later(() => mockProjects.list()) : request<Project[]>('GET', '/projects')
 

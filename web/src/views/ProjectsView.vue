@@ -17,7 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { canCreateProject } from '@/lib/access'
-import { orderProjects, projectPeriod } from '@/lib/project'
+import { orderProjects, projectPeriod, projectStatusLabel } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 
@@ -36,7 +36,7 @@ const perPage = 8
 /* 프로젝트 등록은 시스템 관리자만 — 라우터도 같은 함수로 /projects/new 를 막는다 */
 const canCreate = computed(() => canCreateProject(auth.me))
 
-/* 종료한 프로젝트는 뒤로 — 서버 목록과 같은 순서. 화면에서 종료하면 받은 순서가 어긋나서 여기서도 줄 세운다 */
+/* 진행 → 준비 → 종료 — 서버 목록과 같은 순서. 화면에서 상태를 바꾸면 받은 순서가 어긋나서 여기서도 줄 세운다 */
 const rows = computed(() =>
   orderProjects(data.allProjects).map((project) => ({
     project,
@@ -199,11 +199,11 @@ function onCreated() {
                           {{ row.project.name }}
                         </button>
                         <Badge
-                          v-if="row.closed"
+                          v-if="row.project.status !== 'active'"
                           variant="outline"
                           class="shrink-0"
-                          data-closed-badge
-                          >종료</Badge
+                          :data-status-badge="row.project.status"
+                          >{{ projectStatusLabel(row.project.status) }}</Badge
                         >
                       </span>
                       <span

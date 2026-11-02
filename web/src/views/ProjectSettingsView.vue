@@ -5,7 +5,6 @@ import { Loader2, Lock, Plus, Trash2, UserMinus, X } from 'lucide-vue-next'
 import { ApiError, messageOf } from '@/api'
 import PersonChip from '@/components/app/PersonChip.vue'
 import ProjectAdminFrame from '@/components/app/ProjectAdminFrame.vue'
-import StatusPill from '@/components/app/StatusPill.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,13 +36,17 @@ import { Textarea } from '@/components/ui/textarea'
 import { projectPartsPath } from '@/lib/access'
 import { dayTime } from '@/lib/date'
 import { PROJECT_ROLE_OPTIONS, memberLabel } from '@/lib/member'
-import { PROJECT_DESCRIPTION_MAX, projectDateRangeError } from '@/lib/project'
+import {
+  PROJECT_DESCRIPTION_MAX,
+  PROJECT_STATUS_OPTIONS,
+  projectDateRangeError,
+} from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
-import type { Project, ProjectPatch, ProjectRole } from '@/types/domain'
+import type { Project, ProjectPatch, ProjectRole, ProjectStatus } from '@/types/domain'
 
-/* 프로젝트 관리 — 프로젝트 정보 · 상태 · 멤버, 시스템 관리자에게는 삭제까지.
+/* 프로젝트 관리 — 프로젝트 정보(상태 포함) · 멤버, 시스템 관리자에게는 삭제까지.
    파트 소속은 여기서 보이기만 하고 고치는 곳은 파트 관리다 */
 const data = useDataStore()
 const auth = useAuthStore()
@@ -56,7 +59,6 @@ const partsPath = computed(() => projectPartsPath(projectId.value))
 
 /* 서버 모드는 프로젝트를 바꾸면 스냅샷과 같이 멤버를 받는다 — 받기 전에는 비어 있다 */
 const loading = computed(() => data.syncing || data.projectMembers[projectId.value] === undefined)
-const recordsReady = computed(() => !data.syncing && data.holdsRecordsOf(projectId.value))
 
 const rows = computed(() =>
   (data.projectMembers[projectId.value] ?? [])
@@ -71,53 +73,20 @@ const rows = computed(() =>
     ),
 )
 
-/* 한눈 정보 — 스냅샷이 이 프로젝트 것을 들고 있을 때만 센다 */
-const stats = computed(() => {
-  const id = projectId.value
-  const count = (n: number) => (recordsReady.value ? String(n) : '—')
-  const active = partStore.parts.filter((p) => p.active).length
-  const archived = partStore.parts.length - active
-  return [
-    {
-      key: 'tasks',
-      label: '작업',
-      value: count(data.allTasks.filter((t) => t.projectId === id).length),
-      to: '/tasks',
-    },
-    {
-      key: 'threads',
-      label: '안건',
-      value: count(data.allThreads.filter((t) => t.projectId === id).length),
-      to: '/threads',
-    },
-    {
-      key: 'parts',
-      label: '파트',
-      value: count(active),
-      note: archived ? `보관 ${archived}` : '',
-      to: partsPath.value,
-    },
-    {
-      key: 'members',
-      label: '멤버',
-      value: loading.value ? '—' : String(rows.value.length),
-      note: loading.value ? '' : `관리자 ${rows.value.filter((r) => r.role === 'admin').length}`,
-    },
-  ]
-})
-
-/* 기본 정보 — 이름 · 설명 · 기간을 한 번에 저장한다. 바뀐 칸만 보낸다 */
+/* 기본 정보 — 이름 · 설명 · 기간 · 상태를 한 번에 저장한다. 바뀐 칸만 보낸다 */
 interface InfoDraft {
   name: string
   description: string
   startDate: string
   endDate: string
+  status: ProjectStatus
 }
 const toDraft = (p: Project | null): InfoDraft => ({
   name: p?.name ?? '',
   description: p?.description ?? '',
   startDate: p?.startDate ?? '',
   endDate: p?.endDate ?? '',
+  status: p?.status ?? 'active',
 })
 const draft = ref<InfoDraft>(toDraft(null))
 const saving = ref(false)
@@ -130,6 +99,7 @@ watch(
     project.value?.description,
     project.value?.startDate,
     project.value?.endDate,
+    project.value?.status,
   ],
   () => {
     draft.value = toDraft(project.value)
@@ -151,6 +121,7 @@ const patch = computed<ProjectPatch>(() => {
   if (description !== (p.description?.trim() || null)) out.description = description
   if (nullable(d.startDate) !== p.startDate) out.startDate = nullable(d.startDate)
   if (nullable(d.endDate) !== p.endDate) out.endDate = nullable(d.endDate)
+  if (d.status !== p.status) out.status = d.status
   return out
 })
 const dirty = computed(() => Object.keys(patch.value).length > 0)
@@ -214,21 +185,6 @@ watch(
     if (saveError.value?.code === 'PROJECT_DATE_RANGE') saveError.value = null
   },
 )
-
-/* 상태 — 종료는 표시만 바꾼다. 종료는 한 번 묻고, 다시 열기는 바로 한다 */
-const closeOpen = ref(false)
-const statusBusy = ref(false)
-async function closeProject() {
-  statusBusy.value = true
-  const ok = await data.setProjectStatus(projectId.value, 'closed')
-  statusBusy.value = false
-  if (ok) closeOpen.value = false
-}
-async function reopenProject() {
-  statusBusy.value = true
-  await data.setProjectStatus(projectId.value, 'active')
-  statusBusy.value = false
-}
 
 /* 삭제 — 시스템 관리자만. 이름을 그대로 쳐야 켜진다. 지운 뒤 갈 곳은 틀(ProjectAdminFrame)이 정한다 */
 const deleteOpen = ref(false)
@@ -297,7 +253,7 @@ const partsOf = (memberId: string) =>
         <header class="flex flex-col gap-2.5">
           <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 프로젝트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            프로젝트 정보 · 상태와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고
+            프로젝트 정보와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고
             빼는 것은
             <RouterLink :to="partsPath" class="text-foreground underline-offset-4 hover:underline"
               >파트 관리</RouterLink
@@ -385,6 +341,45 @@ const partsOf = (memberId: string) =>
               </div>
             </div>
             <div class="flex items-start gap-2.5">
+              <span class="w-[92px] shrink-0 pt-1.5 text-sm text-muted-foreground">상태</span>
+              <div class="flex grow flex-col gap-1">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <div
+                    role="group"
+                    aria-label="프로젝트 상태"
+                    class="flex items-center gap-0.5 rounded-md bg-secondary p-0.5"
+                  >
+                    <button
+                      v-for="o in PROJECT_STATUS_OPTIONS"
+                      :key="o.value"
+                      type="button"
+                      class="inline-flex h-7 items-center rounded-[5px] px-4 text-sm transition-colors"
+                      :class="
+                        draft.status === o.value
+                          ? 'bg-background font-medium shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      "
+                      :aria-pressed="draft.status === o.value"
+                      :data-status-option="o.value"
+                      @click="draft.status = o.value"
+                    >
+                      {{ o.label }}
+                    </button>
+                  </div>
+                  <span
+                    v-if="p.status === 'closed' && draft.status === 'closed' && p.closedAt"
+                    class="text-xs text-muted-foreground"
+                    data-closed-at
+                    >{{ dayTime(p.closedAt) }}에 종료</span
+                  >
+                </div>
+                <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
+                  표시만 바뀝니다 — 목록과 프로젝트 고르기에서 진행 · 준비 · 종료 순으로 서고, 작업 ·
+                  안건은 어느 상태든 그대로 쓸 수 있습니다.
+                </p>
+              </div>
+            </div>
+            <div class="flex items-start gap-2.5">
               <span class="w-[92px] shrink-0 pt-1 text-sm text-muted-foreground"
                 >작업 키 접두사</span
               >
@@ -415,59 +410,6 @@ const partsOf = (memberId: string) =>
             </div>
           </div>
 
-          <dl class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            <component
-              :is="s.to ? 'RouterLink' : 'div'"
-              v-for="s in stats"
-              :key="s.key"
-              :to="s.to"
-              :data-stat="s.key"
-              class="flex flex-col gap-1 rounded-lg border border-border bg-card px-[15px] py-3 shadow-sm"
-              :class="s.to ? 'transition-colors hover:bg-accent' : ''"
-            >
-              <dt class="text-xs text-muted-foreground">{{ s.label }}</dt>
-              <dd class="flex items-baseline gap-1.5">
-                <span class="text-xl font-semibold tabular-nums">{{ s.value }}</span>
-                <span v-if="s.note" class="text-xs text-muted-foreground">{{ s.note }}</span>
-              </dd>
-            </component>
-          </dl>
-        </section>
-
-        <section class="flex flex-col gap-3" aria-label="프로젝트 상태">
-          <h2 class="text-sm font-medium">상태</h2>
-          <div
-            class="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
-            :data-project-status="p.status"
-          >
-            <StatusPill :tone="p.status === 'closed' ? 'done' : 'doing'">
-              {{ p.status === 'closed' ? '종료' : '진행 중' }}
-            </StatusPill>
-            <p class="min-w-0 grow text-sm leading-relaxed text-muted-foreground text-pretty">
-              <template v-if="p.status === 'closed'">
-                <span v-if="p.closedAt" data-closed-at
-                  >{{ dayTime(p.closedAt) }}에 종료했습니다.
-                </span>
-                목록과 프로젝트 고르기에서 뒤로 가지만 작업 · 안건은 그대로 쓸 수 있습니다.
-              </template>
-              <template v-else>
-                끝난 프로젝트는 종료로 표시해 두면 목록과 프로젝트 고르기에서 뒤로 갑니다.
-              </template>
-            </p>
-            <Button
-              v-if="p.status === 'closed'"
-              variant="outline"
-              class="shrink-0"
-              :disabled="statusBusy"
-              @click="reopenProject"
-            >
-              <Loader2 v-if="statusBusy" class="animate-spin" />
-              다시 열기
-            </Button>
-            <Button v-else variant="outline" class="shrink-0" @click="closeOpen = true">
-              프로젝트 종료
-            </Button>
-          </div>
         </section>
 
         <section class="flex flex-col gap-3" aria-label="프로젝트 멤버">
@@ -659,25 +601,6 @@ const partsOf = (memberId: string) =>
             </Button>
           </div>
         </section>
-
-        <Dialog v-model:open="closeOpen">
-          <DialogContent class="sm:max-w-[420px]">
-            <DialogHeader>
-              <DialogTitle>프로젝트를 종료할까요?</DialogTitle>
-              <DialogDescription class="text-pretty">
-                {{ p.name }} 을(를) 종료로 표시합니다. 작업 · 안건은 그대로 쓸 수 있고, 언제든 다시
-                열 수 있습니다.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" @click="closeOpen = false">취소</Button>
-              <Button :disabled="statusBusy" data-close-confirm @click="closeProject">
-                <Loader2 v-if="statusBusy" class="animate-spin" />
-                종료하기
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         <Dialog v-if="auth.systemAdmin" v-model:open="deleteOpen">
           <DialogContent class="sm:max-w-[460px]">

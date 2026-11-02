@@ -19,8 +19,8 @@ from app.time import now
 
 # 시스템 역할과 프로젝트 역할은 둘 다 이 둘이다 — 권한 셋은 그 조합으로 나온다 (docs/api/auth.md)
 ROLES = ("admin", "user")
-# 종료는 표시만 한다 — 쓰기를 막지 않는다 (docs/api/auth.md '프로젝트 관리')
-PROJECT_STATUSES = ("active", "closed")
+# 준비 · 종료는 표시만 한다 — 쓰기를 막지 않는다 (docs/api/auth.md '프로젝트 관리')
+PROJECT_STATUSES = ("planned", "active", "closed")
 
 
 class Project(Base):

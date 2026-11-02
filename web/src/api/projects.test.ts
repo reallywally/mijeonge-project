@@ -21,11 +21,15 @@ beforeEach(() => {
 })
 
 describe('목록', () => {
-  it('볼 수 있는 것만, 진행 중이 먼저다', async () => {
+  it('볼 수 있는 것만, 진행 → 준비 → 종료 순이다', async () => {
     await asUser('u2@inno-ax.com')
     expect((await fetchProjects()).map((p) => p.id)).toEqual(['p1', 'p2'])
 
     mockDb().projects.find((p) => p.id === 'p1')!.status = 'closed'
+    expect((await fetchProjects()).map((p) => p.id)).toEqual(['p2', 'p1'])
+
+    mockDb().projects.find((p) => p.id === 'p1')!.status = 'planned'
+    mockDb().projects.find((p) => p.id === 'p2')!.status = 'active'
     expect((await fetchProjects()).map((p) => p.id)).toEqual(['p2', 'p1'])
   })
 })
@@ -105,6 +109,33 @@ describe('수정', () => {
     expect(closed.closedAt).toMatch(/Z$/)
     const reopened = await patchProject('p1', { status: 'active' })
     expect(reopened).toMatchObject({ status: 'active', closedAt: null })
+  })
+
+  it('준비로 두면 closedAt 은 null — 종료에서 준비로 가도 지워진다. 같은 종료를 다시 보내면 시각은 그대로', async () => {
+    await asUser('u1@inno-ax.com')
+    expect(await patchProject('p1', { status: 'planned' })).toMatchObject({
+      status: 'planned',
+      closedAt: null,
+    })
+    const closed = await patchProject('p1', { status: 'closed' })
+    const again = await patchProject('p1', { status: 'closed' })
+    expect(again.closedAt).toBe(closed.closedAt)
+    expect(await patchProject('p1', { status: 'planned' })).toMatchObject({ closedAt: null })
+  })
+
+  it('세 값 밖의 상태는 422 로 거절하고 아무것도 바꾸지 않는다', async () => {
+    await asUser('u1@inno-ax.com')
+    const bad = { name: '바뀌면 안 됨', status: 'archived' } as unknown as Parameters<
+      typeof patchProject
+    >[1]
+    expect(await fail(patchProject('p1', bad))).toMatchObject({
+      status: 422,
+      code: 'VALIDATION_ERROR',
+    })
+    expect(mockDb().projects.find((p) => p.id === 'p1')).toMatchObject({
+      name: '한화손보 차세대',
+      status: 'active',
+    })
   })
 
   it('일반 사용자는 403, 안 보이는 프로젝트는 404', async () => {
