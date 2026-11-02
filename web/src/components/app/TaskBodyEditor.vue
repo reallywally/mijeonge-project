@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { Check } from 'lucide-vue-next'
 import { fitTextarea } from '@/lib/utils'
 import type { TaskLine } from '@/types/domain'
@@ -9,8 +9,9 @@ import type { TaskLine } from '@/types/domain'
    줄 첫머리에 `[] ` 를 치면 체크박스, `- ` 를 치면 불릿으로 바뀐다.
 
    줄은 이 컴포넌트가 들고 있다가 바뀔 때마다 통째로 올린다. 빈 줄은 적는 중일 수 있어 그대로
-   두고, 편집기를 벗어날 때 걷어서 올린다. 부모는 작업이 바뀌면 key 로 새로 띄운다. */
-const props = defineProps<{ lines: TaskLine[] }>()
+   두고, 편집기를 벗어날 때 걷어서 올린다. 부모는 작업이 바뀌면 key 로 새로 띄운다.
+   readonly 면 보는 모양 그대로 두고 아무것도 올리지 않는다 — 고칠 권한이 없는 작업이다 */
+const props = defineProps<{ lines: TaskLine[]; readonly?: boolean }>()
 const emit = defineEmits<{ (e: 'change', lines: TaskLine[]): void }>()
 
 const MAX_LEVEL = 3
@@ -27,6 +28,9 @@ const blank = (from?: TaskLine): TaskLine => ({
 /* 비어 있으면 적을 자리 한 줄을 깔아 둔다 — 올릴 때는 빈 줄이라 걷힌다 */
 const rows = ref<TaskLine[]>(props.lines.length ? props.lines.map((l) => ({ ...l })) : [blank()])
 const fields = ref<HTMLTextAreaElement[]>([])
+const emptyHint = computed(() =>
+  props.readonly ? '내용이 없습니다' : '내용을 적으세요 — [] 를 치면 체크박스가 됩니다',
+)
 
 const filled = () => rows.value.filter((l) => l.text.trim() !== '')
 const commit = () =>
@@ -36,6 +40,7 @@ const commit = () =>
   )
 
 function onFocusOut(e: FocusEvent) {
+  if (props.readonly) return
   const root = e.currentTarget as HTMLElement
   if (root.contains(e.relatedTarget as Node | null)) return
   rows.value = rows.value.length && filled().length ? filled() : [blank()]
@@ -75,7 +80,7 @@ function onInput(index: number, e: Event) {
 
 function onKeydown(index: number, e: KeyboardEvent) {
   /* 한글 조합 중의 키는 글자를 맺는 데 쓰인다 */
-  if (e.isComposing) return
+  if (e.isComposing || props.readonly) return
   const el = e.target as HTMLTextAreaElement
   const line = rows.value[index]
   const atStart = el.selectionStart === 0 && el.selectionEnd === 0
@@ -145,6 +150,7 @@ function onKeydown(index: number, e: KeyboardEvent) {
 }
 
 function toggle(line: TaskLine) {
+  if (props.readonly) return
   line.done = !line.done
   commit()
 }
@@ -159,7 +165,13 @@ function setField(index: number, el: unknown) {
 
 <template>
   <div
-    class="flex flex-col rounded-md border border-transparent px-1.5 py-1 transition-colors hover:border-border focus-within:border-input focus-within:hover:border-input"
+    class="flex flex-col rounded-md border border-transparent px-1.5 py-1 transition-colors"
+    :class="
+      readonly
+        ? ''
+        : 'hover:border-border focus-within:border-input focus-within:hover:border-input'
+    "
+    :data-readonly="readonly ? '' : undefined"
     @focusout="onFocusOut"
   >
     <div
@@ -172,8 +184,11 @@ function setField(index: number, el: unknown) {
         v-if="line.kind === 'check'"
         type="button"
         class="mt-[7px] flex size-[17px] shrink-0 items-center justify-center rounded-sm border"
-        :class="line.done ? 'border-primary bg-primary' : 'border-input hover:border-primary'"
+        :class="
+          line.done ? 'border-primary bg-primary' : 'border-input enabled:hover:border-primary'
+        "
         :aria-label="line.done ? '완료 해제' : '완료'"
+        :disabled="readonly"
         @click="toggle(line)"
       >
         <Check v-if="line.done" class="size-3 text-primary-foreground" />
@@ -183,9 +198,8 @@ function setField(index: number, el: unknown) {
         :ref="(el) => setField(i, el)"
         :value="line.text"
         rows="1"
-        :placeholder="
-          rows.length === 1 && i === 0 ? '내용을 적으세요 — [] 를 치면 체크박스가 됩니다' : ''
-        "
+        :readonly="readonly"
+        :placeholder="rows.length === 1 && i === 0 ? emptyHint : ''"
         class="min-w-0 grow resize-none overflow-hidden [field-sizing:content] bg-transparent py-[5px] text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground"
         :class="line.done ? 'text-muted-foreground line-through' : ''"
         @input="onInput(i, $event)"

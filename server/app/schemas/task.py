@@ -28,6 +28,8 @@ class TaskOut(Schema):
     body: list[TaskLineOut]
     status: str
     owner_id: str | None
+    # 등록한 사람. 기록이 없던 지난 작업은 null — 수정 · 삭제 권한의 근거다
+    creator_id: str | None
     # 둘 다 null 이면 기간 미정이다
     start: date | None
     due: date | None

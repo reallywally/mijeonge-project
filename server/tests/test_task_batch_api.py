@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from app.services import task as task_service
+from tests.conftest import AsMember
 from tests.test_contract_types import FIELDS
 
 URL = "/api/projects/p3/tasks/batch"
@@ -61,6 +62,13 @@ async def test_batch_creates_tree_in_order(client: httpx.AsyncClient) -> None:
 
     snap = (await client.get("/api/projects/p3/snapshot")).json()
     assert [t["id"] for t in snap["tasks"]] == [t["id"] for t in tasks]
+
+
+async def test_batch_records_the_requester_as_creator(as_member: AsMember) -> None:
+    res = await (await as_member("u3")).post(URL, json={"tasks": DRAFT})
+    assert res.status_code == 201
+    # 담당자가 따로 있어도 등록한 사람은 부른 사람 하나다
+    assert [t["creatorId"] for t in res.json()["tasks"]] == ["u3", "u3", "u3"]
 
 
 async def test_batch_keys_continue_from_single_create(client: httpx.AsyncClient) -> None:

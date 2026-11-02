@@ -148,6 +148,11 @@ function setup(g: GanttStatic, el: HTMLElement) {
     emit('add', task.parent ? String(task.parent) : null)
     return false
   })
+  /* 잠긴 줄(readonly)은 끌지 못한다 — 라이브러리의 readonly 를 비켜 들어온 손놀림까지 */
+  g.attachEvent(
+    'onBeforeTaskDrag',
+    (id: string | number) => !props.items.find((i) => i.id === String(id))?.readonly,
+  )
   g.attachEvent('onAfterTaskDrag', (id: string | number) => {
     const moved = g.getTask(id)
     if (!moved.start_date || !moved.end_date) return true

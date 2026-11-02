@@ -6,7 +6,7 @@ import { usePartStore } from '@/stores/part'
 /* 작업 · 안건 속성 칸의 파트 한 줄. 고를 수 있는 것은 공통 + 활성 파트, 그리고 이미 달린 보관 파트.
    프로젝트에 파트가 하나도 없으면 줄째로 숨는다 — 고를 것이 공통뿐인 칸은 노이즈다 */
 const partId = defineModel<string | null>({ required: true })
-defineProps<{ triggerClass: string }>()
+defineProps<{ triggerClass: string; disabled?: boolean }>()
 
 const partStore = usePartStore()
 const COMMON = 'common'
@@ -22,6 +22,7 @@ const shown = computed(() => partStore.parts.length > 0 || partId.value !== null
     <dd class="min-w-0 grow">
       <Select
         :model-value="partId ?? COMMON"
+        :disabled="disabled"
         @update:model-value="(v) => (partId = v === COMMON ? null : String(v))"
       >
         <SelectTrigger :class="triggerClass" aria-label="파트">

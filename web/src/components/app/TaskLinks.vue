@@ -13,8 +13,10 @@ withDefaults(
     threadChoices: Thread[]
     /** 제목을 눌러 그 안건으로 갈 수 있는지 — 아직 없는 작업을 만드는 중에는 못 간다 */
     navigable?: boolean
+    /** 걸고 떼지 못하고 보기만 — 고칠 권한이 없는 작업 */
+    readonly?: boolean
   }>(),
-  { navigable: true },
+  { navigable: true, readonly: false },
 )
 const emit = defineEmits<{
   (e: 'link-thread' | 'unlink-thread' | 'open-thread', id: string): void
@@ -31,6 +33,7 @@ const emit = defineEmits<{
     </div>
 
     <SearchPicker
+      v-if="!readonly"
       :items="threadChoices"
       :text="(t) => t.title"
       :key-of="(t) => t.id"
@@ -53,7 +56,7 @@ const emit = defineEmits<{
       >
         <span class="min-w-0 grow">안건</span>
         <span class="w-[92px] shrink-0">상태</span>
-        <span class="w-7 shrink-0" />
+        <span v-if="!readonly" class="w-7 shrink-0" />
       </div>
       <div
         v-for="row in threads"
@@ -80,6 +83,7 @@ const emit = defineEmits<{
           <ThreadStateBadge :state="row.thread.state" :defer-count="row.deferCount" />
         </span>
         <button
+          v-if="!readonly"
           type="button"
           class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
           :aria-label="`${row.thread.title} 연결 해제`"

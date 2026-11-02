@@ -162,3 +162,17 @@ async def active_project_members(
 
 async def is_assignable(session: AsyncSession, project_id: str, member_id: str) -> bool:
     return bool(await active_project_members(session, project_id, [member_id]))
+
+
+def can_edit_task(scope: Scope, task: Task) -> bool:
+    """작업 하나를 고칠 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
+
+    담당자를 바꾸는 수정도 바꾸기 **전** 작업으로 본다 — 부르는 쪽이 고치기 전에 부른다.
+    """
+    me = scope.actor.id
+    return scope.can_manage or me in (task.creator_id, task.owner_id)
+
+
+def can_delete_task(scope: Scope, task: Task) -> bool:
+    """지우기는 담당자에게 주지 않는다 — 맡은 일을 맡은 사람이 없앨 수 있으면 기록이 사라진다."""
+    return scope.can_manage or task.creator_id == scope.actor.id

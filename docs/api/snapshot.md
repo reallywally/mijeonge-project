@@ -80,6 +80,21 @@ export interface Project {
 
 지운 프로젝트(소프트 삭제)는 응답에 나오지 않는다 — 삭제 여부를 나타내는 필드는 없다.
 
+### `Task` 가 한 필드 늘었다 (2026-11-02, 생성자)
+
+스냅샷의 `tasks` · 작업 쓰기 응답(등록 · 일괄 · 수정 · 줄 · 회의록 반영) 모두 같은 모양이다. 권한 규칙은 `docs/api/auth.md` '작업'.
+
+```ts
+export interface Task {
+  // … 그대로
+  /** 등록한 사람. 등록할 때 서버가 요청한 사람으로 찍고 바꿀 수 없다. 기록이 없던 지난 작업은 null */
+  creatorId: string | null
+}
+```
+
+지난 작업은 리비전 `0027_task_creator` 가 남은 기록으로 채운다 — 변경 이력의 '등록' 줄(2026-10-27 이후 등록), 없으면
+상태 기록의 첫 줄(2026-10-20 이후). 둘 다 마이그레이션이 넣은 backfill 줄이면 누가 했는지 모르니 null 로 둔다.
+
 ### 중첩은 접어서 낸다
 
 서버 테이블은 행으로 펴 두지만(`server/PLAN.md` 1-1) 응답은 `domain.ts` 모양으로 다시 접는다.
@@ -132,14 +147,14 @@ export interface Project {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리', `Task.creatorId` 는 2026-11-02 · `auth.md` '작업'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
 | `Project` | `description` · `startDate` · `endDate` · `closedAt` |
 | `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
 | `Entry` | `ownerId` · `minutesId` |
-| `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` · `minutesId` |
+| `Task` | `parentId` · `ownerId` · `creatorId` · `start` · `due` · `partId` · `minutesId` |
 | `MinutesItem` · `Minutes` | `meetingDate` (스냅샷 밖 — `GET /api/projects/{projectId}/minutes` 등으로만 나간다, `minutes.md`) |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |
 | `CheckRequest` | `confirmedAt` (스냅샷 밖 — `GET /api/projects/{projectId}/checks` 로만 나간다, `check.md`) |

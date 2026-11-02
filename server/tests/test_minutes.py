@@ -182,6 +182,8 @@ async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncS
     assert ids == {"t1": tasks[0]["id"], "t2": tasks[1]["id"], "t3": tasks[2]["id"]}
     assert [t["parentId"] for t in tasks] == [None, ids["t1"], "k4"]
     assert all(t["status"] == "todo" and t["body"] == [] for t in tasks)
+    # 등록한 사람은 반영을 누른 사람이다 — client 는 시스템 관리자
+    assert all(t["creatorId"] == "admin" for t in tasks)
     assert tasks[1]["due"] == "2026-10-24"
     # 파트는 상위를 따른다 — k4 는 인프라(pt1), 최상위는 공통
     assert [t["partId"] for t in tasks] == [None, None, "pt1"]

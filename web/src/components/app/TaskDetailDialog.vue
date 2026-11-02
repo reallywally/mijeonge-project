@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ChevronRight, FolderClosed, Plus } from 'lucide-vue-next'
+import { ChevronRight, FolderClosed, Loader2, Lock, Plus, Trash2 } from 'lucide-vue-next'
+import { ApiError } from '@/api'
 import HistorySection from '@/components/app/HistorySection.vue'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import TaggedTests from '@/components/app/TaggedTests.vue'
@@ -9,13 +10,24 @@ import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
-import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogScrollContent,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
+import { toastError } from '@/lib/notify'
 import {
   MAX_TASK_DEPTH,
   periodProblem,
+  READONLY_HINT,
   statusSinceLabel,
   TASK_STATUS_OPTIONS,
   taskStatusLabel,
@@ -29,7 +41,8 @@ import type { TaskLine, TaskStatus } from '@/types/domain'
 
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
    따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 연결, 오른쪽이 속성이다.
-   안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. 그 아래 댓글, 맨 아래가 접어 둔 변경 이력이다. */
+   안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. 그 아래 댓글, 맨 아래가 접어 둔 변경 이력이다.
+   고치기는 작성자 · 담당자 · 관리자만 — 아니면 칸을 잠그고 보기만 한다(댓글은 누구나 쓴다) */
 const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{
@@ -43,6 +56,12 @@ const partStore = usePartStore()
 const threadStore = useThreadStore()
 
 const detail = computed(() => (props.taskId ? taskStore.taskDetail(props.taskId) : null))
+const canEdit = computed(() => (detail.value ? taskStore.canEdit(detail.value.task) : false))
+const canDelete = computed(() => (detail.value ? taskStore.canDelete(detail.value.task) : false))
+/* 지우기 확인 다이얼로그 — 아래 watch 가 작업을 옮길 때 닫으므로 먼저 둔다 */
+const confirmOpen = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
 
 /* 제목 — Enter 나 벗어나면 들어가고, Esc 는 되돌린다. 비우면 원래 제목으로 돌아간다 */
 const titleDraft = ref('')
@@ -55,7 +74,7 @@ watch(titleField, fitTitle)
 
 function commitTitle() {
   if (!props.taskId) return
-  if (titleDraft.value.trim()) taskStore.setTitle(props.taskId, titleDraft.value)
+  if (canEdit.value && titleDraft.value.trim()) taskStore.setTitle(props.taskId, titleDraft.value)
   titleDraft.value = detail.value?.task.title ?? ''
   void nextTick(fitTitle)
 }
@@ -75,7 +94,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 function saveBody(lines: TaskLine[]) {
-  if (props.taskId) taskStore.setBody(props.taskId, lines)
+  if (props.taskId && canEdit.value) taskStore.setBody(props.taskId, lines)
 }
 
 /* 기간 — 둘 다 있거나 둘 다 없어야 기간이다(간트의 규칙). 한쪽만 적은 동안은 여기서 들고 있다가
@@ -84,7 +103,7 @@ const startDraft = ref('')
 const dueDraft = ref('')
 
 function commitPeriod() {
-  if (!props.taskId) return
+  if (!props.taskId || !canEdit.value) return
   const start = startDraft.value
   const due = dueDraft.value
   if (!periodProblem(start, due)) taskStore.setPeriod(props.taskId, start || null, due || null)
@@ -143,6 +162,7 @@ watch(
     startDraft.value = task?.start ?? ''
     dueDraft.value = task?.due ?? ''
     closeSubtask()
+    confirmOpen.value = false
     void nextTick(fitTitle)
   },
   { immediate: true },
@@ -153,6 +173,37 @@ const subPct = computed(() => {
   if (!d || d.children.length === 0) return 0
   return Math.round((d.doneChildCount / d.children.length) * 100)
 })
+
+/* 지우기 — 확인을 받고 지운다. 하위 작업이 있으면 못 지운다(서버 409 TASK_HAS_CHILDREN).
+   그사이 다른 사람이 하위를 달아 409 가 오면 이유를 띄우고 스냅샷을 다시 받아 하위를 보인다 */
+const hasChildren = computed(() => (detail.value?.children.length ?? 0) > 0)
+
+function askDelete() {
+  deleteError.value = ''
+  confirmOpen.value = true
+}
+
+async function removeTask() {
+  const task = detail.value?.task
+  if (!task || deleting.value) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await taskStore.deleteTask(task.id)
+    confirmOpen.value = false
+    open.value = false
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'TASK_HAS_CHILDREN') {
+      deleteError.value = e.message
+      void data.reloadSnapshot()
+    } else {
+      confirmOpen.value = false
+      toastError(e)
+    }
+  } finally {
+    deleting.value = false
+  }
+}
 
 /* 아직 안 건 안건 — 검색 칸이 이 안에서 찾는다 */
 const threadChoices = computed(() => {
@@ -173,7 +224,15 @@ const threadChoices = computed(() => {
         <ChevronRight class="size-3 text-muted-foreground" />
         <span class="text-xs">{{ detail.task.key }}</span>
         <span class="grow" />
-        <span class="text-xs text-muted-foreground">고치면 바로 저장됩니다</span>
+        <span v-if="canEdit" class="text-xs text-muted-foreground">고치면 바로 저장됩니다</span>
+        <span
+          v-else
+          class="flex items-center gap-1.5 text-xs text-muted-foreground"
+          data-task-readonly
+        >
+          <Lock class="size-3" />
+          {{ READONLY_HINT }}
+        </span>
       </div>
 
       <div class="flex items-stretch">
@@ -185,7 +244,9 @@ const threadChoices = computed(() => {
               v-model="titleDraft"
               rows="1"
               aria-label="제목"
-              class="-mx-2 resize-none overflow-hidden [field-sizing:content] rounded-md border border-transparent bg-transparent px-2 py-1 text-xl leading-snug font-semibold tracking-tight outline-none hover:border-border focus:border-input"
+              :readonly="!canEdit"
+              class="-mx-2 resize-none overflow-hidden [field-sizing:content] rounded-md border border-transparent bg-transparent px-2 py-1 text-xl leading-snug font-semibold tracking-tight outline-none"
+              :class="canEdit ? 'hover:border-border focus:border-input' : ''"
               @input="fitTitle"
               @keydown="onTitleKeydown"
               @blur="commitTitle"
@@ -211,6 +272,7 @@ const threadChoices = computed(() => {
             <TaskBodyEditor
               :key="`${detail.task.id}:${data.snapshotRevision}`"
               :lines="detail.task.body"
+              :readonly="!canEdit"
               @change="saveBody"
             />
           </section>
@@ -252,10 +314,11 @@ const threadChoices = computed(() => {
                 </span>
                 <Select
                   :model-value="child.task.status"
+                  :disabled="!taskStore.canEdit(child.task)"
                   @update:model-value="(v) => taskStore.setStatus(child.task.id, v as TaskStatus)"
                 >
                   <SelectTrigger
-                    class="h-7 w-[120px] shrink-0 justify-start gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent hover:bg-muted focus:ring-[3px]"
+                    class="h-7 w-[120px] shrink-0 justify-start gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent enabled:hover:bg-muted focus:ring-[3px] disabled:cursor-default disabled:opacity-100"
                     :aria-label="`상태 ${taskStatusLabel(child.task.status)}`"
                   >
                     <TaskStatusBadge :status="child.task.status" />
@@ -312,6 +375,7 @@ const threadChoices = computed(() => {
           <TaskLinks
             :threads="detail.threads"
             :thread-choices="threadChoices"
+            :readonly="!canEdit"
             @link-thread="(id) => taskStore.linkThread(detail!.task.id, id)"
             @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
             @open-thread="(id) => emit('open-thread', id)"
@@ -337,6 +401,7 @@ const threadChoices = computed(() => {
           :parent-choices="parentChoices"
           :status-since="statusSinceLabel(detail.task)"
           show-done
+          :readonly="!canEdit"
           @update:status="(v) => taskStore.setStatus(detail!.task.id, v)"
           @update:owner-id="(v) => taskStore.setOwner(detail!.task.id, v)"
           @update:priority="(v) => taskStore.setPriority(detail!.task.id, v)"
@@ -352,12 +417,61 @@ const threadChoices = computed(() => {
               <dd>{{ detail.threads.length }}건</dd>
             </div>
             <div class="flex gap-2">
+              <dt class="w-[72px] shrink-0 text-muted-foreground">작성자</dt>
+              <dd data-task-creator>{{ data.memberName(detail.task.creatorId) ?? '—' }}</dd>
+            </div>
+            <div class="flex gap-2">
               <dt class="w-[72px] shrink-0 text-muted-foreground">만든 날짜</dt>
               <dd>{{ monthDay(detail.task.createdAt) }}</dd>
             </div>
           </dl>
+          <template v-if="canDelete">
+            <div class="grow" />
+            <div class="flex flex-col gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="self-start text-destructive hover:text-destructive"
+                :disabled="hasChildren"
+                data-task-delete
+                @click="askDelete"
+              >
+                <Trash2 class="size-3.5" />
+                작업 지우기
+              </Button>
+              <p v-if="hasChildren" class="px-0.5 text-xs text-muted-foreground" data-delete-reason>
+                하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮겨 주세요.
+              </p>
+            </div>
+          </template>
         </TaskPropertyPanel>
       </div>
+
+      <Dialog v-model:open="confirmOpen">
+        <DialogContent class="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{{ detail.task.key }} 작업을 지울까요?</DialogTitle>
+            <DialogDescription class="text-pretty">
+              본문 · 댓글 · 안건 연결도 함께 지워지고 되돌릴 수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <p v-if="deleteError" class="text-sm text-destructive" data-delete-error>
+            {{ deleteError }}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" @click="confirmOpen = false">취소</Button>
+            <Button
+              variant="destructive"
+              :disabled="deleting"
+              data-delete-confirm
+              @click="removeTask"
+            >
+              <Loader2 v-if="deleting" class="animate-spin" />
+              지우기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DialogScrollContent>
   </Dialog>
 </template>

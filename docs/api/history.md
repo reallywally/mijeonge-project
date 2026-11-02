@@ -132,7 +132,7 @@ export interface HistoryEntry {
 
 ## 시드 · 목업
 
-- 시드는 작업 · 테스트마다 **등록 한 줄**(`backfilled = false`, 바꾼 사람 = 담당자 · 테스트는 만든 사람)을 등록 시각에 둔다
+- 시드는 작업 · 테스트마다 **등록 한 줄**(`backfilled = false`, 바꾼 사람 = 작업은 등록한 사람(`Task.creatorId`, 2026-11-02 — 그전엔 담당자) · 테스트는 만든 사람)을 등록 시각에 둔다. 등록한 사람 기록이 없는 작업(`web/src/fixtures/tasks.ts` 의 `CREATOR_OF` 에 없는 것)은 null 이다
 - 시연용으로 둘을 더한다 — `k20` 에 `status todo → doing`(2026-10-08T00:00:00Z, `task_log` 시연 줄과 같은 때) · `HW-T7` 에 `status testing → fail` + `resultNote`(그 테스트의 바뀐 시각)
 - 목업(`web/src/fixtures`)도 같은 줄을 둔다
 

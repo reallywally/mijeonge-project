@@ -1,4 +1,4 @@
-"""작업 쓰기 API — 발번 · 고리 금지 · 부분 수정 · 본문 줄 · 링크.
+"""작업 쓰기 API — 발번 · 고리 금지 · 부분 수정 · 본문 줄 · 링크 · 삭제.
 
 응답은 스냅샷이 쓰는 `TaskOut` 그대로다. 프론트가 바뀐 레코드를 바로 꽂을 수 있어야 하므로
 키 집합을 읽기 API 와 **같은 상수**로 본다.
@@ -11,8 +11,10 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import TaskComment, TaskHistory, TaskLine, TaskLog, TaskThreadLink, TestRef
 from app.models.task import TASK_LINE_KINDS, TASK_PRIORITIES, TASK_STATUSES
 from app.schemas.task import TaskLineKindIn, TaskPriorityIn, TaskStatusIn
 from tests.test_read_api import TASK_KEYS
@@ -50,6 +52,7 @@ async def test_add_task_answers_with_a_task(client: httpx.AsyncClient) -> None:
     assert task["projectId"] == "p1"
     assert task["title"] == "배포 파이프라인 만들기"
     assert task["createdAt"].endswith("Z")  # ISO 8601 UTC (API.md Q3)
+    assert task["creatorId"] == "admin"  # 등록한 사람 — client 는 시스템 관리자
 
 
 async def test_body_lines_get_server_ids_in_order(client: httpx.AsyncClient) -> None:
@@ -384,3 +387,40 @@ def test_migration_moves_relations_back_to_parents() -> None:
                 text("select task_id, related_id from task_relation order by task_id")
             ).all()
             assert [tuple(row) for row in rows] == [("b", "a"), ("c", "b"), ("d", "e")]
+
+
+async def test_delete_takes_its_records_with_it(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조가 같이 간다.
+
+    번호는 다시 안 쓴다.
+    """
+    made = (
+        await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"threadIds": ["t1"]})
+    ).json()
+    task_id = made["id"]
+    assert (
+        await client.post(f"/api/tasks/{task_id}/comments", json={"body": "남김"})
+    ).status_code == 201
+    assert (await client.put(f"/api/tests/tc1/refs/task/{task_id}")).status_code in (200, 204)
+
+    assert (await client.delete(f"/api/tasks/{task_id}")).status_code == 204
+    gone = await client.delete(f"/api/tasks/{task_id}")
+    assert gone.status_code == 404 and gone.json()["code"] == "TASK_NOT_FOUND"
+    assert (await client.get(f"/api/tasks/{task_id}/comments")).status_code == 404
+    assert (await client.get(f"/api/tasks/{task_id}/history")).status_code == 404
+
+    for model in (TaskLine, TaskComment, TaskThreadLink, TaskLog, TaskHistory, TestRef):
+        left = await session.scalar(
+            select(func.count()).select_from(model).where(model.task_id == task_id)
+        )
+        assert left == 0, model.__name__
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert task_id not in {t["id"] for t in snap["tasks"]}
+    assert all(link["taskId"] != task_id for link in snap["taskThreadLinks"])
+    # 테스트는 남고 태그만 빠진다
+    assert (await client.get("/api/tests/tc1")).status_code == 200
+
+    again = (await client.post("/api/projects/p1/tasks", json={"title": "다음"})).json()
+    assert int(again["key"].split("-")[1]) == int(made["key"].split("-")[1]) + 1

@@ -19,14 +19,16 @@ import type { ParentChoice, TaskPriority, TaskStatus } from '@/types/domain'
 /* 작업의 속성 — 작업 상세와 작업 추가의 오른쪽 칸. 값은 부모가 들고, 여기는 보여 주고 고친 값을 올린다.
    상세는 올라온 값을 바로 넣고, 추가는 만들 때 한꺼번에 넣는다.
    기간(start · due)은 'YYYY-MM-DD' 또는 빈 문자열이다 — 한쪽만 고른 동안에도 들고 있어야 해서다.
-   아래 슬롯에는 상세의 읽기 전용 정보나 추가의 안내를 넣는다. */
-defineProps<{
+   아래 슬롯에는 상세의 읽기 전용 정보나 추가의 안내를 넣는다.
+   readonly 면 칸을 모두 잠근다 — 고칠 권한이 없는 작업(작성자 · 담당자 · 관리자만 고친다) */
+const props = defineProps<{
   /** 고를 수 있는 상위 작업 — 상세에서는 자기와 자기 아래가 빠진다 */
   parentChoices: ParentChoice[]
   /** 상태 옆의 '완료' 버튼 — 이미 있는 작업에만 */
   showDone?: boolean
   /** '진행 중 · 12일째' — 이미 있는 작업에만 */
   statusSince?: string
+  readonly?: boolean
 }>()
 const status = defineModel<TaskStatus>('status', { required: true })
 const ownerId = defineModel<string | null>('ownerId', { required: true })
@@ -45,9 +47,12 @@ const periodHint = computed(() => periodProblem(start.value, due.value))
 /* 날짜는 다 고른 뒤(change)에만 올린다 — 글자를 치는 중의 반쪽 날짜를 올리지 않게 */
 const picked = (e: Event) => (e.target as HTMLInputElement).value
 
-/* 평소엔 글처럼 보이고, 가리키면 고칠 수 있는 칸임이 드러난다 */
-const ghost =
-  'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-accent focus-visible:bg-background focus-visible:border-input'
+/* 평소엔 글처럼 보이고, 가리키면 고칠 수 있는 칸임이 드러난다. 잠긴 칸은 흐리지 않고 글처럼만 둔다 */
+const ghost = computed(() =>
+  props.readonly
+    ? 'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none disabled:cursor-default disabled:opacity-100'
+    : 'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-accent focus-visible:bg-background focus-visible:border-input',
+)
 </script>
 
 <template>
@@ -55,8 +60,11 @@ const ghost =
     class="flex w-[340px] shrink-0 flex-col gap-4 border-l border-border bg-muted/50 px-4 pt-4 pb-6"
   >
     <div class="flex items-center gap-2">
-      <Select v-model="status">
-        <SelectTrigger class="h-8 grow bg-background text-xs font-medium" aria-label="상태">
+      <Select v-model="status" :disabled="readonly">
+        <SelectTrigger
+          class="h-8 grow bg-background text-xs font-medium disabled:cursor-default disabled:opacity-100"
+          aria-label="상태"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -66,7 +74,7 @@ const ghost =
         </SelectContent>
       </Select>
       <Button
-        v-if="showDone"
+        v-if="showDone && !readonly"
         variant="outline"
         size="sm"
         class="shrink-0"
@@ -92,6 +100,7 @@ const ghost =
         <dd class="min-w-0 grow">
           <Select
             :model-value="ownerId ?? NONE"
+            :disabled="readonly"
             @update:model-value="(v) => (ownerId = v === NONE ? null : String(v))"
           >
             <SelectTrigger :class="ghost" aria-label="담당자">
@@ -117,7 +126,7 @@ const ghost =
         </dd>
       </div>
 
-      <PartField v-model="partId" :trigger-class="ghost" />
+      <PartField v-model="partId" :trigger-class="ghost" :disabled="readonly" />
 
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">시작 날짜</dt>
@@ -126,6 +135,7 @@ const ghost =
             :model-value="start"
             type="date"
             aria-label="시작 날짜"
+            :disabled="readonly"
             :class="[ghost, start ? '' : 'text-muted-foreground']"
             @change="(e: Event) => (start = picked(e))"
           />
@@ -138,6 +148,7 @@ const ghost =
             :model-value="due"
             type="date"
             aria-label="기한"
+            :disabled="readonly"
             :class="[ghost, due ? '' : 'text-muted-foreground']"
             @change="(e: Event) => (due = picked(e))"
           />
@@ -159,9 +170,10 @@ const ghost =
             :class="
               priority === p.value
                 ? 'bg-background font-medium shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-muted-foreground enabled:hover:text-foreground'
             "
             :aria-pressed="priority === p.value"
+            :disabled="readonly"
             @click="priority = p.value"
           >
             {{ p.label }}
@@ -172,7 +184,7 @@ const ghost =
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">상위 작업</dt>
         <dd class="min-w-0 grow">
-          <ParentTaskPicker v-model="parentId" :choices="parentChoices" />
+          <ParentTaskPicker v-model="parentId" :choices="parentChoices" :disabled="readonly" />
         </dd>
       </div>
     </dl>

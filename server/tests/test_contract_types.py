@@ -659,9 +659,10 @@ def test_history_shapes_do_not_drift_from_domain_ts(name: str) -> None:
 
 
 async def test_history_responses_match_contract(client: AsyncClient) -> None:
-    # 시드의 k1 은 담당이 없어 changedBy 가 null, HW-T7 은 from · to 에 null 과 숫자가 있다
+    # 시드의 k2 는 등록한 사람 기록이 없어 changedBy 가 null,
+    # HW-T7 은 from · to 에 null 과 숫자가 있다
     rows = [
-        *(await client.get("/api/tasks/k1/history")).json(),
+        *(await client.get("/api/tasks/k2/history")).json(),
         *(await client.get("/api/tasks/k20/history")).json(),
         *(await client.get("/api/tests/tc7/history")).json(),
     ]

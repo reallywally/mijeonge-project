@@ -307,6 +307,8 @@ export interface Task {
   priority: TaskPriority
   /** 속한 파트. null 은 프로젝트 공통. 계층과 따로 간다 — 상위를 바꿔도 안 따라 바뀐다 */
   partId: string | null
+  /** 등록한 사람 — 서버가 로그인한 사람으로 찍는다. 이 칸이 생기기 전의 작업은 null */
+  creatorId: string | null
   createdAt: string
   /** 댓글 수. 본문은 스냅샷에 없어 상세를 열 때 따로 받는다 */
   commentCount: number

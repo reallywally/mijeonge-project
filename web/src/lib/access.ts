@@ -1,4 +1,4 @@
-import type { Me, ProjectRole, TaskComment } from '@/types/domain'
+import type { Me, ProjectRole, Task, TaskComment } from '@/types/domain'
 
 /*
  * 권한 판단 — 메뉴 숨기기 · 라우터 가드 · 목업 서버가 모두 이 함수들을 쓴다 (docs/api/auth.md '권한 셋').
@@ -32,6 +32,20 @@ export const canDeleteComment = (
   comment: Pick<TaskComment, 'authorId'>,
   projectId: string,
 ) => canEditComment(me, comment) || canManageProject(me, projectId)
+
+/** 작업 고치기(속성 · 본문 · 체크박스 · 안건 연결)는 등록한 사람 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
+    댓글 · 확인 요청은 이 경계를 따르지 않는다 */
+export const canEditTask = (
+  me: Me | null,
+  task: Pick<Task, 'creatorId' | 'ownerId'>,
+  projectId: string,
+) =>
+  me !== null &&
+  (task.creatorId === me.id || task.ownerId === me.id || canManageProject(me, projectId))
+
+/** 작업 지우기는 등록한 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 담당자는 못 지운다 */
+export const canDeleteTask = (me: Me | null, task: Pick<Task, 'creatorId'>, projectId: string) =>
+  me !== null && (task.creatorId === me.id || canManageProject(me, projectId))
 
 /** 라우트가 요구하는 권한 — route.meta.access */
 export type RouteAccess = 'systemAdmin' | 'projectAdmin'

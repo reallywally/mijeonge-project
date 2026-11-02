@@ -1,4 +1,6 @@
-"""작업 쓰기 — 등록 · 부분 수정 · 본문 줄 · 안건 링크.
+"""작업 쓰기 — 등록 · 부분 수정 · 본문 줄 · 안건 링크 · 삭제.
+
+고치기 · 지우기 권한은 `access.can_edit_task` · `can_delete_task` 하나로 본다.
 
 작업 ↔ 안건 링크(`task_thread_link`)는 멱등이다: PUT 을 두 번 눌러도 결과가 같고,
 없는 링크를 DELETE 해도 성공이다. 읽기 쪽(`services/snapshot.py`)이 쓰는 `to_task` 도
@@ -40,6 +42,7 @@ from app.services import access
 from app.services import history as history_service
 from app.services import part as part_service
 from app.services import project as project_service
+from app.services.access import Scope
 from app.time import now
 
 # 최상위가 1단이다. 넘는 지난 데이터는 그대로 두고 새로 쌓는 것만 막는다 (Q64)
@@ -70,6 +73,7 @@ def to_task(row: Task, comment_count: int, since: StatusSince) -> TaskOut:
         body=[TaskLineOut.model_validate(line) for line in row.lines],
         status=row.status,
         owner_id=row.owner_id,
+        creator_id=row.creator_id,
         start=row.start,
         due=row.due,
         priority=row.priority,
@@ -258,6 +262,8 @@ async def _insert_task(
         parent_id=payload.parent_id,
         status=payload.status,
         owner_id=payload.owner_id,
+        # 등록하는 길은 전부 여기를 지난다 — 단건 · 일괄 · 회의록 반영
+        creator_id=actor_id,
         start=payload.start,
         due=payload.due,
         priority=payload.priority,
@@ -516,10 +522,18 @@ async def _guard_batch_parts(
             )
 
 
+def _guard_edit(scope: Scope, task: Task) -> None:
+    if not access.can_edit_task(scope, task):
+        raise access.forbidden()
+
+
 async def patch_task(
-    session: AsyncSession, task_id: str, payload: TaskPatch, actor_id: str
+    session: AsyncSession, task_id: str, payload: TaskPatch, scope: Scope
 ) -> TaskOut:
     task = await load_task(session, task_id)
+    # 고치기 전 작업으로 본다 — 담당자를 남에게 넘긴 뒤의 모양으로 보지 않는다
+    _guard_edit(scope, task)
+    actor_id = scope.actor.id
     before = task.status
     snapshot = _history_fields(task)
     body_before = _body_text(task.lines)
@@ -605,9 +619,11 @@ def _replace_body(task: Task, body: list[TaskLinePatchIn]) -> None:
 
 
 async def set_line_done(
-    session: AsyncSession, task_id: str, line_id: str, done: bool, actor_id: str
+    session: AsyncSession, task_id: str, line_id: str, done: bool, scope: Scope
 ) -> TaskOut:
     task = await load_task(session, task_id)
+    _guard_edit(scope, task)
+    actor_id = scope.actor.id
     line = next((each for each in task.lines if each.id == line_id), None)
     if line is None:
         raise not_found("TASK_LINE_NOT_FOUND", "그 본문 줄을 찾을 수 없습니다.")
@@ -646,9 +662,11 @@ async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> b
 
 
 async def link_thread(
-    session: AsyncSession, task_id: str, thread_id: str, actor_id: str
+    session: AsyncSession, task_id: str, thread_id: str, scope: Scope
 ) -> TaskThreadLinkOut:
     task = await load_task(session, task_id)
+    _guard_edit(scope, task)
+    actor_id = scope.actor.id
     if await _attach_thread(session, task, thread_id):
         history_service.record_task(
             session, task, [history_service.change("thread", None, thread_id)], actor_id, now()
@@ -657,8 +675,10 @@ async def link_thread(
     return TaskThreadLinkOut(task_id=task_id, thread_id=thread_id)
 
 
-async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str, actor_id: str) -> None:
+async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str, scope: Scope) -> None:
     task = await load_task(session, task_id)
+    _guard_edit(scope, task)
+    actor_id = scope.actor.id
     linked = await session.scalar(
         select(TaskThreadLink.thread_id).where(
             TaskThreadLink.task_id == task_id, TaskThreadLink.thread_id == thread_id
@@ -675,4 +695,25 @@ async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str, act
     history_service.record_task(
         session, task, [history_service.change("thread", thread_id, None)], actor_id, now()
     )
+    await session.commit()
+
+
+async def delete_task(session: AsyncSession, task_id: str, scope: Scope) -> None:
+    """하드 삭제. 본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조는
+    FK cascade 로 같이 간다.
+
+    하위 작업은 같이 지우지 않는다 — 한 번 누름에 줄기째 날아가면 되돌릴 길이 없다.
+    작업 번호는 다시 쓰지 않는다(`project.last_task_no` 는 그대로다).
+    """
+    task = await load_task(session, task_id)
+    if not access.can_delete_task(scope, task):
+        raise access.forbidden()
+    child = await session.scalar(select(Task.id).where(Task.parent_id == task.id).limit(1))
+    if child is not None:
+        raise ApiError(
+            409,
+            "TASK_HAS_CHILDREN",
+            "하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮기세요.",
+        )
+    await session.delete(task)
     await session.commit()

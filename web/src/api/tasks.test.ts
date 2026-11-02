@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
-import { createTasksBatch, resetMockTasks } from '@/api/tasks'
+import { fetchTaskComments, resetMockComments } from '@/api/comments'
+import { mockDb, resetMockAuth, writeMockSession } from '@/api/mockAuth'
+import { createTasksBatch, deleteTask, resetMockTasks } from '@/api/tasks'
 import { tasks } from '@/fixtures'
 import type { ProposedTask, Task, TaskBatchResult } from '@/types/domain'
 
@@ -147,6 +149,55 @@ describe('한 번에 등록 — 목업 갈래', () => {
   })
 })
 
+describe('지우기 — 목업 갈래', () => {
+  beforeEach(() => {
+    resetMockAuth()
+    resetMockComments()
+  })
+
+  const as = (memberId: string) => writeMockSession(memberId)
+
+  it('로그인이 없으면 401', async () => {
+    await expect(deleteTask('k21')).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('담당자는 못 지운다 — 403 FORBIDDEN. 등록한 사람은 지운다', async () => {
+    /* HW-3: 담당 박지훈(u2) · 등록 김서연(u1). HW-18: 담당 정하늘(u4) · 등록 이도현(u3) */
+    as('u2')
+    await expect(deleteTask('k3')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    await expect(deleteTask('k18')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    as('u3')
+    await expect(deleteTask('k18')).resolves.toBeUndefined()
+  })
+
+  it('하위 작업이 있으면 409 TASK_HAS_CHILDREN — 관리자여도', async () => {
+    as('u1')
+    const error = await deleteTask('k4').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ status: 409, code: 'TASK_HAS_CHILDREN' })
+  })
+
+  it('못 보는 프로젝트 · 없는 작업은 404 TASK_NOT_FOUND', async () => {
+    /* 박지훈(u2)은 p3 에 부여받지 않았다 — p3 에 작업은 없으니 없는 id 로 본다 */
+    as('u2')
+    await expect(deleteTask('nope')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
+  })
+
+  it('지우면 댓글 · 테스트 태그 · 이력이 같이 사라진다', async () => {
+    as('u1')
+    const tagged = () =>
+      mockDb().tests.filter((t) => t.refs.some((r) => r.kind === 'task' && r.id === 'k21'))
+    expect(tagged().length).toBeGreaterThan(0)
+    await deleteTask('k21')
+    expect(tagged()).toHaveLength(0)
+    expect(mockDb().taskHistory.k21).toBeUndefined()
+    expect(await fetchTaskComments('k21')).toEqual([])
+
+    await deleteTask('k18')
+    expect(await fetchTaskComments('k18')).toEqual([])
+  })
+})
+
 describe('한 번에 등록 — 서버 갈래', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_USE_MOCK', 'false')
@@ -178,6 +229,7 @@ describe('한 번에 등록 — 서버 갈래', () => {
       due: null,
       priority: 'normal',
       partId: null,
+      creatorId: null,
       createdAt: '2026-10-12T01:00:00Z',
       commentCount: 0,
       minutesId: null,
@@ -191,6 +243,23 @@ describe('한 번에 등록 — 서버 갈래', () => {
     expect(await createTasksBatch('p 1', input)).toEqual(result)
     expect(fake.mock.calls[0][0]).toBe('/api/projects/p%201/tasks/batch')
     expect(fake.mock.calls[0][1]).toMatchObject({ method: 'POST', body: JSON.stringify(input) })
+  })
+
+  it('지우기는 DELETE /api/tasks/{id} — 204', async () => {
+    const fake = serve(() => new Response(null, { status: 204 }))
+    await expect(deleteTask('k 1')).resolves.toBeUndefined()
+    expect(fake.mock.calls[0][0]).toBe('/api/tasks/k%201')
+    expect(fake.mock.calls[0][1]).toMatchObject({ method: 'DELETE' })
+  })
+
+  it('409 TASK_HAS_CHILDREN 은 그대로 ApiError 다', async () => {
+    serve(() =>
+      json(409, { code: 'TASK_HAS_CHILDREN', message: '하위 작업이 있어 지울 수 없습니다.' }),
+    )
+    await expect(deleteTask('k4')).rejects.toMatchObject({
+      status: 409,
+      code: 'TASK_HAS_CHILDREN',
+    })
   })
 
   it('실패는 본문의 code · detail 그대로 ApiError 다', async () => {

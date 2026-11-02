@@ -59,6 +59,9 @@ class Task(Base):
     parent_id: Mapped[str | None] = mapped_column(String(36))
     status: Mapped[str] = mapped_column(String(16), default="todo")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    # 등록한 사람 — 수정 · 삭제 권한의 근거라 바꾸지 않는다. 기록이 없던 지난 작업은 null.
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    creator_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     start: Mapped[date | None] = mapped_column(Date)
     due: Mapped[date | None] = mapped_column(Date)
     priority: Mapped[str] = mapped_column(String(16), default="normal")

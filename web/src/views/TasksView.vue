@@ -41,7 +41,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { partFilterOf } from '@/lib/part'
-import { TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
+import { READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
@@ -233,11 +233,15 @@ const barLegend = [
   },
 ]
 
-/* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다 */
+/* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다. 고칠 권한이 없는 줄(작성자 · 담당자 · 관리자가 아님)은
+   고를 수 없다 — 몰아 바꾸다 몇 줄만 403 으로 튕기면 무엇이 바뀌었는지 알기 어렵다 */
 const checked = ref<Set<string>>(new Set())
 const checkedCount = computed(() => checked.value.size)
+const editableOnPage = computed(() => pageRows.value.filter((r) => taskStore.canEdit(r.task)))
 const pageAllChecked = computed(
-  () => pageRows.value.length > 0 && pageRows.value.every((r) => checked.value.has(r.task.id)),
+  () =>
+    editableOnPage.value.length > 0 &&
+    editableOnPage.value.every((r) => checked.value.has(r.task.id)),
 )
 
 function toggleRow(id: string, on: boolean) {
@@ -249,20 +253,24 @@ function toggleRow(id: string, on: boolean) {
 
 function togglePage(on: boolean) {
   const next = new Set(checked.value)
-  for (const row of pageRows.value) {
+  for (const row of editableOnPage.value) {
     if (on) next.add(row.task.id)
     else next.delete(row.task.id)
   }
   checked.value = next
 }
 
+/* 고른 뒤에 권한이 바뀌었을 수 있다(담당자를 남에게 넘김) — 보낼 때 한 번 더 거른다 */
+const checkedEditable = () =>
+  taskStore.tasks.filter((t) => checked.value.has(t.id) && taskStore.canEdit(t)).map((t) => t.id)
+
 function bulkStatus(value: string) {
-  for (const id of checked.value) taskStore.setStatus(id, value as TaskStatus)
+  for (const id of checkedEditable()) taskStore.setStatus(id, value as TaskStatus)
   checked.value = new Set()
 }
 
 function bulkOwner(value: string) {
-  for (const id of checked.value) taskStore.setOwner(id, value === 'none' ? null : value)
+  for (const id of checkedEditable()) taskStore.setOwner(id, value === 'none' ? null : value)
   checked.value = new Set()
 }
 </script>
@@ -499,6 +507,7 @@ function bulkOwner(value: string) {
                 <TableHead class="h-10 w-10">
                   <Checkbox
                     :model-value="pageAllChecked"
+                    :disabled="editableOnPage.length === 0"
                     aria-label="이 쪽 전체 선택"
                     @update:model-value="(v) => togglePage(v === true)"
                   />
@@ -535,6 +544,8 @@ function bulkOwner(value: string) {
                 <TableCell @click.stop>
                   <Checkbox
                     :model-value="checked.has(row.task.id)"
+                    :disabled="!taskStore.canEdit(row.task)"
+                    :title="taskStore.canEdit(row.task) ? undefined : READONLY_HINT"
                     :aria-label="`${row.task.title} 선택`"
                     @update:model-value="(v) => toggleRow(row.task.id, v === true)"
                   />
@@ -583,11 +594,13 @@ function bulkOwner(value: string) {
                 <TableCell @click.stop>
                   <Select
                     :model-value="row.task.status"
+                    :disabled="!taskStore.canEdit(row.task)"
                     @update:model-value="(v) => taskStore.setStatus(row.task.id, v as TaskStatus)"
                   >
                     <SelectTrigger
-                      class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent hover:bg-muted focus:ring-[3px]"
+                      class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent enabled:hover:bg-muted focus:ring-[3px] disabled:cursor-default disabled:opacity-100"
                       :aria-label="`상태 ${taskStatusLabel(row.task.status)}`"
+                      :title="taskStore.canEdit(row.task) ? undefined : READONLY_HINT"
                     >
                       <TaskStatusBadge :status="row.task.status" />
                     </SelectTrigger>

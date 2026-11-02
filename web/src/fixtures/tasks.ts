@@ -27,6 +27,19 @@ const STATUS_SINCE: Record<string, string> = {
   k22: '2026-10-13T00:00:00Z',
 }
 
+/* 등록한 사람 — 여기 없는 작업은 이 칸이 생기기 전의 것이라 null 이다.
+   담당자와 다른 사람을 섞어 둔다: HW-4 는 이도현이 담당이고 박지훈이 등록했다 */
+const CREATOR_OF: Record<string, string> = {
+  k1: 'u1',
+  k3: 'u1',
+  k4: 'u2',
+  k5: 'u1',
+  k18: 'u3',
+  k20: 'u3',
+  k21: 'u3',
+  x1: 'u2',
+}
+
 function mk(
   id: string,
   key: string,
@@ -52,6 +65,7 @@ function mk(
     due,
     priority: 'normal',
     partId: PART_OF[id] ?? null,
+    creatorId: CREATOR_OF[id] ?? null,
     createdAt,
     commentCount: taskComments.filter((c) => c.taskId === id).length,
     minutesId: null,

@@ -3,7 +3,9 @@ import {
   adminHome,
   canCreateProject,
   canDeleteComment,
+  canDeleteTask,
   canEditComment,
+  canEditTask,
   canManageAccounts,
   canManageProject,
   canOpen,
@@ -73,6 +75,37 @@ describe('권한 셋', () => {
     expect(gradeOf(projectAdmin, 'p1')).toBe('projectAdmin')
     expect(gradeOf(projectAdmin, 'p2')).toBe('user')
     expect(gradeOf(null, 'p1')).toBeNull()
+  })
+})
+
+describe('작업 고치기 · 지우기', () => {
+  const task = (creatorId: string | null, ownerId: string | null) => ({ creatorId, ownerId })
+  const other = me({ id: 'u4' })
+
+  it('고치기는 등록한 사람 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자', () => {
+    expect(canEditTask(user, task('u2', 'u3'), 'p1')).toBe(true)
+    expect(canEditTask(user, task('u3', 'u2'), 'p1')).toBe(true)
+    expect(canEditTask(other, task('u2', 'u3'), 'p1')).toBe(false)
+    expect(canEditTask(projectAdmin, task('u2', 'u3'), 'p1')).toBe(true)
+    /* p2 에서는 일반 사용자다 */
+    expect(canEditTask(projectAdmin, task('u2', 'u3'), 'p2')).toBe(false)
+    expect(canEditTask(systemAdmin, task(null, null), 'p9')).toBe(true)
+    expect(canEditTask(null, task('u2', 'u2'), 'p1')).toBe(false)
+  })
+
+  it('등록한 사람을 모르는(null) 옛 작업은 담당자 · 관리자만 고친다', () => {
+    expect(canEditTask(user, task(null, null), 'p1')).toBe(false)
+    expect(canEditTask(user, task(null, 'u2'), 'p1')).toBe(true)
+  })
+
+  it('지우기는 등록한 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 담당자는 못 지운다', () => {
+    expect(canDeleteTask(user, task('u2', 'u3'), 'p1')).toBe(true)
+    expect(canDeleteTask(user, task('u3', 'u2'), 'p1')).toBe(false)
+    expect(canDeleteTask(user, task(null, 'u2'), 'p1')).toBe(false)
+    expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p1')).toBe(true)
+    expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p2')).toBe(false)
+    expect(canDeleteTask(systemAdmin, task(null, null), 'p9')).toBe(true)
+    expect(canDeleteTask(null, task(null, null), 'p1')).toBe(false)
   })
 })
 

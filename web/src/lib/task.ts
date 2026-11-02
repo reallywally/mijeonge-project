@@ -1,6 +1,9 @@
 import { kstToday, localDay } from '@/lib/date'
 import type { Task, TaskLine, TaskPriority, TaskStatus } from '@/types/domain'
 
+/** 고칠 권한이 없는 작업에 붙는 안내 — 상세 · 목록 · 칸반 · 간트가 같은 말을 쓴다 */
+export const READONLY_HINT = '작성자 · 담당자 · 관리자만 고칠 수 있습니다'
+
 /* 상태 넷은 목록 · 칸반 · 추가 · 상세가 모두 같은 순서로 쓴다 */
 export const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: 'todo', label: '해야 할 일' },

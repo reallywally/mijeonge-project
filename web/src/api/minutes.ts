@@ -323,7 +323,8 @@ function reject(code: string, message: string, detail: Record<string, string>) {
  * 안건 · 이력 · 작업 데이터는 고치지 않고 결과만 낸다 — 넣는 것은 스토어가 서버 모드와 같은 길로 한다
  */
 function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyResult {
-  const minutes = requireMinutes(requireMe(), minutesId)
+  const me = requireMe()
+  const minutes = requireMinutes(me, minutesId)
   const projectId = minutes.projectId
   const shape = minutesApplyProblems(input)
   if (Object.keys(shape).length > 0) throw invalid(shape)
@@ -474,6 +475,7 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       due: t.due,
       priority: t.priority,
       partId: inheritedPartId(undefined, parent),
+      creatorId: me.id,
       createdAt,
       commentCount: 0,
       minutesId,

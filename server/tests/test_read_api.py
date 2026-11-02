@@ -53,6 +53,8 @@ TASK_KEYS = {
     "body",
     "status",
     "ownerId",
+    # 등록한 사람 — 기록이 없던 지난 작업은 null
+    "creatorId",
     "start",
     "due",
     "priority",
