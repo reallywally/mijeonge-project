@@ -17,6 +17,7 @@ import {
   projectPartsPath,
   projectSettingsPath,
 } from '@/lib/access'
+import { orderProjects } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 
@@ -26,8 +27,9 @@ import { useDataStore } from '@/stores/data'
 const data = useDataStore()
 const auth = useAuthStore()
 
+/* 종료한 프로젝트는 뒤로 */
 const managedProjects = computed(() =>
-  data.allProjects.filter((p) => canManageProject(auth.me, p.id)),
+  orderProjects(data.allProjects).filter((p) => canManageProject(auth.me, p.id)),
 )
 const manageProject = computed(
   () => data.currentProjectId !== '' && canManageProject(auth.me, data.currentProjectId),
@@ -85,11 +87,36 @@ const manageAccounts = computed(() => canManageAccounts(auth.me))
               class="mb-1 h-9 w-full gap-2 bg-card text-[13px] font-semibold"
               aria-label="관리할 프로젝트"
             >
-              <SelectValue placeholder="프로젝트 고르기" class="min-w-0 grow truncate text-left" />
+              <!-- 고른 항목의 글을 베끼지 않고 직접 그린다 — 종료 · 다시 열기가 바로 따라오게 -->
+              <SelectValue class="min-w-0 grow truncate text-left">
+                <template v-if="manageProject && data.currentProject">
+                  {{ data.currentProject.name
+                  }}<span
+                    v-if="data.currentProject.status === 'closed'"
+                    class="ml-1 text-xs font-normal text-muted-foreground"
+                    data-closed-mark
+                    >· 종료</span
+                  >
+                </template>
+                <span v-else class="text-muted-foreground">프로젝트 고르기</span>
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem v-for="p in managedProjects" :key="p.id" :value="p.id">
-                {{ p.name }}
+              <SelectItem
+                v-for="p in managedProjects"
+                :key="p.id"
+                :value="p.id"
+                :data-project-option="p.id"
+              >
+                <span :class="p.status === 'closed' ? 'text-muted-foreground' : ''">{{
+                  p.name
+                }}</span>
+                <span
+                  v-if="p.status === 'closed'"
+                  class="ml-1 text-xs text-muted-foreground"
+                  data-closed-mark
+                  >· 종료</span
+                >
               </SelectItem>
             </SelectContent>
           </Select>

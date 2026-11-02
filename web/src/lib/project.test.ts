@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { makeTaskKeyPrefix, taskKeyPrefixError } from './project'
+import {
+  makeTaskKeyPrefix,
+  orderProjects,
+  projectDateRangeError,
+  projectPeriod,
+  taskKeyPrefixError,
+} from './project'
 
 describe('makeTaskKeyPrefix', () => {
   it('이미 쓰는 접두사를 비껴간다', () => {
@@ -26,5 +32,37 @@ describe('taskKeyPrefixError', () => {
     expect(taskKeyPrefixError('4HW', [])).toContain('1~8자')
     expect(taskKeyPrefixError('ABCDEFGHI', [])).toContain('1~8자')
     expect(taskKeyPrefixError('한화', [])).toContain('1~8자')
+  })
+})
+
+describe('projectDateRangeError', () => {
+  it('둘 다 있을 때만 앞뒤를 본다 — 같은 날은 된다', () => {
+    expect(projectDateRangeError('2026-11-02', '2026-11-01')).toContain('앞섭니다')
+    expect(projectDateRangeError('2026-11-01', '2026-11-01')).toBeNull()
+    expect(projectDateRangeError('2026-11-02', '')).toBeNull()
+    expect(projectDateRangeError('', '2026-11-01')).toBeNull()
+  })
+})
+
+describe('orderProjects', () => {
+  it('진행 중이 먼저, 같은 상태끼리는 받은 순서 그대로', () => {
+    const list = [
+      { id: 'a', status: 'closed' as const },
+      { id: 'b', status: 'active' as const },
+      { id: 'c', status: 'closed' as const },
+      { id: 'd', status: 'active' as const },
+    ]
+    expect(orderProjects(list).map((p) => p.id)).toEqual(['b', 'd', 'a', 'c'])
+  })
+})
+
+describe('projectPeriod', () => {
+  it('있는 쪽만 찍고, 둘 다 없으면 빈 문자열', () => {
+    expect(projectPeriod({ startDate: '2026-03-02', endDate: '2026-12-31' })).toBe(
+      '2026-03-02 ~ 2026-12-31',
+    )
+    expect(projectPeriod({ startDate: '2026-03-02', endDate: null })).toBe('2026-03-02 ~')
+    expect(projectPeriod({ startDate: null, endDate: '2026-12-31' })).toBe('~ 2026-12-31')
+    expect(projectPeriod({ startDate: null, endDate: null })).toBe('')
   })
 })

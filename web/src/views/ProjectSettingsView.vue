@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Loader2, Lock, Plus, UserMinus } from 'lucide-vue-next'
+import { Loader2, Lock, Plus, Trash2, UserMinus, X } from 'lucide-vue-next'
+import { ApiError, messageOf } from '@/api'
 import PersonChip from '@/components/app/PersonChip.vue'
 import ProjectAdminFrame from '@/components/app/ProjectAdminFrame.vue'
+import StatusPill from '@/components/app/StatusPill.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -22,14 +33,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import { projectPartsPath } from '@/lib/access'
+import { dayTime } from '@/lib/date'
 import { PROJECT_ROLE_OPTIONS, memberLabel } from '@/lib/member'
+import { PROJECT_DESCRIPTION_MAX, projectDateRangeError } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
-import type { ProjectRole } from '@/types/domain'
+import type { Project, ProjectPatch, ProjectRole } from '@/types/domain'
 
-/* 프로젝트 관리 — 프로젝트 정보와 프로젝트 멤버. 파트 소속은 여기서 보이기만 하고 고치는 곳은 파트 관리다 */
+/* 프로젝트 관리 — 프로젝트 정보 · 상태 · 멤버, 시스템 관리자에게는 삭제까지.
+   파트 소속은 여기서 보이기만 하고 고치는 곳은 파트 관리다 */
 const data = useDataStore()
 const auth = useAuthStore()
 const partStore = usePartStore()
@@ -91,26 +106,146 @@ const stats = computed(() => {
   ]
 })
 
-/* 이름 고치기 */
-const nameDraft = ref('')
-const renaming = ref(false)
+/* 기본 정보 — 이름 · 설명 · 기간을 한 번에 저장한다. 바뀐 칸만 보낸다 */
+interface InfoDraft {
+  name: string
+  description: string
+  startDate: string
+  endDate: string
+}
+const toDraft = (p: Project | null): InfoDraft => ({
+  name: p?.name ?? '',
+  description: p?.description ?? '',
+  startDate: p?.startDate ?? '',
+  endDate: p?.endDate ?? '',
+})
+const draft = ref<InfoDraft>(toDraft(null))
+const saving = ref(false)
+const saveError = ref<{ code: string; message: string } | null>(null)
+
 watch(
-  () => project.value?.name,
-  (name) => (nameDraft.value = name ?? ''),
+  () => [
+    project.value?.id,
+    project.value?.name,
+    project.value?.description,
+    project.value?.startDate,
+    project.value?.endDate,
+  ],
+  () => {
+    draft.value = toDraft(project.value)
+    saveError.value = null
+  },
   { immediate: true },
 )
-const canRename = computed(
+
+const nullable = (value: string) => (value.trim() === '' ? null : value)
+
+/** 서버에 보낼 바뀐 칸 — 비운 칸은 null(지우기) */
+const patch = computed<ProjectPatch>(() => {
+  const p = project.value
+  if (!p) return {}
+  const d = draft.value
+  const out: ProjectPatch = {}
+  if (d.name.trim() !== p.name) out.name = d.name.trim()
+  const description = nullable(d.description.trim())
+  if (description !== (p.description?.trim() || null)) out.description = description
+  if (nullable(d.startDate) !== p.startDate) out.startDate = nullable(d.startDate)
+  if (nullable(d.endDate) !== p.endDate) out.endDate = nullable(d.endDate)
+  return out
+})
+const dirty = computed(() => Object.keys(patch.value).length > 0)
+
+const nameError = computed(() => (draft.value.name.trim() === '' ? '이름을 적어 주세요.' : null))
+const descriptionError = computed(() =>
+  draft.value.description.length > PROJECT_DESCRIPTION_MAX
+    ? `설명은 ${PROJECT_DESCRIPTION_MAX}자 이하로 적어 주세요.`
+    : null,
+)
+/* 기간은 화면에서 먼저 막고, 그래도 서버가 막으면(다른 사람이 그사이 고침) 그 message 를 같은 자리에 띄운다 */
+const rangeError = computed(
+  () =>
+    projectDateRangeError(draft.value.startDate, draft.value.endDate) ??
+    (saveError.value?.code === 'PROJECT_DATE_RANGE' ? saveError.value.message : null),
+)
+const otherError = computed(() =>
+  saveError.value && saveError.value.code !== 'PROJECT_DATE_RANGE' ? saveError.value.message : null,
+)
+
+const canSave = computed(
   () =>
     !!project.value &&
-    nameDraft.value.trim() !== '' &&
-    nameDraft.value.trim() !== project.value.name &&
-    !renaming.value,
+    dirty.value &&
+    !saving.value &&
+    !nameError.value &&
+    !descriptionError.value &&
+    !projectDateRangeError(draft.value.startDate, draft.value.endDate),
 )
-async function rename() {
-  if (!canRename.value) return
-  renaming.value = true
-  await data.renameProject(projectId.value, nameDraft.value)
-  renaming.value = false
+
+async function saveInfo() {
+  if (!canSave.value) return
+  saving.value = true
+  saveError.value = null
+  try {
+    await data.updateProject(projectId.value, patch.value)
+  } catch (e) {
+    saveError.value = {
+      code: e instanceof ApiError ? e.code : '',
+      message: messageOf(e),
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+function clearPeriod() {
+  draft.value.startDate = ''
+  draft.value.endDate = ''
+}
+
+function resetInfo() {
+  draft.value = toDraft(project.value)
+  saveError.value = null
+}
+
+/* 날짜 칸이 바뀌면 지난 서버 오류는 걷는다 — 고친 값에 옛 말이 남지 않게 */
+watch(
+  () => [draft.value.startDate, draft.value.endDate],
+  () => {
+    if (saveError.value?.code === 'PROJECT_DATE_RANGE') saveError.value = null
+  },
+)
+
+/* 상태 — 종료는 표시만 바꾼다. 종료는 한 번 묻고, 다시 열기는 바로 한다 */
+const closeOpen = ref(false)
+const statusBusy = ref(false)
+async function closeProject() {
+  statusBusy.value = true
+  const ok = await data.setProjectStatus(projectId.value, 'closed')
+  statusBusy.value = false
+  if (ok) closeOpen.value = false
+}
+async function reopenProject() {
+  statusBusy.value = true
+  await data.setProjectStatus(projectId.value, 'active')
+  statusBusy.value = false
+}
+
+/* 삭제 — 시스템 관리자만. 이름을 그대로 쳐야 켜진다. 지운 뒤 갈 곳은 틀(ProjectAdminFrame)이 정한다 */
+const deleteOpen = ref(false)
+const deleteTyped = ref('')
+const deleting = ref(false)
+watch(deleteOpen, (open) => {
+  if (open) deleteTyped.value = ''
+})
+const deleteMatches = computed(
+  () => !!project.value && deleteTyped.value.trim() === project.value.name,
+)
+async function removeProject() {
+  if (!deleteMatches.value || deleting.value) return
+  deleting.value = true
+  const ok = await data.deleteProject(projectId.value)
+  deleting.value = false
+  if (ok) deleteOpen.value = false
 }
 
 /** 더할 수 있는 사람 — 아직 부여되지 않은 활성 멤버 */
@@ -162,8 +297,8 @@ const partsOf = (memberId: string) =>
         <header class="flex flex-col gap-2.5">
           <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 프로젝트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            프로젝트 정보와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고 빼는
-            것은
+            프로젝트 정보 · 상태와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고
+            빼는 것은
             <RouterLink :to="partsPath" class="text-foreground underline-offset-4 hover:underline"
               >파트 관리</RouterLink
             >에서 합니다.
@@ -175,18 +310,79 @@ const partsOf = (memberId: string) =>
           <div
             class="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
           >
-            <div class="flex items-center gap-2.5">
-              <span class="w-[92px] shrink-0 text-sm text-muted-foreground">이름</span>
-              <Input
-                v-model="nameDraft"
-                aria-label="프로젝트 이름"
-                class="grow"
-                @keyup.enter="rename"
-              />
-              <Button class="shrink-0" variant="outline" :disabled="!canRename" @click="rename">
-                <Loader2 v-if="renaming" class="animate-spin" />
-                이름 바꾸기
-              </Button>
+            <div class="flex items-start gap-2.5">
+              <span class="w-[92px] shrink-0 pt-1.5 text-sm text-muted-foreground">이름</span>
+              <div class="flex grow flex-col gap-1">
+                <Input
+                  v-model="draft.name"
+                  aria-label="프로젝트 이름"
+                  :aria-invalid="!!nameError"
+                  @keyup.enter="saveInfo"
+                />
+                <p v-if="nameError" class="text-xs text-destructive">{{ nameError }}</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-2.5">
+              <span class="w-[92px] shrink-0 pt-1.5 text-sm text-muted-foreground">설명</span>
+              <div class="flex grow flex-col gap-1">
+                <Textarea
+                  v-model="draft.description"
+                  aria-label="프로젝트 설명"
+                  rows="3"
+                  placeholder="무엇을 하는 프로젝트인지 — 비워 둬도 됩니다"
+                  :aria-invalid="!!descriptionError"
+                />
+                <p
+                  class="text-xs tabular-nums"
+                  :class="descriptionError ? 'text-destructive' : 'text-muted-foreground'"
+                  data-description-count
+                >
+                  {{
+                    descriptionError ?? `${draft.description.length} / ${PROJECT_DESCRIPTION_MAX}`
+                  }}
+                </p>
+              </div>
+            </div>
+            <div class="flex items-start gap-2.5">
+              <span class="w-[92px] shrink-0 pt-1.5 text-sm text-muted-foreground">기간</span>
+              <div class="flex grow flex-col gap-1">
+                <div class="flex items-center gap-2">
+                  <Input
+                    v-model="draft.startDate"
+                    type="date"
+                    aria-label="시작일"
+                    class="w-[170px]"
+                    :class="draft.startDate ? '' : 'text-muted-foreground'"
+                    :max="draft.endDate || undefined"
+                  />
+                  <span class="text-sm text-muted-foreground">~</span>
+                  <Input
+                    v-model="draft.endDate"
+                    type="date"
+                    aria-label="종료일"
+                    class="w-[170px]"
+                    :class="draft.endDate ? '' : 'text-muted-foreground'"
+                    :min="draft.startDate || undefined"
+                    :aria-invalid="!!rangeError"
+                  />
+                  <Button
+                    v-if="draft.startDate || draft.endDate"
+                    variant="ghost"
+                    size="sm"
+                    class="text-muted-foreground"
+                    @click="clearPeriod"
+                  >
+                    <X class="size-3.5" />
+                    비우기
+                  </Button>
+                </div>
+                <p v-if="rangeError" class="text-xs text-destructive" data-range-error>
+                  {{ rangeError }}
+                </p>
+                <p v-else class="text-xs text-muted-foreground">
+                  둘 다 비워 둘 수 있습니다. 한쪽만 적어도 됩니다.
+                </p>
+              </div>
             </div>
             <div class="flex items-start gap-2.5">
               <span class="w-[92px] shrink-0 pt-1 text-sm text-muted-foreground"
@@ -204,6 +400,18 @@ const partsOf = (memberId: string) =>
                   이미 붙은 작업 키({{ p.taskKeyPrefix }}-4 …)가 기록에 남아 있어 바꾸지 않습니다.
                 </p>
               </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 border-t border-border pt-3">
+              <p v-if="otherError" class="grow text-xs text-destructive" data-save-error>
+                {{ otherError }}
+              </p>
+              <Button v-if="dirty" variant="outline" :disabled="saving" @click="resetInfo"
+                >되돌리기</Button
+              >
+              <Button :disabled="!canSave" data-save-info @click="saveInfo">
+                <Loader2 v-if="saving" class="animate-spin" />
+                저장
+              </Button>
             </div>
           </div>
 
@@ -224,6 +432,42 @@ const partsOf = (memberId: string) =>
               </dd>
             </component>
           </dl>
+        </section>
+
+        <section class="flex flex-col gap-3" aria-label="프로젝트 상태">
+          <h2 class="text-sm font-medium">상태</h2>
+          <div
+            class="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+            :data-project-status="p.status"
+          >
+            <StatusPill :tone="p.status === 'closed' ? 'done' : 'doing'">
+              {{ p.status === 'closed' ? '종료' : '진행 중' }}
+            </StatusPill>
+            <p class="min-w-0 grow text-sm leading-relaxed text-muted-foreground text-pretty">
+              <template v-if="p.status === 'closed'">
+                <span v-if="p.closedAt" data-closed-at
+                  >{{ dayTime(p.closedAt) }}에 종료했습니다.
+                </span>
+                목록과 프로젝트 고르기에서 뒤로 가지만 작업 · 안건은 그대로 쓸 수 있습니다.
+              </template>
+              <template v-else>
+                끝난 프로젝트는 종료로 표시해 두면 목록과 프로젝트 고르기에서 뒤로 갑니다.
+              </template>
+            </p>
+            <Button
+              v-if="p.status === 'closed'"
+              variant="outline"
+              class="shrink-0"
+              :disabled="statusBusy"
+              @click="reopenProject"
+            >
+              <Loader2 v-if="statusBusy" class="animate-spin" />
+              다시 열기
+            </Button>
+            <Button v-else variant="outline" class="shrink-0" @click="closeOpen = true">
+              프로젝트 종료
+            </Button>
+          </div>
         </section>
 
         <section class="flex flex-col gap-3" aria-label="프로젝트 멤버">
@@ -395,6 +639,81 @@ const partsOf = (memberId: string) =>
             </Table>
           </div>
         </section>
+
+        <!-- 프로젝트 관리자에게는 숨긴다 — 막는 것은 서버다 -->
+        <section v-if="auth.systemAdmin" class="flex flex-col gap-3" aria-label="위험 구역">
+          <h2 class="text-sm font-medium text-destructive">위험 구역</h2>
+          <div
+            class="flex items-center gap-3 rounded-lg border border-destructive/40 bg-card px-4 py-3 shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
+          >
+            <div class="flex min-w-0 grow flex-col gap-0.5">
+              <span class="text-sm font-medium">프로젝트 삭제</span>
+              <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
+                지우면 목록에서 빠지고 아무도 이 프로젝트를 열 수 없습니다. 작업 · 안건 · 기록도
+                같이 볼 수 없게 됩니다. 시스템 관리자만 할 수 있습니다.
+              </p>
+            </div>
+            <Button variant="destructive" class="shrink-0" @click="deleteOpen = true">
+              <Trash2 class="size-4" />
+              프로젝트 삭제
+            </Button>
+          </div>
+        </section>
+
+        <Dialog v-model:open="closeOpen">
+          <DialogContent class="sm:max-w-[420px]">
+            <DialogHeader>
+              <DialogTitle>프로젝트를 종료할까요?</DialogTitle>
+              <DialogDescription class="text-pretty">
+                {{ p.name }} 을(를) 종료로 표시합니다. 작업 · 안건은 그대로 쓸 수 있고, 언제든 다시
+                열 수 있습니다.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" @click="closeOpen = false">취소</Button>
+              <Button :disabled="statusBusy" data-close-confirm @click="closeProject">
+                <Loader2 v-if="statusBusy" class="animate-spin" />
+                종료하기
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog v-if="auth.systemAdmin" v-model:open="deleteOpen">
+          <DialogContent class="sm:max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle>프로젝트를 지울까요?</DialogTitle>
+              <DialogDescription class="text-pretty">
+                지운 프로젝트는 목록에서 빠지고 아무도 열 수 없습니다.
+              </DialogDescription>
+            </DialogHeader>
+            <div class="flex flex-col gap-2 py-1">
+              <Label for="project-delete-name" class="leading-relaxed">
+                확인하려면 프로젝트 이름
+                <span class="font-semibold">{{ p.name }}</span> 을(를) 그대로 입력하세요.
+              </Label>
+              <Input
+                id="project-delete-name"
+                v-model="deleteTyped"
+                autocomplete="off"
+                aria-label="지울 프로젝트 이름"
+                @keyup.enter="removeProject"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" @click="deleteOpen = false">취소</Button>
+              <Button
+                variant="destructive"
+                :disabled="!deleteMatches || deleting"
+                data-delete-confirm
+                @click="removeProject"
+              >
+                <Loader2 v-if="deleting" class="animate-spin" />
+                지우기
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </template>
   </ProjectAdminFrame>

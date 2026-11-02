@@ -5,6 +5,7 @@ import { Check, ChevronLeft, ChevronRight, Plus, Search } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import IdCell from '@/components/app/IdCell.vue'
 import ProjectCreateDialog from '@/components/app/ProjectCreateDialog.vue'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { canCreateProject } from '@/lib/access'
+import { orderProjects, projectPeriod } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 
@@ -34,9 +36,12 @@ const perPage = 8
 /* 프로젝트 등록은 시스템 관리자만 — 라우터도 같은 함수로 /projects/new 를 막는다 */
 const canCreate = computed(() => canCreateProject(auth.me))
 
+/* 종료한 프로젝트는 뒤로 — 서버 목록과 같은 순서. 화면에서 종료하면 받은 순서가 어긋나서 여기서도 줄 세운다 */
 const rows = computed(() =>
-  data.allProjects.map((project) => ({
+  orderProjects(data.allProjects).map((project) => ({
     project,
+    closed: project.status === 'closed',
+    period: projectPeriod(project),
     /* 서버 모드는 고른 프로젝트 하나치만 받는다 — 안 받은 프로젝트의 수는 모른다 */
     taskCount: data.holdsRecordsOf(project.id)
       ? data.allTasks.filter((t) => t.projectId === project.id).length
@@ -148,6 +153,9 @@ function onCreated() {
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground"
                   >프로젝트</TableHead
                 >
+                <TableHead class="h-10 w-[200px] text-xs font-medium text-muted-foreground"
+                  >기간</TableHead
+                >
                 <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
                   >작업 키</TableHead
                 >
@@ -166,6 +174,8 @@ function onCreated() {
                 v-for="row in pageRows"
                 :key="row.project.id"
                 class="h-12 cursor-pointer"
+                :data-project-row="row.project.id"
+                :data-closed="row.closed ? 'true' : undefined"
                 @click="pickProject(row.project.id)"
               >
                 <TableCell><IdCell :id="row.project.id" /></TableCell>
@@ -176,15 +186,41 @@ function onCreated() {
                       class="size-3.5 shrink-0 text-muted-foreground"
                     />
                     <span v-else class="size-3.5 shrink-0" />
-                    <button
-                      type="button"
-                      class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
-                      :class="row.project.id === data.currentProjectId ? 'font-medium' : ''"
-                    >
-                      {{ row.project.name }}
-                    </button>
+                    <div class="flex min-w-0 flex-col gap-0.5 py-1.5">
+                      <span class="flex min-w-0 items-center gap-2">
+                        <button
+                          type="button"
+                          class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
+                          :class="[
+                            row.project.id === data.currentProjectId ? 'font-medium' : '',
+                            row.closed ? 'text-muted-foreground' : '',
+                          ]"
+                        >
+                          {{ row.project.name }}
+                        </button>
+                        <Badge
+                          v-if="row.closed"
+                          variant="outline"
+                          class="shrink-0"
+                          data-closed-badge
+                          >종료</Badge
+                        >
+                      </span>
+                      <span
+                        v-if="row.project.description"
+                        class="max-w-[640px] truncate text-xs text-muted-foreground"
+                        :title="row.project.description"
+                        data-project-description
+                        >{{ row.project.description }}</span
+                      >
+                    </div>
                   </div>
                 </TableCell>
+                <TableCell
+                  class="text-sm whitespace-nowrap text-muted-foreground tabular-nums"
+                  data-project-period
+                  >{{ row.period || '—' }}</TableCell
+                >
                 <TableCell class="text-sm text-muted-foreground">
                   {{ row.project.taskKeyPrefix }}-1
                 </TableCell>
@@ -196,7 +232,7 @@ function onCreated() {
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="6" class="h-[110px] text-center text-sm text-muted-foreground">
                   {{
                     data.allProjects.length > 0
                       ? '조회 조건에 맞는 프로젝트가 없습니다.'

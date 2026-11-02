@@ -8,6 +8,7 @@ import {
   partMembers,
   parts,
   projectGrants,
+  projects,
   taskThreadLinks,
   tasks,
   taskHistory,
@@ -27,6 +28,7 @@ import type {
   Minutes,
   Part,
   PartMember,
+  Project,
   Report,
   RiskSettings,
   Task,
@@ -42,6 +44,9 @@ import type {
  */
 
 interface MockDb {
+  /** 지운 것도 남긴다(소프트 삭제) — 접두사가 다시 쓰이지 않게. 지운 id 는 deletedProjectIds */
+  projects: Project[]
+  deletedProjectIds: string[]
   members: Member[]
   accounts: MockAccount[]
   grants: MockProjectGrant[]
@@ -70,6 +75,8 @@ interface MockDb {
 }
 
 const fresh = (): MockDb => ({
+  projects: structuredClone(projects),
+  deletedProjectIds: [],
   members: structuredClone(members),
   accounts: structuredClone(accounts),
   grants: structuredClone(projectGrants),
@@ -156,7 +163,9 @@ export function meOf(memberId: string): Me | null {
     email: account.email,
     systemRole: account.systemRole,
     projectRoles: Object.fromEntries(
-      db.grants.filter((g) => g.memberId === memberId).map((g) => [g.projectId, g.role]),
+      db.grants
+        .filter((g) => g.memberId === memberId && !db.deletedProjectIds.includes(g.projectId))
+        .map((g) => [g.projectId, g.role]),
     ),
   }
 }
@@ -179,7 +188,8 @@ export function endSessionsOf(memberId: string) {
 
 /** 부여받지 않은 프로젝트는 없는 것처럼 404 (docs/api/auth.md '권한 셋') */
 export function requireProject(me: Me, projectId: string) {
-  if (!canSeeProject(me, projectId))
+  /* 지운 프로젝트의 경로도 404 다 — 시스템 관리자여도 */
+  if (!canSeeProject(me, projectId) || db.deletedProjectIds.includes(projectId))
     throw mockError(404, 'PROJECT_NOT_FOUND', '프로젝트를 찾을 수 없습니다.')
 }
 

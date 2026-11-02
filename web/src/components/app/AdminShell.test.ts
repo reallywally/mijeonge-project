@@ -98,3 +98,34 @@ describe('관리자 페이지 사이드바', () => {
     expect(w.get('a[data-admin-link="members"]').attributes('href')).toBe('/admin/members')
   })
 })
+
+describe('프로젝트 고르기의 종료 표시', () => {
+  /* reka-ui 셀렉트는 jsdom 에서 열리지 않는다 — 고른 항목의 글이 찍히는 트리거로 본다. 순서는 lib/project 의 orderProjects 검사가 본다 */
+  it('업무 화면 — 종료한 프로젝트를 고르면 이름 뒤에 · 종료 가 붙는다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const data = useDataStore()
+    const w = await mountShell(AppShell)
+    const trigger = () => w.get('button[role="combobox"]')
+    expect(trigger().text()).toContain('한화손보 차세대')
+    expect(trigger().text()).not.toContain('종료')
+
+    data.setProject('p3')
+    await flushPromises()
+    expect(trigger().text()).toContain('경영지원 파트')
+    expect(trigger().text()).toContain('· 종료')
+  })
+
+  it('관리자 페이지 — 종료한 프로젝트를 고르면 · 종료 가 붙고, 다시 열면 걷힌다', async () => {
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
+    const data = useDataStore()
+    data.setProject('p3')
+    const w = await mountShell(AdminShell)
+    const trigger = () => w.get('button[aria-label="관리할 프로젝트"]')
+    expect(trigger().text()).toContain('경영지원 파트')
+    expect(trigger().text()).toContain('· 종료')
+
+    expect(await data.setProjectStatus('p3', 'active')).toBe(true)
+    await flushPromises()
+    expect(trigger().text()).not.toContain('종료')
+  })
+})

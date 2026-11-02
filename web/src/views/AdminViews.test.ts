@@ -161,7 +161,7 @@ describe('프로젝트 관리 화면', () => {
     await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/admin/projects/p1/settings')
     await w.get('input[aria-label="프로젝트 이름"]').setValue('한화손보 차세대 2기')
-    await click(bodyButton('이름 바꾸기'))
+    await click(bodyButton('저장'))
     expect(useDataStore().currentProject?.name).toBe('한화손보 차세대 2기')
     expect(w.get('h1').text()).toContain('한화손보 차세대 2기')
   })

@@ -82,16 +82,27 @@ MINUTES_ADDED: dict[str, set[str]] = {
 }
 
 
+# 프로젝트 관리가 늘린 필드 — docs/api/snapshot.md 'Project'. 프론트가 domain.ts 에 더하는 중이라
+# 아직 없을 수 있다. status 말고는 null 을 낸다
+PROJECT_ADDED: dict[str, set[str]] = {
+    "Project": {"description", "startDate", "endDate", "status", "closedAt"}
+}
+PROJECT_NULLABLE: dict[str, set[str]] = {
+    "Project": {"description", "startDate", "endDate", "closedAt"}
+}
+
+
 def _added(name: str) -> set[str]:
     return PART_ADDED.get(name, set()) | MINUTES_ADDED.get(name, set())
 
 
 def expected_keys(name: str) -> set[str]:
-    return set(FIELDS[name]) | _added(name)
+    return set(FIELDS[name]) | _added(name) | PROJECT_ADDED.get(name, set())
 
 
 def nullable_keys(name: str) -> set[str]:
-    return {field for field, nullable in FIELDS[name].items() if nullable} | _added(name)
+    declared = {field for field, nullable in FIELDS[name].items() if nullable}
+    return declared | _added(name) | PROJECT_NULLABLE.get(name, set())
 
 
 @pytest.fixture
@@ -133,6 +144,16 @@ def test_added_fields_do_not_drift_from_domain_ts(name: str) -> None:
     for field in ADDED[name]:
         if field in FIELDS[name]:
             assert FIELDS[name][field], f"domain.ts 의 {name}.{field} 가 null 을 허용하지 않는다"
+
+
+def test_project_fields_do_not_drift_from_domain_ts() -> None:
+    """domain.ts 에 이미 들어왔으면 null 허용 여부가 계약과 같아야 한다."""
+    for field in PROJECT_ADDED["Project"]:
+        if field in FIELDS["Project"]:
+            expected = field in PROJECT_NULLABLE["Project"]
+            assert FIELDS["Project"][field] == expected, (
+                f"domain.ts 의 Project.{field} 가 계약과 다르다"
+            )
 
 
 # 인증 · 파트가 늘린 모양 — docs/api/auth.md '새 응답 · 요청 모양' · docs/api/part.md '모양'.

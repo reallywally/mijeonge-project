@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { canOpenAdmin } from '@/lib/access'
+import { orderProjects } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
@@ -40,6 +41,8 @@ const threadStore = useThreadStore()
 const checks = useCheckStore()
 
 const openAdmin = computed(() => canOpenAdmin(auth.me))
+/** 종료한 프로젝트는 뒤로 */
+const projectOptions = computed(() => orderProjects(data.allProjects))
 </script>
 
 <template>
@@ -86,7 +89,18 @@ const openAdmin = computed(() => canOpenAdmin(auth.me))
             @update:model-value="(id) => data.setProject(String(id))"
           >
             <SelectTrigger class="h-9 w-full gap-2 bg-card text-[13px] font-semibold">
-              <SelectValue class="min-w-0 grow truncate text-left" />
+              <!-- 고른 항목의 글을 베끼지 않고 직접 그린다 — 종료 · 다시 열기가 바로 따라오게 -->
+              <SelectValue class="min-w-0 grow truncate text-left">
+                <template v-if="data.currentProject">
+                  {{ data.currentProject.name
+                  }}<span
+                    v-if="data.currentProject.status === 'closed'"
+                    class="ml-1 text-xs font-normal text-muted-foreground"
+                    data-closed-mark
+                    >· 종료</span
+                  >
+                </template>
+              </SelectValue>
               <Badge
                 v-if="checks.pendingElsewhere > 0"
                 variant="secondary"
@@ -97,8 +111,21 @@ const openAdmin = computed(() => canOpenAdmin(auth.me))
               >
             </SelectTrigger>
             <SelectContent>
-              <SelectItem v-for="p in data.allProjects" :key="p.id" :value="p.id">
-                {{ p.name }}
+              <SelectItem
+                v-for="p in projectOptions"
+                :key="p.id"
+                :value="p.id"
+                :data-project-option="p.id"
+              >
+                <span :class="p.status === 'closed' ? 'text-muted-foreground' : ''">{{
+                  p.name
+                }}</span>
+                <span
+                  v-if="p.status === 'closed'"
+                  class="ml-1 text-xs text-muted-foreground"
+                  data-closed-mark
+                  >· 종료</span
+                >
                 <span
                   v-if="p.id !== data.currentProjectId && checks.pendingOf(p.id) > 0"
                   class="text-xs text-muted-foreground"

@@ -89,7 +89,16 @@ describe('fetch 래퍼', () => {
 
 describe('스냅샷', () => {
   const snapshot: ProjectSnapshot = {
-    project: { id: 'p1', name: '한화손보 차세대', taskKeyPrefix: 'HW' },
+    project: {
+      id: 'p1',
+      name: '한화손보 차세대',
+      taskKeyPrefix: 'HW',
+      description: null,
+      startDate: null,
+      endDate: null,
+      status: 'active',
+      closedAt: null,
+    },
     threads: [],
     entries: [],
     tasks: [],

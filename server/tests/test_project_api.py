@@ -5,6 +5,10 @@
 """
 
 import httpx
+import pytest
+
+from tests.conftest import AsMember
+from tests.test_read_api import PROJECT_KEYS
 
 
 async def test_create_project_answers_with_the_contract_shape(client: httpx.AsyncClient) -> None:
@@ -15,7 +19,7 @@ async def test_create_project_answers_with_the_contract_shape(client: httpx.Asyn
 
     project = res.json()
     # domain.ts 의 Project 그대로 — 프로젝트 목록 화면이 접두사를 찍는다
-    assert set(project) == {"id", "name", "taskKeyPrefix"}
+    assert set(project) == PROJECT_KEYS
     assert project["name"] == "사내 포털 개편"
     assert project["taskKeyPrefix"] == "POR"
 
@@ -92,3 +96,181 @@ async def test_prefix_keeps_its_shape_when_given(client: httpx.AsyncClient) -> N
     bad = await client.post("/api/projects", json={"name": "빈칸 낀 값", "taskKeyPrefix": "PO R"})
     assert bad.status_code == 422
     assert bad.json()["detail"] == {"taskKeyPrefix": "형식이 올바르지 않습니다."}
+
+
+# --- 프로젝트 관리 — 설명 · 기간 · 상태 · 삭제 (docs/api/auth.md '프로젝트 관리') ---------------
+
+
+async def test_create_takes_description_and_dates(client: httpx.AsyncClient) -> None:
+    res = await client.post(
+        "/api/projects",
+        json={
+            "name": "기간 있는 프로젝트",
+            "description": "  설명 한 줄  ",
+            "startDate": "2026-11-01",
+            "endDate": "2027-01-31",
+        },
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["description"] == "설명 한 줄"
+    assert (body["startDate"], body["endDate"]) == ("2026-11-01", "2027-01-31")
+    assert (body["status"], body["closedAt"]) == ("active", None)
+
+
+async def test_create_rejects_end_before_start(client: httpx.AsyncClient) -> None:
+    res = await client.post(
+        "/api/projects",
+        json={"name": "거꾸로", "startDate": "2026-11-02", "endDate": "2026-11-01"},
+    )
+    assert res.status_code == 400
+    assert res.json() == {
+        "code": "PROJECT_DATE_RANGE",
+        "message": "종료일은 시작일보다 앞설 수 없습니다.",
+    }
+
+
+async def test_patch_changes_only_sent_fields(as_member: AsMember) -> None:
+    u1 = await as_member("u1")  # p1 관리자
+    res = await u1.patch(
+        "/api/projects/p1", json={"description": "  새 설명 ", "endDate": "2027-12-31"}
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["name"] == "한화손보 차세대"
+    assert body["description"] == "새 설명"
+    # 보내지 않은 시작일은 그대로다
+    assert (body["startDate"], body["endDate"]) == ("2026-07-01", "2027-12-31")
+
+    # 같은 날은 된다
+    same = await u1.patch("/api/projects/p1", json={"startDate": "2027-12-31"})
+    assert same.status_code == 200
+
+
+async def test_patch_checks_range_against_the_result(client: httpx.AsyncClient) -> None:
+    """한쪽만 보내도 바뀐 뒤의 쌍으로 본다 — p1 은 2026-07-01 ~ 2027-06-30."""
+    res = await client.patch("/api/projects/p1", json={"endDate": "2026-06-30"})
+    assert res.status_code == 400
+    assert res.json()["code"] == "PROJECT_DATE_RANGE"
+    # 막혔으면 아무것도 안 바뀐다
+    p1 = (await client.get("/api/projects/p1/snapshot")).json()["project"]
+    assert p1["endDate"] == "2027-06-30"
+
+    # 시작일을 같이 비우면 된다
+    ok = await client.patch("/api/projects/p1", json={"startDate": None, "endDate": "2026-06-30"})
+    assert ok.status_code == 200
+    assert (ok.json()["startDate"], ok.json()["endDate"]) == (None, "2026-06-30")
+
+
+async def test_null_and_blank_clear(client: httpx.AsyncClient) -> None:
+    res = await client.patch(
+        "/api/projects/p1", json={"description": None, "startDate": None, "endDate": None}
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert (body["description"], body["startDate"], body["endDate"]) == (None, None, None)
+
+    await client.patch("/api/projects/p1", json={"description": "다시"})
+    blank = await client.patch("/api/projects/p1", json={"description": "   "})
+    assert blank.json()["description"] is None
+
+
+async def test_patch_rejects_null_name_status_and_long_description(
+    client: httpx.AsyncClient,
+) -> None:
+    for body in ({"name": None}, {"status": None}, {"name": "  "}, {"status": "archived"}):
+        res = await client.patch("/api/projects/p1", json=body)
+        assert res.status_code == 422, body
+        assert res.json()["code"] == "VALIDATION_ERROR"
+    long = await client.patch("/api/projects/p1", json={"description": "가" * 2001})
+    assert long.status_code == 422
+    fits = await client.patch("/api/projects/p1", json={"description": "가" * 2000})
+    assert fits.status_code == 200
+
+
+async def test_close_and_reopen(client: httpx.AsyncClient) -> None:
+    closed = (await client.patch("/api/projects/p1", json={"status": "closed"})).json()
+    assert closed["status"] == "closed"
+    closed_at = closed["closedAt"]
+    assert closed_at is not None and closed_at.endswith("Z")
+
+    # 같은 상태를 다시 보내면 처음 닫은 시각을 지킨다
+    again = (await client.patch("/api/projects/p1", json={"status": "closed"})).json()
+    assert again["closedAt"] == closed_at
+
+    # 종료는 표시만 한다 — 쓰기는 그대로 된다
+    task = await client.post("/api/projects/p1/tasks", json={"title": "닫힌 뒤에도"})
+    assert task.status_code == 201
+
+    # 진행 중인 것이 먼저, 그 안에서는 전과 같은 순서
+    listed = (await client.get("/api/projects")).json()
+    assert [p["id"] for p in listed] == ["p2", "p3", "p1"]
+
+    reopened = (await client.patch("/api/projects/p1", json={"status": "active"})).json()
+    assert (reopened["status"], reopened["closedAt"]) == ("active", None)
+    assert [p["id"] for p in (await client.get("/api/projects")).json()] == ["p1", "p2", "p3"]
+
+
+async def test_only_system_admin_deletes(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    u1 = await as_member("u1")  # p1 관리자
+    forbidden = await u1.delete("/api/projects/p1")
+    assert forbidden.status_code == 403
+    assert forbidden.json()["code"] == "FORBIDDEN"
+
+    assert (await client.delete("/api/projects/p1")).status_code == 204
+    # 한 번 지우면 없는 것이다
+    again = await client.delete("/api/projects/p1")
+    assert again.status_code == 404
+    assert again.json()["code"] == "PROJECT_NOT_FOUND"
+
+
+async def test_deleted_project_drops_out_of_lists(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    u1 = await as_member("u1")
+    assert (await u1.get("/api/checks/pending-count")).json()["byProject"] == {"p1": 1}
+
+    assert (await client.delete("/api/projects/p1")).status_code == 204
+
+    assert [p["id"] for p in (await client.get("/api/projects")).json()] == ["p2", "p3"]
+    assert [p["id"] for p in (await u1.get("/api/projects")).json()] == ["p2", "p3"]
+    # 부여 줄은 남지만(되살리기) 화면에는 안 실린다
+    assert "p1" not in (await u1.get("/api/auth/me")).json()["projectRoles"]
+    assert (await u1.get("/api/checks/pending-count")).json() == {"total": 0, "byProject": {}}
+
+
+DELETED_PATHS = [
+    ("GET", "/api/projects/p1/snapshot", None, "PROJECT_NOT_FOUND"),
+    ("PATCH", "/api/projects/p1", {"name": "되살리기"}, "PROJECT_NOT_FOUND"),
+    ("GET", "/api/projects/p1/search?q=OS", None, "PROJECT_NOT_FOUND"),
+    ("GET", "/api/projects/p1/members", None, "PROJECT_NOT_FOUND"),
+    ("POST", "/api/projects/p1/tasks", {"title": "몰래"}, "PROJECT_NOT_FOUND"),
+    ("GET", "/api/projects/p1/reports", None, "PROJECT_NOT_FOUND"),
+    ("PATCH", "/api/tasks/k4", {"title": "몰래"}, "TASK_NOT_FOUND"),
+    ("GET", "/api/tasks/k4/comments", None, "TASK_NOT_FOUND"),
+    ("PATCH", "/api/threads/t1", {"title": "몰래"}, "THREAD_NOT_FOUND"),
+    ("PATCH", "/api/comments/cm1", {"body": "몰래"}, "COMMENT_NOT_FOUND"),
+    ("PATCH", "/api/parts/pt1", {"name": "몰래"}, "PART_NOT_FOUND"),
+    ("POST", "/api/checks/c3/confirm", None, "CHECK_NOT_FOUND"),
+    ("GET", "/api/minutes/m1", None, "MINUTES_NOT_FOUND"),
+]
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body", "code"), DELETED_PATHS, ids=[p[1] for p in DELETED_PATHS]
+)
+async def test_deleted_project_paths_are_404(
+    client: httpx.AsyncClient, method: str, url: str, body: object, code: str
+) -> None:
+    """시스템 관리자도 못 본다 — 정말 없는 것과 같은 코드다."""
+    assert (await client.delete("/api/projects/p1")).status_code == 204
+    res = await client.request(method, url, json=body)
+    assert res.status_code == 404
+    assert res.json()["code"] == code
+
+
+async def test_deleted_prefix_stays_taken(client: httpx.AsyncClient) -> None:
+    assert (await client.delete("/api/projects/p1")).status_code == 204
+    res = await client.post("/api/projects", json={"name": "HW 다시", "taskKeyPrefix": "HW"})
+    assert res.status_code == 409
+    assert res.json()["code"] == "PROJECT_PREFIX_TAKEN"

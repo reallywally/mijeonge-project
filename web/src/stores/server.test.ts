@@ -390,6 +390,57 @@ describe('만드는 것', () => {
     expect(data.loadedProjectId).toBe('p9')
     expect(data.allTasks).toEqual([])
   })
+
+  it('등록 때 설명 · 기간은 적은 것만 싣는다', async () => {
+    const data = await booted()
+    const made = { ...projects[0], id: 'p9', name: '새 프로젝트', taskKeyPrefix: 'NEW' }
+    on('POST /api/projects', () => json(made, 201))
+    on('GET /api/projects/p9/snapshot', () => json({ ...snapshotOf('p9'), project: made }))
+    on('GET /api/projects/p9/members', () => json([]))
+
+    await data.addProject('새 프로젝트', 'new', {
+      description: '  두 줄\n설명  ',
+      startDate: '2026-11-01',
+      endDate: '',
+    })
+    expect(calls.find((c) => c.route === 'POST /api/projects')!.body).toEqual({
+      name: '새 프로젝트',
+      taskKeyPrefix: 'NEW',
+      description: '두 줄\n설명',
+      startDate: '2026-11-01',
+    })
+  })
+
+  it('수정은 보낸 칸만 PATCH 하고, 기간 오류는 ApiError 로 던진다', async () => {
+    const data = await booted()
+    const closed = { ...projects[0], status: 'closed', closedAt: '2026-11-02T01:00:00Z' }
+    on('PATCH /api/projects/p1', (body) =>
+      (body as { startDate?: string }).startDate
+        ? json({ code: 'PROJECT_DATE_RANGE', message: '종료일이 시작일보다 앞섭니다.' }, 400)
+        : json(closed),
+    )
+
+    expect(await data.setProjectStatus('p1', 'closed')).toBe(true)
+    expect(calls.at(-1)).toEqual({ route: 'PATCH /api/projects/p1', body: { status: 'closed' } })
+    expect(data.currentProject).toMatchObject({ status: 'closed', closedAt: closed.closedAt })
+
+    await expect(data.updateProject('p1', { startDate: '2027-02-01' })).rejects.toMatchObject({
+      status: 400,
+      code: 'PROJECT_DATE_RANGE',
+    })
+    expect(data.currentProject!.startDate).toBe(projects[0].startDate)
+  })
+
+  it('삭제하면 DELETE 204 뒤 목록에서 걷고, 남은 프로젝트의 스냅샷을 받는다', async () => {
+    const data = await booted()
+    on('DELETE /api/projects/p1', () => new Response(null, { status: 204 }))
+
+    expect(await data.deleteProject('p1')).toBe(true)
+    await flush()
+    expect(data.allProjects.map((p) => p.id)).toEqual(['p2', 'p3'])
+    expect(data.currentProjectId).toBe('p2')
+    expect(data.loadedProjectId).toBe('p2')
+  })
 })
 
 describe('파트 (서버 갈래)', () => {

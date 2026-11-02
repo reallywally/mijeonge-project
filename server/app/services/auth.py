@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.errors import ApiError
-from app.models import AuthIdentity, AuthSession, Member, ProjectMember
+from app.models import AuthIdentity, AuthSession, Member, Project, ProjectMember
 from app.schemas.auth import MeOut
 from app.time import as_utc, now
 
@@ -168,7 +168,9 @@ async def me(session: AsyncSession, member_id: str) -> MeOut:
         raise unauthenticated()
     roles = await session.execute(
         select(ProjectMember.project_id, ProjectMember.role).where(
-            ProjectMember.member_id == member_id
+            ProjectMember.member_id == member_id,
+            # 지운 프로젝트의 부여는 남아 있다(되살리기) — 화면에는 없는 것처럼
+            ProjectMember.project_id.in_(select(Project.id).where(Project.deleted_at.is_(None))),
         )
     )
     return MeOut.model_validate(

@@ -33,7 +33,14 @@ async def create_project(payload: ProjectCreate, _: SystemAdmin, session: Sessio
 async def patch_project(
     project_id: str, payload: ProjectPatch, _: ProjectAdmin, session: Session
 ) -> ProjectOut:
-    return await project_service.rename_project(session, project_id, payload.name)
+    """보낸 필드만 바꾼다. 종료(closed)는 표시만 한다 — 쓰기를 막지 않는다."""
+    return await project_service.patch_project(session, project_id, payload)
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+async def delete_project(project_id: str, _: SystemAdmin, session: Session) -> None:
+    """시스템 관리자만. 소프트 삭제 — 그 뒤로는 그 프로젝트를 가리키는 모든 경로가 404 다."""
+    await project_service.delete_project(session, project_id)
 
 
 @router.get("/projects/{project_id}/snapshot")

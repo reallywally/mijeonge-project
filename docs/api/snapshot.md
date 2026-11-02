@@ -57,6 +57,29 @@ export interface Project {
 **프로젝트 사이에 유일하고**(DB 유니크), 빈 문자열은 나가지 않는다. 등록할 때 사람이 안 넣으면
 서버가 만들어 채우므로 **이 필드는 응답에서 늘 채워져 있다** (Q20). 번호 규칙은 Q19 다.
 
+### `Project` 가 다섯 필드 더 늘었다 (2026-11-02, 프로젝트 관리)
+
+목록 · 스냅샷의 `project` · 등록 · 수정 응답이 모두 같은 모양이다. 규칙은 `docs/api/auth.md` '프로젝트 관리'.
+
+```ts
+export interface Project {
+  id: string
+  name: string
+  taskKeyPrefix: string
+  /** 2000자 이하. 비어 있으면 null */
+  description: string | null
+  /** YYYY-MM-DD. 둘 다 있으면 endDate >= startDate */
+  startDate: string | null
+  endDate: string | null
+  /** 종료는 표시만 한다 — 쓰기를 막지 않는다 */
+  status: 'active' | 'closed'
+  /** ISO 8601 UTC · Z. closed 로 바뀐 시각, active 면 null */
+  closedAt: string | null
+}
+```
+
+지운 프로젝트(소프트 삭제)는 응답에 나오지 않는다 — 삭제 여부를 나타내는 필드는 없다.
+
 ### 중첩은 접어서 낸다
 
 서버 테이블은 행으로 펴 두지만(`server/PLAN.md` 1-1) 응답은 `domain.ts` 모양으로 다시 접는다.
@@ -109,10 +132,11 @@ export interface Project {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 여덟 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
+| `Project` | `description` · `startDate` · `endDate` · `closedAt` |
 | `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
 | `Entry` | `ownerId` · `minutesId` |
 | `Task` | `parentId` · `ownerId` · `start` · `due` · `partId` · `minutesId` |
@@ -172,6 +196,11 @@ export interface ProjectInput {
   name: string
   /** 선택. 안 넣으면 서버가 겹치지 않는 값을 만들어 응답에 실어 준다 */
   taskKeyPrefix?: string
+  /** 선택 (2026-11-02). 빈 문자열은 null */
+  description?: string | null
+  /** 선택 (2026-11-02). YYYY-MM-DD, 어긋나면 400 PROJECT_DATE_RANGE */
+  startDate?: string | null
+  endDate?: string | null
 }
 ```
 

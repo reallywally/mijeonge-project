@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
-import { resetMockAuth } from '@/api/mockAuth'
+import { mockDb, resetMockAuth } from '@/api/mockAuth'
 import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
@@ -87,6 +87,147 @@ describe('프로젝트 관리 화면', () => {
     expect(router.currentRoute.value.fullPath).toBe('/admin/projects/p1/parts?part=pt1')
   })
 })
+
+describe('프로젝트 관리 — 기본 정보 · 상태 · 삭제', () => {
+  const field = (selector: string) => document.body.querySelector<HTMLInputElement>(selector)!
+
+  it('이름 · 설명 · 기간을 한 번에 저장하고, 비운 칸은 지운다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/settings')
+    const data = useDataStore()
+
+    expect(field('input[aria-label="시작일"]').value).toBe('2026-03-02')
+    expect(field('input[aria-label="종료일"]').value).toBe('2026-12-31')
+    expect(
+      (w.get('textarea[aria-label="프로젝트 설명"]').element as HTMLTextAreaElement).value,
+    ).toContain('한화손해보험')
+    expect(w.get('button[data-save-info]').attributes('disabled')).toBeDefined()
+
+    await w.get('input[aria-label="프로젝트 이름"]').setValue('한화손보 차세대 2기')
+    await w.get('textarea[aria-label="프로젝트 설명"]').setValue('  ')
+    await w.get('input[aria-label="종료일"]').setValue('')
+    await w.get('input[aria-label="시작일"]').setValue('2026-04-01')
+    await click(w.get('button[data-save-info]').element)
+
+    expect(data.currentProject).toMatchObject({
+      name: '한화손보 차세대 2기',
+      description: null,
+      startDate: '2026-04-01',
+      endDate: null,
+    })
+    expect(w.get('h1').text()).toContain('한화손보 차세대 2기')
+    /* 저장한 값이 새 기준 — 다시 저장할 것이 없다 */
+    expect(w.get('button[data-save-info]').attributes('disabled')).toBeDefined()
+  })
+
+  it('기간이 거꾸로면 화면에서 먼저 막는다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/settings')
+
+    await w.get('input[aria-label="시작일"]').setValue('2027-01-10')
+    expect(w.get('[data-range-error]').text()).toContain('종료일이 시작일보다 앞섭니다')
+    expect(w.get('button[data-save-info]').attributes('disabled')).toBeDefined()
+
+    await w.get('input[aria-label="종료일"]').setValue('')
+    expect(w.find('[data-range-error]').exists()).toBe(false)
+    expect(w.get('button[data-save-info]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('그사이 서버 쪽 기간이 바뀌어 서버가 막으면 그 message 를 기간 칸 아래에 띄운다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/settings')
+    /* 다른 사람이 종료일을 당겨 놓았다 — 화면은 아직 옛 종료일을 들고 있다 */
+    mockDb().projects.find((p) => p.id === 'p1')!.endDate = '2026-04-30'
+
+    await w.get('input[aria-label="시작일"]').setValue('2026-05-01')
+    await click(w.get('button[data-save-info]').element)
+
+    expect(w.get('[data-range-error]').text()).toContain('종료일이 시작일보다 앞섭니다')
+    expect(useDataStore().currentProject!.startDate).toBe('2026-03-02')
+    expect(vi.mocked(toastError)).not.toHaveBeenCalled()
+
+    /* 날짜를 고치면 옛 서버 말은 걷힌다 */
+    await w.get('input[aria-label="시작일"]').setValue('2026-04-01')
+    expect(w.find('[data-range-error]').exists()).toBe(false)
+  })
+
+  it('종료는 한 번 묻고, 종료 시각을 보인다. 다시 열기는 바로 된다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/settings')
+    const data = useDataStore()
+    expect(w.get('[data-project-status]').text()).toContain('진행 중')
+
+    await click(bodyButton('프로젝트 종료'))
+    expect(document.body.textContent).toContain('프로젝트를 종료할까요?')
+    await click(document.body.querySelector('[data-close-confirm]'))
+
+    expect(data.currentProject!.status).toBe('closed')
+    expect(data.currentProject!.closedAt).toBeTruthy()
+    expect(w.get('[data-project-status]').attributes('data-project-status')).toBe('closed')
+    expect(w.get('[data-project-status]').text()).toContain('종료')
+    expect(w.find('[data-closed-at]').exists()).toBe(true)
+
+    await click(bodyButton('다시 열기'))
+    expect(data.currentProject).toMatchObject({ status: 'active', closedAt: null })
+    expect(w.find('[data-closed-at]').exists()).toBe(false)
+  })
+
+  it('위험 구역은 시스템 관리자에게만 보인다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/settings')
+    expect(w.find('[aria-label="위험 구역"]').exists()).toBe(false)
+    expect(bodyButton('프로젝트 삭제')).toBeUndefined()
+  })
+
+  it('삭제는 이름을 그대로 쳐야 켜지고, 지우면 남은 프로젝트로 옮겨 관리자 페이지로 간다', async () => {
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
+    const { w, router } = await mountAt('/admin/projects/p1/settings')
+    const data = useDataStore()
+
+    await click(w.get('[aria-label="위험 구역"]').find('button').element)
+    const confirm = () => document.body.querySelector<HTMLButtonElement>('[data-delete-confirm]')!
+    expect(confirm().disabled).toBe(true)
+
+    const typed = field('input[aria-label="지울 프로젝트 이름"]')
+    typed.value = '한화손보'
+    typed.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(confirm().disabled).toBe(true)
+
+    typed.value = '한화손보 차세대'
+    typed.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(confirm().disabled).toBe(false)
+
+    await click(confirm())
+    expect(data.allProjects.map((p) => p.id)).toEqual(['p2', 'p3'])
+    expect(data.currentProjectId).toBe('p2')
+    expect(mockDb().deletedProjectIds).toEqual(['p1'])
+    expect(router.currentRoute.value.path).toBe('/admin')
+  })
+
+  it('남은 프로젝트가 없으면 빈 상태의 첫 화면(등록)으로 간다', async () => {
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
+    const data = useDataStore()
+    expect(await data.deleteProject('p2')).toBe(true)
+    expect(await data.deleteProject('p3')).toBe(true)
+    const { router } = await mountAt('/admin/projects/p1/settings')
+
+    await click(dangerButton())
+    const typed = field('input[aria-label="지울 프로젝트 이름"]')
+    typed.value = '한화손보 차세대'
+    typed.dispatchEvent(new Event('input'))
+    await flushPromises()
+    await click(document.body.querySelector('[data-delete-confirm]'))
+
+    expect(data.allProjects).toEqual([])
+    expect(data.currentProjectId).toBe('')
+    expect(router.currentRoute.value.path).toBe('/projects/new')
+  })
+})
+
+const dangerButton = () =>
+  document.body.querySelector('[aria-label="위험 구역"] button') ?? undefined
 
 describe('파트 관리 화면', () => {
   it('파트를 안 고르고 들어오면 첫 활성 파트를 주소에 싣는다. 없는 파트여도 같다', async () => {

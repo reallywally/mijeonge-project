@@ -24,7 +24,36 @@ export const members: Member[] = [
  * taskKeyPrefix 는 프로젝트마다 하나고 서로 겹치지 않는다 — 말로 'HW-4' 한 마디로 가리킨다.
  */
 export const projects: Project[] = [
-  { id: 'p1', name: '한화손보 차세대', taskKeyPrefix: 'HW' },
-  { id: 'p2', name: '삼성생명 PAS', taskKeyPrefix: 'PAS' },
-  { id: 'p3', name: '경영지원 파트', taskKeyPrefix: 'OPS' },
+  {
+    id: 'p1',
+    name: '한화손보 차세대',
+    taskKeyPrefix: 'HW',
+    description:
+      '한화손해보험 차세대 시스템 구축 — 인프라 · AI 상담 · 데이터 이관을 한 사업으로 묶는다.',
+    startDate: '2026-03-02',
+    endDate: '2026-12-31',
+    status: 'active',
+    closedAt: null,
+  },
+  {
+    id: 'p2',
+    name: '삼성생명 PAS',
+    taskKeyPrefix: 'PAS',
+    description: null,
+    startDate: '2026-07-01',
+    endDate: null,
+    status: 'active',
+    closedAt: null,
+  },
+  /* 종료한 프로젝트 — 목록 · 고르기에서 뒤로 가고 '종료' 가 붙는다. 쓰기는 막지 않는다 */
+  {
+    id: 'p3',
+    name: '경영지원 파트',
+    taskKeyPrefix: 'OPS',
+    description: '사무직 파트 업무 — 분기마다 정리한다.',
+    startDate: null,
+    endDate: null,
+    status: 'closed',
+    closedAt: '2026-10-30T09:00:00Z',
+  },
 ]

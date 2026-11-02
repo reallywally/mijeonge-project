@@ -18,8 +18,8 @@
 
 | 권한 | 어디에 붙나 | 할 수 있는 것 |
 | --- | --- | --- |
-| 시스템 관리자 | `member.system_role = 'admin'` | **전부.** 모든 프로젝트를 멤버가 아니어도 보고 고친다. 사용자 관리 · 프로젝트 등록 · 모든 프로젝트의 멤버 부여 |
-| 프로젝트 관리자 | `project_member.role = 'admin'` | 그 프로젝트에서 user 가 하는 것 전부 + **그 프로젝트의 멤버 부여 · 역할 변경 · 빼기**, 프로젝트 이름 수정 |
+| 시스템 관리자 | `member.system_role = 'admin'` | **전부.** 모든 프로젝트를 멤버가 아니어도 보고 고친다. 사용자 관리 · 프로젝트 등록 · **프로젝트 삭제** · 모든 프로젝트의 멤버 부여 |
+| 프로젝트 관리자 | `project_member.role = 'admin'` | 그 프로젝트에서 user 가 하는 것 전부 + **그 프로젝트의 멤버 부여 · 역할 변경 · 빼기**, 프로젝트 정보 수정(이름 · 설명 · 기간 · 진행/종료) |
 | 일반 사용자 | `project_member.role = 'user'` | 부여받은 프로젝트를 읽고 쓴다 — 작업 · 안건 · 이력 · 링크 · 댓글 · 챗봇. 지금 화면이 하는 일 전부 |
 
 - 시스템 역할은 `admin` · `user` 둘이다. 프로젝트 역할도 `admin` · `user` 둘이다. **셋은 이 둘의 조합으로 나온다**
@@ -30,6 +30,7 @@
   아무도 사용자를 관리할 수 없는 상태를 만들지 않는다
 - 프로젝트 등록(`POST /api/projects`)은 **시스템 관리자만**. 등록한 사람이 그 프로젝트의 관리자로 붙지는 않는다
   (시스템 관리자는 붙지 않아도 다 할 수 있다) — 관리자를 따로 부여한다
+- 프로젝트 삭제(`DELETE /api/projects/{projectId}`)도 **시스템 관리자만**. 프로젝트 관리자는 403 `FORBIDDEN`
 
 ## 테이블
 
@@ -144,15 +145,47 @@ export interface ProjectMember {
 | GET | `/api/projects/{projectId}/members` | 그 프로젝트에 부여된 사람과 역할. **그 프로젝트의 user 도 부를 수 있다** — 담당자 고르는 자리가 쓴다 | `ProjectMember[]` |
 | PUT | `/api/projects/{projectId}/members/{memberId}` | `{ role }` — 부여하거나 역할을 바꾼다 (멱등). 비활성 멤버는 400 `MEMBER_INACTIVE`, 없는 멤버는 404 `MEMBER_NOT_FOUND` | `ProjectMember` |
 | DELETE | `/api/projects/{projectId}/members/{memberId}` | 빼기 (멱등). 그 사람이 담당하던 작업 · 안건은 **그대로 둔다** — 기록이다 | 204 |
-| PATCH | `/api/projects/{projectId}` | `{ name }` — 프로젝트 이름 수정 | `Project` |
+| PATCH | `/api/projects/{projectId}` | 프로젝트 정보 수정 — 아래 '프로젝트 관리' | `Project` |
 
 - 프로젝트 관리자가 **자기 자신을 빼거나 `user` 로 내리는 것은 된다** — 그 프로젝트에 다른 관리자가 없어도 시스템 관리자가 있으니 막지 않는다
+
+### 프로젝트 관리 (2026-11-02)
+
+| 메서드 | 경로 | 하는 일 | 누가 | 응답 |
+| --- | --- | --- | --- | --- |
+| POST | `/api/projects` | 등록. `name` 필수, `taskKeyPrefix` · `description` · `startDate` · `endDate` 선택 | 시스템 관리자 | `Project` · 201 |
+| PATCH | `/api/projects/{projectId}` | `name` · `description` · `startDate` · `endDate` · `status` 중 **보낸 것만** 바꾼다 | 그 프로젝트 관리자 · 시스템 관리자 | `Project` |
+| DELETE | `/api/projects/{projectId}` | **소프트 삭제** — `deleted_at` 만 찍는다 | 시스템 관리자 | 204 |
+
+```ts
+export type ProjectStatus = 'active' | 'closed'
+
+// Project 에 늘어난 것 (docs/api/snapshot.md 'Project')
+description: string | null   // 2000자 이하
+startDate: string | null     // YYYY-MM-DD
+endDate: string | null       // YYYY-MM-DD
+status: ProjectStatus        // 기본 'active'
+closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
+```
+
+- `description` 은 앞뒤 공백을 떼고, 비면 null 이다. 2000자를 넘으면 422 `VALIDATION_ERROR`
+- PATCH 에서 `description` · `startDate` · `endDate` 의 **null 은 비우기**다. `name` · `status` 는 null 을 받지 않는다(422)
+- 두 날짜가 다 있으면 `endDate >= startDate`(같은 날 허용). 아니면 400 `PROJECT_DATE_RANGE`
+  ("종료일은 시작일보다 앞설 수 없습니다."). PATCH 는 **바뀐 뒤의 값**으로 본다 — 한쪽만 보내도 남은 쪽과 견준다
+- `status` 를 `closed` 로 바꾸면 `closedAt` 을 찍고, `active` 로 되돌리면 null. 같은 상태를 다시 보내면 그대로다(처음 닫은 시각을 지킨다)
+- **종료는 표시만 한다** — 닫힌 프로젝트에도 쓰기는 그대로 된다 (막는 것은 나중에 정한다)
+- `GET /api/projects` 는 `active` 를 먼저, 그 안에서는 전과 같은 순서로 낸다
+- **지운 프로젝트는 어디서도 없는 것이다** — 목록에서 빠지고, 그 프로젝트를 가리키는 모든 경로
+  (`/api/projects/{id}/...` · 그 소속의 `/api/tasks/...` · `/threads/...` · `/comments/...` · `/parts/...` ·
+  `/checks/...` · `/minutes/...` · `/reports/...` · `/tests/...`)가 **시스템 관리자에게도** 원래 없을 때와 같은 404 다.
+  `Me.projectRoles` · 확인 요청 배지(`/api/checks/pending-count`)에서도 빠진다
+- 레코드 · 부여 · `taskKeyPrefix` 는 남는다 — 지운 프로젝트의 접두사로 새 프로젝트를 만들면 409 `PROJECT_PREFIX_TAKEN` (되살릴 여지). 되살리는 API 는 아직 없다
 
 ### 이미 있는 API 에서 바뀌는 것
 
 | 자리 | 바뀌는 것 |
 | --- | --- |
-| `GET /api/projects` | **내가 볼 수 있는 프로젝트만.** 시스템 관리자는 전부. 빈 배열이면 화면은 '부여받은 프로젝트가 없습니다 — 관리자에게 요청하세요' 를 띄운다(시스템 관리자만 등록 화면으로 간다) |
+| `GET /api/projects` | **내가 볼 수 있는 프로젝트만.** 시스템 관리자는 전부(지운 것은 빼고). 빈 배열이면 화면은 '부여받은 프로젝트가 없습니다 — 관리자에게 요청하세요' 를 띄운다(시스템 관리자만 등록 화면으로 간다) |
 | `POST /api/projects` | 시스템 관리자만. 그 밖은 403 `FORBIDDEN` |
 | `/api/projects/{projectId}/...` 전부 · `/api/tasks/...` · `/api/threads/...` · `/api/comments/...` | 그 프로젝트에 부여받았거나 시스템 관리자여야 한다. 아니면 404 (`PROJECT_NOT_FOUND` · `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `COMMENT_NOT_FOUND` — 원래 없을 때와 같은 코드) |
 | 담당자 지정 (`ownerId` — 작업 · 안건 등록 · 수정 · 한 번에 등록 · 이력) | **새로 지정하는** 담당자는 그 프로젝트의 활성 멤버여야 한다. 아니면 지금처럼 400(`TASK_OWNER_NOT_FOUND` 등 지금 코드 그대로). 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다 |
@@ -175,6 +208,7 @@ export interface ProjectMember {
 | 409 | `LAST_SYSTEM_ADMIN` | 마지막 활성 시스템 관리자를 내리거나 끔 |
 | 400 | `MEMBER_INACTIVE` | 비활성 멤버를 프로젝트에 부여 |
 | 400 | `MEMBER_EMAIL_REQUIRED` | 이메일 없는 멤버에 비밀번호를 걺 |
+| 400 | `PROJECT_DATE_RANGE` | 프로젝트의 종료일이 시작일보다 앞섬 (등록 · 수정) |
 
 ## 화면 (프론트가 정할 것의 테두리)
 
