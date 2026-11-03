@@ -8,6 +8,7 @@ import TaggedTests from '@/components/app/TaggedTests.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
+import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Button } from '@/components/ui/button'
@@ -210,6 +211,22 @@ const threadChoices = computed(() => {
   const linked = new Set(detail.value?.threads.map((t) => t.thread.id))
   return threadStore.threads.filter((t) => !linked.has(t.id))
 })
+
+/* 찾는 안건이 없으면 안건 추가 팝업을 이 위에 띄운다 — 적은 제목을 채워 열고, 배경 · 후보 · 담당 · 기한까지
+   여기서 적는다(안건 화면에 다녀오지 않게). 만들면 이 작업에 건다 */
+const newThreadOpen = ref(false)
+const newThreadTitle = ref('')
+
+function createThread(title: string) {
+  newThreadTitle.value = title
+  newThreadOpen.value = true
+}
+
+function onThreadCreated(id: string) {
+  newThreadOpen.value = false
+  const taskId = detail.value?.task.id
+  if (taskId) taskStore.linkThread(taskId, id)
+}
 </script>
 
 <template>
@@ -378,6 +395,7 @@ const threadChoices = computed(() => {
             :readonly="!canEdit"
             @link-thread="(id) => taskStore.linkThread(detail!.task.id, id)"
             @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
+            @create-thread="createThread"
             @open-thread="(id) => emit('open-thread', id)"
           />
 
@@ -472,6 +490,13 @@ const threadChoices = computed(() => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ThreadCreateDialog
+        v-model:open="newThreadOpen"
+        :initial-title="newThreadTitle"
+        :link-note="`만들면 ${detail.task.key} 작업에 연결됩니다`"
+        @created="onThreadCreated"
+      />
     </DialogScrollContent>
   </Dialog>
 </template>

@@ -46,7 +46,7 @@ const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'stuck' | 'overd
 const ownerFilter = ref<string>('all')
 const partFilter = ref<string>('all')
 const page = ref(1)
-const perPage = 5
+const perPage = 10
 
 const counts = computed(() => ({
   all: threadStore.visibleRows.length,

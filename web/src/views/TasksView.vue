@@ -73,7 +73,7 @@ const statusFilter = ref<'all' | TaskStatus | 'undated'>('all')
 const ownerFilter = ref<string>('all')
 const partFilter = ref<string>('all')
 const page = ref(1)
-const perPage = 8
+const perPage = 10
 
 const counts = computed(() => ({
   ...taskStore.statusCounts,

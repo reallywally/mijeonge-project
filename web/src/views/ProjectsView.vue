@@ -31,7 +31,7 @@ const router = useRouter()
 const nameDraft = ref('')
 const query = ref('')
 const page = ref(1)
-const perPage = 8
+const perPage = 10
 
 /* 프로젝트 등록은 시스템 관리자만 — 라우터도 같은 함수로 /projects/new 를 막는다 */
 const canCreate = computed(() => canCreateProject(auth.me))
