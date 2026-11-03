@@ -198,6 +198,9 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | `PATCH` · `DELETE /api/comments/{commentId}` | 고치기는 **작성자만**, 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자. 그 밖은 403 `FORBIDDEN` |
 | 작업 고치기 — `PATCH /api/tasks/{taskId}` · `PATCH …/lines/{lineId}` · `PUT` · `DELETE …/threads/{threadId}` | **생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 작업으로 본다 — 담당자는 남에게 넘길 수 있고, 남은 자기를 담당자로 넣을 수 없다. 하위 작업 등록(`parentId`)은 상위를 고치는 것이 아니라 권한을 안 본다. 댓글 · 확인 요청 규칙은 그대로 |
 | 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. 권한을 먼저 보고 그다음 하위 작업(409 `TASK_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 작업은 없는 작업과 같은 404 로 간다 (`API.md` 엔드포인트 표) |
+| 안건 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}` | **생성자(`Thread.creatorId`) · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02) — 작업과 달리 **담당자도 지운다**. 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 안건으로 본다(작업과 같다). 지우기는 권한을 먼저 보고 그다음 떼어낸 하위 안건(409 `THREAD_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 안건은 없는 안건과 같은 404 로 간다(그 아래 경로 · 그 안건의 확인 요청 id 경로까지) |
+| 이력 줄 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}/entries/{entryId}` | **그 줄 생성자(`Entry.creatorId`) · 안건 생성자 · 안건 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 지운 줄은 404 `ENTRY_NOT_FOUND` |
+| 이력 줄 남기기 — `POST /api/threads/{threadId}/entries` | **바뀌지 않는다** — 프로젝트 멤버 누구나(회의에서 누구든 결정을 적는다). `creatorId` 는 요청한 사람으로 찍는다 (2026-11-02) |
 | 챗봇 `propose_tasks` · `list_members` 도구 | 그 프로젝트의 활성 멤버만 담당자 후보로 본다 |
 | `GET /api/members` | `Member` 에 `active` 가 늘어난다. 로그인만 하면 누구나 부를 수 있다 |
 
@@ -210,6 +213,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | 400 | `INVALID_CREDENTIALS` | 내 비밀번호 바꾸기에서 현재 비밀번호가 틀림 |
 | 403 | `FORBIDDEN` | 로그인은 했지만 권한이 모자람 |
 | 409 | `TASK_HAS_CHILDREN` | 하위 작업이 있는 작업을 지움 (2026-11-02) |
+| 409 | `THREAD_HAS_CHILDREN` | 떼어낸 하위 안건이 있는 안건을 지움 (2026-11-02) |
 | 429 | `TOO_MANY_ATTEMPTS` | 로그인 시도가 IP 당 분당 10회를 넘음 |
 | 404 | `MEMBER_NOT_FOUND` | 없는 멤버 |
 | 409 | `EMAIL_TAKEN` | 이미 쓰는 이메일 |

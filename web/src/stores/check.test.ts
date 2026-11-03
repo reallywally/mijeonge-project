@@ -273,7 +273,8 @@ describe('배지', () => {
     threads.updateThread('t6', { ccIds: ['u3'] })
     expect(await useCheckStore().send('t6')).toBe(1)
     data.setProject('p2')
-    threads.updateThread('t10', { ccIds: ['u3'] })
+    /* u1 은 p2 에서 일반 사용자라 t10 을 못 고친다 — 참조는 데이터로 붙인다 */
+    data.allThreads.find((t) => t.id === 't10')!.ccIds = ['u3']
     await threads.addEntry('t10', 'decide', '여기도 정했다', '', null)
     expect(await useCheckStore().send('t10')).toBe(1)
     await switchTo('u3@inno-ax.com')

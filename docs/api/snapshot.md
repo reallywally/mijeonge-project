@@ -95,6 +95,26 @@ export interface Task {
 지난 작업은 리비전 `0027_task_creator` 가 남은 기록으로 채운다 — 변경 이력의 '등록' 줄(2026-10-27 이후 등록), 없으면
 상태 기록의 첫 줄(2026-10-20 이후). 둘 다 마이그레이션이 넣은 backfill 줄이면 누가 했는지 모르니 null 로 둔다.
 
+### `Thread` · `Entry` 가 한 필드씩 늘었다 (2026-11-02, 생성자)
+
+스냅샷의 `threads` · `entries` · 안건 쓰기 응답(등록 · 수정 · 이력 줄 남기기 · 고치기 · 지우기 · 회의록 반영) 모두 같은 모양이다.
+권한 규칙은 `docs/api/auth.md` '안건'.
+
+```ts
+export interface Thread {
+  // … 그대로
+  /** 등록한 사람. 서버가 요청한 사람으로 찍고 바꿀 수 없다. 기록이 없던 지난 안건은 null */
+  creatorId: string | null
+}
+export interface Entry {
+  // … 그대로
+  /** 줄을 남긴 사람. 서버가 요청한 사람으로 찍는다. 기록이 없던 지난 줄은 null */
+  creatorId: string | null
+}
+```
+
+지난 안건 · 줄은 리비전 `0029_thread_perm` 이 null 로 둔다 — 남은 기록이 없다. 시드는 둘 다 그 행의 `ownerId`(없으면 null).
+
 ### 중첩은 접어서 낸다
 
 서버 테이블은 행으로 펴 두지만(`server/PLAN.md` 1-1) 응답은 `domain.ts` 모양으로 다시 접는다.
@@ -110,10 +130,10 @@ export interface Task {
 
 | 키 | 기준 |
 | --- | --- |
-| `threads` | `thread.projectId === projectId` |
-| `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다 |
+| `threads` | `thread.projectId === projectId` — **지운 안건(논리 삭제, 2026-11-02)은 빠진다** |
+| `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다. **지운 줄(2026-11-02)은 빠진다** |
 | `tasks` | `task.projectId === projectId` — **지운 작업(논리 삭제, 2026-11-02)은 빠진다**. 삭제 여부를 나타내는 필드는 없다 |
-| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지). 지운 작업의 링크는 DB 에 남지만 나가지 않는다 |
+| `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지). 지운 작업 · 지운 안건(2026-11-02)의 링크는 DB 에 남지만 나가지 않는다 |
 | `parts` | `part.projectId === projectId` — 보관(`active=false`)도 싣는다 |
 | `partMembers` | `partId` 가 위 `parts` 안에 있는 것 |
 
@@ -147,13 +167,13 @@ export interface Task {
 
 ### 빈 값은 `null` 이 아니다
 
-`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리', `Task.creatorId` 는 2026-11-02 · `auth.md` '작업'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
+`null` 이 나갈 수 있는 필드는 **아래 표의 이름뿐**이다(`partId` 는 2026-10-14 · `part.md`, `confirmedAt` 은 2026-10-16 · `check.md`, `minutesId` 셋 · `meetingDate` 는 2026-10-20 · `minutes.md`, `Project` 넷은 2026-11-02 · `auth.md` '프로젝트 관리', `Task.creatorId` 는 2026-11-02 · `auth.md` '작업', `Thread.creatorId` · `Entry.creatorId` 는 2026-11-02 · `auth.md` '안건'). 나머지는 빈 문자열 `''` · 빈 배열 `[]` 로 낸다 (Q17 닫힘).
 
 | 타입 | `null` 을 내는 필드 |
 | --- | --- |
 | `Project` | `description` · `startDate` · `endDate` · `closedAt` |
-| `Thread` | `ownerId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
-| `Entry` | `ownerId` · `minutesId` |
+| `Thread` | `ownerId` · `creatorId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
+| `Entry` | `ownerId` · `creatorId` · `minutesId` |
 | `Task` | `parentId` · `ownerId` · `creatorId` · `start` · `due` · `partId` · `minutesId` |
 | `MinutesItem` · `Minutes` | `meetingDate` (스냅샷 밖 — `GET /api/projects/{projectId}/minutes` 등으로만 나간다, `minutes.md`) |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |

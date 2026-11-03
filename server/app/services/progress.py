@@ -38,7 +38,7 @@ from app.schemas.report import (
 from app.schemas.risk import DecisionRiskReport, RiskSettings
 from app.services import risk as risk_service
 from app.services import task as task_service
-from app.services.access import live_task_ids
+from app.services.access import live_task_ids, live_thread_ids
 from app.time import KST, as_utc
 
 PERIOD_DAYS = 7
@@ -148,6 +148,7 @@ async def _thread_counts(session: AsyncSession, project_id: str) -> dict[str, in
         .where(
             TaskThreadLink.project_id == project_id,
             TaskThreadLink.task_id.in_(live_task_ids()),
+            TaskThreadLink.thread_id.in_(live_thread_ids()),
         )
         .group_by(TaskThreadLink.task_id)
     )
@@ -182,7 +183,12 @@ async def _period_decisions(
     rows = await session.execute(
         select(Entry.thread_id, Entry.kind, Entry.created_at, Thread.seq)
         .join(Thread, Thread.id == Entry.thread_id)
-        .where(Thread.project_id == project_id, Entry.kind.in_(("decide", "change", "defer")))
+        .where(
+            Thread.project_id == project_id,
+            Thread.is_deleted.is_(False),
+            Entry.is_deleted.is_(False),
+            Entry.kind.in_(("decide", "change", "defer")),
+        )
     )
     decided: dict[str, int] = {}
     deferred: dict[str, int] = {}

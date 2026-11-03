@@ -1,10 +1,22 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetchThreadHistory } from '@/api/history'
+import { resetMockAuth } from '@/api/mockAuth'
+import { ApiError } from '@/api'
+import { MOCK_PASSWORD } from '@/fixtures'
+import { toastError } from '@/lib/notify'
+import { useAuthStore } from './auth'
 import { useDataStore } from './data'
 import { isOverdue, useThreadStore } from './thread'
 
-beforeEach(() => {
+vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
+
+/* 고치기는 작성자 · 담당자 · 관리자만이다 — 계산을 보는 검사들이라 프로젝트 관리자(u1)로 들어온다 */
+beforeEach(async () => {
+  vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
+  resetMockAuth()
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
 })
 
 describe('안건 이력', () => {
@@ -30,6 +42,7 @@ describe('안건 이력', () => {
       ownerId: null,
       createdAt: '2026-09-20T16:00:00Z',
       minutesId: null,
+      creatorId: null,
     })
     expect(thread.threadDetail('t4')!.events[0].at).toBe('2026-09-21')
   })
@@ -226,6 +239,30 @@ describe('안건 고치기', () => {
   })
 })
 
+describe('이력 글 고치기', () => {
+  const e1 = () =>
+    useThreadStore()
+      .entriesOfThread('t1')
+      .find((e) => e.id === 'e1')!
+
+  it('요약 · 메모만 바뀌고 앞뒤 공백을 뗀다 — 안건 상태는 그대로다', () => {
+    const thread = useThreadStore()
+    expect(thread.updateEntry('e1', { text: ' 우분투 24.04 로 한다 ', note: '  ' })).toBe(true)
+    expect(e1().text).toBe('우분투 24.04 로 한다')
+    expect(e1().note).toBe('')
+    expect(e1().kind).toBe('decide')
+    expect(thread.threads.find((t) => t.id === 't1')!.state).toBe('decided')
+  })
+
+  it('빈 요약 · 없는 줄은 받지 않는다', () => {
+    const thread = useThreadStore()
+    const before = e1().text
+    expect(thread.updateEntry('e1', { text: '   ' })).toBe(false)
+    expect(e1().text).toBe(before)
+    expect(thread.updateEntry('없는줄', { text: 'x' })).toBe(false)
+  })
+})
+
 describe('안건 등록', () => {
   it('배경 · 후보 · 기한을 같이 받는다', async () => {
     const thread = useThreadStore()
@@ -318,5 +355,200 @@ describe('기한 지남', () => {
     /* t4 — 기한 없음 */
     expect(row('t4').dueLabel).toBe('—')
     expect(thread.overdueCount).toBe(1)
+  })
+})
+
+async function signInAs(email: string) {
+  setActivePinia(createPinia())
+  await useAuthStore().login(email, MOCK_PASSWORD)
+}
+
+const forbiddenToast = () =>
+  expect(vi.mocked(toastError).mock.calls.at(-1)?.[0]).toMatchObject({ code: 'FORBIDDEN' })
+
+describe('작성자 · 권한 (목업)', () => {
+  it('등록한 안건 · 남긴 줄에 로그인한 사람이 작성자로 찍히고, 안건 이력에 등록 한 줄이 남는다', async () => {
+    const thread = useThreadStore()
+    const data = useDataStore()
+    const id = (await thread.addThread({ title: '새 안건' }))!
+    expect(data.allThreads.find((t) => t.id === id)!.creatorId).toBe('u1')
+    await thread.addEntry(id, 'defer', '다음에', '', null)
+    expect(thread.entriesOfThread(id)[0].creatorId).toBe('u1')
+
+    const rows = await fetchThreadHistory(id)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ changedBy: 'u1', changes: [{ field: 'created' }] })
+  })
+
+  it('작성자 · 담당자 · 관리자가 아니면 안건 고치기를 403 으로 막고 값은 그대로다', async () => {
+    /* t1 — 작성자 · 담당자 모두 이도현(u3). 박지훈(u2)은 p1 일반 사용자 */
+    await signInAs('u2@inno-ax.com')
+    const thread = useThreadStore()
+    const t1 = () => thread.threads.find((t) => t.id === 't1')!
+    expect(thread.canEdit(t1())).toBe(false)
+    expect(thread.canDelete(t1())).toBe(false)
+    expect(thread.updateThread('t1', { title: '바꿔 봄' })).toBe(false)
+    expect(t1().title).toBe('서버 OS 결정')
+    forbiddenToast()
+
+    /* 이력 줄 고치기도 같다 */
+    const e1 = thread.entriesOfThread('t1')[0]
+    expect(thread.canEditEntry(e1)).toBe(false)
+    expect(thread.updateEntry(e1.id, { text: '바꿔 봄' })).toBe(false)
+    expect(e1.text).toBe('우분투 최신 버전으로 한다')
+  })
+
+  it('결정 · 미루기는 누구나 남기고, 자기가 남긴 줄은 고칠 수 있다', async () => {
+    await signInAs('u2@inno-ax.com')
+    const thread = useThreadStore()
+    expect(await thread.addEntry('t1', 'refine', '24.04 LTS', '', null)).toBe(true)
+    const mine = thread.entriesOfThread('t1').find((e) => e.text === '24.04 LTS')!
+    expect(thread.canEditEntry(mine)).toBe(true)
+    expect(thread.updateEntry(mine.id, { text: '24.04.1 LTS' })).toBe(true)
+    expect(mine.text).toBe('24.04.1 LTS')
+  })
+
+  it('안건 담당자는 지울 수도 있다 — 작업과 다르다', async () => {
+    /* t9 — 담당 · 작성 박지훈(u2) */
+    await signInAs('u2@inno-ax.com')
+    const thread = useThreadStore()
+    const t9 = useDataStore().allThreads.find((t) => t.id === 't9')!
+    t9.creatorId = 'u3'
+    expect(thread.canDelete(t9)).toBe(true)
+  })
+})
+
+describe('안건 지우기', () => {
+  it('안건 · 그 이력 줄 · 작업 연결이 스토어에서 빠진다', async () => {
+    const thread = useThreadStore()
+    const data = useDataStore()
+    expect(data.taskThreads.some((l) => l.threadId === 't1')).toBe(true)
+    await thread.deleteThread('t1')
+    expect(data.allThreads.some((t) => t.id === 't1')).toBe(false)
+    expect(data.allEntries.some((e) => e.threadId === 't1')).toBe(false)
+    expect(data.taskThreads.some((l) => l.threadId === 't1')).toBe(false)
+    expect(thread.threadDetail('t1')).toBeNull()
+  })
+
+  it('떼어낸 하위 안건이 있으면 409 THREAD_HAS_CHILDREN — 아무것도 안 빠진다', async () => {
+    const thread = useThreadStore()
+    const data = useDataStore()
+    data.allThreads.push({
+      ...data.allThreads.find((t) => t.id === 't5')!,
+      id: 'sub',
+      parentThreadId: 't4',
+    })
+    const err = await thread.deleteThread('t4').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect((err as ApiError).status).toBe(409)
+    expect((err as ApiError).code).toBe('THREAD_HAS_CHILDREN')
+    expect(data.allThreads.some((t) => t.id === 't4')).toBe(true)
+  })
+
+  it('권한이 없으면 403 — 스토어도 그대로다', async () => {
+    await signInAs('u2@inno-ax.com')
+    const thread = useThreadStore()
+    const err = await thread.deleteThread('t1').catch((e: unknown) => e)
+    expect((err as ApiError).code).toBe('FORBIDDEN')
+    expect(useDataStore().allThreads.some((t) => t.id === 't1')).toBe(true)
+  })
+})
+
+describe('이력 줄 지우기', () => {
+  const state = (id: string) => useThreadStore().threads.find((t) => t.id === id)!.state
+
+  it('하나뿐인 결정을 지우면 줄이 없어 대기로 돌아간다 — 담당자는 그대로', async () => {
+    const thread = useThreadStore()
+    expect(state('t1')).toBe('decided')
+    await thread.deleteEntry('e1')
+    expect(thread.entriesOfThread('t1')).toEqual([])
+    expect(state('t1')).toBe('queued')
+    expect(thread.threads.find((t) => t.id === 't1')!.ownerId).toBe('u3')
+  })
+
+  it('미룸만 남으면 논의중, 결정 · 변경이 남으면 결정됨', async () => {
+    const thread = useThreadStore()
+    await thread.deleteEntry('e2')
+    expect(state('t5')).toBe('open')
+    await thread.addEntry('t3', 'decide', '사내 모델만', '', null)
+    await thread.deleteEntry('e4')
+    expect(state('t3')).toBe('decided')
+  })
+
+  it('남긴 사람이 아니고 안건도 못 고치면 403', async () => {
+    await signInAs('u2@inno-ax.com')
+    const err = await useThreadStore()
+      .deleteEntry('e1')
+      .catch((e: unknown) => e)
+    expect((err as ApiError).code).toBe('FORBIDDEN')
+    expect(useThreadStore().entriesOfThread('t1')).toHaveLength(1)
+  })
+})
+
+describe('안건 변경 이력 (목업)', () => {
+  it('시드는 안건마다 등록 한 줄 — 바꾼 사람은 작성자', async () => {
+    const rows = await fetchThreadHistory('t1')
+    expect(rows).toEqual([
+      {
+        id: 'hh-t1-1',
+        changedAt: '2026-09-08T00:30:00Z',
+        changedBy: 'u3',
+        backfilled: false,
+        changes: [{ field: 'created', from: null, to: null, subject: '' }],
+      },
+    ])
+    /* 담당자가 없던 안건은 작성자도 없다 */
+    expect((await fetchThreadHistory('t4'))[0].changedBy).toBeNull()
+  })
+
+  it('고친 칸만 칸 표 순서로 — 후보는 줄바꿈으로 이은 글, 참조는 id 배열, 같은 값은 안 남긴다', async () => {
+    const thread = useThreadStore()
+    thread.updateThread('t3', {
+      ccIds: ['u2'],
+      options: ['사내 모델만', ' '],
+      title: '외부 모델 허용 범위',
+      dueDate: '2026-09-30',
+    })
+    const last = (await fetchThreadHistory('t3')).at(-1)!
+    expect(last.changedBy).toBe('u1')
+    expect(last.changes).toEqual([
+      {
+        field: 'title',
+        from: '사내망에서 외부 모델 호출 허용 범위',
+        to: '외부 모델 허용 범위',
+        subject: '',
+      },
+      {
+        field: 'options',
+        from: '전면 허용\n비식별 데이터만 허용\n사내 모델만 사용',
+        to: '사내 모델만',
+        subject: '',
+      },
+      { field: 'ccIds', from: [], to: ['u2'], subject: '' },
+    ])
+  })
+
+  it('이력 줄 고치기 · 지우기는 그 줄의 종류를 subject 로 남긴다', async () => {
+    const thread = useThreadStore()
+    thread.updateEntry('e1', { text: '우분투 24.04', note: '' })
+    await thread.deleteEntry('e1')
+    const rows = await fetchThreadHistory('t1')
+    expect(rows.slice(1).map((r) => r.changes)).toEqual([
+      [
+        {
+          field: 'entryText',
+          from: '우분투 최신 버전으로 한다',
+          to: '우분투 24.04',
+          subject: 'decide',
+        },
+        {
+          field: 'entryNote',
+          from: 'PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.',
+          to: null,
+          subject: 'decide',
+        },
+      ],
+      [{ field: 'entryDeleted', from: '우분투 24.04', to: null, subject: 'decide' }],
+    ])
   })
 })

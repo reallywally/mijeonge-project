@@ -587,6 +587,29 @@
 - [x] 검사 — `lib/access.test.ts`(경계) · `api/tasks.test.ts`(401 · 403 · 404 · 409 · 딸린 것 정리 · 서버 경로) · `stores/task.test.ts`(creatorId 찍힘 · 목업 403 · 지우기 · 409) · `components/app/TaskDetailDialog.test.ts`(읽기 전용 · 작성자 칸 · 버튼 노출 · 확인 · 취소 · 409) · `views/TasksView.test.ts`(목록 잠금 · 전체 선택 · 칸반 · 간트 readonly · 목업 403). 화면 검사는 프로젝트 관리자(u1)로 들어오게 바꿨다
 - [ ] 서버 모드로 한 번 돌려 본다(남이 등록한 작업을 일반 사용자로 열어 잠기는지 · 지우기 204 · 409)
 
+## 21단계 · 안건 · 이력 줄 권한 · 지우기 · 변경 이력 — 안건 상세
+
+"관리자, 담당자, 생성자는 수정, 삭제할 수 있게." 계약은 서버 쪽 초안(2026-11-02, 20단계와 같은 모양) —
+`Thread.creatorId` · `Entry.creatorId`(null 가능), 안건 고치기 · 지우기 = 생성자 · **담당자** · 프로젝트 관리자 · 시스템 관리자,
+이력 줄 고치기 · 지우기 = 그 줄 생성자 + 위 사람들(그 밖 403 `FORBIDDEN`). `DELETE /api/threads/{id}` 204(하위 안건이 있으면 409 `THREAD_HAS_CHILDREN`),
+`DELETE /api/threads/{id}/entries/{entryId}` 200 `{ thread }`(남은 줄로 상태를 다시 잼), `GET /api/threads/{id}/history`. 결정 · 미루기 남기기는 권한을 안 본다.
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 판단 | `lib/access.ts` 의 `canEditThread` · `canDeleteThread`(= 고치기) · `canEditEntry`. 스토어는 `threadStore.canEdit` · `canDelete` · `canEditEntry` 로 감싼다 | 20단계와 같은 길 |
+| 상세 읽기 전용 | 머리줄 자물쇠 + `READONLY_HINT`(작업과 같은 말). 제목 · 배경 · 후보 `readonly`, 기한 · 담당자 · 파트 `disabled`, 참조는 칩만(더하기 · 빼기 숨김). 결정 영역은 열어 두되 미룰 때의 '다시 볼 날'(안건 기한을 고친다)은 숨김 | 줄 남기기는 누구나, 기한 고치기는 고치기 권한 |
+| 작성자 · 지우기 | 오른쪽 아래 '미룬 횟수 · **작성자** · 만든 날짜', 맨 아래 '안건 지우기'(하위 안건이 있으면 꺼지고 이유). 확인 다이얼로그는 작업과 같은 모양, 409 는 다이얼로그 안에 이유 + 스냅샷 다시 받기. 지우면 스토어에서 안건 · 그 줄 · 작업 연결을 빼고 팝업을 닫는다(→ `/threads`). 받아 둔 확인 요청 · 테스트 목록은 다시 받는다 | 작업 상세와 같은 자리 · 모양 |
+| 이력 줄 | [고치기] 옆 [지우기](같은 확인 다이얼로그, "이 결정 줄을 지울까요?"), 둘 다 `canEditEntry` 일 때만. 지우면 응답 안건으로 갈아끼우고 줄을 뺀다 | 상태는 서버가 다시 잰다 |
+| 변경 이력 | 이력 칸 아래에 `HistorySection kind="thread"`. `lib/history` 에 `thread` 칸 표 · 칸 이름(제목 · 배경 · 후보 · 담당자 · 파트 · 기한 · 참조) · '결정 줄 고침 / 메모 / 지움'(subject = kind, 이름은 `ENTRY_KIND_LABEL` — `EntryKindBadge` 도 이것을 쓴다). 후보는 본문처럼 전 · 후 블록 | 작업 · 테스트와 같은 부품 |
+| 목업 | 고치기는 스토어가 403 토스트로 막는다(`rejectEdit`). 지우기는 `api/threads.ts` 목업 갈래가 404 → 403 → 409 순, 줄 지우기는 `lib/thread.ts` `threadStateOf` 로 상태를 다시 잰다. 등록 · 줄 남기기 · 회의록 반영은 `creatorId` 를 로그인한 사람으로 찍고, 등록 · 고치기 · 지우기는 `recordMockHistory('thread', …)` 로 이력을 남긴다 | 서버와 같은 순서 · 같은 코드 |
+| 픽스처 | 안건 · 이력 줄 `creatorId` = 그 `ownerId`(없으면 null), 안건마다 `hh-<id>-1` 등록 줄(바꾼 사람 = 작성자) | 서버 시드와 같게 |
+
+- [x] `types/domain.ts`(`EntryDeleteResult`) · `lib/access.ts` · `lib/thread.ts` · `lib/history.ts` · `api/threads.ts`(`deleteThread` · `deleteEntry` + 목업) · `api/history.ts`(`fetchThreadHistory`) · `api/minutes.ts` · `fixtures/threads.ts` · `fixtures/history.ts`
+- [x] `stores/thread.ts` — 권한 · `rejectEdit` · 목업 이력 · `deleteThread` · `deleteEntry`, `stores/history.ts` 의 `thread` 갈래
+- [x] `ThreadDetailDialog` · `ThreadFields` · `ThreadPropertyPanel` · `ThreadDecisionPanel` · `CcField`(`readonly` / `disabled`)
+- [x] 검사 — `lib/access.test.ts` · `lib/thread.test.ts` · `lib/history.test.ts` · `api/history.test.ts` · `HistoryTimeline.test.ts` · `stores/thread.test.ts`(creatorId · 목업 403 · 지우기 · 409 · 상태 재계산 · 이력) · `stores/server.test.ts`(DELETE · 409 · 응답 안건 · GET 이력) · `views/ThreadListView.test.ts`(읽기 전용 · 버튼 · 확인 · 취소 · 409 · 줄 지우기 · 변경 이력). 화면 · 스토어 검사는 프로젝트 관리자(u1)로 들어온다
+- [ ] 계약이 API.md · docs/api 에 올라가면 맞춰 본다. 서버 모드로 한 번 돌려 본다
+
 ---
 
 ## 진행 상황
@@ -614,6 +637,7 @@
 | 18 프로젝트 관리 늘리기 | **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-02) — 설명 · 기간 · 상태(준비 · 진행 · 종료, 정보 칸에서 고름) · 삭제(시스템 관리자) · 목록 · 고르기의 상태 표시. 한눈 정보는 걷음 |
 | 19 사용자 번호 | **목업으로 끝남 · 서버 갈래는 타입만 맞춤** (2026-11-02) — 사용자 관리 맨 앞 열을 번호로 · 번호 순 · 팝업 제목에 '5번 · 이름' |
 | 20 작업 권한 · 지우기 | **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-02) — 고치기는 작성자 · 담당자 · 관리자만(상세 읽기 전용 · 목록 · 칸반 · 간트 잠금) · 작성자 칸 · 작업 지우기(확인 · 409) |
+| 21 안건 권한 · 지우기 · 변경 이력 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-02) — 안건 · 이력 줄 고치기 · 지우기는 작성자 · 담당자 · 관리자(줄은 남긴 사람도) · 작성자 칸 · 안건 지우기(확인 · 409) · 줄 지우기(상태 재계산) · 변경 이력 칸 |
 
 ## 아직 안 정한 것
 

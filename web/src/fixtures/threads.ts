@@ -22,6 +22,7 @@ export const threads: Thread[] = [
     ccIds: ['u1'],
     createdAt: '2026-09-08T00:30:00Z',
     minutesId: null,
+    creatorId: 'u3',
   },
   {
     id: 't2',
@@ -37,6 +38,7 @@ export const threads: Thread[] = [
     ccIds: ['u2', 'u4'],
     createdAt: '2026-09-08T00:35:00Z',
     minutesId: null,
+    creatorId: 'u3',
   },
   {
     id: 't3',
@@ -53,6 +55,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-09T02:10:00Z',
     minutesId: null,
+    creatorId: 'u1',
   },
   {
     id: 't4',
@@ -68,6 +71,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-10T06:20:00Z',
     minutesId: null,
+    creatorId: null,
   },
   // 시나리오 2 — 두 번 미뤄진 안건
   {
@@ -85,6 +89,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-07T00:10:00Z',
     minutesId: null,
+    creatorId: 'u4',
   },
   // 시나리오 3 — 한 번에 정해진 안건
   {
@@ -101,6 +106,7 @@ export const threads: Thread[] = [
     ccIds: ['u2'],
     createdAt: '2026-09-14T01:00:00Z',
     minutesId: null,
+    creatorId: 'u1',
   },
   {
     id: 't7',
@@ -116,6 +122,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-12T05:40:00Z',
     minutesId: null,
+    creatorId: 'u4',
   },
   {
     id: 't8',
@@ -131,6 +138,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-12T05:45:00Z',
     minutesId: null,
+    creatorId: 'u1',
   },
   {
     id: 't9',
@@ -146,6 +154,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-15T00:20:00Z',
     minutesId: null,
+    creatorId: 'u2',
   },
   // 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
   {
@@ -162,6 +171,7 @@ export const threads: Thread[] = [
     ccIds: [],
     createdAt: '2026-09-16T01:05:00Z',
     minutesId: null,
+    creatorId: 'u2',
   },
 ]
 
@@ -183,6 +193,7 @@ export const entries: Entry[] = [
     ownerId: 'u4',
     createdAt: '2026-09-07T07:30:00Z',
     minutesId: null,
+    creatorId: 'u4',
   },
   // 시나리오 1 — 공유가 안 됐을 뿐 이미 정해져 있던 것
   {
@@ -195,6 +206,7 @@ export const entries: Entry[] = [
     ownerId: 'u3',
     createdAt: '2026-09-09T02:00:00Z',
     minutesId: null,
+    creatorId: 'u3',
   },
   // 시나리오 1 — 함께 보고 정한 것
   {
@@ -207,6 +219,7 @@ export const entries: Entry[] = [
     ownerId: 'u3',
     createdAt: '2026-09-10T06:05:00Z',
     minutesId: null,
+    creatorId: 'u3',
   },
   {
     id: 'e4',
@@ -218,6 +231,7 @@ export const entries: Entry[] = [
     ownerId: 'u1',
     createdAt: '2026-09-10T06:08:00Z',
     minutesId: null,
+    creatorId: 'u1',
   },
   // 시나리오 2 — 두 번째 미룸
   {
@@ -230,6 +244,7 @@ export const entries: Entry[] = [
     ownerId: 'u4',
     createdAt: '2026-09-14T07:10:00Z',
     minutesId: null,
+    creatorId: 'u4',
   },
   // 시나리오 3
   {
@@ -242,5 +257,6 @@ export const entries: Entry[] = [
     ownerId: 'u1',
     createdAt: '2026-09-15T07:00:00Z',
     minutesId: null,
+    creatorId: 'u1',
   },
 ]

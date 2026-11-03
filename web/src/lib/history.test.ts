@@ -319,3 +319,70 @@ describe('화면 말', () => {
     })
   })
 })
+
+describe('안건 이력', () => {
+  const thread = (c: ReturnType<typeof change>) => changeView('thread', c, names)
+
+  it('칸 이름은 제목 · 배경 · 후보 · 담당자 · 파트 · 기한 · 참조, 등록 · 삭제는 문구 하나', () => {
+    expect(thread(change('created', null, null)).label).toBe('등록')
+    expect(thread(change('deleted', null, null)).label).toBe('삭제')
+    expect(thread(change('title', 'DB', 'DB 결정'))).toMatchObject({
+      label: '제목',
+      from: 'DB',
+      to: 'DB 결정',
+    })
+    expect(thread(change('description', '', '배경 글'))).toMatchObject({
+      label: '배경',
+      from: '(비움)',
+      long: true,
+    })
+    expect(thread(change('options', null, '우분투\n록키'))).toMatchObject({
+      label: '후보',
+      from: '없음',
+      to: '우분투\n록키',
+      block: true,
+    })
+    expect(thread(change('ownerId', null, 'u1'))).toMatchObject({ label: '담당자', to: '김철수' })
+    expect(thread(change('partId', 'pt1', null))).toMatchObject({ label: '파트', to: '공통' })
+    expect(thread(change('dueDate', null, '2026-09-12'))).toMatchObject({
+      label: '기한',
+      from: '없음',
+      to: '9/12',
+    })
+    expect(thread(change('ccIds', [], ['u1', 'u9']))).toMatchObject({
+      label: '참조',
+      from: '없음',
+      to: `김철수, ${MISSING}`,
+    })
+  })
+
+  it("이력 줄 칸은 그 줄의 종류를 앞에 — '결정 줄 고침' · '미룸 줄 메모' · '결정 줄 지움'", () => {
+    expect(thread(change('entryText', '정했다', '다시 정했다', 'decide'))).toMatchObject({
+      label: '결정 줄 고침',
+      from: '정했다',
+      to: '다시 정했다',
+    })
+    expect(thread(change('entryNote', null, '사유', 'defer'))).toMatchObject({
+      label: '미룸 줄 메모',
+      from: '없음',
+      to: '사유',
+    })
+    expect(thread(change('entryDeleted', '정했다', null, 'decide'))).toMatchObject({
+      label: '결정 줄 지움',
+      value: '정했다',
+    })
+  })
+
+  it('칸 표 순서로 놓는다 — 등록 · 삭제 다음 글 칸, 이력 줄 칸은 맨 뒤', () => {
+    const ordered = orderChanges(
+      [
+        change('entryText', 'a', 'b', 'decide'),
+        change('ccIds', [], ['u1']),
+        change('title', 'a', 'b'),
+        change('options', null, 'x'),
+      ],
+      'thread',
+    )
+    expect(ordered.map((c) => c.field)).toEqual(['title', 'options', 'ccIds', 'entryText'])
+  })
+})

@@ -15,7 +15,14 @@ from app.models.task import (
     TaskThreadLink,
 )
 from app.models.test import TestCase, TestHistory, TestRef
-from app.models.thread import Entry, EntryDetail, Thread, ThreadCc, ThreadOption
+from app.models.thread import (
+    Entry,
+    EntryDetail,
+    Thread,
+    ThreadCc,
+    ThreadHistory,
+    ThreadOption,
+)
 
 __all__ = [
     "AuthIdentity",
@@ -43,6 +50,7 @@ __all__ = [
     "TestRef",
     "Thread",
     "ThreadCc",
+    "ThreadHistory",
     "ThreadOption",
     "new_id",
 ]

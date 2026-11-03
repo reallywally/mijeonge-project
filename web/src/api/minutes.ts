@@ -401,6 +401,7 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     ownerId: e.ownerId,
     createdAt,
     minutesId,
+    creatorId: me.id,
   })
   /* 이력이 안건에 남기는 흔적 — POST /threads/{id}/entries 와 같다 */
   const touch = (thread: Thread, e: ProposedEntryBody) => {
@@ -426,6 +427,7 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       ccIds: [],
       createdAt,
       minutesId,
+      creatorId: me.id,
     }
     threadIdByTempId[t.tempId] = thread.id
     return thread
@@ -496,6 +498,7 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
 
   /* 등록 때 함께 건 안건은 created 에 든 것으로 본다 — 따로 줄을 안 만든다 */
   for (const t of tasks) recordMockHistory('task', t.id, [change('created', null, null)])
+  for (const t of threads) recordMockHistory('thread', t.id, [change('created', null, null)])
 
   /* 안 보냈거나 null 이면 지금 요약 그대로. 요약은 사람이 고친 것이 아니라 updatedAt 은 그대로 */
   if (input.summary != null) minutes.summary = input.summary.trim()

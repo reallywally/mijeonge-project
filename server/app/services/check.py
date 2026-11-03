@@ -15,7 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, not_found
 from app.models import CheckRequest, Entry, ProjectMember, Task, TaskThreadLink, Thread, new_id
 from app.schemas.check import CheckPendingCount, CheckRequestOut
-from app.services.access import Scope, active_project_members, forbidden, live_project_ids
+from app.services.access import (
+    Scope,
+    active_project_members,
+    forbidden,
+    live_project_ids,
+    live_thread_ids,
+)
 from app.services.thread import DECIDING_KINDS
 from app.time import now
 
@@ -75,6 +81,7 @@ async def recipient_loads(
             Thread.project_id == project_id,
             Thread.owner_id.in_(member_ids),
             Thread.state != "decided",
+            Thread.is_deleted.is_(False),
         )
         .group_by(Thread.owner_id)
     )
@@ -89,7 +96,13 @@ async def recipient_loads(
 
 async def list_checks(session: AsyncSession, project_id: str) -> list[CheckRequestOut]:
     rows = await session.scalars(
-        select(CheckRequest).where(CheckRequest.project_id == project_id).order_by(CheckRequest.seq)
+        select(CheckRequest)
+        .where(
+            CheckRequest.project_id == project_id,
+            # 지운 안건의 요청은 남아 있다 — 화면에는 없는 것처럼
+            CheckRequest.thread_id.in_(live_thread_ids()),
+        )
+        .order_by(CheckRequest.seq)
     )
     return [to_check(row) for row in rows.all()]
 
@@ -98,7 +111,12 @@ async def _latest_decision(session: AsyncSession, thread_id: str) -> Entry | Non
     """지금의 결정 — decide · change 이력 중 seq 가 가장 큰 것 (created_at 으로 가리지 않는다)."""
     found: Entry | None = await session.scalar(
         select(Entry)
-        .where(Entry.thread_id == thread_id, Entry.kind.in_(DECIDING_KINDS))
+        .where(
+            Entry.thread_id == thread_id,
+            Entry.kind.in_(DECIDING_KINDS),
+            # 지운 줄은 결정이 아니다 — 그 앞의 결정이 지금의 결정이 된다
+            Entry.is_deleted.is_(False),
+        )
         .order_by(Entry.seq.desc())
         .limit(1)
     )
@@ -149,7 +167,11 @@ async def send_checks(
     받을 사람 없음.
     """
     thread = await session.scalar(
-        select(Thread).where(Thread.id == thread_id, Thread.project_id == scope.project_id)
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.project_id == scope.project_id,
+            Thread.is_deleted.is_(False),
+        )
     )
     if thread is None:
         raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
@@ -221,6 +243,7 @@ async def pending_count(session: AsyncSession, member_id: str) -> CheckPendingCo
         .where(
             CheckRequest.recipient_id == member_id,
             CheckRequest.confirmed_at.is_(None),
+            CheckRequest.thread_id.in_(live_thread_ids()),
             CheckRequest.project_id.in_(
                 select(ProjectMember.project_id).where(
                     ProjectMember.member_id == member_id,

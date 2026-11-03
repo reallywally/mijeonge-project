@@ -1,13 +1,22 @@
 import { defineStore } from 'pinia'
 import { computed } from 'vue'
 import * as api from '@/api'
+import { ApiError } from '@/api'
+import { canDeleteThread, canEditEntry, canEditThread } from '@/lib/access'
 import { kstToday, localDay, monthDay, nowIso } from '@/lib/date'
+import { change, entryPatchChanges, threadPatchChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
+import { useAuthStore } from '@/stores/auth'
+import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
+import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
+import { useTestStore } from '@/stores/test'
 import type {
   Entry,
   EntryKind,
+  EntryPatch,
+  HistoryChange,
   SubThreadRow,
   Thread,
   ThreadDetail,
@@ -31,6 +40,8 @@ export function isOverdue(thread: Thread, today: string) {
 export const useThreadStore = defineStore('thread', () => {
   const data = useDataStore()
   const partStore = usePartStore()
+  const auth = useAuthStore()
+  const history = useHistoryStore()
 
   /** 고른 프로젝트의 안건만 */
   const threads = computed<Thread[]>(() =>
@@ -147,6 +158,35 @@ export const useThreadStore = defineStore('thread', () => {
   /** 참조는 겹치면 처음 자리 하나 — 서버도 그렇게 저장한다 */
   const uniqueIds = (ids: string[]) => [...new Set(ids)]
 
+  /** 고칠 수 있나 — 등록한 사람 · 담당자 · 프로젝트 관리자 · 시스템 관리자 */
+  const canEdit = (thread: Thread) => canEditThread(auth.me, thread, thread.projectId)
+  /** 지울 수 있나 — 고치기와 같은 경계(작업과 달리 담당자도 지운다) */
+  const canDelete = (thread: Thread) => canDeleteThread(auth.me, thread, thread.projectId)
+  /** 이력 줄을 고치거나 지울 수 있나 — 그 줄을 남긴 사람 · 안건을 고칠 수 있는 사람 */
+  function canEditEntryOf(entry: Entry) {
+    const thread = data.allThreads.find((t) => t.id === entry.threadId)
+    return !!thread && canEditEntry(auth.me, entry, thread, thread.projectId)
+  }
+
+  /** 목업은 서버가 없어 권한도 여기서 흉내 낸다 — 서버의 403 FORBIDDEN 과 같은 모양 */
+  function rejectEdit(allowed: boolean) {
+    if (!data.mock || allowed) return false
+    toastError(new ApiError(403, { code: 'FORBIDDEN', message: '권한이 없습니다.' }))
+    return true
+  }
+
+  /* 목업은 서버가 없어 변경 이력도 여기서 남긴다 — 서버는 요청을 받아 스스로 남긴다 (docs/api/history.md) */
+  function logMock(threadId: string, changes: HistoryChange[]) {
+    if (!data.mock || changes.length === 0) return
+    api.recordMockHistory('thread', threadId, changes)
+    history.touched('thread', threadId)
+  }
+
+  /** 서버에 보낸 쓰기가 끝나면 펼쳐 둔 이력 칸이 다시 부르게 알린다 */
+  function afterWrite(threadId: string, done: Promise<unknown>) {
+    void done.finally(() => history.touched('thread', threadId))
+  }
+
   /** 서버가 돌려준 안건으로 갈아끼운다 */
   function replaceThread(next: Thread) {
     const at = data.allThreads.findIndex((t) => t.id === next.id)
@@ -192,7 +232,10 @@ export const useThreadStore = defineStore('thread', () => {
       parentThreadId: null,
       createdAt: nowIso(),
       minutesId: null,
+      /* 목업에서는 등록한 사람을 여기서 찍는다 — 서버 모드는 서버가 찍어 돌려준다 */
+      creatorId: data.currentMemberId,
     })
+    logMock(id, [change('created', null, null)])
     return id
   }
 
@@ -205,23 +248,34 @@ export const useThreadStore = defineStore('thread', () => {
     const thread = data.allThreads.find((t) => t.id === threadId)
     if (!thread) return false
     if (patch.title !== undefined && !patch.title.trim()) return false
+    if (rejectEdit(canEdit(thread))) return false
     if (data.rejectOwner(patch.ownerId, 'THREAD_OWNER_NOT_FOUND', thread.ownerId)) return false
     if (data.rejectPart(patch.partId, thread.partId)) return false
     if (data.rejectCc(patch.ccIds, thread.ccIds)) return false
     const clean: ThreadPatch = {}
-    if (patch.title !== undefined) clean.title = thread.title = patch.title.trim()
-    if (patch.description !== undefined)
-      clean.description = thread.description = patch.description.trim()
-    if (patch.options !== undefined) clean.options = thread.options = cleanOptions(patch.options)
-    if (patch.dueDate !== undefined) clean.dueDate = thread.dueDate = patch.dueDate || null
-    if (patch.ownerId !== undefined) clean.ownerId = thread.ownerId = patch.ownerId
-    if (patch.partId !== undefined) clean.partId = thread.partId = patch.partId
-    if (patch.ccIds !== undefined) {
-      clean.ccIds = [...patch.ccIds]
-      thread.ccIds = uniqueIds(patch.ccIds)
-    }
+    if (patch.title !== undefined) clean.title = patch.title.trim()
+    if (patch.description !== undefined) clean.description = patch.description.trim()
+    if (patch.options !== undefined) clean.options = cleanOptions(patch.options)
+    if (patch.dueDate !== undefined) clean.dueDate = patch.dueDate || null
+    if (patch.ownerId !== undefined) clean.ownerId = patch.ownerId
+    if (patch.partId !== undefined) clean.partId = patch.partId
+    if (patch.ccIds !== undefined) clean.ccIds = [...patch.ccIds]
+    /* 이력은 고치기 전 값과 견준다 */
+    logMock(
+      threadId,
+      threadPatchChanges(thread, {
+        ...clean,
+        ...(clean.ccIds ? { ccIds: uniqueIds(clean.ccIds) } : {}),
+      }),
+    )
+    const { ccIds, ...plain } = clean
+    Object.assign(thread, plain)
+    if (ccIds !== undefined) thread.ccIds = uniqueIds(ccIds)
     if (!data.mock) {
-      void data.save(`thread:${threadId}`, () => api.patchThread(threadId, clean), replaceThread)
+      afterWrite(
+        threadId,
+        data.save(`thread:${threadId}`, () => api.patchThread(threadId, clean), replaceThread),
+      )
     }
     return true
   }
@@ -263,6 +317,7 @@ export const useThreadStore = defineStore('thread', () => {
       ownerId,
       createdAt: nowIso(),
       minutesId: null,
+      creatorId: data.currentMemberId,
     })
 
     const thread = data.allThreads.find((t) => t.id === threadId)
@@ -274,6 +329,70 @@ export const useThreadStore = defineStore('thread', () => {
       thread.state = 'open'
     }
     return true
+  }
+
+  /**
+   * 이력 한 줄의 글을 고친다 — PATCH /api/threads/{id}/entries/{entryId}.
+   * 실수로 남긴 결정 · 메모를 바로잡는 길이다. kind 는 못 바꿔 안건 상태도 그대로다.
+   * 빈 요약은 받지 않는다(서버도 422). 화면에 먼저 반영하고 돌아온 줄로 갈아끼운다.
+   */
+  function updateEntry(entryId: string, patch: EntryPatch) {
+    const entry = data.allEntries.find((e) => e.id === entryId)
+    if (!entry) return false
+    if (patch.text !== undefined && !patch.text.trim()) return false
+    if (rejectEdit(canEditEntryOf(entry))) return false
+    const clean: EntryPatch = {}
+    if (patch.text !== undefined) clean.text = patch.text.trim()
+    if (patch.note !== undefined) clean.note = patch.note.trim()
+    logMock(entry.threadId, entryPatchChanges(entry, clean))
+    Object.assign(entry, clean)
+    if (!data.mock) {
+      afterWrite(
+        entry.threadId,
+        data.save(
+          `entry:${entryId}`,
+          () => api.patchEntry(entry.threadId, entryId, clean),
+          (next) => {
+            const at = data.allEntries.findIndex((e) => e.id === next.id)
+            if (at >= 0) data.allEntries[at] = next
+          },
+        ),
+      )
+    }
+    return true
+  }
+
+  /**
+   * 안건을 지운다(논리 삭제) — 이력 줄 · 작업 연결 · 확인 요청 · 테스트 태그도 어디서도 안 보이게 된다.
+   * 떼어낸 하위 안건이 있으면 409 THREAD_HAS_CHILDREN. 실패하면 ApiError 를 던진다 — 이유를 띄우는 것은 화면 몫이다
+   */
+  async function deleteThread(threadId: string) {
+    await api.deleteThread(threadId)
+    data.allThreads = data.allThreads.filter((t) => t.id !== threadId)
+    data.allEntries = data.allEntries.filter((e) => e.threadId !== threadId)
+    data.taskThreads = data.taskThreads.filter((l) => l.threadId !== threadId)
+    /* 받아 둔 확인 요청 · 테스트 태그에서도 빠졌다 — 받아 둔 목록이 있으면 다시 받는다 */
+    const checkStore = useCheckStore()
+    if (checkStore.loaded) void checkStore.load()
+    const testStore = useTestStore()
+    if (testStore.loaded) void testStore.load()
+  }
+
+  /**
+   * 이력 한 줄을 지운다(논리 삭제). 남은 줄로 다시 잰 안건 상태를 서버가 돌려준다 — 그 안건으로 갈아끼운다.
+   * 실패하면 ApiError 를 던진다
+   */
+  async function deleteEntry(entryId: string) {
+    const entry = data.allEntries.find((e) => e.id === entryId)
+    if (!entry) return
+    const threadId = entry.threadId
+    try {
+      const res = await api.deleteEntry(threadId, entryId)
+      data.allEntries = data.allEntries.filter((e) => e.id !== entryId)
+      replaceThread(res.thread)
+    } finally {
+      history.touched('thread', threadId)
+    }
   }
 
   return {
@@ -288,5 +407,11 @@ export const useThreadStore = defineStore('thread', () => {
     addThread,
     updateThread,
     addEntry,
+    updateEntry,
+    canEdit,
+    canDelete,
+    canEditEntry: canEditEntryOf,
+    deleteThread,
+    deleteEntry,
   }
 })

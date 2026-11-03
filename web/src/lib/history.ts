@@ -2,18 +2,23 @@ import { slashDay } from '@/lib/date'
 import { taskPriorityLabel, taskStatusLabel } from '@/lib/task'
 import { testStatusLabel } from '@/lib/testcase'
 import type {
+  Entry,
+  EntryKind,
+  EntryPatch,
   HistoryChange,
   HistoryEntry,
   TaskLine,
   TaskPriority,
   TaskStatus,
   TestStatus,
+  Thread,
+  ThreadPatch,
 } from '@/types/domain'
 
 /* 변경 이력 (docs/api/history.md). 서버는 값을 id 그대로 남기고 이름은 화면이 지금의 것으로 찾는다.
    목업 갈래가 서버처럼 줄을 남길 때 쓰는 비교도 여기 둔다 — 화면 말로 바꾸는 것과 같은 칸 표를 본다 */
 
-export type HistoryKind = 'task' | 'test'
+export type HistoryKind = 'task' | 'test' | 'thread'
 
 /** 한 줄 안의 칸 순서 — 계약의 '칸' 표 순서 그대로 */
 export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
@@ -56,6 +61,30 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'threadRef',
     'basis',
   ],
+  thread: [
+    'created',
+    'deleted',
+    'title',
+    'description',
+    'options',
+    'ownerId',
+    'partId',
+    'dueDate',
+    'ccIds',
+    'entryText',
+    'entryNote',
+    'entryDeleted',
+  ],
+}
+
+/** 이력 줄(entry)의 종류 이름 — 안건 이력 배지(EntryKindBadge)와 변경 이력이 같은 말을 쓴다 */
+export const ENTRY_KIND_LABEL: Record<EntryKind, string> = {
+  decide: '결정',
+  change: '변경',
+  refine: '세부 추가',
+  split: '하위 안건으로 분리',
+  defer: '미룸',
+  raise: '제기',
 }
 
 type Value = HistoryChange['from']
@@ -96,6 +125,31 @@ export function diffChanges(
     if (from !== to) out.push(change(field, from, to))
   }
   return orderChanges(out, kind)
+}
+
+/**
+ * 안건 PATCH 한 번이 바꾼 칸 — 목업이 서버처럼 남긴다. 후보는 줄바꿈으로 이은 글(비면 null),
+ * 참조는 id 배열로 견준다. 값은 이미 다듬은(trim) 것을 받는다
+ */
+export function threadPatchChanges(before: Thread, patch: ThreadPatch): HistoryChange[] {
+  const { options, ccIds, ...plain } = patch
+  const out = diffChanges(before, plain, 'thread')
+  const joined = (list: string[]) => (list.length ? list.join('\n') : null)
+  if (options !== undefined && joined(options) !== joined(before.options))
+    out.push(change('options', joined(before.options), joined(options)))
+  if (ccIds !== undefined && ccIds.join(',') !== before.ccIds.join(','))
+    out.push(change('ccIds', [...before.ccIds], [...ccIds]))
+  return orderChanges(out, 'thread')
+}
+
+/** 이력 줄 PATCH 한 번이 바꾼 칸 — subject 는 그 줄의 종류. 메모는 비면 null */
+export function entryPatchChanges(before: Entry, patch: EntryPatch): HistoryChange[] {
+  const out: HistoryChange[] = []
+  if (patch.text !== undefined && patch.text !== before.text)
+    out.push(change('entryText', before.text, patch.text, before.kind))
+  if (patch.note !== undefined && patch.note !== before.note)
+    out.push(change('entryNote', before.note || null, patch.note || null, before.kind))
+  return out
 }
 
 /** 본문이 바뀌었나 — 줄 글 · 종류 · 체크 · 들여쓰기 · 순서. 줄 id 는 안 본다(서버가 다시 붙인다) */
@@ -206,9 +260,27 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
     failedStep: '실패한 단계',
     resultNote: '결과 메모',
   },
+  thread: {
+    title: '제목',
+    description: '배경',
+    options: '후보',
+    ownerId: '담당자',
+    partId: '파트',
+    dueDate: '기한',
+    ccIds: '참조',
+  },
 }
 
-const LONG_FIELDS = new Set(['content', 'purpose', 'precondition', 'testData', 'resultNote'])
+const LONG_FIELDS = new Set([
+  'content',
+  'purpose',
+  'precondition',
+  'testData',
+  'resultNote',
+  'description',
+  'entryText',
+  'entryNote',
+])
 
 const str = (v: Value) => (v === null ? '' : Array.isArray(v) ? v.join(', ') : String(v))
 
@@ -238,13 +310,26 @@ function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNam
     case 'start':
     case 'due':
       return v === null ? '미정' : slashDay(str(v))
+    case 'dueDate':
+      return v === null ? '없음' : slashDay(str(v))
+    case 'ccIds': {
+      const ids = Array.isArray(v) ? v : []
+      return ids.length === 0 ? '없음' : ids.map((id) => name(names.member(id))).join(', ')
+    }
     case 'failedStep':
       return v === null ? '없음' : `${v}단계`
     case 'resultNote':
+    case 'entryNote':
       return v === null ? '없음' : str(v)
     default:
       return str(v) === '' ? '(비움)' : str(v)
   }
+}
+
+/** 이력 줄의 칸 — subject 가 그 줄의 kind 다. '결정 줄 고침' 처럼 앞에 종류를 붙인다 */
+function entryChange(c: HistoryChange, what: string) {
+  const kindLabel = ENTRY_KIND_LABEL[c.subject as EntryKind] ?? '이력'
+  return { field: c.field, label: `${kindLabel} ${what}`, long: false }
 }
 
 /** 걸기 · 떼기 칸 — 걸기는 null → id, 떼기는 id → null */
@@ -291,6 +376,29 @@ export function changeView(
       return { ...base, label: `${c.to === true ? '☑' : '☐'} ${c.subject}` }
     case 'basis':
       return { ...base, label: '기준 그대로 맞다 확인' }
+    case 'deleted':
+      return { ...base, label: '삭제' }
+    case 'options':
+      /* 후보는 줄마다 하나 — 본문처럼 줄을 살려 전 · 후를 위아래에 놓는다 */
+      return {
+        ...base,
+        label: '후보',
+        from: c.from === null ? '없음' : str(c.from),
+        to: c.to === null ? '없음' : str(c.to),
+        long: true,
+        block: true,
+      }
+    case 'entryText':
+      return { ...entryChange(c, '줄 고침'), from: str(c.from), to: str(c.to), long: true }
+    case 'entryNote':
+      return {
+        ...entryChange(c, '줄 메모'),
+        from: valueText(kind, c.field, c.from, names),
+        to: valueText(kind, c.field, c.to, names),
+        long: true,
+      }
+    case 'entryDeleted':
+      return { ...entryChange(c, '줄 지움'), value: str(c.from), long: false }
   }
   const link = LINK[c.field]
   if (link) {

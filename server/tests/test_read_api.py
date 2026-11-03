@@ -27,6 +27,8 @@ THREAD_KEYS = {
     "dueDate",
     "state",
     "ownerId",
+    # 등록한 사람 — 기록이 없던 지난 안건은 null
+    "creatorId",
     "parentThreadId",
     "createdAt",
     "partId",
@@ -41,6 +43,8 @@ ENTRY_KEYS = {
     "detail",
     "note",
     "ownerId",
+    # 줄을 남긴 사람 — 기록이 없던 지난 줄은 null
+    "creatorId",
     "createdAt",
     "minutesId",
 }

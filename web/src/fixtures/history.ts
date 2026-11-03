@@ -1,10 +1,11 @@
 import { tasks } from '@/fixtures/tasks'
 import { testCases } from '@/fixtures/tests'
+import { threads } from '@/fixtures/threads'
 import type { HistoryEntry } from '@/types/domain'
 
 /**
- * 변경 이력 — docs/api/history.md '시드 · 목업'. 작업 · 테스트마다 등록 한 줄(바꾼 사람 = 작업은 담당자 ·
- * 테스트는 만든 사람, 등록 시각)에 시연 둘을 더한다 — k20 의 상태(task_log 시연 줄과 같은 때) ·
+ * 변경 이력 — docs/api/history.md '시드 · 목업'. 작업 · 테스트 · 안건마다 등록 한 줄(바꾼 사람 = 작업 · 안건은
+ * 작성자 · 테스트는 만든 사람, 등록 시각)에 시연 둘을 더한다 — k20 의 상태(task_log 시연 줄과 같은 때) ·
  * HW-T7 의 실패(그 테스트의 바뀐 시각). 배열 순서가 seq 순서다
  */
 
@@ -41,3 +42,7 @@ testHistory.tc7.push({
     { field: 'resultNote', from: null, to: t7.resultNote, subject: '' },
   ],
 })
+
+export const threadHistory: Record<string, HistoryEntry[]> = Object.fromEntries(
+  threads.map((t) => [t.id, [created('hh', t.id, t.createdAt, t.creatorId)]]),
+)

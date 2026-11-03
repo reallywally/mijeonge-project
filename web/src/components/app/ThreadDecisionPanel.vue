@@ -4,6 +4,7 @@ import { Check, ChevronRight, Clock, Plus } from 'lucide-vue-next'
 import PersonChip from '@/components/app/PersonChip.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -18,8 +19,9 @@ import type { ThreadDetail } from '@/types/domain'
 /* 안건 상세의 '결정' 영역 — 이 앱이 하려는 일이 여기 모인다. 정하면 결정으로, 못 정하면 사유를 달아
    미룸으로 남긴다. 결정인지 미루기인지 먼저 고르고, 고른 쪽에 맞는 칸만 보여 준다.
    상태는 손으로 바꾸지 않고 여기서 남긴 줄로만 바뀐다.
-   결정된 안건은 결정 내용을 크게 보여 주고, 바꾸면 새 결정 줄이 앞의 것을 대체한다(앞의 것은 이력에 남는다). */
-const props = defineProps<{ detail: ThreadDetail }>()
+   결정된 안건은 결정 내용을 크게 보여 주고, 바꾸면 새 결정 줄이 앞의 것을 대체한다(앞의 것은 이력에 남는다).
+   줄 남기기는 프로젝트 멤버 누구나다. 다만 '다시 볼 날' 은 안건 기한을 고치는 일이라 고칠 권한이 있을 때만 보인다 */
+const props = defineProps<{ detail: ThreadDetail; canEditThread?: boolean }>()
 const emit = defineEmits<{ (e: 'open-thread', id: string): void }>()
 
 const data = useDataStore()
@@ -103,8 +105,17 @@ async function submit() {
   /* 실패는 스토어가 알렸다 — 적은 것을 그대로 두어 다시 남길 수 있게 한다 */
   if (!saved) return
   /* 다시 볼 날은 줄이 남은 뒤에 안건 기한으로 옮긴다 — 줄 없이 기한만 바뀌면 왜 바뀌었는지가 사라진다 */
-  if (kind === 'defer' && due) threadStore.updateThread(id, { dueDate: due })
+  if (kind === 'defer' && due && props.canEditThread) threadStore.updateThread(id, { dueDate: due })
   reset()
+}
+
+/* 상세 설명은 여러 줄이다 — Enter 는 줄바꿈, 남기기는 ⌘/Ctrl+Enter */
+function onNoteKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault()
+    submit()
+  }
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -151,8 +162,11 @@ function onKeydown(e: KeyboardEvent) {
         </p>
       </div>
 
-      <p v-if="detail.settledNote" class="ml-8 text-sm leading-relaxed text-muted-foreground">
-        <span class="font-medium text-foreground">근거</span> — {{ detail.settledNote }}
+      <p
+        v-if="detail.settledNote"
+        class="ml-8 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
+      >
+        <span class="font-medium text-foreground">상세 설명</span> — {{ detail.settledNote }}
       </p>
 
       <div class="ml-8 flex items-center gap-2">
@@ -276,18 +290,20 @@ function onKeydown(e: KeyboardEvent) {
 
       <div v-if="mode !== 'defer'" class="flex flex-col gap-1.5">
         <label for="decision-note" class="text-xs font-medium">
-          근거 <span class="font-normal text-muted-foreground">(선택)</span>
+          상세 설명
+          <span class="font-normal text-muted-foreground">(선택 · ⌘/Ctrl+Enter 로 남기기)</span>
         </label>
-        <Input
+        <Textarea
           id="decision-note"
           v-model="note"
-          placeholder="무엇을 보고 · 누구에게 확인하고 정했나요"
-          class="bg-background"
-          @keydown="onKeydown"
+          rows="3"
+          placeholder="무엇을 보고 · 누구에게 확인하고 정했나요. 조건 · 예외도 적어 두세요"
+          class="bg-background [field-sizing:content]"
+          @keydown="onNoteKeydown"
         />
       </div>
 
-      <div v-if="mode === 'defer'" class="flex flex-col gap-1.5">
+      <div v-if="mode === 'defer' && canEditThread" class="flex flex-col gap-1.5">
         <label for="decision-next-due" class="text-xs font-medium">
           다시 볼 날 <span class="font-normal text-muted-foreground">(선택)</span>
         </label>

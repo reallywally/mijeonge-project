@@ -163,7 +163,7 @@ async def search_threads(
 
     def scoped(owner: Select[Any]) -> Select[Any]:
         # 프로젝트로 먼저 거른다 — 도구가 다른 프로젝트 id 를 넣어도 못 읽는다
-        owner = owner.where(Thread.project_id == project_id)
+        owner = owner.where(Thread.project_id == project_id, Thread.is_deleted.is_(False))
         return owner.where(Thread.state == state) if state is not None else owner
 
     title_hit, title_score = _match(Thread.title, query)
@@ -174,7 +174,8 @@ async def search_threads(
     detail_hit, detail_score = _match(EntryDetail.text, query)
 
     owner = select(Thread.id.label("owner_id"))
-    by_entry = owner.join(Entry, Entry.thread_id == Thread.id)
+    # 지운 줄은 검색에 안 걸린다
+    by_entry = owner.join(Entry, (Entry.thread_id == Thread.id) & Entry.is_deleted.is_(False))
     parts = [
         _place(scoped(owner).where(title_hit), "title", Thread.title, title_score, 0),
         _place(scoped(owner).where(desc_hit), "description", Thread.description, desc_score, 0),
@@ -219,7 +220,11 @@ async def _decisions(session: AsyncSession, thread_ids: Sequence[str]) -> dict[s
     """안건마다 마지막 decide · change 줄의 text — 결정이 바뀐 안건은 이것이 지금의 결정이다."""
     rows = await session.execute(
         select(Entry.thread_id, Entry.text)
-        .where(Entry.thread_id.in_(thread_ids), Entry.kind.in_(DECIDING_KINDS))
+        .where(
+            Entry.thread_id.in_(thread_ids),
+            Entry.kind.in_(DECIDING_KINDS),
+            Entry.is_deleted.is_(False),
+        )
         .order_by(Entry.seq)
     )
     # seq 오름차순으로 덮어쓰면 마지막 줄이 남는다
@@ -285,14 +290,20 @@ async def search(session: AsyncSession, project_id: str, query: str, limit: int)
 
 async def get_thread(session: AsyncSession, project_id: str, thread_id: str) -> ThreadDoc:
     found = await session.execute(
-        select(Thread).where(Thread.id == thread_id, Thread.project_id == project_id)
+        select(Thread).where(
+            Thread.id == thread_id,
+            Thread.project_id == project_id,
+            Thread.is_deleted.is_(False),
+        )
     )
     thread = found.scalar_one_or_none()
     if thread is None:
         raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
 
     entries = await session.execute(
-        select(Entry).where(Entry.thread_id == thread.id).order_by(Entry.seq)
+        select(Entry)
+        .where(Entry.thread_id == thread.id, Entry.is_deleted.is_(False))
+        .order_by(Entry.seq)
     )
     tasks = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
@@ -345,7 +356,11 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
     threads = await session.execute(
         select(Thread.id, Thread.title, Thread.state)
         .join(TaskThreadLink, TaskThreadLink.thread_id == Thread.id)
-        .where(TaskThreadLink.task_id == task.id, TaskThreadLink.project_id == project_id)
+        .where(
+            TaskThreadLink.task_id == task.id,
+            TaskThreadLink.project_id == project_id,
+            Thread.is_deleted.is_(False),
+        )
         .order_by(Thread.seq)
     )
     children = await session.execute(

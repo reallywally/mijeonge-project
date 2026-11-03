@@ -18,6 +18,8 @@ class ThreadOut(Schema):
     title: str
     state: str
     owner_id: str | None
+    # 등록한 사람. 기록이 없던 지난 안건은 null — 수정 · 삭제 권한의 근거다
+    creator_id: str | None
     parent_thread_id: str | None
     created_at: Utc
     description: str = ""
@@ -43,6 +45,8 @@ class EntryOut(Schema):
     detail: list[str]
     note: str
     owner_id: str | None
+    # 줄을 남긴 사람. 기록이 없던 지난 줄은 null — 그 줄을 고치고 지울 수 있다
+    creator_id: str | None
     created_at: Utc
     minutes_id: str | None = None
 
@@ -100,6 +104,32 @@ class ThreadPatch(Schema):
         if value is None:
             raise PydanticCustomError("null_not_allowed", "null 로 비울 수 없는 값입니다.")
         return value
+
+
+class EntryPatch(Schema):
+    """이력 한 줄의 글 고치기 — 실수로 남긴 결정 · 메모를 바로잡는다. 보낸 필드만 바꾼다.
+
+    kind · 처리한 사람은 못 바꾼다 — 줄이 안건 상태를 바꿨으니 바꾸려면 새 줄을 남긴다.
+    """
+
+    # 앞뒤 공백을 떼고 비면 422 다(string_too_short)
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+    # 빈 값은 '' 다
+    note: Annotated[str, StringConstraints(strip_whitespace=True)] | None = None
+
+    @field_validator("text", "note")
+    @classmethod
+    def _not_null(cls, value: object) -> object:
+        # ThreadPatch 와 같다 — 명시적으로 보낸 null 만 걸린다
+        if value is None:
+            raise PydanticCustomError("null_not_allowed", "null 로 비울 수 없는 값입니다.")
+        return value
+
+
+class EntryRemoved(Schema):
+    """줄을 지우면 안건 상태를 다시 센다 — 바뀐 안건을 돌려준다(화면이 갈아끼운다)."""
+
+    thread: ThreadOut
 
 
 class EntryAdded(Schema):

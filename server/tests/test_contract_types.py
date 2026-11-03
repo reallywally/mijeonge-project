@@ -665,6 +665,8 @@ async def test_history_responses_match_contract(client: AsyncClient) -> None:
         *(await client.get("/api/tasks/k2/history")).json(),
         *(await client.get("/api/tasks/k20/history")).json(),
         *(await client.get("/api/tests/tc7/history")).json(),
+        # 안건 — 담당이 없던 t4 는 등록한 사람도 null
+        *(await client.get("/api/threads/t4/history")).json(),
     ]
     nulls: dict[str, set[str]] = {"HistoryEntry": set(), "HistoryChange": set()}
     for row in rows:

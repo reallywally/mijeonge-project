@@ -13,7 +13,9 @@ import { useDataStore } from '@/stores/data'
 
 /* 안건 속성 칸의 참조 한 줄 — 결정을 같이 알아야 할 사람 여럿. 고를 수 있는 것은 이 프로젝트의 활성 멤버.
    이미 붙어 있다가 빠진(비활성 · 부여 해제) 사람은 흐린 칩으로 남는다 — 서버는 그대로 둔 수정을 받고,
-   보낼 때 조용히 건너뛴다 (docs/api/check.md '구현에서 메운 것') */
+   보낼 때 조용히 건너뛴다 (docs/api/check.md '구현에서 메운 것').
+   disabled 면 칩만 보인다 — 고칠 권한이 없는 안건 */
+defineProps<{ disabled?: boolean }>()
 const ccIds = defineModel<string[]>({ required: true })
 
 const data = useDataStore()
@@ -49,8 +51,9 @@ const remove = (id: string) => (ccIds.value = ccIds.value.filter((x) => x !== id
         >
           {{ c.name.charAt(0) }}
         </span>
-        {{ c.name }}
+        <span :class="disabled ? 'pr-1.5' : ''">{{ c.name }}</span>
         <button
+          v-if="!disabled"
           type="button"
           class="flex size-[18px] items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
           :aria-label="`참조에서 ${c.name} 빼기`"
@@ -61,7 +64,10 @@ const remove = (id: string) => (ccIds.value = ccIds.value.filter((x) => x !== id
         </button>
       </span>
 
-      <DropdownMenu>
+      <span v-if="disabled && ccIds.length === 0" class="pt-1 text-xs text-muted-foreground"
+        >없음</span
+      >
+      <DropdownMenu v-if="!disabled">
         <DropdownMenuTrigger as-child>
           <button
             type="button"

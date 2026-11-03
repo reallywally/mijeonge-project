@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, not_found
 from app.models import (
     CheckRequest,
+    Entry,
     Member,
     Minutes,
     Part,
@@ -70,6 +71,12 @@ def live_task_ids() -> Select[tuple[str]]:
     return select(Task.id).where(Task.is_deleted.is_(False))
 
 
+def live_thread_ids() -> Select[tuple[str]]:
+    """지우지 않은 안건. 안건을 잇지 않고 `thread_id` 만 쥔 표(이력 줄 · 링크 · 확인 요청 ·
+    테스트 참조)가 `in_()` 으로 건다. 안건을 직접 읽는 자리는 `Thread.is_deleted.is_(False)`."""
+    return select(Thread.id).where(Thread.is_deleted.is_(False))
+
+
 async def _project_of(session: AsyncSession, param: str, value: str) -> str | None:
     """그 레코드의 프로젝트. 지운 프로젝트 소속이면 없는 것과 같다 — 원래 없을 때의 404 로 간다."""
     stmt: Select[tuple[str]]
@@ -80,11 +87,15 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             # 지운 작업은 없는 것과 같다 — 그 아래 경로(줄 · 링크 · 댓글 · 이력)가 전부 404 로 간다
             stmt = select(Task.project_id).where(Task.id == value, Task.is_deleted.is_(False))
         case "thread_id":
-            stmt = select(Thread.project_id).where(Thread.id == value)
+            # 지운 안건은 없는 것과 같다 — 그 아래 경로(이력 줄 · 확인 요청 · 변경 이력)가 전부 404
+            stmt = select(Thread.project_id).where(Thread.id == value, Thread.is_deleted.is_(False))
         case "part_id":
             stmt = select(Part.project_id).where(Part.id == value)
         case "check_id":
-            stmt = select(CheckRequest.project_id).where(CheckRequest.id == value)
+            # 지운 안건의 확인 요청은 목록에서 빠진다 — 확인하기도 없는 것과 같다
+            stmt = select(CheckRequest.project_id).where(
+                CheckRequest.id == value, CheckRequest.thread_id.in_(live_thread_ids())
+            )
         case "minutes_id":
             stmt = select(Minutes.project_id).where(Minutes.id == value)
         case "report_id":
@@ -183,3 +194,18 @@ def can_edit_task(scope: Scope, task: Task) -> bool:
 def can_delete_task(scope: Scope, task: Task) -> bool:
     """지우기는 담당자에게 주지 않는다 — 맡은 일을 맡은 사람이 없앨 수 있으면 기록이 사라진다."""
     return scope.can_manage or task.creator_id == scope.actor.id
+
+
+def can_edit_thread(scope: Scope, thread: Thread) -> bool:
+    """안건 하나를 고치고 **지울** 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
+
+    작업과 달리 담당자도 지운다(2026-11-02 사용자 결정). 담당자를 바꾸는 수정도 바꾸기 **전**
+    안건으로 본다 — 부르는 쪽이 고치기 전에 부른다.
+    """
+    me = scope.actor.id
+    return scope.can_manage or me in (thread.creator_id, thread.owner_id)
+
+
+def can_edit_entry(scope: Scope, thread: Thread, entry: Entry) -> bool:
+    """이력 한 줄을 고치고 지울 수 있나 — 그 줄을 남긴 사람 + 안건을 고칠 수 있는 사람."""
+    return can_edit_thread(scope, thread) or entry.creator_id == scope.actor.id

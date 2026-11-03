@@ -1,4 +1,4 @@
-"""작업 · 테스트 변경 이력 — `docs/api/history.md` · Q59.
+"""작업 · 테스트 · 안건 변경 이력 — `docs/api/history.md` · Q59.
 
 요청 하나 = 한 줄, 값이 바뀐 칸만 계약 표의 순서로, 남길 칸이 없으면 줄이 없다.
 시드에는 작업 · 테스트마다 '등록' 한 줄과 시연 둘(k20 · HW-T7)이 있다.
@@ -18,10 +18,11 @@ from sqlalchemy import create_engine, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import test as test_route
-from app.models import Member, Task, TaskHistory, TestHistory
+from app.models import Member, Task, TaskHistory, TestHistory, ThreadHistory
 from app.time import now
 from tests.conftest import ADMIN, AsMember
-from tests.test_minutes import minutes, task
+from tests.test_minutes import body as entry_body
+from tests.test_minutes import minutes, new_thread, old_entry, task
 
 CREATED = [{"field": "created", "from": None, "to": None, "subject": ""}]
 
@@ -684,3 +685,207 @@ def test_migration_backfills_a_created_line() -> None:
             revisions[head].module.downgrade()
             tables = {row[0] for row in conn.execute(text("select name from sqlite_master")).all()}
             assert "task_history" not in tables and "test_history" not in tables
+
+
+# --- 안건 (docs/api/history.md '칸 — 안건') ---------------------------------------------------
+
+
+async def test_seed_has_a_created_line_per_thread(client: httpx.AsyncClient) -> None:
+    (t1,) = await history(client, "threads/t1")
+    assert t1 == {
+        "id": "hh-t1-1",
+        "changedAt": "2026-09-08T00:30:00Z",
+        # 시드의 등록한 사람은 담당자다 — t1 은 u3
+        "changedBy": "u3",
+        "backfilled": False,
+        "changes": CREATED,
+    }
+    # 담당이 없던 t4 는 등록한 사람도 비어 있다
+    (t4,) = await history(client, "threads/t4")
+    assert t4["id"] == "hh-t4-1" and t4["changedBy"] is None
+
+
+async def test_thread_create_and_minutes_apply_write_created(client: httpx.AsyncClient) -> None:
+    created = (await client.post("/api/projects/p1/threads", json={"title": "새 안건"})).json()
+    (row,) = await history(client, f"threads/{created['id']}")
+    assert row["changes"] == CREATED and row["changedBy"] == ADMIN
+
+    payload = minutes(
+        threads=[new_thread("n1", "회의 안건", entry=entry_body("defer", "미룸"))],
+        entries=[old_entry("o1", "t4", "decide", "정함")],
+    )
+    res = await client.post("/api/minutes/m1/apply", json=payload)
+    assert res.status_code == 201, res.json()
+    (made,) = res.json()["threads"]
+    assert made["creatorId"] == ADMIN
+    # 회의록으로 남긴 줄도 반영한 사람이 남긴 것이다
+    assert [entry["creatorId"] for entry in res.json()["entries"]] == [ADMIN, ADMIN]
+    (row,) = await history(client, f"threads/{made['id']}")
+    assert row["changes"] == CREATED and row["changedBy"] == ADMIN
+
+
+async def test_thread_patch_writes_changed_fields_in_table_order(
+    client: httpx.AsyncClient,
+) -> None:
+    res = await client.patch(
+        "/api/threads/t1",
+        json={
+            "ccIds": ["u1", "u2"],
+            "dueDate": None,
+            "partId": None,
+            "ownerId": "u2",
+            "options": ["우분투", "록키"],
+            "description": "배경을 고침",
+            "title": "서버 OS 결정 (고침)",
+        },
+    )
+    assert res.status_code == 200, res.json()
+    assert await last_changes(client, "threads/t1") == [
+        ch("title", "서버 OS 결정", "서버 OS 결정 (고침)"),
+        ch(
+            "description",
+            "개발 환경 설정 작업에서 서버 OS가 정해지지 않아 서버 구성을 시작하지 못하고 있다.",
+            "배경을 고침",
+        ),
+        ch("options", "우분투\n록키\nCentOS", "우분투\n록키"),
+        ch("ownerId", "u3", "u2"),
+        ch("partId", "pt1", None),
+        ch("dueDate", "2026-09-12", None),
+        ch("ccIds", ["u1"], ["u1", "u2"]),
+    ]
+
+
+async def test_thread_patch_options_empty_is_null(client: httpx.AsyncClient) -> None:
+    assert (await client.patch("/api/threads/t1", json={"options": []})).status_code == 200
+    assert await last_changes(client, "threads/t1") == [ch("options", "우분투\n록키\nCentOS", None)]
+
+
+async def test_thread_patch_without_a_change_writes_nothing(client: httpx.AsyncClient) -> None:
+    for body in (
+        {},
+        {"title": "서버 OS 결정"},
+        {"ccIds": ["u1"]},
+        {"options": ["우분투", "록키", "CentOS"]},
+    ):
+        assert (await client.patch("/api/threads/t1", json=body)).status_code == 200
+    assert len(await history(client, "threads/t1")) == 1
+
+
+async def test_adding_an_entry_writes_no_thread_history(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/threads/t4/entries", json={"kind": "refine", "text": "다듬음"})
+    assert res.status_code == 201
+    assert len(await history(client, "threads/t4")) == 1
+
+
+async def test_entry_patch_and_delete_lines(client: httpx.AsyncClient, as_member: AsMember) -> None:
+    u3 = await as_member("u3")
+    res = await u3.patch(
+        "/api/threads/t1/entries/e1", json={"text": "우분투 24.04 로 한다", "note": ""}
+    )
+    assert res.status_code == 200
+    rows = await history(client, "threads/t1")
+    assert rows[-1]["changedBy"] == "u3"
+    assert rows[-1]["changes"] == [
+        ch("entryText", "우분투 최신 버전으로 한다", "우분투 24.04 로 한다", "decide"),
+        ch(
+            "entryNote",
+            "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.",
+            None,
+            "decide",
+        ),
+    ]
+    # 같은 글로 다시 고치면 줄이 없다
+    await u3.patch("/api/threads/t1/entries/e1", json={"text": "우분투 24.04 로 한다"})
+    assert len(await history(client, "threads/t1")) == len(rows)
+
+    assert (await u3.delete("/api/threads/t1/entries/e1")).status_code == 200
+    assert await last_changes(client, "threads/t1") == [
+        ch("entryDeleted", "우분투 24.04 로 한다", None, "decide")
+    ]
+
+
+async def test_thread_delete_line_stays_in_the_db(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    assert (await client.delete("/api/threads/t4")).status_code == 204
+    # 지운 안건의 이력은 404 다 — DB 에는 끝에 '삭제' 줄이 남는다
+    res = await client.get("/api/threads/t4/history")
+    assert res.status_code == 404 and res.json()["code"] == "THREAD_NOT_FOUND"
+    rows = (
+        await session.scalars(
+            select(ThreadHistory).where(ThreadHistory.thread_id == "t4").order_by(ThreadHistory.seq)
+        )
+    ).all()
+    assert [row.changes for row in rows] == [CREATED, [ch("deleted", None, None)]]
+    assert rows[-1].changed_by == ADMIN
+
+
+async def test_thread_history_missing_and_ungranted(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    res = await client.get("/api/threads/nope/history")
+    assert res.status_code == 404 and res.json()["code"] == "THREAD_NOT_FOUND"
+    session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
+    await session.commit()
+    u9 = await as_member("u9")
+    assert (await u9.get("/api/threads/t1/history")).json()["code"] == "THREAD_NOT_FOUND"
+
+
+def test_migration_0029_backfills_a_created_line_per_thread() -> None:
+    script = ScriptDirectory.from_config(Config("alembic.ini"))
+    revisions = list(reversed(list(script.walk_revisions("base", "heads"))))
+    head = next(i for i, rev in enumerate(revisions) if rev.revision == "0029_thread_perm")
+
+    engine = create_engine("sqlite://")
+    with engine.connect() as conn:
+        # sqlite 의 batch 는 표를 새로 만들고 옛 표를 지운다 — FK 를 켜 두면 그때 줄이 cascade 로
+        # 같이 지워진다. Postgres 는 ALTER 라 그런 일이 없다. 트랜잭션 밖에서 꺼야 먹는다
+        conn.exec_driver_sql("pragma foreign_keys=off")
+        conn.commit()
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            for revision in revisions[:head]:
+                revision.module.upgrade()
+            conn.execute(
+                text("insert into project (id, name, task_key_prefix) values ('p', '피', 'P')")
+            )
+            for number, (thread_id, day) in enumerate((("h2", "01"), ("h1", "02")), start=1):
+                conn.execute(
+                    text(
+                        "insert into thread (id, project_id, title, description, state,"
+                        " created_at, seq) values (:id, 'p', '안건', '', 'queued', :at, :seq)"
+                    ),
+                    {"id": thread_id, "at": f"2026-09-{day} 00:00:00", "seq": number},
+                )
+            conn.execute(
+                text(
+                    "insert into entry (id, thread_id, kind, text, note, created_at, seq)"
+                    " values ('e', 'h1', 'raise', '줄', '', '2026-09-02 00:00:00', 1)"
+                )
+            )
+            revisions[head].module.upgrade()
+
+            rows = conn.execute(
+                text(
+                    "select thread_id, changed_by, changed_at, changes, backfilled"
+                    " from thread_history order by seq"
+                )
+            ).all()
+            assert [row[0] for row in rows] == ["h2", "h1"]
+            assert [str(row[2])[:10] for row in rows] == ["2026-09-01", "2026-09-02"]
+            assert all(row[1] is None and row[4] for row in rows)
+            assert all(json.loads(row[3]) == CREATED for row in rows)
+            # 있던 안건 · 줄은 등록한 사람을 모르고, 살아 있다
+            assert conn.execute(text("select creator_id, is_deleted from thread")).all() == [
+                (None, 0),
+                (None, 0),
+            ]
+            assert conn.execute(text("select creator_id, is_deleted from entry")).all() == [
+                (None, 0)
+            ]
+
+            revisions[head].module.downgrade()
+            tables = {row[0] for row in conn.execute(text("select name from sqlite_master")).all()}
+            assert "thread_history" not in tables
+            columns = {row[1] for row in conn.execute(text("pragma table_info(thread)")).all()}
+            assert not columns & {"creator_id", "is_deleted", "deleted_at", "deleted_by"}

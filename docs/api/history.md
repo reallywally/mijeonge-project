@@ -1,4 +1,4 @@
-# 변경 이력 — 작업 · 테스트 (2026-10-27)
+# 변경 이력 — 작업 · 테스트 · 안건 (2026-10-27, 안건은 2026-11-02)
 
 > 결정은 `docs/api/decisions.md` Q59. 순서는 `server/PLAN.md` 17단계 · `web/PLAN.md` 17단계.
 > 작업 상태 기록(`task_log`, `docs/api/task-flow.md`)은 **그대로 둔다** — 리포트 · N일째의 근거다.
@@ -16,7 +16,7 @@
 | 긴 글 | 단계(`steps`)는 개수만. 테스트 내용 · 목적 · 사전조건 · 테스트 데이터는 값을 남긴다. **본문(`body`)은 2026-11-01 부터 전 · 후 글을 남긴다**(Q65, 아래 '본문') — 그 전 줄은 값 없이 '바뀌었다' 만 | 본문이 비었다가 '작업1 · 작업2' 가 됐다는 것이 보여야 한다 |
 | 본문 합치기 | **같은 사람이 본문만 이어 고치면 한 줄로 합친다**(Q65) — 아래 '본문' | 화면이 입력을 0.5초 멈출 때마다 저장해 글자마다 줄이 쌓였다 |
 | 안 바뀐 것 | 값이 그대로인 칸은 남기지 않는다. 남길 칸이 하나도 없으면 줄을 안 만든다 | 빈 `PATCH` · 같은 값 저장이 이력을 덮지 않게 |
-| 테이블 | `task_history` · `test_history` 따로. 테스트를 지우면 같이 지운다(cascade). 작업 삭제는 논리 삭제라(2026-11-02) 이력이 남고 끝에 `deleted` 줄이 붙는다 — 지운 작업의 이력은 API 로 안 나간다(404) | 작업 · 테스트의 복합 FK 규칙을 그대로 쓴다 |
+| 테이블 | `task_history` · `test_history` · `thread_history`(2026-11-02) 따로. 테스트를 지우면 같이 지운다(cascade). 작업 삭제는 논리 삭제라(2026-11-02) 이력이 남고 끝에 `deleted` 줄이 붙는다 — 지운 작업의 이력은 API 로 안 나간다(404) | 작업 · 테스트의 복합 FK 규칙을 그대로 쓴다 |
 | 지난 것 | 마이그레이션이 기존 작업 · 테스트마다 **등록 한 줄**(`backfilled`)을 등록 시각에 남긴다. 그 앞은 모른다 | 어느 상세를 열어도 '등록' 줄부터 보인다 |
 | 읽기 | 상세를 열 때 따로 부른다(댓글과 같다). 스냅샷 · 테스트 목록에 싣지 않는다 | 목록이 무거워지지 않는다 |
 
@@ -35,6 +35,11 @@ test_history
   id · project_id · test_id    FK (test_id, project_id) → test_case(id, project_id) cascade
   (나머지는 task_history 와 같다)
 index (test_id, seq)
+
+thread_history (2026-11-02, 리비전 0029)
+  id · project_id · thread_id  FK (thread_id, project_id) → thread(id, project_id) cascade
+  (나머지는 task_history 와 같다)
+index (thread_id, seq)
 ```
 
 ## 모양
@@ -44,10 +49,10 @@ index (test_id, seq)
 export interface HistoryChange {
   /** 아래 '칸' 표의 이름 */
   field: string
-  /** 바뀌기 전 값. 없던 값(담당자 없음 · 기간 미정 · 새로 건 태그)은 null */
-  from: string | number | boolean | null
+  /** 바뀌기 전 값. 없던 값(담당자 없음 · 기간 미정 · 새로 건 태그)은 null. 안건 참조(ccIds) · 지난 relatedIds 는 id 배열 */
+  from: string | number | boolean | string[] | null
   /** 바뀐 뒤 값. 비운 값 · 뗀 태그는 null */
-  to: string | number | boolean | null
+  to: string | number | boolean | string[] | null
   /** 무엇에 대한 바뀜인지 한 줄 — 체크한 본문 줄의 글. 없으면 '' */
   subject: string
 }
@@ -120,14 +125,34 @@ export interface HistoryEntry {
 - 상태 바꾸기의 줄은 `status` 를 맨 앞에 두고 `resultNote` 가 뒤따른다
 - 작업 · 테스트 모두 한 줄 안의 칸 순서는 위 표의 순서다
 
+### 칸 — 안건 (`thread_history`, 2026-11-02)
+
+| `field` | 언제 | `from` · `to` · `subject` |
+| --- | --- | --- |
+| `created` | 안건 등록 · 회의록 `apply` | `null` · `null` (늘 그 줄의 유일한 칸) |
+| `deleted` | `DELETE /api/threads/{threadId}` | `null` · `null` (늘 그 줄의 유일한 칸). 지운 안건의 이력은 404 라 화면에는 안 나온다 — DB 에 남는 기록이다 |
+| `title` · `description` | `PATCH` | 글 |
+| `options` | `PATCH` | 후보를 `\n` 으로 이은 글, 비면 `null` |
+| `ownerId` · `partId` | `PATCH` | id 또는 `null` |
+| `dueDate` | `PATCH` | `YYYY-MM-DD` 또는 `null` |
+| `ccIds` | `PATCH` | 참조 id 배열(순서째, 빈 배열은 `[]`) — `HistoryValue` 의 `string[]` |
+| `entryText` · `entryNote` | 이력 줄 `PATCH` | 전 · 후 글(메모는 비면 `null`). `subject` = 그 줄의 `kind`(`decide` · `defer` …) |
+| `entryDeleted` | 이력 줄 `DELETE` | `from` = 그 줄의 `text`, `to` = `null`, `subject` = 그 줄의 `kind` |
+
+- 한 줄 안의 칸 순서는 위 표의 순서다. 값이 같으면 안 남기고, 남길 칸이 없으면 줄 없음(`ccIds` · `options` 를 같은 배열로 다시 보내도 줄 없음)
+- 이력 줄 **남기기**(`POST .../entries`)는 안 남긴다 — 그 줄 자체가 기록이다. 상태 · 담당자가 줄 때문에 바뀌어도 마찬가지다
+- 이력 줄 지우기로 안건 상태가 다시 세어져도 `state` 칸은 없다 — `entryDeleted` 한 칸이 그 일이다
+- 화면 칸 이름: 제목 · 배경 · 후보 · 담당자 · 파트 · 기한 · 참조 · '결정/미룸… 줄 고침'(`entryText`) · '… 줄 메모'(`entryNote`) · '… 줄 지움'(`entryDeleted`). kind 라벨은 `EntryKindBadge` 와 같은 말
+
 ## 엔드포인트
 
 | 메서드 | 경로 | 하는 일 | 응답 |
 | --- | --- | --- | --- |
 | GET | `/api/tasks/{taskId}/history` | 작업의 변경 이력 | `HistoryEntry[]` |
 | GET | `/api/tests/{testId}/history` | 테스트의 변경 이력 | `HistoryEntry[]` |
+| GET | `/api/threads/{threadId}/history` | 안건의 변경 이력 (2026-11-02) | `HistoryEntry[]` |
 
-- 경계는 `require_scope` 그대로 — 없거나 못 보는 프로젝트면 404 `TASK_NOT_FOUND` · `TEST_NOT_FOUND`
+- 경계는 `require_scope` 그대로 — 없거나 못 보는 프로젝트면 404 `TASK_NOT_FOUND` · `TEST_NOT_FOUND` · `THREAD_NOT_FOUND`. 지운 안건도 `THREAD_NOT_FOUND`
 - 쓰기 응답은 그대로다 — 이력은 응답에 실리지 않는다. 화면은 상세의 이력 칸이 열려 있으면 쓰기 뒤에 다시 부른다
 - 늘어나는 오류 코드 없음
 
@@ -136,6 +161,7 @@ export interface HistoryEntry {
 - 시드는 작업 · 테스트마다 **등록 한 줄**(`backfilled = false`, 바꾼 사람 = 작업은 등록한 사람(`Task.creatorId`, 2026-11-02 — 그전엔 담당자) · 테스트는 만든 사람)을 등록 시각에 둔다. 등록한 사람 기록이 없는 작업(`web/src/fixtures/tasks.ts` 의 `CREATOR_OF` 에 없는 것)은 null 이다
 - 시연용으로 둘을 더한다 — `k20` 에 `status todo → doing`(2026-10-08T00:00:00Z, `task_log` 시연 줄과 같은 때) · `HW-T7` 에 `status testing → fail` + `resultNote`(그 테스트의 바뀐 시각)
 - 목업(`web/src/fixtures`)도 같은 줄을 둔다
+- 안건(2026-11-02) — 시드 · 목업은 안건마다 `created` 한 줄(`backfilled = false`, 바꾼 사람 = 그 안건의 `creatorId` = 시드의 담당자, 담당 없는 `t4` 는 `null`, 시각 = 안건의 `createdAt`), id 는 `hh-<안건 id>-1`(예: `hh-t1-1`). 순서는 안건 배열 순. 마이그레이션 `0029_thread_perm` 은 있던 안건마다 `created` backfill 줄(바꾼 사람 없음, id 는 uuid4 hex)
 
 ## 화면 (프론트가 정할 것의 테두리)
 

@@ -42,6 +42,7 @@ from app.models import (
     TestCase,
     TestHistory,
     Thread,
+    ThreadHistory,
 )
 from app.services import auth as auth_service
 from app.services.auth import COOKIE
@@ -68,6 +69,7 @@ SEQ_MODELS: tuple[tuple[type[Base], str], ...] = (
             TestCase,
             TaskHistory,
             TestHistory,
+            ThreadHistory,
         )
     ),
     (Member, "no"),

@@ -309,7 +309,11 @@ async def _details(
     link_rows = await session.execute(
         select(TaskThreadLink.task_id, Thread.id, Thread.title, Thread.state)
         .join(Thread, Thread.id == TaskThreadLink.thread_id)
-        .where(TaskThreadLink.project_id == project_id, TaskThreadLink.task_id.in_(task_ids))
+        .where(
+            TaskThreadLink.project_id == project_id,
+            TaskThreadLink.task_id.in_(task_ids),
+            Thread.is_deleted.is_(False),
+        )
         .order_by(Thread.seq)
     )
     links = list(link_rows.tuples())
@@ -348,7 +352,7 @@ async def _last_entries(session: AsyncSession, thread_ids: set[str]) -> dict[str
         return {}
     last = (
         select(Entry.thread_id, func.max(Entry.seq).label("seq"))
-        .where(Entry.thread_id.in_(thread_ids))
+        .where(Entry.thread_id.in_(thread_ids), Entry.is_deleted.is_(False))
         .group_by(Entry.thread_id)
         .subquery()
     )
@@ -368,7 +372,9 @@ async def _period_threads(
         return {}
     rows = await session.execute(
         select(Thread.id, Thread.title, Thread.state).where(
-            Thread.project_id == project_id, Thread.id.in_(thread_ids)
+            Thread.project_id == project_id,
+            Thread.id.in_(thread_ids),
+            Thread.is_deleted.is_(False),
         )
     )
     docs: dict[str, dict[str, Any]] = {
@@ -377,7 +383,7 @@ async def _period_threads(
     }
     entries = await session.execute(
         select(Entry.thread_id, Entry.kind, Entry.text, Entry.note, Entry.created_at)
-        .where(Entry.thread_id.in_(docs))
+        .where(Entry.thread_id.in_(docs), Entry.is_deleted.is_(False))
         .order_by(Entry.seq)
     )
     for row in entries:
