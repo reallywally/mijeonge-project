@@ -81,7 +81,7 @@ const PARTIAL_REF_RE = /\[(?:\[(?:[a-z]*(?::[^\]\s]*\]?)?)?)?$/
 
 /**
  * 답 본문을 글 · 근거 조각으로 쪼갠다 (docs/api/chat.md '근거 표시'). 근거가 스냅샷에 있는지는 그리는 쪽이 본다.
- * 글은 그대로 둔다 — 마크다운을 풀지 않고 줄바꿈만 살려 그린다
+ * 글은 그대로 둔다 — 마크다운은 여기서 풀지 않는다(챗봇 답은 lib/markdown 이 먼저 블록 · 인라인으로 나눈 뒤 글 조각마다 이것을 부른다)
  */
 export function splitRefs(text: string): ChatSegment[] {
   const body = text.replace(PARTIAL_REF_RE, '')
