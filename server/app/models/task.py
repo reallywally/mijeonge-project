@@ -80,6 +80,8 @@ class Task(Base):
         ForeignKey("minutes.id", ondelete="SET NULL"), index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # 같은 상위 안에서의 순서(0부터) — 트리(간트 · 하위 목록)가 형제를 세운다. 목록은 seq 그대로
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)

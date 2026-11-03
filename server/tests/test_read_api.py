@@ -59,6 +59,8 @@ TASK_KEYS = {
     "ownerId",
     # 등록한 사람 — 기록이 없던 지난 작업은 null
     "creatorId",
+    # 같은 상위 안에서의 순서 (2026-11-03)
+    "order",
     "start",
     "due",
     "priority",

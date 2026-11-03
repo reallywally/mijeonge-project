@@ -81,7 +81,7 @@ export interface HistoryEntry {
 | `created` | 등록 · 일괄 등록 · 회의록 `apply` | `null` · `null` (늘 그 줄의 유일한 칸) |
 | `deleted` | `DELETE /api/tasks/{taskId}` (2026-11-02) | `null` · `null` (늘 그 줄의 유일한 칸). 지운 작업의 이력은 404 라 화면에는 안 나온다 — DB 에 남는 기록이다 |
 | `title` · `status` · `priority` | `PATCH` | 값 |
-| `ownerId` · `partId` · `parentId` | `PATCH` | id 또는 `null` |
+| `ownerId` · `partId` · `parentId` | `PATCH`. `parentId` 는 옮기기(`POST /api/tasks/{taskId}/move`)가 상위를 바꿀 때도 — 순서만 바뀐 것(옮긴 작업 · 형제)은 남기지 않는다 (2026-11-03) | id 또는 `null` |
 | `start` · `due` | `PATCH` | `YYYY-MM-DD` 또는 `null` |
 | `relatedIds` | 더 남기지 않는다 — 2026-10-27 ~ 28 연관 작업(Q61, Q62 로 걷음) 때 남은 줄만 | 작업 id 배열(건 순서) |
 | `body` | `PATCH` 의 `body` 가 줄 글 · 종류 · 체크 · 들여쓰기 · 순서 중 하나라도 바꿈 | 본문 글(아래 '본문') 또는 빈 본문이면 `null`. 2026-11-01 전 줄은 `null` · `null` |

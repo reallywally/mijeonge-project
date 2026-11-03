@@ -313,6 +313,8 @@ export interface Task {
   partId: string | null
   /** 등록한 사람 — 서버가 로그인한 사람으로 찍는다. 이 칸이 생기기 전의 작업은 null */
   creatorId: string | null
+  /** 같은 상위 안에서의 순서(0부터) — 간트 · 하위 목록 같은 트리가 이것으로 형제를 세운다. 목록은 등록순 그대로 */
+  order: number
   createdAt: string
   /** 댓글 수. 본문은 스냅샷에 없어 상세를 열 때 따로 받는다 */
   commentCount: number
@@ -458,6 +460,14 @@ export interface TaskPatch {
   body?: TaskLine[]
   /** null 로 공통. 하위 작업은 따라 바뀌지 않는다 */
   partId?: string | null
+}
+
+/** 간트에서 줄을 끌어 옮길 때 — POST /api/tasks/{id}/move. 응답은 order · parentId 가 바뀐 Task[] */
+export interface TaskMove {
+  /** 옮겨 갈 상위 — null 은 최상위 */
+  parentId: string | null
+  /** 새 상위 안에서 이 작업 바로 앞에 놓을 형제 — null 은 맨 끝 */
+  beforeId: string | null
 }
 
 /** PATCH /api/projects/{projectId} — 프로젝트 관리자 · 시스템 관리자. 보낸 것만 바뀌고 null 은 지운다 */

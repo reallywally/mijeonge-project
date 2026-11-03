@@ -591,3 +591,80 @@ describe('파트 (서버 갈래)', () => {
     expect(data.partMembers.some((pm) => pm.memberId === 'u1')).toBe(true)
   })
 })
+
+describe('줄 끌어 옮기기', () => {
+  it('POST /api/tasks/{id}/move 로 { parentId, beforeId } 를 보내고 화면에 먼저 놓는다', async () => {
+    const data = await booted()
+    const task = useTaskStore()
+    on('POST /api/tasks/k20/move', () => json([]))
+
+    task.moveTask('k20', 'k1', 'k3')
+    expect(calls.at(-1)).toEqual({
+      route: 'POST /api/tasks/k20/move',
+      body: { parentId: 'k1', beforeId: 'k3' },
+    })
+    const k20 = data.allTasks.find((t) => t.id === 'k20')!
+    expect(k20).toMatchObject({ parentId: 'k1', order: 1 })
+    expect(data.allTasks.find((t) => t.id === 'k3')!.order).toBe(2)
+  })
+
+  it('응답의 바뀐 작업들로 갈아끼운다', async () => {
+    const data = await booted()
+    const task = useTaskStore()
+    const k22 = data.allTasks.find((t) => t.id === 'k22')!
+    const k19 = data.allTasks.find((t) => t.id === 'k19')!
+    /* 서버가 매긴 값이 화면 계산과 달라도 서버 것을 믿는다 */
+    on('POST /api/tasks/k22/move', () =>
+      json([
+        { ...k19, order: 5 },
+        { ...k22, order: 0, title: '서버가 고친 제목' },
+      ]),
+    )
+
+    task.moveTask('k22', 'k4', 'k19')
+    expect(data.allTasks.find((t) => t.id === 'k22')!.order).toBe(0)
+    await flush()
+    expect(data.allTasks.find((t) => t.id === 'k19')!.order).toBe(5)
+    expect(data.allTasks.find((t) => t.id === 'k22')!.title).toBe('서버가 고친 제목')
+  })
+
+  it('실패하면 알리고 스냅샷을 다시 받아 원래 자리로 돌아온다', async () => {
+    const data = await booted()
+    const task = useTaskStore()
+    on('POST /api/tasks/k20/move', () =>
+      json(
+        {
+          code: 'TASK_BEFORE_NOT_SIBLING',
+          message: '앞에 둘 작업이 옮겨 갈 상위의 하위 작업이 아닙니다.',
+        },
+        400,
+      ),
+    )
+
+    task.moveTask('k20', 'k1', null)
+    expect(data.allTasks.find((t) => t.id === 'k20')!.parentId).toBe('k1')
+    await flush()
+
+    expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({
+      code: 'TASK_BEFORE_NOT_SIBLING',
+    })
+    expect(calls.slice(-2).map((c) => c.route)).toEqual([
+      'GET /api/projects/p1/snapshot',
+      'GET /api/projects/p1/members',
+    ])
+    expect(data.allTasks.find((t) => t.id === 'k20')).toMatchObject({ parentId: 'k4', order: 1 })
+  })
+
+  it('고리 · 4단은 보내기 전에 막는다 — 서버와 같은 코드로 알린다', async () => {
+    await booted()
+    const task = useTaskStore()
+    const sent = calls.length
+    task.moveTask('k5', 'k7', null)
+    task.moveTask('k7', 'k12', null)
+    expect(calls).toHaveLength(sent)
+    expect(vi.mocked(toastError).mock.calls.map((c) => (c[0] as { code: string }).code)).toEqual([
+      'TASK_PARENT_DESCENDANT',
+      'TASK_DEPTH_EXCEEDED',
+    ])
+  })
+})

@@ -52,6 +52,7 @@ HIDDEN = [
     ("PATCH", "/api/tasks/k4", {"title": "몰래"}, "TASK_NOT_FOUND"),
     ("PATCH", "/api/tasks/k4/lines/x", {"done": True}, "TASK_NOT_FOUND"),
     ("DELETE", "/api/tasks/k4", None, "TASK_NOT_FOUND"),
+    ("POST", "/api/tasks/k4/move", {"parentId": None, "beforeId": None}, "TASK_NOT_FOUND"),
     ("GET", "/api/tasks/k4/comments", None, "TASK_NOT_FOUND"),
     ("POST", "/api/tasks/k4/comments", {"body": "몰래"}, "TASK_NOT_FOUND"),
     ("PATCH", "/api/threads/t1", {"title": "몰래"}, "THREAD_NOT_FOUND"),

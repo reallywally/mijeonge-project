@@ -1,7 +1,9 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetchTaskHistory } from '@/api/history'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
+import { change } from '@/lib/history'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from './auth'
 import { useDataStore } from './data'
@@ -401,5 +403,117 @@ describe('고치기 · 지우기 권한', () => {
     expect(data.allTasks.some((t) => t.id === 'k22')).toBe(false)
     expect(data.taskThreads.some((l) => l.taskId === 'k22')).toBe(false)
     expect(task.taskDetail('k4')!.children.map((c) => c.task.key)).not.toContain('HW-22')
+  })
+})
+
+describe('줄 끌어 옮기기', () => {
+  /* 형제를 order 로 세운 키 — 간트 · 하위 목록이 보는 순서 */
+  const keysUnder = (parentId: string | null) =>
+    useDataStore()
+      .allTasks.filter((t) => t.projectId === 'p1' && t.parentId === parentId)
+      .sort((a, b) => a.order - b.order)
+      .map((t) => `${t.key}:${t.order}`)
+  const lastCode = () =>
+    (vi.mocked(toastError).mock.calls.at(-1)?.[0] as { code?: string } | undefined)?.code
+
+  it('픽스처는 같은 상위 안에서 배열 순서대로 0, 1, 2…', () => {
+    expect(keysUnder(null)).toEqual(['HW-1:0', 'HW-4:1', 'HW-5:2'])
+    expect(keysUnder('k4')).toEqual(['HW-19:0', 'HW-20:1', 'HW-21:2', 'HW-22:3'])
+  })
+
+  it('같은 상위 안에서 순서만 바꾼다 — 0..n 으로 다시 매기고 이력은 안 남긴다', async () => {
+    const task = useTaskStore()
+    /* 목업 이력은 검사 사이에 안 비워진다 — 전 · 후 줄 수를 견준다 */
+    const logged = (await fetchTaskHistory('k22')).length
+    task.moveTask('k22', 'k4', 'k20')
+    expect(keysUnder('k4')).toEqual(['HW-19:0', 'HW-22:1', 'HW-20:2', 'HW-21:3'])
+    expect(await fetchTaskHistory('k22')).toHaveLength(logged)
+    /* 하위 목록도 같은 순서다 */
+    expect(task.taskDetail('k4')!.children.map((c) => c.task.key)).toEqual([
+      'HW-19',
+      'HW-22',
+      'HW-20',
+      'HW-21',
+    ])
+
+    task.moveTask('k19', 'k4', null)
+    expect(keysUnder('k4')).toEqual(['HW-22:0', 'HW-20:1', 'HW-21:2', 'HW-19:3'])
+  })
+
+  it('다른 상위로 — 옛 형제도 다시 매기고 parentId 이력이 한 줄', async () => {
+    const task = useTaskStore()
+    task.moveTask('k20', 'k1', 'k3')
+    expect(keysUnder('k1')).toEqual(['HW-2:0', 'HW-20:1', 'HW-3:2'])
+    expect(keysUnder('k4')).toEqual(['HW-19:0', 'HW-21:1', 'HW-22:2'])
+    const lines = (await fetchTaskHistory('k20')).map((e) => e.changes)
+    expect(lines.filter((c) => c.some((x) => x.field === 'parentId'))).toEqual([
+      [change('parentId', 'k4', 'k1')],
+    ])
+  })
+
+  it('최상위로 — beforeId 가 null 이면 맨 끝', () => {
+    const task = useTaskStore()
+    task.moveTask('k6', null, 'k4')
+    expect(keysUnder(null)).toEqual(['HW-1:0', 'HW-6:1', 'HW-4:2', 'HW-5:3'])
+    task.moveTask('k17', null, null)
+    expect(keysUnder(null)).toEqual(['HW-1:0', 'HW-6:1', 'HW-4:2', 'HW-5:3', 'HW-17:4'])
+    expect(keysUnder('k5')).toEqual(['HW-18:0'])
+  })
+
+  it('같은 자리면 아무것도 안 바뀐다', async () => {
+    const task = useTaskStore()
+    const before = JSON.stringify(useDataStore().allTasks)
+    task.moveTask('k20', 'k4', 'k21')
+    expect(JSON.stringify(useDataStore().allTasks)).toBe(before)
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('4단을 넘으면 400 TASK_DEPTH_EXCEEDED · 자기 아래는 TASK_PARENT_DESCENDANT — 그대로 둔다', () => {
+    const task = useTaskStore()
+    const before = JSON.stringify(useDataStore().allTasks)
+    /* 가상비서(k7)는 하위까지 2단 — 3단 작업(AI 심사 k12) 밑으로 가면 5단이다 */
+    expect(task.canMove('k7', 'k12')).toBe(false)
+    task.moveTask('k7', 'k12', null)
+    expect(lastCode()).toBe('TASK_DEPTH_EXCEEDED')
+    expect(task.canMove('k5', 'k7')).toBe(false)
+    task.moveTask('k5', 'k7', null)
+    expect(lastCode()).toBe('TASK_PARENT_DESCENDANT')
+    task.moveTask('k20', 'k4', 'k2')
+    expect(lastCode()).toBe('TASK_BEFORE_NOT_SIBLING')
+    expect(JSON.stringify(useDataStore().allTasks)).toBe(before)
+
+    expect(task.canMove('k8', 'k12')).toBe(true)
+  })
+
+  it('못 고치는 작업은 403 FORBIDDEN 으로 알리고 그대로 둔다', async () => {
+    resetMockAuth()
+    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    const task = useTaskStore()
+    /* HW-18: 담당 정하늘(u4) · 등록 이도현(u3) */
+    expect(task.canMove('k18', null)).toBe(false)
+    task.moveTask('k18', null, null)
+    expect(lastCode()).toBe('FORBIDDEN')
+    expect(useDataStore().allTasks.find((t) => t.id === 'k18')!.parentId).toBe('k5')
+  })
+
+  it('새 작업은 그 상위의 맨 끝이다', async () => {
+    const task = useTaskStore()
+    const id = await task.addTask({
+      title: '새 하위',
+      parentId: 'k4',
+      body: [],
+      status: 'todo',
+      ownerId: null,
+      start: null,
+      due: null,
+      priority: 'normal',
+      threadIds: [],
+    })
+    expect(useDataStore().allTasks.find((t) => t.id === id)!.order).toBe(4)
+  })
+
+  it('상위 바꾸기(PATCH)도 새 상위의 맨 끝으로 간다', () => {
+    useTaskStore().setParent('k20', 'k1')
+    expect(keysUnder('k1')).toEqual(['HW-2:0', 'HW-3:1', 'HW-20:2'])
   })
 })

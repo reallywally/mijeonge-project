@@ -18,7 +18,7 @@ import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
 import { inheritedPartId } from '@/lib/part'
-import { batchDepthProblems, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
+import { batchDepthProblems, nextTaskOrder, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
 import type {
   Entry,
   Me,
@@ -478,6 +478,12 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       priority: t.priority,
       partId: inheritedPartId(undefined, parent),
       creatorId: me.id,
+      /* 그 상위의 맨 끝부터 배열 순서대로 — 앞에서 만든 형제까지 본다 */
+      order: nextTaskOrder(
+        [...world.tasks, ...Object.values(madeByTempId)],
+        projectId,
+        parent?.id ?? null,
+      ),
       createdAt,
       commentCount: 0,
       minutesId,
