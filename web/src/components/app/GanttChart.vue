@@ -20,11 +20,17 @@ const props = defineProps<{
   titleLabel: string
   /** 맨 아래의 손놀림 안내 */
   hint: string
+  /** 그리드의 줄을 끌어 상위 · 형제 순서를 바꾼다 — 작업 간트만 켠다 */
+  reorderable?: boolean
+  /** 이 상위(null 은 최상위) 밑에 놓을 수 있나 — 차트가 모르는 규칙(4단 · 숨긴 하위)은 부모가 본다 */
+  canDrop?: (id: string, parentId: string | null) => boolean
 }>()
 const emit = defineEmits<{
   (e: 'open', id: string): void
   (e: 'add', parentId: string | null): void
   (e: 'move', id: string, start: string, due: string): void
+  /** 줄을 놓은 자리 — 새 상위(null 은 최상위)와 바로 뒤 형제(null 은 맨 끝) */
+  (e: 'reorder', id: string, parentId: string | null, beforeId: string | null): void
 }>()
 
 const host = ref<HTMLElement | null>(null)
@@ -92,6 +98,30 @@ let chart: GanttStatic | null = null
    간트는 이미 제 손으로 막대를 옮겨 놓았다. 되돌아오는 길(부모 다시 그리기 · 목업 응답)이 모두
    마이크로태스크라 한 박자(setTimeout) 뒤에 푼다 */
 let fromChart = false
+/* 줄을 놓으면 dhtmlx 가 먼저 옮겨 놓는다. 스토어가 받으면 items 가 바뀌어 다시 그려지지만, 거절하면
+   items 가 그대로라 옮긴 자리가 남는다 — 한 박자 뒤에도 다시 안 그려졌으면 items 로 되돌린다 */
+let reorderPending = false
+
+const itemOf = (id: string | number) => props.items.find((i) => i.id === String(id))
+
+/** dhtmlx 의 뿌리(최상위)는 우리 쪽 null 이다 */
+function parentOf(g: GanttStatic, parent: string | number | null | undefined) {
+  if (parent === null || parent === undefined) return null
+  return String(parent) === String(g.config.root_id ?? 0) || String(parent) === '0'
+    ? null
+    : String(parent)
+}
+
+/** 놓을 수 있는 자리인가 — 잠긴 줄 · 자기 아래 · 4단 줄(+ 숨김) 밑 · 부모가 막는 자리는 안 된다 */
+function canPlace(g: GanttStatic, id: string | number, target: string | number) {
+  if (itemOf(id)?.readonly) return false
+  const parentId = parentOf(g, target)
+  if (parentId !== null) {
+    if (parentId === String(id) || g.isChildOf(parentId, id)) return false
+    if (itemOf(parentId)?.noAdd) return false
+  }
+  return props.canDrop ? props.canDrop(String(id), parentId) : true
+}
 
 function setup(g: GanttStatic, el: HTMLElement) {
   g.config.date_format = '%Y-%m-%d'
@@ -107,6 +137,9 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.config.drag_links = false
   g.config.drag_progress = false
   g.config.details_on_dblclick = false
+  /* 줄 끌기 — 'marker' 는 놓을 때까지 줄을 안 옮기고 자리만 보여 준다. free 라야 다른 상위로도 간다 */
+  g.config.order_branch = props.reorderable ? 'marker' : false
+  g.config.order_branch_free = props.reorderable === true
   g.config.columns = [
     {
       name: 'text',
@@ -153,6 +186,31 @@ function setup(g: GanttStatic, el: HTMLElement) {
     'onBeforeTaskDrag',
     (id: string | number) => !props.items.find((i) => i.id === String(id))?.readonly,
   )
+  if (props.reorderable) {
+    g.attachEvent('onRowDragStart', (id: string | number) => !itemOf(id)?.readonly)
+    /* 못 놓는 자리 위에서는 표시를 앞의 자리에 둔다 — 놓기 전에 안 된다는 것이 보인다 */
+    g.attachEvent('onBeforeRowDragMove', (id: string | number, parent: string | number) =>
+      canPlace(g, id, parent),
+    )
+    g.attachEvent('onBeforeRowDragEnd', (id: string | number, parent: string | number) =>
+      canPlace(g, id, parent),
+    )
+    g.attachEvent('onRowDragEnd', (id: string | number) => {
+      const next = g.getNextSibling(id)
+      reorderPending = true
+      setTimeout(() => {
+        if (!reorderPending || !chart) return
+        reorderPending = false
+        draw(chart, props.items)
+      })
+      emit(
+        'reorder',
+        String(id),
+        parentOf(g, g.getParent(id)),
+        next === null || next === undefined ? null : String(next),
+      )
+    })
+  }
   g.attachEvent('onAfterTaskDrag', (id: string | number) => {
     const moved = g.getTask(id)
     if (!moved.start_date || !moved.end_date) return true
@@ -191,7 +249,9 @@ let centered = false
 
 function draw(g: GanttStatic, items: GanttItem[]) {
   g.clearAll()
-  g.parse({ data: items })
+  /* dhtmlx 는 받은 객체를 그대로 쥐고 고친다(옮긴 줄의 parent 등) — 사본을 줘야 같은 items 로
+     다시 그릴 때 원래 자리로 돌아온다 */
+  g.parse({ data: items.map((item) => ({ ...item })) })
   applyRange(g, items)
   g.render()
   if (!centered && items.length > 0) {
@@ -216,6 +276,7 @@ watch(
   () => props.items,
   (next) => {
     if (!chart || fromChart) return
+    reorderPending = false
     draw(chart, next)
   },
 )

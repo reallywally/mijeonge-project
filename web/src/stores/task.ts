@@ -12,6 +12,9 @@ import {
   MAX_TASK_DEPTH,
   TASK_DEPTH_MESSAGE,
   hiddenDoneIds,
+  moveProblem,
+  nextTaskOrder,
+  placeTask,
   subtreeHeights,
   taskDepths,
 } from '@/lib/task'
@@ -195,7 +198,11 @@ export const useTaskStore = defineStore('task', () => {
   function taskDetail(taskId: string): TaskDetail | null {
     const task = data.allTasks.find((t) => t.id === taskId)
     if (!task) return null
-    const children = tasks.value.filter((t) => t.parentId === taskId).map(toRow)
+    /* 하위 목록은 트리라 형제 순서(order)로 — 간트와 같은 순서다 */
+    const children = tasks.value
+      .filter((t) => t.parentId === taskId)
+      .sort((a, b) => a.order - b.order)
+      .map(toRow)
     return {
       task,
       ownerName: data.memberName(task.ownerId),
@@ -358,8 +365,57 @@ export const useTaskStore = defineStore('task', () => {
     if (parentId && selfAndDescendants(taskId).has(parentId)) return
     if (parentId !== task.parentId && rejectDepth(parentId, heightOf.value[taskId] ?? 1)) return
     logPatch(task, { parentId })
+    /* 새 상위의 맨 끝으로 간다 — 서버가 그렇게 매겨 돌려준다 */
+    if (parentId !== task.parentId)
+      task.order = nextTaskOrder(
+        tasks.value.filter((t) => t.id !== taskId),
+        task.projectId,
+        parentId,
+      )
     task.parentId = parentId
     patch(taskId, { parentId })
+  }
+
+  /** 이 상위(null 은 최상위) 밑으로 옮길 수 있나 — 간트가 놓기 전에 묻는다. 고칠 권한 · 고리 · 4단을 본다 */
+  const canMove = (taskId: string, parentId: string | null) => {
+    const task = byId.value[taskId]
+    return !!task && canEdit(task) && moveProblem(tasks.value, taskId, parentId, null) === null
+  }
+
+  /**
+   * 간트에서 줄을 끌어 놓았을 때 — 상위(null 은 최상위)를 바꾸고 beforeId 앞(null 은 맨 끝)에 놓는다.
+   * 화면에 먼저 반영하고, 서버가 돌려준 바뀐 작업들로 갈아끼운다. 실패하면 스냅샷을 다시 받는다
+   */
+  function moveTask(taskId: string, parentId: string | null, beforeId: string | null) {
+    const task = findTask(taskId)
+    if (!task || rejectEdit(task)) return
+    /* 고리 · 4단 · 형제 아님은 서버도 같은 코드로 막는다 — 화면에 먼저 놓기 전에 걸러야
+       고리가 생긴 트리를 잠깐이라도 그리지 않는다 */
+    const problem = moveProblem(tasks.value, taskId, parentId, beforeId)
+    if (problem) {
+      toastError(new ApiError(400, problem))
+      return
+    }
+    const changed = placeTask(tasks.value, taskId, parentId, beforeId)
+    if (changed.length === 0) return
+    /* 상위가 바뀔 때만 이력이 남는다 — 순서만 바뀐 것은 안 남긴다 */
+    if (parentId !== task.parentId) logPatch(task, { parentId })
+    for (const next of changed) {
+      const t = findTask(next.id)
+      if (!t) continue
+      t.parentId = next.parentId
+      t.order = next.order
+    }
+    if (data.mock) return
+    const projectId = task.projectId
+    afterWrite(
+      taskId,
+      data.save(
+        `move:${projectId}`,
+        () => api.moveTask(taskId, { parentId, beforeId }),
+        (res) => res.forEach(replaceTask),
+      ),
+    )
   }
 
   /** 파트를 바꾼다(null 은 공통). 하위 작업은 따라 바뀌지 않는다 — 계약이 그렇다 */
@@ -486,6 +542,8 @@ export const useTaskStore = defineStore('task', () => {
       partId,
       /* 목업에서는 등록한 사람을 여기서 찍는다 — 서버 모드는 서버가 찍어 돌려준다 */
       creatorId: data.currentMemberId,
+      /* 그 상위의 맨 끝 — 서버가 그렇게 매긴다 */
+      order: nextTaskOrder(tasks.value, data.currentProjectId, input.parentId),
       createdAt,
       commentCount: 0,
       minutesId: null,
@@ -610,6 +668,8 @@ export const useTaskStore = defineStore('task', () => {
     toggleBodyLine,
     setTitle,
     setParent,
+    canMove,
+    moveTask,
     setPriority,
     setPart,
     setBody,

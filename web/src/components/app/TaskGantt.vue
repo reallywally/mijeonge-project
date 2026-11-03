@@ -7,7 +7,7 @@ import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 
 /* 작업 간트차트 — 목록이 평평한 게시판인 자리에서 이쪽은 계층 트리다. 그리기는 GanttChart 가 하고
-   여기는 작업 스토어를 잇는다: 끌어 놓은 기간을 스토어에 넣으면 스토어가 다시 그린다 */
+   여기는 작업 스토어를 잇는다: 끌어 놓은 기간 · 자리를 스토어에 넣으면 스토어가 다시 그린다 */
 const emit = defineEmits<{
   (e: 'open-task', id: string): void
   (e: 'add-task', parentId: string | null): void
@@ -32,6 +32,14 @@ const items = computed(() => {
   )
 })
 const period = computed(() => rangeLabel(taskStore.shownRows))
+
+/* 바로 뒤에 선 줄이 진짜 형제가 아니면(상위가 걸러져 최상위로 올라선 줄) 맨 끝으로 놓는다 —
+   서버는 형제가 아닌 beforeId 를 400 으로 돌려보낸다 */
+function reorder(id: string, parentId: string | null, beforeId: string | null) {
+  const sibling =
+    beforeId !== null && taskStore.tasks.some((t) => t.id === beforeId && t.parentId === parentId)
+  taskStore.moveTask(id, parentId, sibling ? beforeId : null)
+}
 </script>
 
 <template>
@@ -39,9 +47,12 @@ const period = computed(() => rangeLabel(taskStore.shownRows))
     :items="items"
     :period="period"
     title-label="작업"
-    hint="막대를 끌거나 늘리면 기간이 바뀝니다."
+    hint="막대를 끌거나 늘리면 기간이 바뀝니다. 줄을 끌면 상위 · 순서가 바뀝니다."
+    reorderable
+    :can-drop="taskStore.canMove"
     @open="(id) => emit('open-task', id)"
     @add="(parentId) => emit('add-task', parentId)"
     @move="(id, start, due) => taskStore.setPeriod(id, start, due)"
+    @reorder="reorder"
   />
 </template>

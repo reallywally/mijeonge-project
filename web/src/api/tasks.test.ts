@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import { fetchTaskComments, resetMockComments } from '@/api/comments'
 import { mockDb, resetMockAuth, writeMockSession } from '@/api/mockAuth'
-import { createTasksBatch, deleteTask, resetMockTasks } from '@/api/tasks'
+import { createTasksBatch, deleteTask, moveTask, resetMockTasks } from '@/api/tasks'
 import { tasks } from '@/fixtures'
 import type { ProposedTask, Task, TaskBatchResult } from '@/types/domain'
 
@@ -198,6 +198,76 @@ describe('지우기 — 목업 갈래', () => {
   })
 })
 
+describe('줄 옮기기 — 목업 갈래', () => {
+  beforeEach(resetMockAuth)
+
+  const as = (memberId: string) => writeMockSession(memberId)
+  const codeOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: ApiError) => `${e.status} ${e.code}`,
+    )
+
+  it('바뀐 작업의 사본만 등록순으로 낸다 — 픽스처는 고치지 않는다', async () => {
+    as('u1')
+    const res = await moveTask('k22', { parentId: 'k4', beforeId: 'k20' })
+    expect(res.map((t) => [t.id, t.order])).toEqual([
+      ['k20', 2],
+      ['k21', 3],
+      ['k22', 1],
+    ])
+    expect(tasks.find((t) => t.id === 'k22')!.order).toBe(3)
+
+    const across = await moveTask('k20', { parentId: null, beforeId: null })
+    expect(across.find((t) => t.id === 'k20')).toMatchObject({ parentId: null, order: 3 })
+    expect(across.map((t) => t.id)).toEqual(['k20', 'k21', 'k22'])
+  })
+
+  it('같은 자리면 []', async () => {
+    as('u1')
+    expect(await moveTask('k20', { parentId: 'k4', beforeId: 'k21' })).toEqual([])
+    expect(await moveTask('k22', { parentId: 'k4', beforeId: null })).toEqual([])
+  })
+
+  it('상위 검사는 PATCH 와 같은 코드 · 형제가 아니면 TASK_BEFORE_NOT_SIBLING', async () => {
+    as('u1')
+    expect(await codeOf(moveTask('k4', { parentId: 'k4', beforeId: null }))).toBe(
+      '400 TASK_PARENT_SELF',
+    )
+    expect(await codeOf(moveTask('k4', { parentId: 'nope', beforeId: null }))).toBe(
+      '400 TASK_PARENT_NOT_FOUND',
+    )
+    expect(await codeOf(moveTask('k4', { parentId: 'x1', beforeId: null }))).toBe(
+      '400 TASK_PARENT_OTHER_PROJECT',
+    )
+    expect(await codeOf(moveTask('k5', { parentId: 'k7', beforeId: null }))).toBe(
+      '400 TASK_PARENT_DESCENDANT',
+    )
+    /* 가상비서(k7)는 하위까지 2단 — 3단 작업(AI 심사 k12) 밑으로 가면 5단이다 */
+    expect(await codeOf(moveTask('k7', { parentId: 'k12', beforeId: null }))).toBe(
+      '400 TASK_DEPTH_EXCEEDED',
+    )
+    expect(await codeOf(moveTask('k20', { parentId: 'k4', beforeId: 'k2' }))).toBe(
+      '400 TASK_BEFORE_NOT_SIBLING',
+    )
+    expect(await codeOf(moveTask('k20', { parentId: 'k4', beforeId: 'k20' }))).toBe(
+      '400 TASK_BEFORE_NOT_SIBLING',
+    )
+  })
+
+  it('고칠 수 없으면 403 · 없는 작업은 404 · 로그인이 없으면 401', async () => {
+    expect(await codeOf(moveTask('k18', { parentId: null, beforeId: null }))).toMatch(/^401/)
+    /* HW-18: 담당 정하늘(u4) · 등록 이도현(u3) — 박지훈(u2)은 못 옮기고 등록한 사람은 옮긴다 */
+    as('u2')
+    expect(await codeOf(moveTask('k18', { parentId: null, beforeId: null }))).toBe('403 FORBIDDEN')
+    expect(await codeOf(moveTask('nope', { parentId: null, beforeId: null }))).toBe(
+      '404 TASK_NOT_FOUND',
+    )
+    as('u3')
+    expect(await codeOf(moveTask('k18', { parentId: null, beforeId: null }))).toBeNull()
+  })
+})
+
 describe('한 번에 등록 — 서버 갈래', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_USE_MOCK', 'false')
@@ -230,6 +300,7 @@ describe('한 번에 등록 — 서버 갈래', () => {
       priority: 'normal',
       partId: null,
       creatorId: null,
+      order: 0,
       createdAt: '2026-10-12T01:00:00Z',
       commentCount: 0,
       minutesId: null,
@@ -250,6 +321,15 @@ describe('한 번에 등록 — 서버 갈래', () => {
     await expect(deleteTask('k 1')).resolves.toBeUndefined()
     expect(fake.mock.calls[0][0]).toBe('/api/tasks/k%201')
     expect(fake.mock.calls[0][1]).toMatchObject({ method: 'DELETE' })
+  })
+
+  it('옮기기는 POST /api/tasks/{id}/move — 바뀐 Task[] 를 그대로 낸다', async () => {
+    const moved = { ...tasks.find((t) => t.id === 'k20')!, parentId: 'k1', order: 1 }
+    const fake = serve(() => json(200, [moved]))
+    const move = { parentId: 'k1', beforeId: 'k3' }
+    expect(await moveTask('k 20', move)).toEqual([moved])
+    expect(fake.mock.calls[0][0]).toBe('/api/tasks/k%2020/move')
+    expect(fake.mock.calls[0][1]).toMatchObject({ method: 'POST', body: JSON.stringify(move) })
   })
 
   it('409 TASK_HAS_CHILDREN 은 그대로 ApiError 다', async () => {

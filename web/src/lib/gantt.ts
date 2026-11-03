@@ -55,6 +55,7 @@ export const endToDue = (end: Date) => isoDay(shiftDays(end, -1))
 /**
  * 묶음인지 · 부모가 누구인지는 **건네받은 행 안에서** 본다 — '내 파트' 로 거르면 자식이 다 빠진 묶음이
  * 생기는데, 그것을 묶음으로 두면 자식 없는 project 막대가 기간 없이 선다. 부모가 빠졌으면 최상위로 올린다.
+ * 형제는 order 로 세운다 — dhtmlx 는 받은 순서대로 형제를 놓는다. 같으면 받은 순서(등록순)다.
  */
 export function toGanttItems(
   rows: TaskRow[],
@@ -63,7 +64,9 @@ export function toGanttItems(
 ): GanttItem[] {
   const ids = new Set(rows.map((r) => r.task.id))
   const parents = new Set(rows.map((r) => r.task.parentId).filter((id) => id !== null))
-  return rows.map((row) => {
+  /* 형제끼리만 뜻이 있는 값이지만 통째로 세워도 형제 사이의 앞뒤는 같다(sort 는 안정 정렬) */
+  const ordered = [...rows].sort((a, b) => a.task.order - b.task.order)
+  return ordered.map((row) => {
     const task = row.task
     const scheduled = task.start !== null && task.due !== null
     return {

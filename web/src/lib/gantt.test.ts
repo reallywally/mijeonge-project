@@ -28,6 +28,21 @@ describe('스토어를 간트가 먹는 모양으로', () => {
     expect(items()).toHaveLength(22)
   })
 
+  it('형제는 order 로 선다 — dhtmlx 는 받은 순서대로 형제를 놓는다. 같으면 등록순', () => {
+    const rows = useTaskStore().rows.map((r) =>
+      r.task.parentId === 'k4'
+        ? { ...r, task: { ...r.task, order: { k19: 2, k20: 0, k21: 1, k22: 1 }[r.task.id]! } }
+        : r,
+    )
+    const under = (parent: string) =>
+      toGanttItems(rows, taskStatusLabel)
+        .filter((i) => i.parent === parent)
+        .map((i) => i.key)
+    expect(under('k4')).toEqual(['HW-20', 'HW-21', 'HW-22', 'HW-19'])
+    /* 다른 상위의 형제 순서는 그대로다 */
+    expect(under('0')).toEqual(['HW-1', 'HW-4', 'HW-5'])
+  })
+
   it('자식이 있는 작업은 묶음 막대가 된다', () => {
     expect(item('HW-5').type).toBe('project')
     expect(item('HW-8').type).toBeUndefined()

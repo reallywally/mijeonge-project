@@ -4,16 +4,24 @@ import { recordMockHistory } from '@/api/history'
 import { isMockMode } from '@/api/mode'
 import { forbidden, later, mockDb, mockSessionMemberId, mockWorld, requireMe } from '@/api/mockAuth'
 import { projects, tasks } from '@/fixtures'
-import { canDeleteTask, canSeeProject } from '@/lib/access'
+import { canDeleteTask, canEditTask, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { inheritedPartId } from '@/lib/part'
-import { batchDepthProblems, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
+import {
+  batchDepthProblems,
+  moveProblem,
+  nextTaskOrder,
+  placeTask,
+  taskDepths,
+  TASK_DEPTH_MESSAGE,
+} from '@/lib/task'
 import type {
   Task,
   TaskBatchInput,
   TaskBatchResult,
   TaskInput,
+  TaskMove,
   TaskPatch,
   TaskThreadLink,
 } from '@/types/domain'
@@ -147,7 +155,10 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
   const taskIdByTempId: Record<string, string> = {}
   const madeByTempId: Record<string, Task> = {}
   const createdAt = nowIso()
-  const made = input.tasks.map((t): Task => {
+  /* 순서는 그 상위의 맨 끝부터 배열 순서대로 이어 붙인다 — 앞에서 만든 형제까지 본다 */
+  const world = mockWorld().tasks
+  const made: Task[] = []
+  for (const t of input.tasks) {
     mockSeq += 1
     const taskId = `bt${mockSeq}`
     taskIdByTempId[t.tempId] = taskId
@@ -157,12 +168,13 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
         : t.parentId !== null
           ? (existing(t.parentId) ?? null)
           : null
+    const parentId = t.parentTempId === null ? t.parentId : taskIdByTempId[t.parentTempId]
     const task: Task = {
       id: taskId,
       projectId,
       key: takeMockKey(projectId),
       title: t.title.trim(),
-      parentId: t.parentTempId === null ? t.parentId : taskIdByTempId[t.parentTempId],
+      parentId,
       body: [],
       status: 'todo',
       ownerId: t.ownerId,
@@ -173,6 +185,7 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       partId: inheritedPartId(undefined, parent),
       /* 등록한 사람은 로그인한 사람이다 */
       creatorId: mockSessionMemberId(),
+      order: nextTaskOrder([...world, ...made], projectId, parentId),
       createdAt,
       commentCount: 0,
       minutesId: null,
@@ -181,8 +194,8 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       statusSinceBackfill: false,
     }
     madeByTempId[t.tempId] = task
-    return task
-  })
+    made.push(task)
+  }
   for (const t of made) recordMockHistory('task', t.id, [change('created', null, null)])
   return { tasks: made, taskIdByTempId }
 }
@@ -192,3 +205,23 @@ export const createTasksBatch = (projectId: string, input: TaskBatchInput) =>
   isMockMode()
     ? Promise.resolve().then(() => mockBatch(projectId, input))
     : request<TaskBatchResult>('POST', `/projects/${id(projectId)}/tasks/batch`, input)
+
+/* 목업 갈래 — 서버의 검사(권한 · 상위 · 4단 · 형제)를 그대로 보고 바뀌는 작업들의 사본을 낸다.
+   작업은 데이터 스토어가 들고 있어 갈아끼우기도 스토어가 한다(스토어가 목업에서는 같은 계산을 직접 한다) */
+function mockMove(taskId: string, move: TaskMove): Task[] {
+  const me = requireMe()
+  const world = mockWorld()
+  const task = world.tasks.find((t) => t.id === taskId)
+  if (!task || !canSeeProject(me, task.projectId))
+    throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
+  if (!canEditTask(me, task, task.projectId)) throw forbidden()
+  const problem = moveProblem(world.tasks, taskId, move.parentId, move.beforeId)
+  if (problem) throw mockError(400, problem.code, problem.message)
+  return placeTask(world.tasks, taskId, move.parentId, move.beforeId)
+}
+
+/** 간트에서 줄을 끌어 놓은 자리로 — 상위 · 형제 순서. order 나 parentId 가 바뀐 작업만 돌아온다(없으면 []) */
+export const moveTask = (taskId: string, move: TaskMove) =>
+  isMockMode()
+    ? later(() => mockMove(taskId, move))
+    : request<Task[]>('POST', `/tasks/${id(taskId)}/move`, move)

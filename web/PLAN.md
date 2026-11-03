@@ -610,6 +610,27 @@
 - [x] 검사 — `lib/access.test.ts` · `lib/thread.test.ts` · `lib/history.test.ts` · `api/history.test.ts` · `HistoryTimeline.test.ts` · `stores/thread.test.ts`(creatorId · 목업 403 · 지우기 · 409 · 상태 재계산 · 이력) · `stores/server.test.ts`(DELETE · 409 · 응답 안건 · GET 이력) · `views/ThreadListView.test.ts`(읽기 전용 · 버튼 · 확인 · 취소 · 409 · 줄 지우기 · 변경 이력). 화면 · 스토어 검사는 프로젝트 관리자(u1)로 들어온다
 - [ ] 계약이 API.md · docs/api 에 올라가면 맞춰 본다. 서버 모드로 한 번 돌려 본다
 
+## 22단계 · 간트 줄 끌어 옮기기 — 상위 · 형제 순서
+
+"간트에서 끌어 놓아 상위를 바꾸고 순서를 바꾼다." 계약은 서버와 맞춘 초안(2026-11-03) — `Task.order`(같은 상위 안 0부터, 시드 · 픽스처는
+배열 순서), `POST /api/tasks/{id}/move` `{ parentId, beforeId }` → 200 `Task[]`(order · parentId 가 바뀐 것만, 같은 자리면 `[]`).
+상위 검사는 PATCH 와 같은 코드 + 400 `TASK_BEFORE_NOT_SIBLING`, 권한은 옮기는 작업의 고치기(403), 상위가 바뀔 때만 `parentId` 이력.
+막대 끌기(기간)는 그대로다.
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 차트 | `GanttChart` 의 `reorderable` · `canDrop` prop — 작업 간트만 켠다. `order_branch = 'marker'` · `order_branch_free`. `onBeforeRowDragMove` · `onBeforeRowDragEnd` 가 잠긴 줄 · 자기 아래 · 4단 줄(+ 숨김) 밑 · `canDrop` 이 막는 자리를 거절, `onRowDragEnd` 가 `getParent` · `getNextSibling` 으로 `reorder(id, parentId, beforeId)` | 놓기 전에 막아 튕기는 일이 없게 |
+| 되돌리기 | 차트는 parse 에 items 사본을 준다(dhtmlx 가 받은 객체를 고친다). 놓은 뒤 한 박자 안에 items 가 안 바뀌면(스토어가 거절 · 같은 자리) items 로 다시 그린다. 서버 실패는 스냅샷을 다시 받아 돌아온다 | 차트 안의 자리가 스토어와 어긋나지 않게 |
+| 뒤 형제 | `TaskGantt` 가 바로 뒤 줄이 진짜 형제가 아니면(상위가 걸러져 최상위로 선 줄) `beforeId = null` 로 보낸다 | 서버는 400 을 낸다 |
+| 스토어 | `moveTask` — `rejectEdit` → `lib/task` `moveProblem`(목업 · 서버 모드 모두, 서버와 같은 code 로 토스트) → `placeTask` 로 화면에 먼저 놓고 → `data.save('move:<프로젝트>')` 응답으로 갈아끼움. `canMove(id, parentId)` 는 간트가 놓기 전에 묻는다 | 고리가 생긴 트리를 잠깐이라도 그리지 않게 |
+| 순서 | `toGanttItems` · 작업 상세의 하위 목록은 `order` 로 선다. 목록 · 칸반은 등록순 그대로. 새 작업(등록 · 일괄 · 회의록 반영 목업)과 상위 바꾸기(PATCH 목업)는 그 상위의 맨 끝(`nextTaskOrder`) | 계약 1절 |
+| 목업 | `api/tasks.ts` `moveTask` 목업 갈래는 404 → 403 → 상위 검사 → 형제 순으로 보고 바뀐 사본을 낸다(갈아끼우기는 스토어 몫 — 목업 스토어는 같은 계산을 직접 한다). 이력은 스토어가 `logPatch` 로 | 서버와 같은 순서 · 같은 코드 |
+
+- [x] `types/domain.ts`(`TaskMove`) · `lib/task.ts`(`siblingsInOrder` · `nextTaskOrder` · `moveProblem` · `placeTask`) · `lib/gantt.ts` · `api/tasks.ts` · `api/minutes.ts` · `fixtures/tasks.ts`
+- [x] `stores/task.ts`(`moveTask` · `canMove` · 하위 목록 정렬 · 등록 · 상위 바꾸기의 order) · `GanttChart` · `TaskGantt`(hint 에 '줄을 끌면 상위 · 순서가 바뀝니다.')
+- [x] 검사 — `lib/gantt.test.ts`(order 정렬) · `stores/task.test.ts`(같은 상위 · 다른 상위 · 최상위 · 같은 자리 · 권한 · 4단 · 고리 · 이력 · 새 작업 맨 끝) · `stores/server.test.ts`(요청 모양 · 응답 갈아끼우기 · 실패 되돌리기 · 보내기 전 막기) · `api/tasks.test.ts`(목업 코드 · 서버 경로) · `TaskGantt.test.ts`(이벤트를 직접 불러 emit · 막기 · 잠금 · 되돌리기 · 테스트 간트는 꺼짐)
+- [ ] 브라우저에서 끌어 본다(marker 표시 · 자동 스크롤). 서버 모드로 한 번 돌려 본다
+
 ---
 
 ## 진행 상황
@@ -638,6 +659,7 @@
 | 19 사용자 번호 | **목업으로 끝남 · 서버 갈래는 타입만 맞춤** (2026-11-02) — 사용자 관리 맨 앞 열을 번호로 · 번호 순 · 팝업 제목에 '5번 · 이름' |
 | 20 작업 권한 · 지우기 | **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-02) — 고치기는 작성자 · 담당자 · 관리자만(상세 읽기 전용 · 목록 · 칸반 · 간트 잠금) · 작성자 칸 · 작업 지우기(확인 · 409) |
 | 21 안건 권한 · 지우기 · 변경 이력 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-02) — 안건 · 이력 줄 고치기 · 지우기는 작성자 · 담당자 · 관리자(줄은 남긴 사람도) · 작성자 칸 · 안건 지우기(확인 · 409) · 줄 지우기(상태 재계산) · 변경 이력 칸 |
+| 22 간트 줄 끌기 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-03) — 상위 · 형제 순서(`Task.order` · `POST /api/tasks/{id}/move`) |
 
 ## 아직 안 정한 것
 

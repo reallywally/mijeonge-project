@@ -66,6 +66,8 @@ function mk(
     priority: 'normal',
     partId: PART_OF[id] ?? null,
     creatorId: CREATOR_OF[id] ?? null,
+    /* 순서는 아래에서 형제끼리 매긴다 */
+    order: 0,
     createdAt,
     commentCount: taskComments.filter((c) => c.taskId === id).length,
     minutesId: null,
@@ -97,7 +99,7 @@ const envBody: TaskLine[] = [
   { id: 'l7', kind: 'check', text: 'CI 러너 붙이기', done: false, level: 0 },
 ]
 
-export const tasks: Task[] = [
+const rows: Task[] = [
   mk('k1', 'HW-1', '설계', null, 'doing', null, '2026-09-07', '2026-09-22'),
   mk('k2', 'HW-2', '데이터 설계', 'k1', 'done', 'u1', '2026-09-07', '2026-09-14'),
   mk('k3', 'HW-3', '프로그램 설계', 'k1', 'doing', 'u2', '2026-09-15', '2026-09-22'),
@@ -133,6 +135,13 @@ export const tasks: Task[] = [
     projectId: 'p2',
   },
 ]
+
+/** 같은 상위 안에서 배열 순서대로 0, 1, 2… — 시드와 같다 */
+export const tasks: Task[] = rows.map((t, i) => ({
+  ...t,
+  order: rows.slice(0, i).filter((s) => s.projectId === t.projectId && s.parentId === t.parentId)
+    .length,
+}))
 
 /** 작업 ↔ 안건. 작업을 하다가 정해야 했던 것들이다 */
 export const taskThreadLinks: TaskThreadLink[] = [

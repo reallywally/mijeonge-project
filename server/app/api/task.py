@@ -10,6 +10,7 @@ from app.schemas.task import (
     TaskBatchResult,
     TaskCreate,
     TaskLinePatch,
+    TaskMoveIn,
     TaskOut,
     TaskPatch,
     TaskThreadLinkOut,
@@ -42,6 +43,14 @@ async def patch_task(
 ) -> TaskOut:
     """부분 수정 — 상태 · 담당자 · 기간 · 상위 작업이 다 이 하나로 들어온다."""
     return await task_service.patch_task(session, task_id, payload, scope)
+
+
+@router.post("/tasks/{task_id}/move")
+async def move_task(
+    task_id: str, payload: TaskMoveIn, scope: ProjectScope, session: Session
+) -> list[TaskOut]:
+    """간트에서 줄을 끌어 상위 · 형제 순서를 바꾼다. 바뀐 작업만 돌려준다."""
+    return await task_service.move_task(session, task_id, payload, scope)
 
 
 @router.delete("/tasks/{task_id}", status_code=204)

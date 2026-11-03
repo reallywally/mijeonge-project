@@ -1,4 +1,4 @@
-"""작업 쓰기 — 등록 · 부분 수정 · 본문 줄 · 안건 링크 · 삭제.
+"""작업 쓰기 — 등록 · 부분 수정 · 옮기기 · 본문 줄 · 안건 링크 · 삭제.
 
 고치기 · 지우기 권한은 `access.can_edit_task` · `can_delete_task` 하나로 본다.
 
@@ -11,7 +11,7 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import NamedTuple
 
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
@@ -34,6 +34,7 @@ from app.schemas.task import (
     TaskCreate,
     TaskLineOut,
     TaskLinePatchIn,
+    TaskMoveIn,
     TaskOut,
     TaskPatch,
     TaskThreadLinkOut,
@@ -74,6 +75,7 @@ def to_task(row: Task, comment_count: int, since: StatusSince) -> TaskOut:
         status=row.status,
         owner_id=row.owner_id,
         creator_id=row.creator_id,
+        order=row.sort_order,
         start=row.start,
         due=row.due,
         priority=row.priority,
@@ -255,6 +257,32 @@ async def _subtree_height(session: AsyncSession, task_id: str, limit: int) -> in
     return height
 
 
+def _same_parent(project_id: str, parent_id: str | None) -> ColumnElement[bool]:
+    """같은 상위의 안 지운 작업 — 최상위끼리도 형제다."""
+    parent = Task.parent_id.is_(None) if parent_id is None else Task.parent_id == parent_id
+    return and_(Task.project_id == project_id, parent, Task.is_deleted.is_(False))
+
+
+async def _next_order(session: AsyncSession, project_id: str, parent_id: str | None) -> int:
+    """그 상위의 맨 끝 자리 — 안 지운 형제 가운데 가장 큰 order + 1."""
+    top = await session.scalar(
+        select(func.max(Task.sort_order)).where(_same_parent(project_id, parent_id))
+    )
+    return 0 if top is None else top + 1
+
+
+async def _siblings(
+    session: AsyncSession, project_id: str, parent_id: str | None, without: str
+) -> list[Task]:
+    """`without` 을 뺀 형제들 — order 순, 같으면 등록 순."""
+    found = await session.scalars(
+        select(Task)
+        .where(_same_parent(project_id, parent_id), Task.id != without)
+        .order_by(Task.sort_order, Task.seq)
+    )
+    return list(found.all())
+
+
 async def _insert_task(
     session: AsyncSession, project: Project, payload: TaskCreate, actor_id: str | None
 ) -> Task:
@@ -263,6 +291,8 @@ async def _insert_task(
     if await _guard_parent(session, project.id, None, payload.parent_id) + 1 > MAX_TASK_DEPTH:
         raise _depth_exceeded()
     part_id = await _part_for_new_task(session, project.id, payload)
+    # 일괄 · 회의록은 한 줄씩 flush 하며 넣으니 앞의 줄을 보고 이어 붙는다
+    sort_order = await _next_order(session, project.id, payload.parent_id)
 
     task = Task(
         id=new_id(),
@@ -278,6 +308,7 @@ async def _insert_task(
         due=payload.due,
         priority=payload.priority,
         part_id=part_id,
+        sort_order=sort_order,
         created_at=now(),
         # 화면이 보낸 줄 id 는 화면 안에서만 쓰던 값이다 — 서버가 새로 붙인다
         lines=[
@@ -570,6 +601,9 @@ async def patch_task(
     # 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다. 하위 작업은 따라 바뀌지 않는다
     if "part_id" in changes and changes["part_id"] != task.part_id:
         await part_service.guard_part(session, task.project_id, changes["part_id"])
+    if "parent_id" in changes and changes["parent_id"] != task.parent_id:
+        # 새 상위의 맨 끝으로 — 옛 형제의 빈자리는 순서만 뜻이 있어 메우지 않는다
+        task.sort_order = await _next_order(session, task.project_id, changes["parent_id"])
     for field, value in changes.items():
         setattr(task, field, value)
     at = now()
@@ -585,6 +619,73 @@ async def patch_task(
     await history_service.record_task_body(session, task, changed, actor_id, at)
     await session.commit()
     return to_task(task, await comment_count(session, task.id), await status_since(session, task))
+
+
+async def move_task(
+    session: AsyncSession, task_id: str, payload: TaskMoveIn, scope: Scope
+) -> list[TaskOut]:
+    """간트에서 끌어 놓은 자리로 — 상위를 바꾸고 형제 안의 순서를 다시 매긴다.
+
+    상위 검사는 PATCH 의 `parentId` 와 같은 규칙 · 같은 코드다. 새 상위 · 형제의 권한은 안 본다 —
+    그 작업들은 order 만 바뀐다. 바뀐 작업(옮긴 것 포함)만 돌려주고, 아무것도 안 바뀌면 [] 다.
+    """
+    task = await load_task(session, task_id)
+    _guard_edit(scope, task)
+    parent_id = payload.parent_id
+    old_parent = task.parent_id
+    moves_parent = parent_id != old_parent
+    depth = await _guard_parent(session, task.project_id, task.id, parent_id)
+    if moves_parent and depth > 0:
+        limit = MAX_TASK_DEPTH - depth
+        if await _subtree_height(session, task.id, limit) > limit:
+            raise _depth_exceeded()
+
+    siblings = await _siblings(session, task.project_id, parent_id, task.id)
+    if payload.before_id is None:
+        at_index = len(siblings)
+    else:
+        found = next((i for i, row in enumerate(siblings) if row.id == payload.before_id), None)
+        if found is None:
+            raise bad_request(
+                "TASK_BEFORE_NOT_SIBLING", "앞에 둘 작업이 옮겨 갈 상위의 하위 작업이 아닙니다."
+            )
+        at_index = found
+    placed = [*siblings[:at_index], task, *siblings[at_index:]]
+    if not moves_parent:
+        current = sorted([*siblings, task], key=lambda row: (row.sort_order, row.seq))
+        # 같은 자리면 빈자리가 있어도 다시 매기지 않는다 — 놓았다 그대로 둔 것은 바뀐 것이 없다
+        if [row.id for row in current] == [row.id for row in placed]:
+            return []
+
+    changed: dict[str, Task] = {}
+    if moves_parent:
+        task.parent_id = parent_id
+        changed[task.id] = task
+        history_service.record_task(
+            session,
+            task,
+            [history_service.change("parentId", old_parent, parent_id)],
+            scope.actor.id,
+            now(),
+        )
+        left = await _siblings(session, task.project_id, old_parent, task.id)
+        _renumber(left, changed)
+    _renumber(placed, changed)
+    await session.commit()
+
+    counts = await comment_counts(session, task.project_id)
+    since = await status_since_map(session, task.project_id)
+    return [
+        to_task(row, counts.get(row.id, 0), since_or_created(since, row))
+        for row in sorted(changed.values(), key=lambda row: row.seq)
+    ]
+
+
+def _renumber(rows: Sequence[Task], changed: dict[str, Task]) -> None:
+    for order, row in enumerate(rows):
+        if row.sort_order != order:
+            row.sort_order = order
+            changed[row.id] = row
 
 
 def _history_fields(task: Task) -> list[tuple[str, object]]:

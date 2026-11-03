@@ -168,3 +168,110 @@ export function batchDepthProblems(
   })
   return detail
 }
+
+/* ── 줄 끌어 옮기기 — 상위 · 형제 순서 ───────────────────── */
+
+type OrderNode = Pick<Task, 'id' | 'projectId' | 'parentId' | 'order'>
+
+/** 형제를 order 로 세운다 — 같으면 받은 배열 순서(등록순)다. 서버도 (order, seq) 로 세운다 */
+export function siblingsInOrder<T extends OrderNode>(
+  tasks: T[],
+  projectId: string,
+  parentId: string | null,
+): T[] {
+  const at = new Map(tasks.map((t, i) => [t.id, i]))
+  return tasks
+    .filter((t) => t.projectId === projectId && t.parentId === parentId)
+    .sort((a, b) => a.order - b.order || at.get(a.id)! - at.get(b.id)!)
+}
+
+/** 새 작업은 그 상위의 맨 끝 — 형제 가운데 가장 큰 order + 1, 형제가 없으면 0 */
+export function nextTaskOrder(tasks: OrderNode[], projectId: string, parentId: string | null) {
+  return tasks
+    .filter((t) => t.projectId === projectId && t.parentId === parentId)
+    .reduce((max, t) => Math.max(max, t.order + 1), 0)
+}
+
+/**
+ * 옮기기를 서버처럼 따진다 — 걸리면 서버의 400 과 같은 code · message, 괜찮으면 null.
+ * 4단 제한은 상위가 바뀔 때만 본다(서버가 그렇다). 목업 서버와 스토어가 같이 쓴다
+ */
+export function moveProblem(
+  tasks: OrderNode[],
+  taskId: string,
+  parentId: string | null,
+  beforeId: string | null,
+): { code: string; message: string } | null {
+  const task = tasks.find((t) => t.id === taskId)
+  if (!task) return null
+  if (parentId !== null) {
+    if (parentId === taskId)
+      return { code: 'TASK_PARENT_SELF', message: '작업을 자기 자신의 상위로 둘 수 없습니다.' }
+    const parent = tasks.find((t) => t.id === parentId)
+    if (!parent) return { code: 'TASK_PARENT_NOT_FOUND', message: '상위 작업을 찾을 수 없습니다.' }
+    if (parent.projectId !== task.projectId)
+      return { code: 'TASK_PARENT_OTHER_PROJECT', message: '상위 작업이 다른 프로젝트에 있습니다.' }
+    const parentOf = new Map(tasks.map((t) => [t.id, t.parentId]))
+    const seen = new Set<string>()
+    for (let up = parent.parentId; up !== null && !seen.has(up); up = parentOf.get(up) ?? null) {
+      if (up === taskId)
+        return { code: 'TASK_PARENT_DESCENDANT', message: '하위 작업을 상위로 둘 수 없습니다.' }
+      seen.add(up)
+    }
+    if (parentId !== task.parentId) {
+      const depth = taskDepths(tasks)[parentId] ?? 1
+      const height = subtreeHeights(tasks)[taskId] ?? 1
+      if (depth + height > MAX_TASK_DEPTH)
+        return { code: 'TASK_DEPTH_EXCEEDED', message: TASK_DEPTH_MESSAGE }
+    }
+  }
+  if (
+    beforeId !== null &&
+    (beforeId === taskId ||
+      !tasks.some(
+        (t) => t.id === beforeId && t.projectId === task.projectId && t.parentId === parentId,
+      ))
+  )
+    return {
+      code: 'TASK_BEFORE_NOT_SIBLING',
+      message: '앞에 둘 작업이 옮겨 갈 상위의 하위 작업이 아닙니다.',
+    }
+  return null
+}
+
+/**
+ * 옮긴 뒤 order · parentId 가 바뀌는 작업들 — 고친 사본을 등록순으로 낸다(서버 응답과 같은 모양).
+ * 새 형제들 사이 beforeId 자리(null 은 맨 끝)에 끼우고 0..n 으로 다시 매긴다. 상위가 바뀌면 옛 형제도.
+ * 같은 상위 · 같은 자리면 빈자리가 있어도 [] 다. 따지기(moveProblem)는 먼저 끝냈다고 본다
+ */
+export function placeTask<T extends OrderNode>(
+  tasks: T[],
+  taskId: string,
+  parentId: string | null,
+  beforeId: string | null,
+): T[] {
+  const task = tasks.find((t) => t.id === taskId)
+  if (!task) return []
+  const moves = parentId !== task.parentId
+  const siblings = siblingsInOrder(tasks, task.projectId, parentId).filter((t) => t.id !== taskId)
+  const at = beforeId === null ? -1 : siblings.findIndex((t) => t.id === beforeId)
+  const placed =
+    at < 0 ? [...siblings, task] : [...siblings.slice(0, at), task, ...siblings.slice(at)]
+  if (!moves) {
+    const now = siblingsInOrder(tasks, task.projectId, parentId)
+    if (now.every((t, i) => t.id === placed[i].id)) return []
+  }
+
+  const next = new Map<string, T>()
+  if (moves) next.set(taskId, { ...task, parentId })
+  const renumber = (rows: T[]) =>
+    rows.forEach((row, order) => {
+      const cur = next.get(row.id) ?? row
+      if (cur.order !== order || row.id === taskId) next.set(row.id, { ...cur, order })
+    })
+  if (moves)
+    renumber(siblingsInOrder(tasks, task.projectId, task.parentId).filter((t) => t.id !== taskId))
+  renumber(placed)
+  /* 옮긴 작업은 상위가 그대로여도 자리가 바뀌었으니 낸다 — order 가 그대로인 형제는 안 낸다 */
+  return tasks.filter((t) => next.has(t.id)).map((t) => next.get(t.id)!)
+}

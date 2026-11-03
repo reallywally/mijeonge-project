@@ -4,7 +4,11 @@ import { createPinia, setActivePinia } from 'pinia'
 import { Gantt } from 'dhtmlx-gantt'
 import type { GanttStatic } from 'dhtmlx-gantt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import GanttChart from './GanttChart.vue'
 import TaskGantt from './TaskGantt.vue'
+import { resetMockAuth } from '@/api/mockAuth'
+import { MOCK_PASSWORD } from '@/fixtures'
+import { useAuthStore } from '@/stores/auth'
 import { useTaskStore } from '@/stores/task'
 
 /* dhtmlx 는 컨테이너의 실제 높이를 재서 보이는 줄만 그린다. jsdom 은 모든 크기가 0 이라
@@ -177,5 +181,107 @@ describe('간트차트 — 화살표', () => {
     const w = await mountGantt()
     expect(w.findAll('.gantt_task_link')).toHaveLength(0)
     expect(w.find('.gantt_link_control').exists()).toBe(false)
+  })
+})
+
+describe('간트차트 — 줄 끌어 옮기기', () => {
+  /* jsdom 에서는 끌기를 흉내 낼 수 없어 dhtmlx 가 놓을 때 부르는 이벤트를 직접 부른다.
+     onBeforeRowDragEnd 가 false 면 dhtmlx 는 옮기지 않고, 아니면 옮긴 뒤 onRowDragEnd 를 부른다 */
+  async function mountAs(memberId: string | null) {
+    resetMockAuth()
+    if (memberId) await useAuthStore().login(`${memberId}@inno-ax.com`, MOCK_PASSWORD)
+    const spy = vi.spyOn(Gantt, 'getGanttInstance')
+    const w = await mountGantt()
+    const chart = spy.mock.results.at(-1)!.value as GanttStatic
+    spy.mockRestore()
+    return { w, chart, chart_: w.getComponent(GanttChart) }
+  }
+
+  /** dhtmlx 가 하는 대로 — 물어보고, 되면 옮기고, 놓았다고 알린다 */
+  function drop(chart: GanttStatic, id: string, parent: string, index: number) {
+    if (chart.callEvent('onBeforeRowDragEnd', [id, parent, index]) === false) return false
+    chart.moveTask(id, index, parent)
+    chart.callEvent('onRowDragEnd', [id, parent, index])
+    return true
+  }
+
+  const orderUnder = (parentId: string | null) =>
+    useTaskStore()
+      .tasks.filter((t) => t.parentId === parentId)
+      .sort((a, b) => a.order - b.order)
+      .map((t) => t.id)
+
+  it('작업 간트는 줄 끌기를 켠다 — 다른 상위로도 놓인다', async () => {
+    const { chart } = await mountAs('u1')
+    expect(chart.config.order_branch).toBe('marker')
+    expect(chart.config.order_branch_free).toBe(true)
+  })
+
+  it('놓으면 새 상위와 바로 뒤 형제를 알리고, 스토어가 내려 준 순서로 다시 그린다', async () => {
+    const { chart, chart_ } = await mountAs('u1')
+    /* 개발 환경 설정(k4) 밑 HW-22 를 맨 앞(HW-19 앞)으로 */
+    expect(drop(chart, 'k22', 'k4', 0)).toBe(true)
+    expect(chart_.emitted('reorder')).toEqual([['k22', 'k4', 'k19']])
+    expect(orderUnder('k4')).toEqual(['k22', 'k19', 'k20', 'k21'])
+    await flushPromises()
+    expect(chart.getChildren('k4')).toEqual(['k22', 'k19', 'k20', 'k21'])
+
+    /* 최상위의 맨 끝으로 — 상위는 null, 뒤 형제도 null */
+    drop(chart, 'k20', '0', 3)
+    expect(chart_.emitted('reorder')!.at(-1)).toEqual(['k20', null, null])
+    expect(orderUnder(null)).toEqual(['k1', 'k4', 'k5', 'k20'])
+    await flushPromises()
+    expect(chart.getChildren(chart.config.root_id)).toEqual(['k1', 'k4', 'k5', 'k20'])
+    expect(chart.getTaskCount()).toBe(22)
+  })
+
+  it('자기 아래 · 4단 줄 밑 · 4단을 넘기는 자리는 놓기 전에 막는다', async () => {
+    const { chart, chart_ } = await mountAs('u1')
+    /* 개발(k5) 을 자기 하위인 가상비서(k7) 밑으로 */
+    expect(drop(chart, 'k5', 'k7', 0)).toBe(false)
+    /* 4단 작업 tool02(k9) 밑 — 5단이 된다 */
+    expect(drop(chart, 'k21', 'k9', 0)).toBe(false)
+    /* 하위까지 2단인 가상비서(k7) 를 3단 AI 심사(k12) 밑으로 — 5단이 된다 */
+    expect(drop(chart, 'k7', 'k12', 0)).toBe(false)
+    expect(chart_.emitted('reorder')).toBeUndefined()
+    expect(chart.callEvent('onBeforeRowDragMove', ['k7', 'k12', 0])).toBe(false)
+    expect(chart.callEvent('onBeforeRowDragMove', ['k8', 'k12', 0])).toBe(true)
+  })
+
+  it('잠긴 줄(고칠 권한 없음)은 끌기를 시작하지 못한다', async () => {
+    /* 박지훈(u2)은 HW-18(담당 정하늘 · 등록 이도현)을 못 고친다. HW-3 은 담당이라 고친다 */
+    const { chart } = await mountAs('u2')
+    expect(chart.callEvent('onRowDragStart', ['k18', document.body, new Event('mousedown')])).toBe(
+      false,
+    )
+    expect(chart.callEvent('onBeforeRowDragEnd', ['k18', '0', 0])).toBe(false)
+    expect(chart.callEvent('onRowDragStart', ['k3', document.body, new Event('mousedown')])).toBe(
+      true,
+    )
+  })
+
+  it('스토어가 받지 않으면(같은 자리 · 거절) 원래 자리로 돌아온다', async () => {
+    const { chart } = await mountAs('u1')
+    vi.spyOn(useTaskStore(), 'moveTask').mockImplementation(() => {})
+    drop(chart, 'k22', 'k1', 0)
+    expect(chart.getParent('k22')).toBe('k1')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(chart.getParent('k22')).toBe('k4')
+    expect(chart.getChildren('k4')).toEqual(['k19', 'k20', 'k21', 'k22'])
+  })
+})
+
+describe('테스트 간트', () => {
+  it('줄 끌기는 꺼져 있다', async () => {
+    const spy = vi.spyOn(Gantt, 'getGanttInstance')
+    mount(GanttChart, {
+      props: { items: [], period: '', titleLabel: '테스트', hint: '' },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const chart = spy.mock.results.at(-1)!.value as GanttStatic
+    spy.mockRestore()
+    expect(chart.config.order_branch).toBe(false)
+    expect(chart.config.order_branch_free).toBe(false)
   })
 })

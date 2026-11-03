@@ -30,6 +30,8 @@ class TaskOut(Schema):
     owner_id: str | None
     # 등록한 사람. 기록이 없던 지난 작업은 null — 수정 · 삭제 권한의 근거다
     creator_id: str | None
+    # 같은 상위 안에서의 순서(0부터). 스냅샷 배열은 그대로 seq 순이다 — 트리만 이것으로 세운다
+    order: int
     # 둘 다 null 이면 기간 미정이다
     start: date | None
     due: date | None
@@ -98,6 +100,15 @@ class TaskPatch(Schema):
     # 보내면 본문을 통째로 갈아끼운다. 기본값은 '안 보냄' 표시일 뿐이고(exclude_unset 으로 가른다),
     # 본문의 빈 값은 [] 라 null 은 타입에서 422 로 걸린다 (API.md '빈 값은 null 이 아니다')
     body: list[TaskLinePatchIn] = []
+
+
+class TaskMoveIn(Schema):
+    """간트에서 줄을 끌어 놓은 자리. 둘 다 키를 꼭 싣는다 — 빠뜨려서 최상위로 조용히 가지 않게."""
+
+    # 옮겨 갈 상위. null 이면 최상위
+    parent_id: str | None
+    # 새 상위 안에서 바로 뒤에 올 형제. null 이면 맨 끝
+    before_id: str | None
 
 
 # 초안 하나에 담을 수 있는 작업 수 (API.md '작업 초안')
