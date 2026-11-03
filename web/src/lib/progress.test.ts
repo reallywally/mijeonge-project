@@ -56,6 +56,7 @@ function thread(id: string, state: Thread['state']): Thread {
     ccIds: [],
     createdAt: '2026-09-01T00:00:00Z',
     minutesId: null,
+    creatorId: null,
   }
 }
 
@@ -248,6 +249,7 @@ describe('진척 · 결정 · 사람 · previous', () => {
             ownerId: null,
             createdAt: '2026-10-15T00:00:00Z',
             minutesId: null,
+            creatorId: null,
           },
           {
             id: 'e2',
@@ -259,6 +261,7 @@ describe('진척 · 결정 · 사람 · previous', () => {
             ownerId: null,
             createdAt: '2026-10-16T00:00:00Z',
             minutesId: null,
+            creatorId: null,
           },
           {
             id: 'e3',
@@ -270,6 +273,7 @@ describe('진척 · 결정 · 사람 · previous', () => {
             ownerId: null,
             createdAt: '2026-10-01T00:00:00Z',
             minutesId: null,
+            creatorId: null,
           },
         ],
         riskyThreadIds: Array.from({ length: 12 }, (_, i) => `r${i}`),

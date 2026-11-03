@@ -11,7 +11,7 @@ export type HistoryLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 const keyOf = (kind: HistoryKind, id: string) => `${kind}:${id}`
 
 /**
- * 작업 · 테스트의 변경 이력 (docs/api/history.md). 스냅샷 · 테스트 목록에 없어 상세의 [변경 이력] 을 펼칠 때 받는다.
+ * 작업 · 테스트 · 안건의 변경 이력 (docs/api/history.md). 스냅샷 · 테스트 목록에 없어 상세의 [변경 이력] 을 펼칠 때 받는다.
  * 쓰기 응답에는 이력이 안 실린다 — 작업 · 테스트 스토어가 쓰기를 마칠 때 touched 로 알리면
  * 펼쳐 둔 이력 칸이 revision 을 보고 다시 부른다
  */
@@ -40,7 +40,11 @@ export const useHistoryStore = defineStore('history', () => {
     latest.set(key, mine)
     status.value[key] = 'loading'
     try {
-      const rows = await (kind === 'task' ? api.fetchTaskHistory(id) : api.fetchTestHistory(id))
+      const rows = await (kind === 'task'
+        ? api.fetchTaskHistory(id)
+        : kind === 'test'
+          ? api.fetchTestHistory(id)
+          : api.fetchThreadHistory(id))
       if (latest.get(key) !== mine) return
       entries.value[key] = rows
       status.value[key] = 'ready'

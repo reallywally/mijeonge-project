@@ -30,6 +30,7 @@ from app.schemas.minutes import (
 from app.schemas.task import TaskCreate, TaskThreadLinkOut
 from app.schemas.thread import EntryCreate, EntryOut
 from app.services import access
+from app.services import history as history_service
 from app.services import project as project_service
 from app.services import task as task_service
 from app.services import thread as thread_service
@@ -244,7 +245,9 @@ async def minutes_problems(
     if wanted:
         rows = await session.execute(
             select(Thread.id, Thread.owner_id).where(
-                Thread.project_id == project_id, Thread.id.in_(wanted)
+                Thread.project_id == project_id,
+                Thread.id.in_(wanted),
+                Thread.is_deleted.is_(False),
             )
         )
         owner_of = {thread_id: owner_id for thread_id, owner_id in rows.tuples().all()}
@@ -370,6 +373,7 @@ async def _insert(
             description=item.description,
             state="queued",
             owner_id=item.owner_id,
+            creator_id=actor_id,
             due_date=item.due_date,
             parent_thread_id=None,
             part_id=None,
@@ -385,13 +389,18 @@ async def _insert(
         thread_ids[item.temp_id] = thread.id
         created_threads.append(thread)
     await session.flush()
+    # 등록과 같이 '등록' 이력 한 줄 — 안건이 먼저 들어가야 이력의 복합 FK 가 선다
+    for thread in created_threads:
+        history_service.record_thread(
+            session, thread, history_service.created(), actor_id, created_at
+        )
 
     added: list[EntryOut] = []
     # 상태를 바꾸는 규칙은 POST /api/threads/{id}/entries 와 같은 함수다
     for item, thread in zip(threads, created_threads, strict=True):
         if item.entry is None:
             continue
-        entry = thread_service.build_entry(_entry_create(item.entry), thread.id, now())
+        entry = thread_service.build_entry(_entry_create(item.entry), thread.id, now(), actor_id)
         entry.minutes_id = minutes_id
         session.add(entry)
         thread_service.apply_entry_to_thread(thread, item.entry.kind, item.entry.owner_id)
@@ -402,7 +411,7 @@ async def _insert(
     for proposed in entries:
         thread = await thread_service.load_thread(session, proposed.thread_id)
         before = (thread.state, thread.owner_id)
-        entry = thread_service.build_entry(_entry_create(proposed), thread.id, now())
+        entry = thread_service.build_entry(_entry_create(proposed), thread.id, now(), actor_id)
         entry.minutes_id = minutes_id
         session.add(entry)
         thread_service.apply_entry_to_thread(thread, proposed.kind, proposed.owner_id)

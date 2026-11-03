@@ -1,4 +1,4 @@
-import type { Me, ProjectRole, Task, TaskComment } from '@/types/domain'
+import type { Entry, Me, ProjectRole, Task, TaskComment, Thread } from '@/types/domain'
 
 /*
  * 권한 판단 — 메뉴 숨기기 · 라우터 가드 · 목업 서버가 모두 이 함수들을 쓴다 (docs/api/auth.md '권한 셋').
@@ -46,6 +46,27 @@ export const canEditTask = (
 /** 작업 지우기는 등록한 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 담당자는 못 지운다 */
 export const canDeleteTask = (me: Me | null, task: Pick<Task, 'creatorId'>, projectId: string) =>
   me !== null && (task.creatorId === me.id || canManageProject(me, projectId))
+
+/** 안건 고치기(제목 · 배경 · 후보 · 기한 · 담당자 · 파트 · 참조)는 등록한 사람 · 담당자 · 그 프로젝트 관리자 ·
+    시스템 관리자. 이력 줄 남기기(결정 · 미루기)는 이 경계를 따르지 않는다 — 회의에서 누구든 결정을 적는다 */
+export const canEditThread = (
+  me: Me | null,
+  thread: Pick<Thread, 'creatorId' | 'ownerId'>,
+  projectId: string,
+) =>
+  me !== null &&
+  (thread.creatorId === me.id || thread.ownerId === me.id || canManageProject(me, projectId))
+
+/** 안건 지우기는 고치기와 같은 경계 — 작업과 달리 담당자도 지운다 */
+export const canDeleteThread = canEditThread
+
+/** 이력 줄 고치기 · 지우기는 그 줄을 남긴 사람 · 안건을 고칠 수 있는 사람(안건 작성자 · 담당자 · 관리자) */
+export const canEditEntry = (
+  me: Me | null,
+  entry: Pick<Entry, 'creatorId'>,
+  thread: Pick<Thread, 'creatorId' | 'ownerId'>,
+  projectId: string,
+) => me !== null && (entry.creatorId === me.id || canEditThread(me, thread, projectId))
 
 /** 라우트가 요구하는 권한 — route.meta.access */
 export type RouteAccess = 'systemAdmin' | 'projectAdmin'

@@ -314,7 +314,9 @@ async def _thread_titles(
         return {}
     rows = await session.execute(
         select(Thread.id, Thread.title).where(
-            Thread.project_id == project_id, Thread.id.in_(thread_ids)
+            Thread.project_id == project_id,
+            Thread.id.in_(thread_ids),
+            Thread.is_deleted.is_(False),
         )
     )
     return {row.id: row.title for row in rows}

@@ -45,6 +45,7 @@ from app.models import (
     TestRef,
     Thread,
     ThreadCc,
+    ThreadHistory,
     ThreadOption,
 )
 from app.services.auth import PASSWORD
@@ -193,6 +194,8 @@ def thread(
         description=description,
         state=state,
         owner_id=owner,
+        # 등록한 사람은 담당자로 둔다 — 목업 픽스처와 같다 (계약 2026-11-02, 없으면 null)
+        creator_id=owner,
         due_date=d(due),
         parent_thread_id=None,
         part_id=THREAD_PARTS.get(id_),
@@ -295,6 +298,8 @@ def entry(
         text=text,
         note=note,
         owner_id=owner,
+        # 줄을 남긴 사람은 그 줄의 처리한 사람으로 둔다 — 목업 픽스처와 같다
+        creator_id=owner,
         created_at=at(created),
         details=[
             EntryDetail(id=f"{id_}d{i}", entry_id=id_, text=t, sort_order=i)
@@ -580,6 +585,22 @@ def task_logs() -> list[TaskLog]:
 CREATED_CHANGES: list[dict[str, str | int | bool | None]] = [
     {"field": "created", "from": None, "to": None, "subject": ""}
 ]
+
+
+def thread_histories() -> list[ThreadHistory]:
+    """안건마다 '등록' 한 줄(등록 시각 · 등록한 사람) — id 는 `hh-<안건 id>-1`."""
+    return [
+        ThreadHistory(
+            id=f"hh-{row.id}-1",
+            project_id=row.project_id,
+            thread_id=row.id,
+            changed_by=row.creator_id,
+            changed_at=row.created_at,
+            changes=CREATED_CHANGES,
+            backfilled=False,
+        )
+        for row in threads()
+    ]
 
 
 def task_histories() -> list[TaskHistory]:
@@ -997,6 +1018,7 @@ async def clear(session: AsyncSession) -> None:
         Entry,
         ThreadOption,
         ThreadCc,
+        ThreadHistory,
         Thread,
         Minutes,
         PartMember,
@@ -1047,6 +1069,7 @@ async def advance_identity(session: AsyncSession) -> None:
             "test_case",
             "task_history",
             "test_history",
+            "thread_history",
         )
     ]
     # 멤버 번호는 열 이름이 no 다. 따옴표로 감싼다 — NO 는 SQL 키워드다
@@ -1092,6 +1115,7 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(test_refs())
     session.add_all(in_order(task_histories()))
     session.add_all(in_order(test_histories()))
+    session.add_all(in_order(thread_histories()))
     await session.flush()
     await advance_identity(session)
     await session.commit()
@@ -1117,6 +1141,7 @@ async def run() -> None:
         "test": len(SEED_TESTS),
         "task_history": len(task_histories()),
         "test_history": len(test_histories()),
+        "thread_history": len(thread_histories()),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@inno-ax.com / 비밀번호 {DEV_PASSWORD}")

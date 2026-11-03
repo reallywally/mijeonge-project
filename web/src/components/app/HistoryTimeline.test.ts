@@ -36,3 +36,33 @@ describe('HistoryTimeline — 본문', () => {
     expect(w.get('[data-history-to]').element.textContent).toBe('1\n2\n3\n4')
   })
 })
+
+describe('HistoryTimeline — 안건', () => {
+  it('이력 줄 고침은 전 → 후, 지움은 지운 글 한 값으로 선다', () => {
+    const w = mount(HistoryTimeline, {
+      props: {
+        entries: [
+          {
+            id: 'hh1',
+            changedAt: '2026-11-02T01:00:00Z',
+            who: '김서연',
+            changes: [
+              {
+                field: 'entryText',
+                label: '결정 줄 고침',
+                from: '정했다',
+                to: '다시 정했다',
+                long: true,
+              },
+              { field: 'entryDeleted', label: '미룸 줄 지움', value: '다음에', long: false },
+            ],
+          },
+        ],
+      },
+    })
+    expect(w.get('[data-history-field="entryText"]').text()).toBe(
+      '결정 줄 고침: 정했다 → 다시 정했다',
+    )
+    expect(w.get('[data-history-field="entryDeleted"]').text()).toBe('미룸 줄 지움: 다음에')
+  })
+})

@@ -166,6 +166,8 @@ export interface Thread {
   createdAt: string
   /** 출처 — 회의록 [AI 정리] 로 등록했으면 그 회의록. 손으로 만들었거나 회의록을 지웠으면 null */
   minutesId: string | null
+  /** 등록한 사람 — 서버가 요청한 사람으로 찍는다. 기록이 없는 옛 안건은 null */
+  creatorId: string | null
 }
 
 export interface Entry {
@@ -182,6 +184,8 @@ export interface Entry {
   createdAt: string
   /** 출처 회의록. 없으면 null */
   minutesId: string | null
+  /** 이 줄을 남긴 사람 — 서버가 요청한 사람으로 찍는다. 기록이 없는 옛 줄은 null */
+  creatorId: string | null
 }
 
 /** 목록 한 행에 필요한, 계산해서 얻는 값들 */
@@ -481,6 +485,23 @@ export interface EntryInput {
   detail?: string[]
   note?: string
   ownerId?: string | null
+}
+
+/**
+ * 이력 한 줄의 글 고치기 — PATCH /api/threads/{id}/entries/{entryId}. 보낸 필드만 바뀐다.
+ * kind · 처리한 사람은 못 바꾼다(줄이 이미 안건 상태를 바꿨다). 빈 text 는 받지 않는다.
+ */
+export interface EntryPatch {
+  text?: string
+  note?: string
+}
+
+/**
+ * 이력 한 줄 지우기의 응답 — DELETE /api/threads/{id}/entries/{entryId}.
+ * 남은 줄로 안건 상태를 다시 계산하므로 바뀐 안건을 받아 갈아끼운다(담당자는 그대로)
+ */
+export interface EntryDeleteResult {
+  thread: Thread
 }
 
 /** GET /api/projects/{id}/snapshot — 그 프로젝트의 원본 전부. 키 이름은 픽스처 export 이름이다 */

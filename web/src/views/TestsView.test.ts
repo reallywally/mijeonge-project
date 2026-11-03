@@ -320,7 +320,7 @@ describe('테스트 간트', () => {
   })
 })
 
-describe('작업 · 안건 상세의 태그한 테스트', () => {
+describe('작업 상세의 태그한 테스트', () => {
   it('작업 상세에 읽기 전용 칩, [테스트 추가] 는 그 작업을 태그로 건 채 연다', async () => {
     await mountAt('/tasks/k21')
     expect(text('[data-tagged-test="tc6"]')).toContain('HW-T6')
@@ -332,9 +332,10 @@ describe('작업 · 안건 상세의 태그한 테스트', () => {
     expect(window.location.search).toContain('task=k21')
   })
 
-  it('안건 상세에도 같은 칩이 선다', async () => {
+  it('안건 상세에는 태그한 테스트 칸이 없다', async () => {
     await mountAt('/threads/t2')
-    expect(text('[data-tagged-test="tc4"]')).toContain('HW-T4')
+    expect($('[role="dialog"]')).not.toBeNull()
+    expect($('[data-tagged-tests]')).toBeNull()
   })
 })
 

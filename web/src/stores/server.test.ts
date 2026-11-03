@@ -14,6 +14,7 @@ import {
 } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
+import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 import { useThreadStore } from '@/stores/thread'
@@ -258,6 +259,20 @@ describe('바로 저장하는 수정', () => {
     expect(data.allThreads.find((t) => t.id === 't3')!.options).toEqual(['사내 모델만'])
   })
 
+  it('이력 글 고치기는 그 안건 경로로 보내고 응답 줄로 갈아끼운다', async () => {
+    const data = await booted()
+    const thread = useThreadStore()
+    const e1 = data.allEntries.find((e) => e.id === 'e1')!
+    on('PATCH /api/threads/t1/entries/e1', (body) =>
+      json({ ...e1, ...(body as object), note: '서버가 다듬음' }),
+    )
+
+    thread.updateEntry('e1', { text: ' 우분투 24.04 로 한다 ' })
+    expect(calls.at(-1)!.body).toEqual({ text: '우분투 24.04 로 한다' })
+    await flush()
+    expect(data.allEntries.find((e) => e.id === 'e1')!.note).toBe('서버가 다듬음')
+  })
+
   it('본문은 모아서 보내고, 새 줄은 서버가 붙인 id 로 다음에 실어 보낸다', async () => {
     const data = await booted()
     const task = useTaskStore()
@@ -440,6 +455,56 @@ describe('만드는 것', () => {
     expect(data.allProjects.map((p) => p.id)).toEqual(['p2', 'p3'])
     expect(data.currentProjectId).toBe('p2')
     expect(data.loadedProjectId).toBe('p2')
+  })
+})
+
+describe('안건 · 이력 줄 지우기 · 변경 이력 (서버 갈래)', () => {
+  it('안건 DELETE 204 뒤 안건 · 이력 줄 · 작업 연결을 스토어에서 뺀다', async () => {
+    const data = await booted()
+    on('DELETE /api/threads/t1', () => new Response(null, { status: 204 }))
+    await useThreadStore().deleteThread('t1')
+    expect(calls.at(-1)!.route).toBe('DELETE /api/threads/t1')
+    expect(data.allThreads.some((t) => t.id === 't1')).toBe(false)
+    expect(data.allEntries.some((e) => e.threadId === 't1')).toBe(false)
+    expect(data.taskThreads.some((l) => l.threadId === 't1')).toBe(false)
+  })
+
+  it('409 THREAD_HAS_CHILDREN 은 ApiError 로 던지고 아무것도 빼지 않는다', async () => {
+    const data = await booted()
+    on('DELETE /api/threads/t1', () =>
+      json({ code: 'THREAD_HAS_CHILDREN', message: '하위 안건이 있어 지울 수 없습니다.' }, 409),
+    )
+    await expect(useThreadStore().deleteThread('t1')).rejects.toMatchObject({
+      status: 409,
+      code: 'THREAD_HAS_CHILDREN',
+    })
+    expect(data.allThreads.some((t) => t.id === 't1')).toBe(true)
+  })
+
+  it('이력 줄 DELETE 는 응답의 안건(다시 잰 상태)으로 갈아끼우고 줄을 뺀다', async () => {
+    const data = await booted()
+    const t1 = data.allThreads.find((t) => t.id === 't1')!
+    on('DELETE /api/threads/t1/entries/e1', () => json({ thread: { ...t1, state: 'queued' } }))
+    await useThreadStore().deleteEntry('e1')
+    expect(data.allEntries.some((e) => e.id === 'e1')).toBe(false)
+    expect(data.allThreads.find((t) => t.id === 't1')!.state).toBe('queued')
+  })
+
+  it('변경 이력은 GET /api/threads/{id}/history', async () => {
+    await booted()
+    const rows = [
+      {
+        id: 'h1',
+        changedAt: '2026-11-02T00:00:00Z',
+        changedBy: 'u1',
+        backfilled: true,
+        changes: [{ field: 'created', from: null, to: null, subject: '' }],
+      },
+    ]
+    on('GET /api/threads/t1/history', () => json(rows))
+    const history = useHistoryStore()
+    await history.load('thread', 't1')
+    expect(history.entriesOf('thread', 't1')).toEqual(rows)
   })
 })
 

@@ -255,8 +255,8 @@ const partsOf = (memberId: string) =>
         <header class="flex flex-col gap-2.5">
           <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 프로젝트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            프로젝트 정보와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고
-            빼는 것은
+            프로젝트 정보와 이 프로젝트에 부여된 사람을 관리합니다. 파트를 만들고 사람을 넣고 빼는
+            것은
             <RouterLink :to="partsPath" class="text-foreground underline-offset-4 hover:underline"
               >파트 관리</RouterLink
             >에서 합니다.
@@ -376,8 +376,8 @@ const partsOf = (memberId: string) =>
                   >
                 </div>
                 <p class="text-xs leading-relaxed text-muted-foreground text-pretty">
-                  표시만 바뀝니다 — 목록과 프로젝트 고르기에서 진행 · 준비 · 종료 순으로 서고, 작업 ·
-                  안건은 어느 상태든 그대로 쓸 수 있습니다.
+                  표시만 바뀝니다 — 목록과 프로젝트 고르기에서 진행 · 준비 · 종료 순으로 서고, 작업
+                  · 안건은 어느 상태든 그대로 쓸 수 있습니다.
                 </p>
               </div>
             </div>
@@ -411,7 +411,6 @@ const partsOf = (memberId: string) =>
               </Button>
             </div>
           </div>
-
         </section>
 
         <section class="flex flex-col gap-3" aria-label="프로젝트 멤버">

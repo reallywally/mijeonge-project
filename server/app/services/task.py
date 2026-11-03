@@ -171,7 +171,10 @@ async def load_task(session: AsyncSession, task_id: str) -> Task:
 
 
 async def _load_thread(session: AsyncSession, thread_id: str) -> Thread:
-    found = await session.execute(select(Thread).where(Thread.id == thread_id))
+    # 지운 안건은 없는 것과 같다 — 링크를 새로 걸 수 없다
+    found = await session.execute(
+        select(Thread).where(Thread.id == thread_id, Thread.is_deleted.is_(False))
+    )
     thread = found.scalar_one_or_none()
     if thread is None:
         raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")

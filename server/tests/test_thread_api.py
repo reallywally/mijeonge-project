@@ -1,13 +1,20 @@
-"""안건 쓰기 API — 등록 · 부분 수정 · 이력 한 줄.
+"""안건 쓰기 API — 등록 · 부분 수정 · 삭제 · 이력 한 줄 · 이력 줄 고치기 · 지우기.
 
 **줄 하나가 안건 상태를 바꾼다.** 지금 `stores/thread.ts` 가 하는 계산을 서버로 옮긴 것이라
 전이 규칙을 여기서 못 박는다. 부분 수정(PATCH)은 상태를 못 바꾼다.
 """
 
+from typing import Any
+
 import httpx
+import pytest
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Member
+from app.errors import ApiError
+from app.models import CheckRequest, Entry, Member, TaskThreadLink, TestRef, Thread
+from app.services import search as search_service
+from tests.conftest import AsMember
 from tests.test_read_api import ENTRY_KEYS, THREAD_KEYS
 
 
@@ -382,3 +389,237 @@ async def test_cc_already_there_may_stay_when_it_goes_inactive(
     assert res.json()["detail"] == {
         "ccIds.1": "이 프로젝트에 부여되지 않았거나 비활성인 사람입니다."
     }
+
+
+async def test_patch_entry_fixes_the_text_and_keeps_the_rest(client: httpx.AsyncClient) -> None:
+    """실수로 Enter 를 눌러 남긴 결정을 바로잡는다 — 글만 바뀌고 상태 · kind 는 그대로다."""
+    res = await client.patch(
+        "/api/threads/t1/entries/e1", json={"text": "  우분투 24.04 LTS 로 한다  "}
+    )
+    assert res.status_code == 200
+    entry = res.json()
+    assert set(entry) == ENTRY_KEYS
+    assert entry["text"] == "우분투 24.04 LTS 로 한다"
+    assert entry["note"] == "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다."
+    assert entry["kind"] == "decide"
+
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    saved = next(e for e in snap["entries"] if e["id"] == "e1")
+    assert saved["text"] == "우분투 24.04 LTS 로 한다"
+    assert next(t for t in snap["threads"] if t["id"] == "t1")["state"] == "decided"
+
+
+async def test_patch_entry_may_empty_the_note(client: httpx.AsyncClient) -> None:
+    res = await client.patch("/api/threads/t1/entries/e1", json={"note": "  "})
+    assert res.status_code == 200
+    assert res.json()["note"] == ""
+
+
+async def test_patch_entry_rejects_blank_text_and_null(client: httpx.AsyncClient) -> None:
+    for body in ({"text": "   "}, {"text": None}, {"note": None}):
+        res = await client.patch("/api/threads/t1/entries/e1", json=body)
+        assert res.status_code == 422, body
+
+
+async def test_patch_entry_of_another_thread_is_404(client: httpx.AsyncClient) -> None:
+    # e2 는 t5 의 줄이다 — 경로의 안건과 맞아야 한다
+    res = await client.patch("/api/threads/t1/entries/e2", json={"text": "x"})
+    assert res.status_code == 404
+    assert res.json()["code"] == "ENTRY_NOT_FOUND"
+    res = await client.patch("/api/threads/t1/entries/없는줄", json={"text": "x"})
+    assert res.status_code == 404
+
+
+# --- 작성자 · 논리 삭제 (2026-11-02) ------------------------------------------------------------
+
+
+async def test_creator_is_the_requester_and_cannot_be_sent(as_member: AsMember) -> None:
+    u2 = await as_member("u2")
+    made = await u2.post("/api/projects/p1/threads", json={"title": "새", "creatorId": "u3"})
+    assert made.status_code == 201 and made.json()["creatorId"] == "u2"
+    thread_id = made.json()["id"]
+    added = await u2.post(
+        f"/api/threads/{thread_id}/entries",
+        json={"kind": "refine", "text": "다듬음", "creatorId": "u3"},
+    )
+    assert added.status_code == 201 and added.json()["entry"]["creatorId"] == "u2"
+    patched = await u2.patch(f"/api/threads/{thread_id}", json={"creatorId": "u3", "title": "새2"})
+    assert patched.status_code == 200 and patched.json()["creatorId"] == "u2"
+
+
+async def test_seed_creator_is_the_owner(client: httpx.AsyncClient) -> None:
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert all(t["creatorId"] == t["ownerId"] for t in snap["threads"])
+    assert all(e["creatorId"] == e["ownerId"] for e in snap["entries"])
+
+
+async def test_delete_thread_is_logical_and_hides_it_everywhere(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    """t2 — 링크(k4 · k22) · 확인 요청(c1 ~ c3) · 테스트 참조 · 결정 e3 이 걸린 안건."""
+    before_badge = (await (await as_member("u3")).get("/api/checks/pending-count")).json()
+    assert (await client.delete("/api/threads/t2")).status_code == 204
+
+    session.expire_all()
+    row = await session.get(Thread, "t2")
+    assert row is not None
+    assert row.is_deleted is True and row.deleted_by == "admin" and row.deleted_at is not None
+    # 딸린 줄은 DB 에 남는다
+    for model, column in (
+        (Entry, Entry.thread_id),
+        (TaskThreadLink, TaskThreadLink.thread_id),
+        (CheckRequest, CheckRequest.thread_id),
+        (TestRef, TestRef.thread_id),
+    ):
+        left = await session.scalar(select(func.count()).select_from(model).where(column == "t2"))
+        assert left, model.__name__
+
+    # 안건으로 가는 길은 전부 404
+    for method, url, body in [
+        ("DELETE", "/api/threads/t2", None),
+        ("PATCH", "/api/threads/t2", {"title": "살리기"}),
+        ("POST", "/api/threads/t2/entries", {"kind": "refine", "text": "또"}),
+        ("PATCH", "/api/threads/t2/entries/e3", {"text": "고침"}),
+        ("DELETE", "/api/threads/t2/entries/e3", None),
+        ("GET", "/api/threads/t2/history", None),
+        ("POST", "/api/threads/t2/checks", None),
+        ("PUT", "/api/tasks/k1/threads/t2", None),
+        ("PUT", "/api/tests/tc1/refs/thread/t2", None),
+    ]:
+        res = await client.request(method, url, json=body)
+        assert res.status_code == 404, (method, url)
+        assert res.json()["code"] == "THREAD_NOT_FOUND", (method, url)
+    # 확인 요청 id 로 가도 없는 것과 같다
+    res = await (await as_member("u3")).post("/api/checks/c1/confirm")
+    assert res.status_code == 404 and res.json()["code"] == "CHECK_NOT_FOUND"
+    # 작업 등록에서 걸어도 없는 안건이다
+    res = await client.post("/api/projects/p1/tasks", json={"title": "x", "threadIds": ["t2"]})
+    assert res.status_code == 404 and res.json()["code"] == "THREAD_NOT_FOUND"
+
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert "t2" not in {t["id"] for t in snap["threads"]}
+    assert "e3" not in {e["id"] for e in snap["entries"]}
+    assert all(link["threadId"] != "t2" for link in snap["taskThreadLinks"])
+
+    checks = (await client.get("/api/projects/p1/checks")).json()
+    assert all(c["threadId"] != "t2" for c in checks)
+    after_badge = (await (await as_member("u3")).get("/api/checks/pending-count")).json()
+    assert after_badge["total"] == before_badge["total"] - 1  # c1 이 빠졌다
+
+    tests = (await client.get("/api/projects/p1/tests")).json()
+    assert all(ref["id"] != "t2" for row in tests for ref in row["refs"])
+    risks = await client.get("/api/projects/p1/risks")
+    assert risks.status_code == 200 and '"t2"' not in risks.text
+
+    # 챗봇 도구도 못 읽는다
+    with pytest.raises(ApiError) as caught:
+        await search_service.get_thread(session, "p1", "t2")
+    assert caught.value.code == "THREAD_NOT_FOUND"
+    task = await search_service.get_task(session, "p1", "k4")
+    assert "t2" not in {t.id for t in task.threads}
+
+    # 회의록 반영도 없는 안건으로 본다
+    res = await client.post(
+        "/api/minutes/m1/apply",
+        json={
+            "threads": [],
+            "entries": [
+                {
+                    "tempId": "o1",
+                    "threadId": "t2",
+                    "kind": "decide",
+                    "text": "x",
+                    "detail": [],
+                    "note": "",
+                    "ownerId": None,
+                    "ownerHint": "",
+                    "quote": "",
+                }
+            ],
+            "tasks": [],
+        },
+    )
+    assert res.status_code == 400 and res.json()["code"] == "THREAD_NOT_FOUND"
+
+
+async def test_thread_with_a_split_child_is_409(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    # 떼어내는 API 는 아직 없다 — 칸을 바로 찍는다. t4 를 t3 에서 떼어냈다
+    await session.execute(update(Thread).where(Thread.id == "t4").values(parent_thread_id="t3"))
+    await session.commit()
+    # 권한이 먼저다 — t3 은 u1 담당 · 등록, u2 는 남
+    assert (await (await as_member("u2")).delete("/api/threads/t3")).status_code == 403
+    res = await client.delete("/api/threads/t3")
+    assert res.status_code == 409
+    assert res.json() == {
+        "code": "THREAD_HAS_CHILDREN",
+        "message": "떼어낸 하위 안건이 있어 지울 수 없습니다. 하위 안건을 먼저 지우세요.",
+    }
+    # 하위를 지우면 지워진다 — 지운 하위는 세지 않는다
+    assert (await client.delete("/api/threads/t4")).status_code == 204
+    assert (await client.delete("/api/threads/t3")).status_code == 204
+
+
+async def test_delete_entry_recounts_the_state(client: httpx.AsyncClient) -> None:
+    """남은 줄에 decide · change 가 있으면 decided, 줄이 있으면 open, 없으면 queued."""
+    made = (await client.post("/api/projects/p1/threads", json={"title": "셈"})).json()
+    tid = made["id"]
+    ids = []
+    for kind, owner in (("defer", None), ("decide", "u2"), ("change", None)):
+        res = await client.post(
+            f"/api/threads/{tid}/entries", json={"kind": kind, "text": kind, "ownerId": owner}
+        )
+        ids.append(res.json()["entry"]["id"])
+    defer_id, decide_id, change_id = ids
+
+    res = await client.delete(f"/api/threads/{tid}/entries/{change_id}")
+    assert res.status_code == 200
+    assert set(res.json()) == {"thread"}
+    assert set(res.json()["thread"]) == THREAD_KEYS
+    assert res.json()["thread"]["state"] == "decided"  # decide 가 남았다
+
+    res = await client.delete(f"/api/threads/{tid}/entries/{decide_id}")
+    thread = res.json()["thread"]
+    assert thread["state"] == "open"
+    assert thread["ownerId"] == "u2"  # 결정이 바꾼 담당자는 되돌리지 않는다
+
+    res = await client.delete(f"/api/threads/{tid}/entries/{defer_id}")
+    assert res.json()["thread"]["state"] == "queued"
+
+    # 지운 줄은 스냅샷에 없고, 그 줄로 가는 길은 404
+    snap = (await client.get("/api/projects/p1/snapshot")).json()
+    assert not {defer_id, decide_id, change_id} & {e["id"] for e in snap["entries"]}
+    for method, body in (("PATCH", {"text": "살리기"}), ("DELETE", None)):
+        res = await client.request(method, f"/api/threads/{tid}/entries/{decide_id}", json=body)
+        assert res.status_code == 404 and res.json()["code"] == "ENTRY_NOT_FOUND", method
+    res = await client.delete(f"/api/threads/{tid}/entries/없는줄")
+    assert res.status_code == 404 and res.json()["code"] == "ENTRY_NOT_FOUND"
+
+
+async def test_deleted_entry_drops_out_of_decisions_and_risk(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """지운 결정은 '지금의 결정' 이 아니다 — 앞의 결정이 다시 지금의 결정이 된다."""
+    res = await client.post(
+        "/api/threads/t1/entries", json={"kind": "change", "text": "록키로 바꿈"}
+    )
+    change_id = res.json()["entry"]["id"]
+    assert (await client.delete(f"/api/threads/t1/entries/{change_id}")).status_code == 200
+    doc = await search_service.get_thread(session, "p1", "t1")
+    assert change_id not in {e.id for e in doc.entries}
+
+    # 확인 요청은 남은 마지막 결정(e1)으로 본다 — c4 가 이미 보냈다
+    res = await client.post("/api/threads/t1/checks")
+    assert res.status_code == 409 and res.json()["code"] == "CHECK_ALREADY_SENT"
+
+    # t5 의 미룸 둘 가운데 하나를 지우면 미룬 횟수가 하나 준다
+    def defers(body: dict[str, Any]) -> int:
+        row = next(t for t in body["threads"] if t["threadId"] == "t5")
+        count: int = row["deferCount"]
+        return count
+
+    before = defers((await client.get("/api/projects/p1/risks")).json())
+    assert (await client.delete("/api/threads/t5/entries/e5")).status_code == 200
+    after = defers((await client.get("/api/projects/p1/risks")).json())
+    assert after == before - 1

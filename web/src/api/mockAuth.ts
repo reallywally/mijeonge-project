@@ -14,6 +14,7 @@ import {
   taskHistory,
   testCases,
   testHistory,
+  threadHistory,
   threads,
 } from '@/fixtures'
 import type { MockAccount, MockProjectGrant, MockTestCase } from '@/fixtures'
@@ -70,9 +71,10 @@ interface MockDb {
   testSeq: number
   /** 프로젝트별 다음 테스트 번호 — 지운 번호를 다시 쓰지 않는다 */
   nextTestNo: Record<string, number>
-  /** 변경 이력 — 작업 · 테스트 id 마다 등록 순서대로 */
+  /** 변경 이력 — 작업 · 테스트 · 안건 id 마다 등록 순서대로 */
   taskHistory: Record<string, HistoryEntry[]>
   testHistory: Record<string, HistoryEntry[]>
+  threadHistory: Record<string, HistoryEntry[]>
   historySeq: number
 }
 
@@ -97,6 +99,7 @@ const fresh = (): MockDb => ({
   nextTestNo: {},
   taskHistory: structuredClone(taskHistory),
   testHistory: structuredClone(testHistory),
+  threadHistory: structuredClone(threadHistory),
   historySeq: 0,
 })
 

@@ -7,10 +7,21 @@ import { change, mergesBody, orderChanges, type HistoryKind } from '@/lib/histor
 import type { HistoryChange, HistoryEntry } from '@/types/domain'
 
 /* 변경 이력 (docs/api/history.md). 서버는 쓰기 요청마다 스스로 줄을 남기고 여기서는 읽기만 한다.
-   목업 갈래는 서버가 없어 목업 쓰기(작업은 데이터 스토어 · 일괄 등록 · 회의록 apply, 테스트는 api/tests)가
+   목업 갈래는 서버가 없어 목업 쓰기(작업 · 안건은 데이터 스토어 · 일괄 등록 · 회의록 apply, 테스트는 api/tests)가
    recordMockHistory 한 곳으로 줄을 남긴다 */
 
-const book = (kind: HistoryKind) => (kind === 'task' ? mockDb().taskHistory : mockDb().testHistory)
+const book = (kind: HistoryKind) =>
+  kind === 'task'
+    ? mockDb().taskHistory
+    : kind === 'test'
+      ? mockDb().testHistory
+      : mockDb().threadHistory
+
+const NOT_FOUND: Record<HistoryKind, [string, string]> = {
+  task: ['TASK_NOT_FOUND', '작업을 찾을 수 없습니다.'],
+  test: ['TEST_NOT_FOUND', '테스트를 찾을 수 없습니다.'],
+  thread: ['THREAD_NOT_FOUND', '안건을 찾을 수 없습니다.'],
+}
 
 /**
  * 목업 이력에 한 줄 — 요청 하나가 한 줄이다. 남길 칸이 없으면 줄을 안 만든다.
@@ -56,11 +67,10 @@ function mockList(kind: HistoryKind, targetId: string): HistoryEntry[] {
   const projectId =
     kind === 'task'
       ? mockWorld().tasks.find((t) => t.id === targetId)?.projectId
-      : mockDb().tests.find((t) => t.id === targetId)?.projectId
-  if (!projectId || !canSeeProject(me, projectId))
-    throw kind === 'task'
-      ? mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
-      : mockError(404, 'TEST_NOT_FOUND', '테스트를 찾을 수 없습니다.')
+      : kind === 'test'
+        ? mockDb().tests.find((t) => t.id === targetId)?.projectId
+        : mockWorld().threads.find((t) => t.id === targetId)?.projectId
+  if (!projectId || !canSeeProject(me, projectId)) throw mockError(404, ...NOT_FOUND[kind])
   return structuredClone(book(kind)[targetId] ?? [])
 }
 
@@ -69,6 +79,12 @@ export const fetchTaskHistory = (taskId: string) =>
   isMockMode()
     ? later(() => mockList('task', taskId))
     : request<HistoryEntry[]>('GET', `/tasks/${id(taskId)}/history`)
+
+/** 안건의 변경 이력 — 오래된 것부터(seq 순). 이력 줄(entry) 고치기 · 지우기도 여기 남는다 */
+export const fetchThreadHistory = (threadId: string) =>
+  isMockMode()
+    ? later(() => mockList('thread', threadId))
+    : request<HistoryEntry[]>('GET', `/threads/${id(threadId)}/history`)
 
 /** 테스트의 변경 이력 — 오래된 것부터(seq 순) */
 export const fetchTestHistory = (testId: string) =>

@@ -10,7 +10,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import ColumnElement, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
@@ -85,8 +85,11 @@ class _Entry:
 
 
 def _live_ref() -> ColumnElement[bool]:
-    """지운 작업에 건 태그는 남아 있다 — 목록 · 기준 · 개수 어디서도 없는 것처럼 거른다."""
-    return or_(TestRef.task_id.is_(None), TestRef.task_id.in_(access.live_task_ids()))
+    """지운 작업 · 안건에 건 태그는 남아 있다 — 목록 · 기준 · 개수 어디서도 없는 것처럼 거른다."""
+    return and_(
+        or_(TestRef.task_id.is_(None), TestRef.task_id.in_(access.live_task_ids())),
+        or_(TestRef.thread_id.is_(None), TestRef.thread_id.in_(access.live_thread_ids())),
+    )
 
 
 async def _refs(session: AsyncSession, test_ids: Collection[str]) -> dict[str, list[_Ref]]:
@@ -122,7 +125,8 @@ async def _links(session: AsyncSession, task_ids: Collection[str]) -> dict[str, 
         return {}
     rows = await session.execute(
         select(TaskThreadLink.task_id, TaskThreadLink.thread_id).where(
-            TaskThreadLink.task_id.in_(task_ids)
+            TaskThreadLink.task_id.in_(task_ids),
+            TaskThreadLink.thread_id.in_(access.live_thread_ids()),
         )
     )
     found: dict[str, set[str]] = defaultdict(set)
@@ -147,7 +151,7 @@ async def _entries(session: AsyncSession, thread_ids: Collection[str]) -> dict[s
         return {}
     rows = await session.execute(
         select(Entry.id, Entry.thread_id, Entry.kind, Entry.seq)
-        .where(Entry.thread_id.in_(thread_ids))
+        .where(Entry.thread_id.in_(thread_ids), Entry.is_deleted.is_(False))
         .order_by(Entry.seq)
     )
     found: dict[str, list[_Entry]] = defaultdict(list)
@@ -178,7 +182,7 @@ async def _current_basis(session: AsyncSession, test_id: str) -> int | None:
     if not reached:
         return None
     top: int | None = await session.scalar(
-        select(func.max(Entry.seq)).where(Entry.thread_id.in_(reached))
+        select(func.max(Entry.seq)).where(Entry.thread_id.in_(reached), Entry.is_deleted.is_(False))
     )
     return top
 
@@ -344,7 +348,9 @@ async def _guard_target(
         if owner != project_id:
             raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
     else:
-        owner = await session.scalar(select(Thread.project_id).where(Thread.id == target_id))
+        owner = await session.scalar(
+            select(Thread.project_id).where(Thread.id == target_id, Thread.is_deleted.is_(False))
+        )
         if owner != project_id:
             raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
 

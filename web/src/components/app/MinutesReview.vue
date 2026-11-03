@@ -37,7 +37,7 @@ const KIND_OPTIONS: { value: ProposedEntryBody['kind']; label: string }[] = [
   { value: 'defer', label: '미룸' },
   { value: 'refine', label: '세부 추가' },
 ]
-const noteLabel = (kind: ProposedEntryBody['kind']) => (kind === 'defer' ? '사유' : '근거')
+const noteLabel = (kind: ProposedEntryBody['kind']) => (kind === 'defer' ? '사유' : '상세 설명')
 
 const existing = (threadId: string) => threadStore.rows.find((r) => r.thread.id === threadId)
 const newTitle = (tempId: string) =>
@@ -152,7 +152,7 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
                   aria-label="이력 내용"
                 />
               </div>
-              <p v-if="t.entry.note" class="text-xs text-muted-foreground">
+              <p v-if="t.entry.note" class="text-xs whitespace-pre-line text-muted-foreground">
                 {{ noteLabel(t.entry.kind) }} · {{ t.entry.note }}
               </p>
             </div>
@@ -234,7 +234,7 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
             <ul v-if="e.detail.length > 0" class="list-disc pl-5 text-xs text-muted-foreground">
               <li v-for="(d, i) in e.detail" :key="i">{{ d }}</li>
             </ul>
-            <p v-if="e.note" class="text-xs text-muted-foreground">
+            <p v-if="e.note" class="text-xs whitespace-pre-line text-muted-foreground">
               {{ noteLabel(e.kind) }} · {{ e.note }}
             </p>
             <blockquote

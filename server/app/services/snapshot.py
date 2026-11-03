@@ -23,7 +23,7 @@ from app.schemas.project import ProjectOut
 from app.schemas.snapshot import SnapshotOut
 from app.schemas.task import TaskThreadLinkOut
 from app.services import project as project_service
-from app.services.access import live_task_ids
+from app.services.access import live_task_ids, live_thread_ids
 from app.services.part import to_part
 from app.services.task import comment_counts, since_or_created, status_since_map, to_task
 from app.services.thread import to_entry, to_thread
@@ -38,13 +38,20 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
     project = await project_service.load_project(session, project_id)
     threads = await _all(
         session,
-        select(Thread).where(Thread.project_id == project_id).order_by(Thread.seq),
+        select(Thread)
+        .where(Thread.project_id == project_id, Thread.is_deleted.is_(False))
+        .order_by(Thread.seq),
     )
     entries = await _all(
         session,
         select(Entry)
         .join(Thread, Thread.id == Entry.thread_id)
-        .where(Thread.project_id == project_id)
+        .where(
+            Thread.project_id == project_id,
+            # 지운 안건의 줄 · 지운 줄은 화면에 없는 것처럼
+            Thread.is_deleted.is_(False),
+            Entry.is_deleted.is_(False),
+        )
         .order_by(Entry.seq),
     )
     tasks = await _all(
@@ -61,8 +68,9 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
         select(TaskThreadLink)
         .where(
             TaskThreadLink.project_id == project_id,
-            # 지운 작업의 링크는 남아 있다 — 화면에는 없는 것처럼
+            # 지운 작업 · 안건의 링크는 남아 있다 — 화면에는 없는 것처럼
             TaskThreadLink.task_id.in_(live_task_ids()),
+            TaskThreadLink.thread_id.in_(live_thread_ids()),
         )
         .order_by(TaskThreadLink.task_id, TaskThreadLink.thread_id),
     )

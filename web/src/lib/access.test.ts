@@ -4,8 +4,11 @@ import {
   canCreateProject,
   canDeleteComment,
   canDeleteTask,
+  canDeleteThread,
   canEditComment,
+  canEditEntry,
   canEditTask,
+  canEditThread,
   canManageAccounts,
   canManageProject,
   canOpen,
@@ -106,6 +109,38 @@ describe('작업 고치기 · 지우기', () => {
     expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p2')).toBe(false)
     expect(canDeleteTask(systemAdmin, task(null, null), 'p9')).toBe(true)
     expect(canDeleteTask(null, task(null, null), 'p1')).toBe(false)
+  })
+})
+
+describe('안건 · 이력 줄 고치기 · 지우기', () => {
+  const thread = (creatorId: string | null, ownerId: string | null) => ({ creatorId, ownerId })
+  const entry = (creatorId: string | null) => ({ creatorId })
+  const other = me({ id: 'u4' })
+
+  it('안건 고치기 · 지우기는 등록한 사람 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자 — 담당자도 지운다', () => {
+    for (const can of [canEditThread, canDeleteThread]) {
+      expect(can(user, thread('u2', 'u3'), 'p1')).toBe(true)
+      expect(can(user, thread('u3', 'u2'), 'p1')).toBe(true)
+      expect(can(other, thread('u2', 'u3'), 'p1')).toBe(false)
+      expect(can(projectAdmin, thread('u2', 'u3'), 'p1')).toBe(true)
+      expect(can(projectAdmin, thread('u2', 'u3'), 'p2')).toBe(false)
+      expect(can(systemAdmin, thread(null, null), 'p9')).toBe(true)
+      expect(can(null, thread('u2', 'u2'), 'p1')).toBe(false)
+      /* 등록한 사람을 모르는 옛 안건 */
+      expect(can(user, thread(null, null), 'p1')).toBe(false)
+    }
+  })
+
+  it('이력 줄은 그 줄을 남긴 사람에 안건을 고칠 수 있는 사람까지', () => {
+    expect(canEditEntry(user, entry('u2'), thread('u3', 'u3'), 'p1')).toBe(true)
+    expect(canEditEntry(user, entry('u3'), thread('u2', null), 'p1')).toBe(true)
+    expect(canEditEntry(user, entry('u3'), thread(null, 'u2'), 'p1')).toBe(true)
+    expect(canEditEntry(user, entry('u3'), thread('u3', 'u3'), 'p1')).toBe(false)
+    expect(canEditEntry(user, entry(null), thread(null, null), 'p1')).toBe(false)
+    expect(canEditEntry(projectAdmin, entry('u3'), thread('u3', 'u3'), 'p1')).toBe(true)
+    expect(canEditEntry(projectAdmin, entry('u3'), thread('u3', 'u3'), 'p2')).toBe(false)
+    expect(canEditEntry(systemAdmin, entry(null), thread(null, null), 'p9')).toBe(true)
+    expect(canEditEntry(null, entry('u2'), thread('u2', 'u2'), 'p1')).toBe(false)
   })
 })
 

@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -14,9 +15,14 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_id, trgm_index
+from app.models.task import HISTORY_CHANGES
+
+# Entry 에 `text` 칸이 있어 sqlalchemy 의 text 는 sql_text 로 들인다. 지우지 않은 줄의 기본값
+FALSE = sql_text("false")
 
 # 상태는 셋뿐이다. '미룸'은 상태가 아니라 kind='defer' 인 Entry 다
 THREAD_STATES = ("queued", "open", "decided")
@@ -28,6 +34,14 @@ class Thread(Base):
     __table_args__ = (
         CheckConstraint(f"state in {THREAD_STATES}", name="state"),
         Index("ix_thread_project_id", "project_id"),
+        # 읽는 자리마다 지운 안건을 거른다 — 작업(ix_task_project_id_live)과 같은 부분 인덱스
+        Index(
+            "ix_thread_project_id_live",
+            "project_id",
+            "seq",
+            postgresql_where=sql_text("not is_deleted"),
+            sqlite_where=sql_text("not is_deleted"),
+        ),
         # 부모는 같은 프로젝트여야 한다 (API.md Q16). 링크 테이블의 복합 FK 도 이 유니크를 본다
         UniqueConstraint("id", "project_id"),
         ForeignKeyConstraint(
@@ -46,6 +60,9 @@ class Thread(Base):
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     state: Mapped[str] = mapped_column(String(16), default="queued")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    # 등록한 사람 — 수정 · 삭제 권한의 근거라 바꾸지 않는다. 기록이 없던 지난 안건은 null.
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    creator_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     # 결정 기한. 사람이 고른 날짜라 Task.start · due 와 같이 date 다
     due_date: Mapped[date | None] = mapped_column(Date)
     # 다른 안건에서 떼어낸 것이면 그 안건. FK 는 위의 복합 FK 하나뿐이다
@@ -60,6 +77,10 @@ class Thread(Base):
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    # 논리 삭제 — 이력 줄 · 후보 · 참조 · 링크 · 확인 요청은 그대로 두고 읽는 쪽이 거른다
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=FALSE)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
 
     options: Mapped[list["ThreadOption"]] = relationship(
         back_populates="thread",
@@ -126,6 +147,8 @@ class Entry(Base):
     # 왜 그렇게 됐는지
     note: Mapped[str] = mapped_column(Text, default="")
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    # 줄을 남긴 사람 — 그 줄을 고치고 지울 수 있다. 기록이 없던 지난 줄은 null
+    creator_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     # AI 정리로 [등록] 했으면 그 회의록. 회의록을 지우면 비고 줄은 남는다 (docs/api/minutes.md)
     minutes_id: Mapped[str | None] = mapped_column(
         ForeignKey("minutes.id", ondelete="SET NULL"), index=True
@@ -134,6 +157,10 @@ class Entry(Base):
     # 등록 순서. 화면이 배열 순서를 그대로 쓴다(안건 목록 · 작업 목록에 정렬이 없다) —
     # created_at 은 날짜뿐이라 같은 날 여러 줄의 순서를 못 가린다
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    # 논리 삭제 — 지운 줄은 안건 상태 · 결정 · 검색 어디서도 빠진다
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=FALSE)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
 
     details: Mapped[list["EntryDetail"]] = relationship(
         back_populates="entry",
@@ -155,3 +182,26 @@ class EntryDetail(Base):
     sort_order: Mapped[int] = mapped_column(Integer)
 
     entry: Mapped[Entry] = relationship(back_populates="details")
+
+
+class ThreadHistory(Base):
+    """안건 변경 이력 한 줄 = 요청 하나. `task_history` 와 같은 모양이다 (docs/api/history.md)."""
+
+    __tablename__ = "thread_history"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+        ),
+        Index("ix_thread_history_thread_id_seq", "thread_id", "seq"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(String(36))
+    thread_id: Mapped[str] = mapped_column(String(36))
+    # backfill 은 누가 했는지 모른다. 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    changed_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # changed_at 으로 세우지 않는다 (Q15)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    changes: Mapped[list[dict[str, object]]] = mapped_column(HISTORY_CHANGES)
+    backfilled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=FALSE)

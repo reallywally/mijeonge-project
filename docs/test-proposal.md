@@ -128,7 +128,7 @@ test_ref                                        -- 참조 태그
   - **단계 표** — `#` · 행동 · 기대 결과. 줄 추가 · 순서 끌기 · 지우기
   - **상태 바꾸기** — [테스트 시작] → [통과] · [실패] · [막힘]. 실패 · 막힘은 메모 · 실패한 단계를 받는다. 지금 상태 · N일째 · 누가 바꿨는지를 보이고, 다시 돌리면 덮어쓴다
   - '기준 바뀜' 이면 바뀐 결정 줄 · [어디가 바뀌었나] · [고치기] · [그대로 맞다]
-- **작업 상세 · 안건 상세** — '이 작업(안건)을 태그한 테스트' 를 **읽기 전용 칩**으로(상태 색), [테스트 추가](태그가 걸린 채 열린다). 테스트를 여기서 편집하지 않는다
+- **작업 상세** — '이 작업을 태그한 테스트' 를 **읽기 전용 칩**으로(상태 색), [테스트 추가](태그가 걸린 채 열린다). 테스트를 여기서 편집하지 않는다
 
 ## AI — 네 자리
 
@@ -199,7 +199,7 @@ AI 는 아무것도 저장하지 않는다. 고치기 · 추가 · 지우기는 
 | 상태 | `POST /api/tests/{testId}/status` `{ status, failedStep?, note? }` | 다섯 상태 어디로든. `status_changed_at` · 누가는 서버가 찍고, 다시 부르면 덮어쓴다. 실패 · 막힘은 메모 필수. 하위가 있는 테스트는 400 |
 | 태그 | `PUT · DELETE /api/tests/{testId}/refs/{kind}/{id}` | `kind` = `task` \| `thread`. 멱등 · 같은 프로젝트만 |
 | 기준 확인 | `POST /api/tests/{testId}/basis` | "그대로 맞다" — `basis_seq` 를 지금으로 |
-| 태그한 테스트 | `GET /api/tasks/{taskId}/tests` · `GET /api/threads/{threadId}/tests` | 작업 · 안건 상세의 읽기 전용 칩 |
+| 태그한 테스트 | `GET /api/tasks/{taskId}/tests` · `GET /api/threads/{threadId}/tests` | 작업 상세의 읽기 전용 칩 (안건 상세에는 두지 않는다) |
 | 일괄 추가 | `POST /api/projects/{projectId}/tests/batch` | AI 초안 [추가]. 한 트랜잭션 |
 | AI 검토 | `POST /api/projects/{projectId}/tests/review` `{ testIds? }` | 한 번 · JSON · 저장 안 함. 챗봇과 같은 제한기(분당) |
 | AI 빠진 테스트 | `POST /api/projects/{projectId}/tests/suggest` `{ taskId \| threadId \| testId }` | 한 번 · JSON · 저장 안 함 |

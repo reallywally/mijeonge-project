@@ -30,7 +30,7 @@ from app.schemas.risk import (
     ThreadRiskSignal,
 )
 from app.services import project as project_service
-from app.services.access import live_task_ids
+from app.services.access import live_task_ids, live_thread_ids
 from app.time import KST, as_utc, now
 
 # 신호 점수는 고정이다 — 바꿀 수 있는 것은 문턱값 다섯뿐이다. 순서가 곧 signals 배열의 순서다
@@ -164,7 +164,7 @@ async def _read(
             Thread.seq,
             Thread.created_at,
         )
-        .where(Thread.project_id == project_id)
+        .where(Thread.project_id == project_id, Thread.is_deleted.is_(False))
         .order_by(Thread.seq)
     )
     threads = {
@@ -184,7 +184,13 @@ async def _read(
     entry_rows = await session.execute(
         select(Entry.thread_id, Entry.kind, Entry.note, Entry.created_at)
         .join(Thread, Thread.id == Entry.thread_id)
-        .where(Thread.project_id == project_id, Thread.state.in_(UNDECIDED))
+        .where(
+            Thread.project_id == project_id,
+            Thread.is_deleted.is_(False),
+            Thread.state.in_(UNDECIDED),
+            # 지운 줄은 미룬 횟수 · 마지막 손댄 날에 안 든다
+            Entry.is_deleted.is_(False),
+        )
         .order_by(Entry.seq)
     )
     for row in entry_rows:
@@ -215,6 +221,7 @@ async def _read(
             TaskThreadLink.project_id == project_id,
             # 지운 작업의 링크는 남아 있다 — 위 tasks 에 없는 id 를 끌고 오지 않게
             TaskThreadLink.task_id.in_(live_task_ids()),
+            TaskThreadLink.thread_id.in_(live_thread_ids()),
         )
     )
     links = [(row.task_id, row.thread_id) for row in link_rows]

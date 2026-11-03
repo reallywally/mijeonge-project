@@ -12,7 +12,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError
-from app.models import Task
+from app.models import Entry, Task, Thread
 from app.services import search as search_service
 from scripts.seed import seed
 
@@ -212,6 +212,24 @@ async def test_deleted_task_is_not_found(
     assert "k4" not in {hit["id"] for hit in body["tasks"]}
     after = await search_service.similar_tasks(pg_session, "p1")
     assert all("k2" not in (p.a.id, p.b.id) for p in after)
+
+
+async def test_deleted_thread_and_entry_are_not_found(
+    pg_client: httpx.AsyncClient, pg_session: AsyncSession
+) -> None:
+    """지운 안건은 어디로도 안 걸리고, 지운 줄은 그 글로 안 걸리며 '결정' 에도 안 나온다."""
+    hit = await _search(pg_client, "최신 버전")
+    assert [(t["id"], t["decision"]) for t in hit["threads"]] == [
+        ("t1", "우분투 최신 버전으로 한다")
+    ]
+    await pg_session.execute(update(Entry).where(Entry.id == "e1").values(is_deleted=True))
+    await pg_session.execute(update(Thread).where(Thread.id == "t2").values(is_deleted=True))
+    await pg_session.commit()
+
+    assert (await _search(pg_client, "최신 버전"))["threads"] == []
+    by_title = await _search(pg_client, "OS 결정")
+    assert [(t["id"], t["decision"]) for t in by_title["threads"]] == [("t1", "")]
+    assert "t2" not in {t["id"] for t in (await _search(pg_client, "DB 결정"))["threads"]}
 
 
 async def test_no_hit_is_empty_not_404(pg_client: httpx.AsyncClient) -> None:
