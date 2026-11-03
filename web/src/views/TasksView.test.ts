@@ -19,7 +19,13 @@ const chart = vi.hoisted(() => ({
   config: {} as Record<string, unknown>,
   templates: {} as Record<string, unknown>,
   events: {} as Record<string, (...args: unknown[]) => unknown>,
-  parsed: [] as { id: string; key: string; parent: string; unscheduled?: boolean }[],
+  parsed: [] as {
+    id: string
+    key: string
+    parent: string
+    unscheduled?: boolean
+    context?: boolean
+  }[],
   dragged: {} as Record<string, { start_date: Date; end_date: Date }>,
   destroyed: 0,
   attachEvent(name: string, fn: (...args: unknown[]) => unknown) {
@@ -689,6 +695,36 @@ describe('간트차트 탭', () => {
     expect(chart.destroyed).toBe(0)
     w.unmount()
     expect(chart.destroyed).toBe(1)
+  })
+})
+
+describe('내 작업만 (간트)', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('간트에만 서고, 켜면 내가 등록 · 담당한 작업과 그 상위만 남는다 — 바꾼 값은 기억한다', async () => {
+    const w = await mountView('/tasks')
+    const taskStore = useTaskStore()
+    const toggle = w.find('[data-mine-only]')
+    expect(toggle.attributes('data-state')).toBe('unchecked')
+    const before = chart.parsed.length
+
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(taskStore.mineOnly).toBe(true)
+    expect(chart.parsed.length).toBeLessThan(before)
+    /* 간트는 트리 순서(order)로 세우니 무엇이 섰는지만 본다 */
+    expect(chart.parsed.map((t) => t.id).sort()).toEqual(
+      taskStore.shownRows.map((r) => r.task.id).sort(),
+    )
+    expect(w.find('[data-mine-count]').text()).toBe(`등록 · 담당 ${taskStore.mineShownCount}건`)
+    /* 내 것이 아닌 상위는 흐리게(context) 선다 */
+    for (const t of chart.parsed)
+      expect(Boolean(t.context)).toBe(taskStore.isMineContext(String(t.id)))
+    expect(localStorage.getItem('innoflow.tasks.mineOnly')).toBe('on')
+
+    await w.vm.$router.push('/tasks?view=list')
+    await flushPromises()
+    expect(w.find('[data-mine-only]').exists()).toBe(false)
   })
 })
 

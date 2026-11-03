@@ -14,6 +14,7 @@ import {
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import HideDoneToggle from '@/components/app/HideDoneToggle.vue'
+import MineOnlyToggle from '@/components/app/MineOnlyToggle.vue'
 import IdCell from '@/components/app/IdCell.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
@@ -386,6 +387,7 @@ function bulkOwner(value: string) {
           view === 'list' && doneChosen ? '상태로 완료를 골라 완료 작업도 보입니다' : undefined
         "
       />
+      <MineOnlyToggle v-if="view === 'gantt'" />
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>
