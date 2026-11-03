@@ -115,6 +115,7 @@
 - [x] 안건 칩: 제목 + `ThreadStateBadge`, 작업 칩: `key` + 제목. **스냅샷에 없는 id 는 안 그린다** — 리스크 요약의 `ChatRefText` 를 그대로 쓴다. 사용자 말풍선은 친 글 그대로 둔다
 - [x] 칩을 누르면 `/threads/:id` · `/tasks/:id` 로 — 기존 상세 팝업이 뜬다. 챗봇 창은 열린 채로 둔다 (`ChatRefText` 는 `open-thread` · `open-task` 만 내고, 갈 곳은 쓰는 쪽이 정한다 — 리스크 화면은 그 자리 팝업)
 - [x] 답 본문은 마크다운을 쓰지 않고 줄바꿈만 살린다 (`v-html` 을 쓰지 않는다)
+  - 2026-11-03 고침 — 챗봇 답은 마크다운 몇 가지(굵게 · 기울임 · `코드` · 목록 · 제목 · 코드 블록 · 구분선)를 그린다. `lib/markdown.ts` 가 블록 · 인라인 조각으로만 나누고 `ChatRefText`(`markdown` prop)가 Vue 로 직접 그린다 — 여전히 `v-html` 은 없고 표 · 링크 · HTML 은 글자 그대로. 근거 칩은 굵게 · 목록 안에서도 선다. 리포트 · 리스크 요약은 프롬프트가 마크다운을 막아 줄바꿈만 그대로
 - [x] 목업 답에 근거 표시를 넣고, 목업 `done.refs` 를 본문에서 모은다(`lib/chat.ts` 의 `collectRefs`, 리스크 요약 목업도 같이 쓴다)
 - [x] 테스트 — 칩이 섬 · 미룬 횟수 · 없는 id 안 그림 · 누르면 주소 이동 + 창 유지 · 받는 중 꼬리 · 사용자 글 그대로 (`components/app/ChatWidget.test.ts` · `lib/chat.test.ts` · `api/chat.test.ts`)
 

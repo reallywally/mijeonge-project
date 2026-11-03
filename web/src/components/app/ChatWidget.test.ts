@@ -259,6 +259,25 @@ describe('챗봇 창 — 근거 칩', () => {
     expect(task.text()).toContain('보험료 산출 기간계 API 개발')
   })
 
+  it('답의 마크다운 몇 가지를 그린다 — 굵게 · 목록 · 코드, 굵게 안의 근거도 칩이다', async () => {
+    const w = await opened()
+    useChatStore().lines.push(
+      answer(
+        '## 정리\n**[[thread:t1]] 는 정해졌습니다**\n\n- 첫째 `apt`\n- 둘째\n\n<b>태그</b> | 표 |',
+      ),
+    )
+    await nextTick()
+    const body = w.get('[data-answer-text]')
+    expect(body.text()).not.toContain('**')
+    expect(body.get('[data-md-heading]').text()).toBe('정리')
+    expect(body.get('strong [data-ref-thread="t1"]').text()).toContain('서버 OS 결정')
+    expect(body.findAll('ul li').map((li) => li.text())).toEqual(['첫째 apt', '둘째'])
+    expect(body.get('li code').text()).toBe('apt')
+    /* HTML 은 글자 그대로 — 태그로 그리지 않는다 */
+    expect(body.find('b').exists()).toBe(false)
+    expect(body.text()).toContain('<b>태그</b> | 표 |')
+  })
+
   it('미룬 안건 칩에는 미룬 횟수가 같이 선다', async () => {
     const w = await opened()
     useChatStore().lines.push(answer('[[thread:t5]] 가 아직입니다.'))

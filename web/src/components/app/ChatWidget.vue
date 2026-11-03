@@ -218,9 +218,10 @@ watch(
               {{ line.text }}
             </p>
             <template v-else>
-              <!-- 답은 AI 가 낸 글이라 v-html 로 그리지 않는다. 근거 표시만 칩으로, 사용자 글은 그대로 둔다 -->
+              <!-- 답은 AI 가 낸 글이라 v-html 로 그리지 않는다. 마크다운 몇 가지 · 근거 칩은 조각내 그리고, 사용자 글은 그대로 둔다 -->
               <ChatRefText
                 v-if="line.text"
+                markdown
                 :text="line.text"
                 class="max-w-[85%] rounded-lg bg-muted px-3 py-2"
                 data-answer-text
