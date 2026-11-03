@@ -517,3 +517,38 @@ describe('줄 끌어 옮기기', () => {
     expect(keysUnder('k1')).toEqual(['HW-2:0', 'HW-3:1', 'HW-20:2'])
   })
 })
+
+describe('내 작업만 (간트)', () => {
+  it('내가 등록했거나 담당인 작업과 그 조상만 남기고, 내 것이 아닌 조상은 흐리게 둔다', () => {
+    const task = useTaskStore()
+    const me = useAuthStore().me!.id
+    task.setHideDone(false)
+    const all = task.shownRows.map((r) => r.task)
+    expect(task.mineOnly).toBe(false)
+
+    task.setMineOnly(true)
+    const mine = all.filter((t) => t.creatorId === me || t.ownerId === me)
+    expect(mine.length).toBeGreaterThan(0)
+    const byId = new Map(all.map((t) => [t.id, t]))
+    const ancestors = new Set<string>()
+    for (const t of mine) {
+      for (let at = t.parentId; at && byId.has(at); at = byId.get(at)!.parentId) ancestors.add(at)
+    }
+    const expected = all.filter((t) => mine.includes(t) || ancestors.has(t.id)).map((t) => t.id)
+
+    expect(task.shownRows.map((r) => r.task.id)).toEqual(expected)
+    expect(task.mineShownCount).toBe(mine.length)
+    for (const id of ancestors) expect(task.isMineContext(id)).toBe(!mine.some((t) => t.id === id))
+    for (const t of mine) expect(task.isMineContext(t.id)).toBe(false)
+
+    task.setMineOnly(false)
+    expect(task.shownRows.map((r) => r.task.id)).toEqual(all.map((t) => t.id))
+  })
+
+  it('완료 숨기기와 같이 걸린다 — 숨긴 완료는 내 것이어도 안 선다', () => {
+    const task = useTaskStore()
+    task.setHideDone(true)
+    task.setMineOnly(true)
+    expect(task.shownRows.some((r) => r.task.status === 'done' && !r.childCount)).toBe(false)
+  })
+})

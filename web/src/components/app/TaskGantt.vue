@@ -23,13 +23,15 @@ const items = computed(() => {
   const locked = new Set(
     taskStore.shownRows.filter((r) => !taskStore.canEdit(r.task)).map((r) => r.task.id),
   )
-  return toGanttItems(taskStore.shownRows, taskStatusLabel, partStore.isContextTask).map(
-    (item) => ({
-      ...item,
-      ...(taskStore.canAddChild(item.id) ? {} : { noAdd: true }),
-      ...(locked.has(item.id) ? { readonly: true } : {}),
-    }),
-  )
+  return toGanttItems(
+    taskStore.shownRows,
+    taskStatusLabel,
+    (id) => partStore.isContextTask(id) || taskStore.isMineContext(id),
+  ).map((item) => ({
+    ...item,
+    ...(taskStore.canAddChild(item.id) ? {} : { noAdd: true }),
+    ...(locked.has(item.id) ? { readonly: true } : {}),
+  }))
 })
 const period = computed(() => rangeLabel(taskStore.shownRows))
 

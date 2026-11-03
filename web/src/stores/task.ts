@@ -157,10 +157,45 @@ export const useTaskStore = defineStore('task', () => {
   const doneHiddenIds = computed<Set<string>>(() =>
     hideDone.value ? hiddenDoneIds(visibleRows.value.map((r) => r.task)) : new Set(),
   )
-  /** 간트가 그리는 행 — 보이는 범위에서 숨긴 완료를 뺀 것 */
-  const shownRows = computed<TaskRow[]>(() =>
+  /* 내 작업만 — 간트만 따른다. 내가 등록했거나 담당인 작업과, 트리가 끊기지 않게 그 조상(흐리게)을 남긴다.
+     처음은 꺼짐이고 바꾼 값은 브라우저에 기억한다. 보기만 거른다 */
+  const MINE_ONLY_KEY = 'innoflow.tasks.mineOnly'
+  const mineOnly = ref(recall(MINE_ONLY_KEY) === 'on')
+  function setMineOnly(on: boolean) {
+    mineOnly.value = on
+    remember(MINE_ONLY_KEY, on ? 'on' : 'off')
+  }
+  const isMine = (task: Task) =>
+    auth.me !== null && (task.creatorId === auth.me.id || task.ownerId === auth.me.id)
+
+  /** 숨긴 완료를 뺀 행 — 내 작업만 거르기 전 */
+  const undoneRows = computed<TaskRow[]>(() =>
     visibleRows.value.filter((r) => !doneHiddenIds.value.has(r.task.id)),
   )
+  /** 내 작업만일 때 내 것이 아닌데 조상이라 남은 작업 — 간트가 흐리게 그린다 */
+  const mineContextIds = computed<Set<string>>(() => {
+    if (!mineOnly.value) return new Set()
+    const byId = new Map(undoneRows.value.map((r) => [r.task.id, r.task]))
+    const context = new Set<string>()
+    for (const r of undoneRows.value) {
+      if (!isMine(r.task)) continue
+      let at = r.task.parentId
+      while (at && byId.has(at) && !context.has(at)) {
+        if (!isMine(byId.get(at)!)) context.add(at)
+        at = byId.get(at)!.parentId
+      }
+    }
+    return context
+  })
+  /** 간트가 그리는 행 — 보이는 범위에서 숨긴 완료를 빼고, 내 작업만이면 내 것과 그 조상만 */
+  const shownRows = computed<TaskRow[]>(() =>
+    mineOnly.value
+      ? undoneRows.value.filter((r) => isMine(r.task) || mineContextIds.value.has(r.task.id))
+      : undoneRows.value,
+  )
+  /** 내 작업만일 때 간트에 선 내 작업 수 — 조상은 빼고 센다 */
+  const mineShownCount = computed(() => shownRows.value.filter((r) => isMine(r.task)).length)
+  const isMineContext = (taskId: string) => mineContextIds.value.has(taskId)
 
   /* 아래 수는 보이는 것만 센다 — 화면에 없는 작업을 '몇 건' 이라 적으면 찾을 수 없다 */
 
@@ -654,6 +689,10 @@ export const useTaskStore = defineStore('task', () => {
     setHideDone,
     doneHiddenIds,
     shownRows,
+    mineOnly,
+    setMineOnly,
+    mineShownCount,
+    isMineContext,
     periodLabel,
     taskDetail,
     threadRow,
