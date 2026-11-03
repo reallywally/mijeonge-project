@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { X } from 'lucide-vue-next'
+import { Plus, X } from 'lucide-vue-next'
 import SearchPicker from '@/components/app/SearchPicker.vue'
 import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
 import type { TaskThreadRow, Thread } from '@/types/domain'
 
 /* 작업에 거는 안건 — 작업 상세와 작업 추가가 같이 쓴다. 위의 검색 칸으로 찾아 걸고, 걸린 것은 표로 본다.
-   거는 일은 부모가 한다 — 상세는 바로 링크를 만들고, 추가는 골라 두었다가 만들 때 건다. */
+   거는 일은 부모가 한다 — 상세는 바로 링크를 만들고, 추가는 골라 두었다가 만들 때 건다.
+   찾는 안건이 없으면 새로 등록할 수 있다('create-thread', 적은 제목 또는 '') — 부모가 안건 추가 팝업을
+   그 제목으로 열고, 만들면 건다. */
 withDefaults(
   defineProps<{
     threads: TaskThreadRow[]
@@ -20,6 +22,7 @@ withDefaults(
 )
 const emit = defineEmits<{
   (e: 'link-thread' | 'unlink-thread' | 'open-thread', id: string): void
+  (e: 'create-thread', title: string): void
 }>()
 </script>
 
@@ -30,6 +33,16 @@ const emit = defineEmits<{
       <span class="text-xs text-muted-foreground">{{ threads.length }}건</span>
       <span class="grow" />
       <span class="truncate text-xs text-muted-foreground">이 작업을 하다가 정할 것</span>
+      <button
+        v-if="!readonly"
+        type="button"
+        class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        data-new-thread
+        @click="emit('create-thread', '')"
+      >
+        <Plus class="size-3" />
+        새 안건
+      </button>
     </div>
 
     <SearchPicker
@@ -37,9 +50,11 @@ const emit = defineEmits<{
       :items="threadChoices"
       :text="(t) => t.title"
       :key-of="(t) => t.id"
-      placeholder="안건 제목으로 찾기"
-      empty-label="연결할 수 있는 안건을 모두 연결했습니다"
+      placeholder="안건 제목으로 찾기 · 없으면 새로 등록"
+      empty-label="안건 제목을 적어 새로 등록"
+      :create-label="(q) => `'${q}' 안건 새로 등록…`"
       @pick="(t) => emit('link-thread', t.id)"
+      @create="(title) => emit('create-thread', title)"
     >
       <template #item="{ item }">
         <span class="min-w-0 grow truncate">{{ item.title }}</span>

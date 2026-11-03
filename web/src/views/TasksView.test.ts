@@ -9,6 +9,7 @@ import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
+import { useThreadStore } from '@/stores/thread'
 import TasksView from './TasksView.vue'
 
 /* dhtmlx-gantt 는 jsdom 에서 컨테이너 높이가 0 이라 줄을 한 줄도 그리지 않는다.
@@ -121,8 +122,29 @@ async function keydown(selector: string, key: string) {
 }
 
 /* 검색 칸 아래로 펼쳐진 후보들 */
+/* 고를 수 있는 기존 것만 — 새로 등록하는 줄(data-picker-create)은 따로 본다 */
 const options = () =>
-  [...document.body.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim() ?? '')
+  [...document.body.querySelectorAll('[role="option"]:not([data-picker-create])')].map(
+    (o) => o.textContent?.trim() ?? '',
+  )
+const createOption = () => document.body.querySelector<HTMLElement>('[data-picker-create]')
+/* 작업 팝업 위에 뜬 안건 추가 팝업의 칸 · 버튼 — 작업 팝업에도 '제목' 칸이 있어 안건 팝업 안에서 찾는다 */
+const threadDialog = () =>
+  document.body.querySelector('[data-thread-link-note]')!.closest('[role="dialog"]')!
+const threadTitleField = () =>
+  threadDialog().querySelector<HTMLTextAreaElement>('textarea[aria-label="제목"]')!
+const text = (sel: string) => document.body.querySelector(sel)?.textContent ?? ''
+async function typeIn(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  el.value = value
+  el.dispatchEvent(new Event('input'))
+  await flushPromises()
+}
+const threadField = (label: string) =>
+  threadDialog().querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`)!
+const cancelOf = (inside: Element) =>
+  [...inside.closest('[role="dialog"]')!.querySelectorAll('button')].find(
+    (b) => b.textContent?.trim() === '취소',
+  )
 
 enableAutoUnmount(afterEach)
 
@@ -152,10 +174,10 @@ describe('작업 목록 화면', () => {
     expect(w.text()).toContain('목록')
   })
 
-  it('한 쪽에 여덟 줄씩 놓고 총 건수를 적는다', async () => {
+  it('한 쪽에 열 줄씩 놓고 총 건수를 적는다', async () => {
     const w = await mountView()
-    expect(w.findAll('tbody tr')).toHaveLength(8)
-    expect(w.text()).toContain('총 22건 중 1–8건')
+    expect(w.findAll('tbody tr')).toHaveLength(10)
+    expect(w.text()).toContain('총 22건 중 1–10건')
   })
 
   it('제목 아래에 어디에 속한 작업인지 경로가 붙는다', async () => {
@@ -234,7 +256,7 @@ describe('작업 상세 팝업', () => {
     const taskStore = useTaskStore()
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
 
-    const search = 'input[placeholder="안건 제목으로 찾기"]'
+    const search = 'input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]'
     await type(search, '백업')
     /* 적은 말이 들어간 것만 펼친다 */
     expect(options()).toEqual(['개발 서버 백업 주기대기'])
@@ -246,6 +268,52 @@ describe('작업 상세 팝업', () => {
     expect(options()).toEqual([])
 
     await click(document.body.querySelector('button[aria-label="개발 서버 백업 주기 연결 해제"]')!)
+    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
+  })
+
+  it('찾는 안건이 없으면 안건 추가 팝업을 제목을 채워 열고, 상세까지 적어 만들면 건다', async () => {
+    await mountView('/tasks/k4')
+    const taskStore = useTaskStore()
+    const threadStore = useThreadStore()
+    const search = 'input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]'
+
+    await type(search, '로그 보관 기간')
+    expect(options()).toEqual([])
+    expect(createOption()!.textContent).toContain("'로그 보관 기간' 안건 새로 등록…")
+    /* 맞는 것이 없으면 Enter 가 새로 등록하는 줄을 고른다 — 아직 안 만든다 */
+    const before = threadStore.threads.length
+    await keydown(search, 'Enter')
+    expect(threadStore.threads).toHaveLength(before)
+
+    expect(text('[data-thread-link-note]')).toContain('만들면 HW-4 작업에 연결됩니다')
+    expect(threadTitleField().value).toBe('로그 보관 기간')
+    await typeIn(threadField('배경'), '감사 대응으로 1년은 남겨야 한다')
+    await typeIn(threadField('후보'), '90일\n1년')
+    await click(popupButton('만들고 연결'))
+
+    const made = threadStore.threads.find((t) => t.title === '로그 보관 기간')!
+    expect(made.state).toBe('queued')
+    expect(made.description).toBe('감사 대응으로 1년은 남겨야 한다')
+    expect(made.options).toEqual(['90일', '1년'])
+    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', made.id])
+    /* 안건 팝업만 닫히고 작업 상세는 그대로다 */
+    expect(document.body.querySelector('[data-thread-link-note]')).toBeNull()
+    expect(popupText()).toContain('연관 안건')
+  })
+
+  it('[새 안건] 으로 빈 팝업을 열고, 취소하면 아무것도 안 만든다', async () => {
+    await mountView('/tasks/k4')
+    const taskStore = useTaskStore()
+    const threadStore = useThreadStore()
+    const before = threadStore.threads.length
+
+    await click(document.body.querySelector('[data-new-thread]')!)
+    expect(threadTitleField().value).toBe('')
+    expect(popupButton('만들고 연결')!.hasAttribute('disabled')).toBe(true)
+    await typeIn(threadTitleField(), '배포 승인자')
+    await click(cancelOf(threadTitleField()))
+
+    expect(threadStore.threads).toHaveLength(before)
     expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
   })
 
@@ -375,7 +443,7 @@ describe('작업 추가 팝업', () => {
       ['check', '러너 등록'],
       ['bullet', '사내 인증서가 필요하다'],
     ])
-    expect(w.text()).toContain('총 23건 중 1–8건')
+    expect(w.text()).toContain('총 23건 중 1–10건')
   })
 
   it('찾아서 골라 둔 안건이 만들 때 같이 걸린다', async () => {
@@ -383,8 +451,8 @@ describe('작업 추가 팝업', () => {
     const taskStore = useTaskStore()
 
     await type('textarea[aria-label="제목"]', '백업 스크립트')
-    await type('input[placeholder="안건 제목으로 찾기"]', '백업')
-    await keydown('input[placeholder="안건 제목으로 찾기"]', 'Enter')
+    await type('input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]', '백업')
+    await keydown('input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]', 'Enter')
     /* 아직 만들기 전이라 표에만 서 있다 */
     expect(popupText()).toContain('개발 서버 백업 주기')
     expect(taskStore.rows).toHaveLength(22)
@@ -392,6 +460,26 @@ describe('작업 추가 팝업', () => {
     await click(popupButton('만들기'))
     const made = taskStore.rows.find((r) => r.task.title === '백업 스크립트')!
     expect(taskStore.threadsOfTask(made.task.id).map((t) => t.id)).toEqual(['t4'])
+  })
+
+  it('작업 추가에서도 안건 추가 팝업으로 새 안건을 만들어 골라 둔다', async () => {
+    await mountView('/tasks/new')
+    const taskStore = useTaskStore()
+    const threadStore = useThreadStore()
+
+    await type('textarea[aria-label="제목"]', '로그 정리')
+    await type('input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]', '로그 보관 기간')
+    /* 목록 줄은 칸의 포커스를 안 뺏으려 mousedown 으로 고른다 */
+    createOption()!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flushPromises()
+    expect(text('[data-thread-link-note]')).toContain('만들 때 같이 연결됩니다')
+    await click(popupButton('만들고 연결'))
+
+    const made = threadStore.threads.find((t) => t.title === '로그 보관 기간')!
+    expect(popupText()).toContain('로그 보관 기간')
+    await click(popupButton('만들기'))
+    const task = taskStore.rows.find((r) => r.task.title === '로그 정리')!
+    expect(taskStore.threadsOfTask(task.task.id).map((t) => t.id)).toEqual([made.id])
   })
 
   it('하위 작업 추가로 들어오면 상위 작업이 채워져 있다', async () => {
@@ -614,7 +702,7 @@ describe('완료 숨기기 (Q64)', () => {
   it('처음은 켜짐 — 목록에서 완료 셋이 숨고 그 수를 적는다', async () => {
     const w = await mountView()
     expect(toggle(w).attributes('data-state')).toBe('checked')
-    expect(w.text()).toContain('총 19건 중 1–8건')
+    expect(w.text()).toContain('총 19건 중 1–10건')
     expect(hiddenNote(w).text()).toBe('완료 3건 숨김')
     /* 상태 칩의 수 · 간트의 'N / 22 완료' 같은 집계는 숨긴 것도 센다 */
     const chips = w.findAll('button').map((b) => b.text())
@@ -643,7 +731,7 @@ describe('완료 숨기기 (Q64)', () => {
     const w = await mountView()
     await toggle(w).trigger('click')
     await flushPromises()
-    expect(w.text()).toContain('총 22건 중 1–8건')
+    expect(w.text()).toContain('총 22건 중 1–10건')
     expect(hiddenNote(w).exists()).toBe(false)
     expect(localStorage.getItem('innoflow.tasks.hideDone')).toBe('off')
 

@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed } from 'lucide-vue-next'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
+import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -101,6 +102,21 @@ const threadChoices = computed(() =>
 
 const toggle = (list: string[], id: string, on: boolean) =>
   on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
+
+/* 찾는 안건이 없으면 안건 추가 팝업을 이 위에 띄운다 — 적은 제목을 채워 열고, 배경 · 후보 · 담당 · 기한까지
+   여기서 적는다(안건 화면에 다녀오지 않게). 만들면 이 작업에 건다 */
+const newThreadOpen = ref(false)
+const newThreadTitle = ref('')
+
+function createThread(title: string) {
+  newThreadTitle.value = title
+  newThreadOpen.value = true
+}
+
+function onThreadCreated(id: string) {
+  newThreadOpen.value = false
+  threadIds.value = toggle(threadIds.value, id, true)
+}
 
 const parentPath = computed(() => {
   const label = taskStore.parentOptions.find((o) => o.id === parent.value)?.label
@@ -211,6 +227,7 @@ function onKeydown(e: KeyboardEvent) {
             :navigable="false"
             @link-thread="(id) => (threadIds = toggle(threadIds, id, true))"
             @unlink-thread="(id) => (threadIds = toggle(threadIds, id, false))"
+            @create-thread="createThread"
           />
         </div>
 
@@ -248,6 +265,13 @@ function onKeydown(e: KeyboardEvent) {
           {{ saving ? '만드는 중…' : '만들기' }}
         </Button>
       </div>
+
+      <ThreadCreateDialog
+        v-model:open="newThreadOpen"
+        :initial-title="newThreadTitle"
+        link-note="만들면 이 작업을 만들 때 같이 연결됩니다"
+        @created="onThreadCreated"
+      />
     </DialogScrollContent>
   </Dialog>
 </template>

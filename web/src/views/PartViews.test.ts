@@ -79,11 +79,11 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
     const w = await mountAt('/tasks?view=list')
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
-    expect(w.text()).toContain('총 10건 중 1–8건')
+    expect(w.text()).toContain('총 10건 중 1–10건')
     expect(w.text()).not.toContain('가상비서')
 
     await click(scopeButton('all'))
-    expect(w.text()).toContain('총 22건 중 1–8건')
+    expect(w.text()).toContain('총 22건 중 1–10건')
   })
 
   it('파트 칩은 파트가 있는 행에만 붙는다 — 공통은 안 그린다', async () => {
