@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { Plus, X } from 'lucide-vue-next'
 import SearchPicker from '@/components/app/SearchPicker.vue'
-import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
-import type { TaskThreadRow, Thread } from '@/types/domain'
+import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
+import type { TaskAgendaRow, Agenda } from '@/types/domain'
 
 /* 작업에 거는 안건 — 작업 상세와 작업 추가가 같이 쓴다. 위의 검색 칸으로 찾아 걸고, 걸린 것은 표로 본다.
    거는 일은 부모가 한다 — 상세는 바로 링크를 만들고, 추가는 골라 두었다가 만들 때 건다.
-   찾는 안건이 없으면 새로 등록할 수 있다('create-thread', 적은 제목 또는 '') — 부모가 안건 추가 팝업을
+   찾는 안건이 없으면 새로 등록할 수 있다('create-agenda', 적은 제목 또는 '') — 부모가 안건 추가 팝업을
    그 제목으로 열고, 만들면 건다. */
 withDefaults(
   defineProps<{
-    threads: TaskThreadRow[]
+    agendas: TaskAgendaRow[]
     /** 아직 안 건 것 — 검색 칸이 이 안에서 찾는다 */
-    threadChoices: Thread[]
+    agendaChoices: Agenda[]
     /** 제목을 눌러 그 안건으로 갈 수 있는지 — 아직 없는 작업을 만드는 중에는 못 간다 */
     navigable?: boolean
     /** 걸고 떼지 못하고 보기만 — 고칠 권한이 없는 작업 */
@@ -21,8 +21,8 @@ withDefaults(
   { navigable: true, readonly: false },
 )
 const emit = defineEmits<{
-  (e: 'link-thread' | 'unlink-thread' | 'open-thread', id: string): void
-  (e: 'create-thread', title: string): void
+  (e: 'link-agenda' | 'unlink-agenda' | 'open-agenda', id: string): void
+  (e: 'create-agenda', title: string): void
 }>()
 </script>
 
@@ -30,15 +30,15 @@ const emit = defineEmits<{
   <section class="flex min-w-0 flex-col gap-2.5">
     <div class="flex items-baseline gap-2">
       <span class="text-xs font-medium">연관 안건</span>
-      <span class="text-xs text-muted-foreground">{{ threads.length }}건</span>
+      <span class="text-xs text-muted-foreground">{{ agendas.length }}건</span>
       <span class="grow" />
       <span class="truncate text-xs text-muted-foreground">이 작업을 하다가 정할 것</span>
       <button
         v-if="!readonly"
         type="button"
         class="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-        data-new-thread
-        @click="emit('create-thread', '')"
+        data-new-agenda
+        @click="emit('create-agenda', '')"
       >
         <Plus class="size-3" />
         새 안건
@@ -47,23 +47,23 @@ const emit = defineEmits<{
 
     <SearchPicker
       v-if="!readonly"
-      :items="threadChoices"
+      :items="agendaChoices"
       :text="(t) => t.title"
       :key-of="(t) => t.id"
       placeholder="안건 제목으로 찾기 · 없으면 새로 등록"
       empty-label="안건 제목을 적어 새로 등록"
       :create-label="(q) => `'${q}' 안건 새로 등록…`"
-      @pick="(t) => emit('link-thread', t.id)"
-      @create="(title) => emit('create-thread', title)"
+      @pick="(t) => emit('link-agenda', t.id)"
+      @create="(title) => emit('create-agenda', title)"
     >
       <template #item="{ item }">
         <span class="min-w-0 grow truncate">{{ item.title }}</span>
-        <ThreadStateBadge :state="item.state" />
+        <AgendaStateBadge :state="item.state" />
       </template>
     </SearchPicker>
 
     <div
-      v-if="threads.length"
+      v-if="agendas.length"
       class="flex flex-col overflow-hidden rounded-md border border-border"
     >
       <div
@@ -74,8 +74,8 @@ const emit = defineEmits<{
         <span v-if="!readonly" class="w-7 shrink-0" />
       </div>
       <div
-        v-for="row in threads"
-        :key="row.thread.id"
+        v-for="row in agendas"
+        :key="row.agenda.id"
         class="group flex min-h-[46px] items-center gap-3 border-b border-border px-3 py-1.5 last:border-b-0"
       >
         <span class="flex min-w-0 grow flex-col gap-0.5">
@@ -83,10 +83,10 @@ const emit = defineEmits<{
             type="button"
             class="min-w-0 truncate text-left text-[13px] underline-offset-4 enabled:hover:underline"
             :disabled="!navigable"
-            :title="row.thread.title"
-            @click="emit('open-thread', row.thread.id)"
+            :title="row.agenda.title"
+            @click="emit('open-agenda', row.agenda.id)"
           >
-            {{ row.thread.title }}
+            {{ row.agenda.title }}
           </button>
           <span
             class="truncate text-xs text-muted-foreground"
@@ -95,15 +95,15 @@ const emit = defineEmits<{
           >
         </span>
         <span class="w-[92px] shrink-0">
-          <ThreadStateBadge :state="row.thread.state" :defer-count="row.deferCount" />
+          <AgendaStateBadge :state="row.agenda.state" />
         </span>
         <button
           v-if="!readonly"
           type="button"
           class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
-          :aria-label="`${row.thread.title} 연결 해제`"
+          :aria-label="`${row.agenda.title} 연결 해제`"
           title="연결 해제"
-          @click="emit('unlink-thread', row.thread.id)"
+          @click="emit('unlink-agenda', row.agenda.id)"
         >
           <X class="size-3.5" />
         </button>

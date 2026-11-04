@@ -22,7 +22,7 @@ from app.api import report as report_api
 from app.config import settings
 from app.llm.anthropic_provider import FALLBACK_BETA, AnthropicProvider
 from app.main import app
-from app.models import Entry, Member, ProjectReport, Task
+from app.models import Agenda, Member, ProjectReport, Task
 from app.services import chat as chat_service
 from app.services import report as report_service
 from app.services.ratelimit import RateLimiter
@@ -127,17 +127,17 @@ async def test_second_report_sees_the_first(client: httpx.AsyncClient) -> None:
 async def test_refs_only_for_ids_that_were_given(client: httpx.AsyncClient) -> None:
     """근거 칩은 본문에 나온 것 중 넣어 준 id 만 — 다른 프로젝트 · 지어낸 id 는 칩이 안 된다."""
     text = (
-        "[[task:k20]] [[task:x1]] [[thread:t10]] [[thread:t5]] [[task:없는것]] "
-        "[[task:k22]] [[thread:t2]] [[task:k20]]"
+        "[[task:k20]] [[task:x1]] [[agenda:t10]] [[agenda:t5]] [[task:없는것]] "
+        "[[task:k22]] [[agenda:t2]] [[task:k20]]"
     )
     use(FakeClient(Turn(texts=[text])))
     events = await post(client)
     assert events[-1][1]["refs"] == [
         {"kind": "task", "id": "k20"},
-        {"kind": "thread", "id": "t5"},
+        {"kind": "agenda", "id": "t5"},
         {"kind": "task", "id": "k22"},
         # k22 에 걸린 안건 — details 로 넣어 준 것이다
-        {"kind": "thread", "id": "t2"},
+        {"kind": "agenda", "id": "t2"},
     ]
 
 
@@ -302,35 +302,47 @@ async def test_details_for_top_eight(client: httpx.AsyncClient) -> None:
     assert checks and all(isinstance(line["done"], bool) for line in checks)
     assert [c["key"] for c in k4["children"]] == ["HW-19", "HW-20", "HW-21", "HW-22"]
     assert {c["status"] for c in k4["children"]} == {"done", "doing", "todo", "blocked"}
-    threads = {t["id"]: t for t in k4["threads"]}
-    assert set(threads) == {"t1", "t2"}
-    last = threads["t2"]["lastEntry"]
-    assert set(last) == {"kind", "text", "note", "date"}
+    agendas = {t["id"]: t for t in k4["agendas"]}
+    assert set(agendas) == {"t1", "t2"}
+    # 걸린 안건은 상태와 결정내용까지
+    assert agendas["t2"] == {
+        "id": "t2",
+        "title": "DB 결정",
+        "state": "decided",
+        "decision": (
+            "mysql 을 쓴다\n"
+            "- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n"
+            "- supabase 는 비용 때문에 뺀다"
+        ),
+    }
 
 
-async def test_decisions_carry_period_entries(
+async def test_decisions_carry_the_decision(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    """기간 안에 결정 이력이 남은 안건 — 제목과 이번 기간의 이력만 들어간다."""
-    session.add(
-        Entry(
-            thread_id="t9",
-            kind="decide",
-            text="공통 코드 A안",
-            note="",
-            created_at=at("2026-10-19T00:00:00Z"),
-        )
-    )
+    """기간 안에 정해진 안건(decidedAt) — 제목 · 상태 · 결정내용 · 정한 날만 들어간다."""
+    t9 = await session.get(Agenda, "t9")
+    assert t9 is not None
+    t9.state = "decided"
+    t9.decision = "공통 코드 A안"
+    t9.decided_at = at("2026-10-19T00:00:00Z")
     await session.commit()
     fake = FakeClient(Turn(texts=["글"]))
     use(fake)
     events = await post(client)
-    assert events[0][1]["facts"]["decisions"]["decidedThreadIds"] == ["t9"]
-    (t9,) = sent(fake)["decisions"]["decided"]
-    assert t9["id"] == "t9" and t9["title"]
-    assert t9["entries"] == [
-        {"kind": "decide", "text": "공통 코드 A안", "note": "", "date": "2026-10-19"}
-    ]
+    decisions = events[0][1]["facts"]["decisions"]
+    assert decisions["decidedAgendaIds"] == ["t9"]
+    # 미뤄진 것은 걷었다 — 키째 없다
+    assert set(decisions) == {"decidedAgendaIds", "riskyAgendaIds"}
+    (doc,) = sent(fake)["decisions"]["decided"]
+    assert doc == {
+        "id": "t9",
+        "title": "공통 코드 체계 확정",
+        "state": "decided",
+        "decision": "공통 코드 A안",
+        "decidedOn": "2026-10-19",
+    }
+    assert "deferred" not in sent(fake)["decisions"]
 
 
 # --- 문턱 -----------------------------------------------------------------------------------

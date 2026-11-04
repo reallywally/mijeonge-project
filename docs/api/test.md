@@ -5,6 +5,8 @@
 > 작성 중 · 준비됨 · 테스트 중 · 막힘은 상태 칸에서 고른다. 화면 말 '통과' 는 **'성공'** 이다(값은 그대로 `pass`).
 > **2026-10-27 고침 (사용자, Q60)** — 입력을 줄였다. **목적 · 사전조건 · 단계(단계 표 · 실패한 단계)를 걷고 `content` '테스트 내용'(글 칸 하나, textarea)을 더했다**(리비전 `0020_test_content`).
 > 지난 목적 · 사전조건 · 단계는 테스트 내용 글로 옮겼다. 테스트 데이터는 그대로 둔다. 실패는 메모만 받는다.
+> **2026-11-04 고침 (안건 간소화, `agenda.md`)** — 이력 줄(`Entry`)을 걷어 '결정 변경' 은 **안건 변경 이력(`agenda_history`)에서 `decision` 칸이 있거나 `state` 가 `decided` 로 바뀐 줄**이다.
+> `changedEntryIds` → **`changedAgendaIds: string[]`**(basis 뒤로 결정이 바뀐 닿는 안건, 처음 바뀐 순). 태그 `kind` 는 `'thread'` → `'agenda'`(`refs/agenda/{id}`, `?agenda=`), 테이블 열 `test_ref.agenda_id`.
 >
 > 순서는 `server/PLAN.md` 16단계 · `web/PLAN.md` 16단계. **이 문서는 1단계(AI 없이)의 계약이다** —
 > AI 셋(검토 · 빠진 테스트 찾기 · 바뀐 자리 설명)과 챗봇 도구는 끝의 '나중' 에 테두리만 두고, 시작할 때 이 문서를 고친다.
@@ -48,9 +50,9 @@ index (project_id, seq)
 test_ref
   test_id · project_id
   task_id    FK (task_id, project_id)   → task(id, project_id) cascade     null 가능
-  thread_id  FK (thread_id, project_id) → thread(id, project_id) cascade   null 가능
-  check: task_id · thread_id 중 정확히 하나
-  unique (test_id, task_id) · unique (test_id, thread_id)
+  agenda_id  FK (agenda_id, project_id) → agenda(id, project_id) cascade   null 가능   (2026-11-04 thread_id 에서)
+  check: task_id · agenda_id 중 정확히 하나
+  unique (test_id, task_id) · unique (test_id, agenda_id)
 ```
 
 - **번호** — `{taskKeyPrefix}-T{번호}`(`HW-T12`). 프로젝트별로 세고 지운 번호를 다시 쓰지 않는다 — `snapshot.md` '`task.key` 발번' 과 같은 한 문장 잠금(`next_test_no`)
@@ -71,7 +73,7 @@ export type TestSignal =
 
 /** 참조 태그 */
 export interface TestRef {
-  kind: 'task' | 'thread'
+  kind: 'task' | 'agenda'
   id: string
 }
 
@@ -102,8 +104,8 @@ export interface TestCase {
   partId: string | null
   /** 규칙이 붙인 신호. 하위가 있는 테스트(묶음)는 늘 [] */
   signals: TestSignal[]
-  /** 기준 바뀜의 근거 — basis 뒤로 닿는 안건에 생긴 decide · change Entry 의 id, 오래된 것부터. 없으면 [] */
-  changedEntryIds: string[]
+  /** 기준 바뀜의 근거 — basis 뒤로 결정이 바뀐 닿는 안건, 처음 바뀐 순. 없으면 [] (2026-11-04) */
+  changedAgendaIds: string[]
   createdBy: string | null
   createdAt: string
 }
@@ -156,7 +158,7 @@ export interface TestStatusInput {
 - 상위 — 없거나 다른 프로젝트면 400 `TEST_PARENT_NOT_FOUND`, 자기 자신 400 `TEST_PARENT_SELF`, 자손 400 `TEST_PARENT_DESCENDANT`
 - 담당자 · 파트 — 작업과 같은 검사 · 같은 `code`(`TASK_OWNER_NOT_FOUND` 자리에 `TEST_OWNER_NOT_FOUND`, 파트는 작업과 같은 것)
 - 상태 — 하위가 있는 테스트는 400 `TEST_GROUP_STATUS`(묶음은 직접 돌리지 않는다). `fail` · `blocked` 가 아니면 `resultNote` 를 비운다. **같은 상태로 다시 보내도** `statusChangedAt` · `By` 를 새로 찍는다(덮어쓴다)
-- 태그 — 같은 프로젝트의 작업 · 안건만(아니면 404 `TASK_NOT_FOUND` · `THREAD_NOT_FOUND`), 20개까지 400 `TEST_REF_LIMIT`
+- 태그 — 같은 프로젝트의 작업 · 안건만(아니면 404 `TASK_NOT_FOUND` · `AGENDA_NOT_FOUND`), 20개까지 400 `TEST_REF_LIMIT`
 - 지우기 — 하위가 있으면 409 `TEST_HAS_CHILDREN`, 만든 사람 · 관리자가 아니면 403 `FORBIDDEN`
 
 ## 며칠째 · 신호 — 서버가 센다
@@ -171,17 +173,18 @@ export interface TestStatusInput {
 | `notStarted` | `start < 오늘` 이고 `status ∈ {draft, ready}` |
 | `longBlocked` | `status = blocked` 이고 `statusDays > staleDays` |
 | `failedIdle` | `status = fail` 이고 `statusDays > staleDays` |
-| `basisChanged` | `changedEntryIds` 가 비어 있지 않다 |
+| `basisChanged` | `changedAgendaIds` 가 비어 있지 않다 |
 
 - **하위가 있는 테스트(묶음)** 는 `signals` 가 늘 `[]` 이다 — 묶음의 상태 · 신호는 화면이 하위에서 모은다
 - `signals` 는 위 표의 순서로 낸다
 
 ### 기준 바뀜 — `basis_seq`
 
-- **닿는 안건** = 직접 태그한 안건 + 태그한 작업에 걸린 안건(`task_thread_link`)
-- `basis_seq` = 닿는 안건들의 Entry `seq` 가장 큰 값(닿는 안건이 없거나 Entry 가 없으면 null)
+- **닿는 안건** = 직접 태그한 안건 + 태그한 작업에 걸린 안건(`task_agenda_link`)
+- **결정 변경 줄**(2026-11-04) = 닿는 안건의 `agenda_history` 줄 중 `decision` 칸이 있거나 `state` 칸의 `to` 가 `decided` 인 것
+- `basis_seq` = 닿는 안건들의 결정 변경 줄 `seq` 가장 큰 값(닿는 안건이 없거나 그런 줄이 없으면 null). ~~Entry `seq`~~
 - **새로 찍는 때** — 만들 때 · `PATCH`(무엇이든 바꾸면) · 태그를 걸거나 뗄 때 · `POST .../basis`("그대로 맞다")
-- `changedEntryIds` = 닿는 안건의 Entry 중 `kind ∈ {decide, change}` 이고 `seq > coalesce(basis_seq, 0)` 인 것
+- `changedAgendaIds` = 결정 변경 줄 중 `seq > coalesce(basis_seq, 0)` 인 것이 있는 닿는 안건 — 그런 줄의 첫 `seq` 순(처음 바뀐 순). ~~`changedEntryIds` = Entry 중 `kind ∈ {decide, change}` …~~
 - 알고 두는 것 — **태그한 작업에 안건이 새로 걸리면** 그 안건의 옛 결정도 `seq` 가 크면 기준 바뀜으로 뜬다. 사람이 [그대로 맞다] 로 지운다. 결정이 바뀐 것을 놓치는 것보다 낫다
 
 ## 엔드포인트
@@ -194,7 +197,7 @@ export interface TestStatusInput {
 | PATCH | `/api/tests/{testId}` | 고치기 | `TestCase` |
 | DELETE | `/api/tests/{testId}` | 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | 204 |
 | POST | `/api/tests/{testId}/status` | 상태 바꾸기 | `TestCase` |
-| PUT | `/api/tests/{testId}/refs/{kind}/{refId}` | 태그 걸기(멱등). `kind` = `task` \| `thread` | `TestCase` |
+| PUT | `/api/tests/{testId}/refs/{kind}/{refId}` | 태그 걸기(멱등). `kind` = `task` \| `agenda` | `TestCase` |
 | DELETE | `/api/tests/{testId}/refs/{kind}/{refId}` | 태그 떼기(멱등 — 없는 태그도 204) | 204 |
 | POST | `/api/tests/{testId}/basis` | "그대로 맞다" — `basis_seq` 를 지금으로 | `TestCase` |
 
@@ -221,7 +224,7 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 | `HW-T1` 로그인 시나리오 | (묶음) | draft | — | — | `[]` (묶음) |
 | `HW-T2` 올바른 계정으로 로그인 | T1 | pass · 10-10 | 10-08 ~ 10-10 | 작업 1개 | `[]` |
 | `HW-T3` 비밀번호 5회 틀림 잠금 | T1 | testing · 10-03 | 10-06 ~ 10-08 | 안건 1개 | `longRunning` · `overdue` |
-| `HW-T4` 비밀번호 변경 주기 | T1 | ready · 10-01 | 10-13 ~ 10-17 | **결정이 바뀐 안건**(basis 뒤에 `decide` · `change` 줄) | `notStarted` · `basisChanged` |
+| `HW-T4` 비밀번호 변경 주기 | T1 | ready · 10-01 | 10-13 ~ 10-17 | **결정이 바뀐 안건**(basis 뒤에 결정 변경 줄) | `notStarted` · `basisChanged` |
 | `HW-T5` 계정 배포 시나리오 | (묶음) | draft | — | — | `[]` |
 | `HW-T6` 개발자 계정 일괄 생성 | T5 | blocked · 10-02 | — | 작업 `k21` | `longBlocked` |
 | `HW-T7` 권한 없는 계정 접근 차단 | T5 | fail · 10-05 | 10-14 ~ 10-20 | — | `failedIdle` |
@@ -236,12 +239,12 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
   - **목록** — 키 · 제목 · 경로(상위 테스트) · 태그 칩 · 상태 · N일째 · 신호 칩 · 기간 · 담당
   - **간트** — 작업 간트(`TaskGantt`)를 테스트에도 쓴다. 왼쪽 묶음 트리(키 · 제목 · 상태 배지), 막대는 테스트 기간, 끌어서 기간 바꾸기(= `PATCH`), 줄 [+] 로 그 묶음 아래 추가. 선행 화살표는 없다
   - **묶음의 상태** — 하위 상태 중 가장 나쁜 것: `fail` > `blocked` > `testing` > `draft` · `ready` > `pass`. 묶음의 신호는 하위 신호를 모은 것
-- **테스트 상세** — 작업 상세와 따로 만든 팝업(`/tests/:id`), 추가는 `/tests/new`(작업 · 안건 상세에서 오면 `?task=` · `?thread=` 로 태그를 미리 채운다)
+- **테스트 상세** — 작업 상세와 따로 만든 팝업(`/tests/:id`), 추가는 `/tests/new`(작업 · 안건 상세에서 오면 `?task=` · `?agenda=` 로 태그를 미리 채운다)
   - 위: 키 · 제목 · 상태(N일째, 고르기) · 담당자 · 파트 · 상위 테스트 · 기간
   - 태그 칩 — 작업 번호 · 안건 제목으로 찾아 건다. 누르면 그 작업 · 안건 상세
   - **테스트 내용**(여러 줄 textarea) · 테스트 데이터
   - **상태 바꾸기** — 결과 버튼은 **[성공] · [실패]** 둘(실패는 메모). 작성 중 · 준비됨 · 테스트 중 · 막힘은 위 **상태 칸에서 고른다**(작업 상세의 상태 고르기와 같은 방식, 막힘을 고르면 메모를 받는다). 묶음이면 버튼 · 고르기 대신 하위 요약
-  - 기준 바뀜이면 `changedEntryIds` 의 Entry 를 안건 이력처럼 보이고 [그대로 맞다](= `POST .../basis`)
+  - 기준 바뀜이면 `changedAgendaIds` 의 안건을 칩과 지금 결정내용으로 보이고 [그대로 맞다](= `POST .../basis`) (2026-11-04)
 - **작업 상세** — '이 작업을 태그한 테스트' 를 읽기 전용 칩(상태 색)으로, [테스트 추가]
 
 ## 나중 (아직 계약 아님)
@@ -261,7 +264,7 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 - 리비전은 `0017_test_case`. `test_ref` 에는 계약의 열 말고 **대리 키 `id`** 를 하나 더 둔다(PK 가 필요하다, JSON 에는 안 나간다). `test_id` 도 `(test_id, project_id) → test_case(id, project_id)` 복합 FK(cascade)라 태그의 `project_id` 가 테스트의 프로젝트와 어긋날 수 없다
 - 안전망 CHECK 둘 — `parent_id <> id`, `result_note` 는 `fail` · `blocked` 일 때만 비어 있지 않다
 - 앞뒤 공백을 떼어 **저장한다** — `title` · 상태의 `note`. `content` · `testData` 는 받은 그대로 둔다
-- 하위가 생긴 테스트(묶음)의 자기 `status` · `resultNote` 는 건드리지 않는다 — 화면이 하위에서 모으고 신호는 `[]` 다. `changedEntryIds` 는 묶음에도 센다(태그가 있으면)
+- 하위가 생긴 테스트(묶음)의 자기 `status` · `resultNote` 는 건드리지 않는다 — 화면이 하위에서 모으고 신호는 `[]` 다. `changedAgendaIds` 는 묶음에도 센다(태그가 있으면)
 
 **만들 때 · 상태**
 - 만들 때 `statusChangedAt` = `createdAt`, `statusChangedBy` = 만든 사람(draft 로 둔 사람)
@@ -278,10 +281,12 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 
 **시드** (`server/scripts/seed.py` 의 `SEED_TESTS`) — **목업 `web/src/fixtures/tests.ts` 와 같은 줄**이다(id `tc1` ~ `tc8` · 글자 · 담당 · 파트 · 시각 · 테스트 내용). 태그 id `tc2r0` 꼴은 서버만 쓴다. p1 의 `next_test_no` 는 9
 - 바뀐 시각은 표의 날 12:00 KST(`03:00Z`), 묶음 · `createdAt` 은 `2026-09-30T01:00:00Z`. 담당 = 바꾼 사람 = 만든 사람
-- **T2** — 작업 `k4`(개발 환경 설정 — `t1` · `t2` 에 걸려 있다) 태그, `basis_seq = 3`(닿는 안건의 최댓값 `e3`) → `changedEntryIds = []`. 태그한 작업으로 안건에 닿지만 바뀐 것이 없는 줄
-- **T3** — 안건 `t3`(미룸 `e4` 만 있다) 태그, `basis_seq = 4` → `[]`
-- **T4** — 안건 `t2`(DB 결정) 태그, `basis_seq = 2` — **결정 `e3`(seq 3) 앞에서 확인한 것**이라 `changedEntryIds = ["e3"]`. 서버 규칙의 예외는 이 한 줄뿐이다(규칙대로면 3). 시드에 `change` Entry 가 없어 `decide` 인 `e3` 를 '바뀐 결정' 으로 쓴다(규칙은 둘 다 센다). `change` 를 더하면 확인 요청 시드(`c1` ~ `c3` → `e3`)가 어긋난다
-- **T6** — 작업 `k21`(걸린 안건 없음) 태그, `basis_seq = null`
+- **2026-11-04 고침** — 결정 변경 줄은 안건 변경 이력의 이행 줄(`hh-<id>-2`, `agenda.md` '시드 · 목업')이다. 안건 이력 seq 는 등록 줄 1 ~ 10 → 이행 줄 `t1` 11 · `t2` 12 · `t5` 13 · `t6` 14. 결과(바뀜 있음 · 없음)는 아래 옛 줄과 같다
+  - **T2** `basis_seq = 12`(`t1` · `t2` 의 최댓값) → `[]` · **T3** `null`(`t3` 에 결정 변경 줄 없음) → `[]` · **T4** `basis_seq = 11`(`t2` 의 줄 12 앞) → `changedAgendaIds = ["t2"]` · **T6** `null`
+- ~~**T2** — 작업 `k4`(개발 환경 설정 — `t1` · `t2` 에 걸려 있다) 태그, `basis_seq = 3`(닿는 안건의 최댓값 `e3`) → `changedEntryIds = []`. 태그한 작업으로 안건에 닿지만 바뀐 것이 없는 줄~~
+- ~~**T3** — 안건 `t3`(미룸 `e4` 만 있다) 태그, `basis_seq = 4` → `[]`~~
+- ~~**T4** — 안건 `t2`(DB 결정) 태그, `basis_seq = 2` — **결정 `e3`(seq 3) 앞에서 확인한 것**이라 `changedEntryIds = ["e3"]`. 서버 규칙의 예외는 이 한 줄뿐이다(규칙대로면 3). 시드에 `change` Entry 가 없어 `decide` 인 `e3` 를 '바뀐 결정' 으로 쓴다(규칙은 둘 다 센다). `change` 를 더하면 확인 요청 시드(`c1` ~ `c3` → `e3`)가 어긋난다~~
+- ~~**T6** — 작업 `k21`(걸린 안건 없음) 태그, `basis_seq = null`~~
 - ~~목업의 Entry 순서는 `e2 · e1 · e3 …`, 서버 seq 는 `e1 · e2 · e3 …` 로 앞 둘이 다르지만 위 셋의 결과(`[]` · `[]` · `["e3"]`)는 같다~~ 2026-11-03 부터 서버 시드의 Entry 순서도 목업과 같다(`e2 · e1 · e3 · e4 · e8 · e5 · e7 · e6`). 위 셋의 결과는 그대로다
 
 ## 구현에서 메운 것 (화면)

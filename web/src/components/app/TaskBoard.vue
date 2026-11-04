@@ -15,7 +15,7 @@ import type { TaskStatus } from '@/types/domain'
 const emit = defineEmits<{
   (e: 'open-task', id: string): void
   (e: 'add-task', status: TaskStatus): void
-  (e: 'open-thread', id: string): void
+  (e: 'open-agenda', id: string): void
 }>()
 
 const taskStore = useTaskStore()
@@ -39,14 +39,14 @@ const columns = computed(() => {
 
 /* 배지를 누르면 그 안건으로 간다. 여러 건 걸린 작업은 첫 번째로 보내고
    나머지는 작업 상세에서 본다 — 배지 하나로 여러 곳을 가리킬 수는 없다 */
-function openThread(taskId: string) {
-  const first = taskStore.threadsOfTask(taskId)[0]
-  if (first) emit('open-thread', first.id)
+function openAgenda(taskId: string) {
+  const first = taskStore.agendasOfTask(taskId)[0]
+  if (first) emit('open-agenda', first.id)
 }
 
-const threadTitles = (taskId: string) =>
+const agendaTitles = (taskId: string) =>
   taskStore
-    .threadsOfTask(taskId)
+    .agendasOfTask(taskId)
     .map((t) => t.title)
     .join(' · ')
 </script>
@@ -98,15 +98,15 @@ const threadTitles = (taskId: string) =>
                 {{ row.task.commentCount }}
               </span>
               <button
-                v-if="row.threadCount > 0"
+                v-if="row.agendaCount > 0"
                 type="button"
-                :title="threadTitles(row.task.id)"
+                :title="agendaTitles(row.task.id)"
                 :aria-label="`${row.task.title} 연관 안건`"
-                @click.stop="openThread(row.task.id)"
+                @click.stop="openAgenda(row.task.id)"
               >
                 <Badge :variant="row.task.status === 'blocked' ? 'destructive' : 'outline'">
                   <ListTree class="size-3" />
-                  안건 {{ row.threadCount }}
+                  안건 {{ row.agendaCount }}
                 </Badge>
               </button>
             </div>

@@ -28,7 +28,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 
 /* 대메뉴는 작업 · 안건 · 테스트 · 리스크 · 리포트 · 확인 요청 · 회의록이다. 위에서 프로젝트를 고르면 모두 그 프로젝트 안에서만 돈다.
    관리 메뉴는 관리자 페이지(AdminShell)로 뺐다 — 여기는 관리 권한이 있는 사람에게만 그리로 가는 링크 하나를 둔다.
@@ -37,7 +37,7 @@ import { useThreadStore } from '@/stores/thread'
 const data = useDataStore()
 const auth = useAuthStore()
 const taskStore = useTaskStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 const checks = useCheckStore()
 
 const openAdmin = computed(() => canOpenAdmin(auth.me))
@@ -156,14 +156,14 @@ const projectOptions = computed(() => orderProjects(data.allProjects))
             }}</span>
           </RouterLink>
           <RouterLink
-            to="/threads"
+            to="/agendas"
             class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
             active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
           >
             <ListTree class="size-4 shrink-0" />
             <span class="grow">안건</span>
             <span class="text-xs text-muted-foreground tabular-nums">{{
-              threadStore.visibleRows.length
+              agendaStore.visibleRows.length
             }}</span>
           </RouterLink>
           <RouterLink

@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CheckRequest, DecisionItem, Entry, Minutes, Task, TaskLine, Thread, ThreadCc
+from app.models import Agenda, AgendaHistory, CheckRequest, Minutes, Task, TaskLine
 from app.services.check import recipients_of
 from scripts.seed import MINUTES_EXAMPLE, seed
 
@@ -17,13 +17,12 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
     async def count(model: type) -> int:
         return (await session.execute(select(func.count()).select_from(model))).scalar_one()
 
-    assert await count(Thread) == 10
-    assert await count(Entry) == 8
-    assert await count(DecisionItem) == 6
+    assert await count(Agenda) == 10
+    # 안건마다 '등록' 한 줄 + 결정내용이 있는 넷(t1 · t2 · t5 · t6)의 '결정내용' 한 줄
+    assert await count(AgendaHistory) == 14
     assert await count(Task) == 24
     assert await count(TaskLine) == 7
     assert await count(CheckRequest) == 4
-    assert await count(ThreadCc) == 4
     assert await count(Minutes) == 1
 
 
@@ -36,25 +35,15 @@ async def test_seed_is_repeatable(session: AsyncSession) -> None:
 
 
 async def test_scenario_records_stand(session: AsyncSession) -> None:
-    """시나리오 1 · 2 가 그대로 서 있는지 — 결정 한 줄과 두 번 미룸."""
+    """시나리오 1 · 2 가 그대로 서 있는지 — 회의 밖에서 정한 결정과 아직 논의중인 t5."""
     await seed(session)
 
-    outside = (await session.execute(select(Entry).where(Entry.id == "e1"))).scalar_one()
-    assert outside.kind == "decide"
-
-    t5 = (
-        (await session.execute(select(Entry).where(Entry.thread_id == "t5").order_by(Entry.seq)))
-        .scalars()
-        .all()
-    )
-    # 두 번 미뤘고(안건 전체), 그 사이에 항목 하나(in)만 정했다 — 그래서 아직 논의중이다
-    assert [(e.kind, e.item_id) for e in t5] == [
-        ("defer", None),
-        ("decide", "di5"),
-        ("defer", None),
-    ]
-    t5_thread = (await session.execute(select(Thread).where(Thread.id == "t5"))).scalar_one()
-    assert t5_thread.state == "open"
+    t1 = await session.get(Agenda, "t1")
+    assert t1 is not None and t1.state == "decided" and t1.decision == "우분투 최신 버전으로 한다"
+    # 항목 둘 중 in 만 정했다 — 그래서 아직 논의중이고, 정한 것만 결정내용에 남았다
+    t5 = await session.get(Agenda, "t5")
+    assert t5 is not None and t5.state == "open" and t5.decided_at is None
+    assert t5.decision == "요청(in) 항목: 계약번호 · 상품코드 · 가입일 셋을 넘긴다"
 
     blocked = (await session.execute(select(Task).where(Task.id == "k18"))).scalar_one()
     assert blocked.status == "blocked"
@@ -65,21 +54,26 @@ async def test_scenario_records_stand(session: AsyncSession) -> None:
     assert [line.sort_order for line in env.lines] == list(range(7))
 
 
-async def test_seed_checks_follow_the_recipient_rule(session: AsyncSession) -> None:
-    """c1 ~ c4 는 서버가 그때 보냈다면 정했을 받는 사람 그대로다 (check.md '시드 · 목업')."""
+async def test_seed_checks_point_at_the_first_decision(session: AsyncSession) -> None:
+    """c1 ~ c4 — 이행 규칙대로 결정 판 1 · 그때의 결정 글 (check.md '시드 · 목업')."""
     await seed(session)
     rows = (await session.scalars(select(CheckRequest).order_by(CheckRequest.seq))).all()
-    assert [(r.id, r.thread_id, r.entry_id, r.sender_id, r.recipient_id) for r in rows] == [
-        ("c1", "t2", "e3", "u1", "u3"),
-        ("c2", "t2", "e3", "u1", "u2"),
-        ("c3", "t2", "e3", "u1", "u4"),
-        ("c4", "t1", "e1", "u3", "u1"),
+    assert [
+        (r.id, r.agenda_id, r.decision_rev, r.decision, r.sender_id, r.recipient_id) for r in rows
+    ] == [
+        ("c1", "t2", 1, "mysql 을 쓴다", "u1", "u3"),
+        ("c2", "t2", 1, "mysql 을 쓴다", "u1", "u2"),
+        ("c3", "t2", 1, "mysql 을 쓴다", "u1", "u4"),
+        ("c4", "t1", 1, "우분투 최신 버전으로 한다", "u3", "u1"),
     ]
-    for thread_id, sender in (("t2", "u1"), ("t1", "u3")):
-        thread = await session.get(Thread, thread_id)
-        assert thread is not None
-        expected = [r.recipient_id for r in rows if r.thread_id == thread_id]
-        assert await recipients_of(session, thread, sender) == expected
+    # 판은 안건의 지금 판과 같다 — 같은 판으로는 다시 못 보낸다
+    for agenda_id in ("t1", "t2"):
+        agenda = await session.get(Agenda, agenda_id)
+        assert agenda is not None and agenda.decision_rev == 1
+    # 받는 사람 규칙은 연결 작업 담당자뿐이 됐다 — u2 · u4(c2 · c3)는 참조로 받았던 지난 기록이다
+    t2 = await session.get(Agenda, "t2")
+    assert t2 is not None
+    assert await recipients_of(session, t2, "u1") == ["u3"]
 
 
 async def test_seed_minutes_m1(session: AsyncSession) -> None:
@@ -96,7 +90,7 @@ async def test_seed_minutes_m1(session: AsyncSession) -> None:
     found = re.search(r"export const MINUTES_EXAMPLE = `(.*?)`\n", fixture, re.S)
     assert found is not None, "web/src/fixtures/minutes.ts 에 MINUTES_EXAMPLE 이 없다"
     assert m1.body == MINUTES_EXAMPLE == found.group(1)
-    for model in (Thread, Entry, Task):
+    for model in (Agenda, Task):
         sourced = await session.scalar(
             select(func.count()).select_from(model).where(model.minutes_id.is_not(None))
         )

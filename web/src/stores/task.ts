@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
 import { canDeleteTask, canEditTask } from '@/lib/access'
+import { firstLine } from '@/lib/agenda'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { bodyChanged, bodyText, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
@@ -23,7 +24,6 @@ import { useDataStore } from '@/stores/data'
 import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
-import { useThreadStore } from '@/stores/thread'
 import type {
   HistoryChange,
   ParentChoice,
@@ -37,8 +37,8 @@ import type {
   TaskPriority,
   TaskRow,
   TaskStatus,
-  TaskThreadRow,
-  Thread,
+  TaskAgendaRow,
+  Agenda,
 } from '@/types/domain'
 
 /**
@@ -50,7 +50,6 @@ import type {
  */
 export const useTaskStore = defineStore('task', () => {
   const data = useDataStore()
-  const threadStore = useThreadStore()
   const partStore = usePartStore()
   const history = useHistoryStore()
   const auth = useAuthStore()
@@ -119,11 +118,11 @@ export const useTaskStore = defineStore('task', () => {
   const periodLabel = (task: Task) =>
     task.start && task.due ? `${slashDay(task.start)} ~ ${slashDay(task.due)}` : ''
 
-  const threadsOfTask = (taskId: string): Thread[] =>
-    data.taskThreads
+  const agendasOfTask = (taskId: string): Agenda[] =>
+    data.taskAgendas
       .filter((l) => l.taskId === taskId)
-      .map((l) => data.allThreads.find((t) => t.id === l.threadId))
-      .filter((t): t is Thread => t !== undefined)
+      .map((l) => data.allAgendas.find((t) => t.id === l.agendaId))
+      .filter((t): t is Agenda => t !== undefined)
 
   function toRow(task: Task): TaskRow {
     return {
@@ -132,7 +131,7 @@ export const useTaskStore = defineStore('task', () => {
       pathLabel: pathLabel(task),
       periodLabel: periodLabel(task),
       undated: !task.start || !task.due,
-      threadCount: threadsOfTask(task.id).length,
+      agendaCount: agendasOfTask(task.id).length,
       childCount: childCountOf.value[task.id] ?? 0,
     }
   }
@@ -215,26 +214,18 @@ export const useTaskStore = defineStore('task', () => {
   }))
 
   /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
-  function threadRow(thread: Thread): TaskThreadRow {
-    const detail = threadStore.threadDetail(thread.id)
-    const deferCount = detail?.deferCount ?? 0
-    const items = detail?.items ?? []
-    if (detail?.settled) {
-      /* 항목이 여럿이면 지금 결정을 한 줄로 잇는다 */
+  function agendaRow(agenda: Agenda): TaskAgendaRow {
+    const line = firstLine(agenda.decision)
+    if (agenda.state === 'decided')
       return {
-        thread,
-        deferCount,
-        line: items.map((i) => i.current).join(' · '),
-        where: items.length === 1 ? items[0].settledLabel : `항목 ${items.length}개 모두 정해짐`,
+        agenda,
+        line: line || '결정내용이 비었습니다.',
+        where: agenda.decidedAt ? `${monthDay(agenda.decidedAt)}에 정해짐` : '정해짐',
       }
-    }
-    const last = detail?.events[0]
-    const progress = items.length >= 2 ? ` · 결정 ${detail!.settledCount}/${items.length} 정함` : ''
     return {
-      thread,
-      deferCount,
-      line: last ? last.entry.text : '아직 아무 기록이 없습니다.',
-      where: last ? `마지막 기록 · ${monthDay(last.at)}${progress}` : '기록 없음',
+      agenda,
+      line: line || '아직 결정내용이 없습니다.',
+      where: `${monthDay(agenda.createdAt)}에 등록`,
     }
   }
 
@@ -253,7 +244,7 @@ export const useTaskStore = defineStore('task', () => {
       periodLabel: periodLabel(task),
       parent: task.parentId ? (byId.value[task.parentId] ?? null) : null,
       children,
-      threads: threadsOfTask(taskId).map(threadRow),
+      agendas: agendasOfTask(taskId).map(agendaRow),
       doneChildCount: children.filter((c) => c.task.status === 'done').length,
     }
   }
@@ -538,9 +529,9 @@ export const useTaskStore = defineStore('task', () => {
     )
   }
 
-  function addLink(taskId: string, threadId: string) {
-    const already = data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId)
-    if (!already) data.taskThreads.push({ taskId, threadId })
+  function addLink(taskId: string, agendaId: string) {
+    const already = data.taskAgendas.some((l) => l.taskId === taskId && l.agendaId === agendaId)
+    if (!already) data.taskAgendas.push({ taskId, agendaId })
   }
 
   /**
@@ -553,7 +544,7 @@ export const useTaskStore = defineStore('task', () => {
         const task = await api.createTask(data.currentProjectId, input)
         data.allTasks.push(task)
         /* 링크는 서버가 같이 세웠다 — 여기서는 들고만 있는다 */
-        for (const threadId of input.threadIds) addLink(task.id, threadId)
+        for (const agendaId of input.agendaIds) addLink(task.id, agendaId)
         return task.id
       } catch (e) {
         toastError(e)
@@ -593,7 +584,7 @@ export const useTaskStore = defineStore('task', () => {
       statusChangedAt: createdAt,
       statusSinceBackfill: false,
     })
-    for (const threadId of input.threadIds) addLink(id, threadId)
+    for (const agendaId of input.agendaIds) addLink(id, agendaId)
     /* 등록 때 함께 건 안건은 created 에 든 것으로 본다 */
     logMock(id, [change('created', null, null)])
     return id
@@ -622,37 +613,37 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   /** 작업 상세에서 안건을 걸고 뗀다. 안건 화면에서는 이 링크를 읽기만 한다. */
-  function linkThread(taskId: string, threadId: string) {
+  function linkAgenda(taskId: string, agendaId: string) {
     const task = findTask(taskId)
     if (!task || rejectEdit(task)) return
-    if (!data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId))
-      logMock(taskId, [change('thread', null, threadId)])
-    addLink(taskId, threadId)
+    if (!data.taskAgendas.some((l) => l.taskId === taskId && l.agendaId === agendaId))
+      logMock(taskId, [change('agenda', null, agendaId)])
+    addLink(taskId, agendaId)
     if (data.mock) return
     afterWrite(
       taskId,
       data.save(
-        `link:${taskId}:${threadId}`,
-        () => api.linkTaskThread(taskId, threadId),
+        `link:${taskId}:${agendaId}`,
+        () => api.linkTaskAgenda(taskId, agendaId),
         () => {},
       ),
     )
   }
 
-  function unlinkThread(taskId: string, threadId: string) {
+  function unlinkAgenda(taskId: string, agendaId: string) {
     const task = findTask(taskId)
     if (!task || rejectEdit(task)) return
-    if (data.taskThreads.some((l) => l.taskId === taskId && l.threadId === threadId))
-      logMock(taskId, [change('thread', threadId, null)])
-    data.taskThreads = data.taskThreads.filter(
-      (l) => !(l.taskId === taskId && l.threadId === threadId),
+    if (data.taskAgendas.some((l) => l.taskId === taskId && l.agendaId === agendaId))
+      logMock(taskId, [change('agenda', agendaId, null)])
+    data.taskAgendas = data.taskAgendas.filter(
+      (l) => !(l.taskId === taskId && l.agendaId === agendaId),
     )
     if (data.mock) return
     afterWrite(
       taskId,
       data.save(
-        `link:${taskId}:${threadId}`,
-        () => api.unlinkTaskThread(taskId, threadId),
+        `link:${taskId}:${agendaId}`,
+        () => api.unlinkTaskAgenda(taskId, agendaId),
         () => {},
       ),
     )
@@ -668,15 +659,15 @@ export const useTaskStore = defineStore('task', () => {
     clearTimeout(bodyTimers.get(taskId))
     bodyTimers.delete(taskId)
     data.allTasks = data.allTasks.filter((t) => t.id !== taskId)
-    data.taskThreads = data.taskThreads.filter((l) => l.taskId !== taskId)
+    data.taskAgendas = data.taskAgendas.filter((l) => l.taskId !== taskId)
     /* 테스트의 태그도 서버에서 빠졌다 — 받아 둔 목록이 있으면 다시 받는다 */
     if (testStore.loaded) void testStore.load()
   }
 
   /** 어느 작업에 걸린 안건인지 — 안건 이력에서 읽기 전용으로 보여준다 */
-  const tasksOfThread = (threadId: string): TaskRow[] =>
-    data.taskThreads
-      .filter((l) => l.threadId === threadId)
+  const tasksOfAgenda = (agendaId: string): TaskRow[] =>
+    data.taskAgendas
+      .filter((l) => l.agendaId === agendaId)
       .map((l) => data.allTasks.find((t) => t.id === l.taskId))
       .filter((t): t is Task => t !== undefined)
       .map(toRow)
@@ -703,9 +694,9 @@ export const useTaskStore = defineStore('task', () => {
     isMineContext,
     periodLabel,
     taskDetail,
-    threadRow,
-    threadsOfTask,
-    tasksOfThread,
+    agendaRow,
+    agendasOfTask,
+    tasksOfAgenda,
     canEdit,
     canDelete,
     deleteTask,
@@ -722,7 +713,7 @@ export const useTaskStore = defineStore('task', () => {
     setBody,
     addTask,
     addTaskBatch,
-    linkThread,
-    unlinkThread,
+    linkAgenda,
+    unlinkAgenda,
   }
 })

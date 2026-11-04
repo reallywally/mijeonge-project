@@ -1,5 +1,5 @@
 /* 계약(API.md 공통 규칙)에서 createdAt 은 ISO 8601 UTC 고 늘 Z 로 끝난다.
-   사람이 고른 날짜(Thread.dueDate · Task.start · Task.due)만 YYYY-MM-DD 다. */
+   사람이 고른 날짜(Agenda.dueDate · Task.start · Task.due)만 YYYY-MM-DD 다. */
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000
 
 /** 2026-09-08T22:00:00Z → 2026-09-09. 날짜뿐인 문자열은 그대로 통과한다. */

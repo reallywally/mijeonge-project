@@ -3,7 +3,7 @@ import type { Part, PartMember } from '@/types/domain'
 /*
  * 파트 — docs/api/part.md '시드 · 목업' 표 그대로다. 서버 시드와 같은 id · 소속이라
  * 목업과 서버를 오가도 '내 파트' 에 보이는 것이 같다. p2 · p3 에는 파트가 없다(전환이 숨는 경우).
- * 작업 · 안건의 partId 는 tasks.ts · threads.ts 가 단다.
+ * 작업 · 안건의 partId 는 tasks.ts · agendas.ts 가 단다.
  */
 
 /** 이름 순 — 스냅샷이 내는 순서와 같다 */

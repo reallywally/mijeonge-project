@@ -2,27 +2,25 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isUnreachable } from '@/api'
 import {
-  decisionItems,
-  entries,
   members,
   partMembers,
   parts,
   projectGrants,
   projects,
   tasks,
-  taskThreadLinks,
-  threads,
+  taskAgendaLinks,
+  agendas,
 } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import type { Me, ProjectSnapshot, Task } from '@/types/domain'
 
 /* 서버 모드 — fetch 를 가짜로 바꿔 부팅 순서 · 늦게 온 응답 · 실패 되돌리기를 본다.
-   계산은 목업 모드 테스트(task · thread)가 보니 여기서는 오가는 것만 본다. */
+   계산은 목업 모드 테스트(task · agenda)가 보니 여기서는 오가는 것만 본다. */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
 type Reply = Response | Promise<Response>
@@ -45,15 +43,9 @@ function later() {
 
 const snapshotOf = (projectId: string): ProjectSnapshot => ({
   project: projects.find((p) => p.id === projectId)!,
-  threads: threads.filter((t) => t.projectId === projectId),
-  decisionItems: decisionItems.filter((i) =>
-    threads.some((t) => t.id === i.threadId && t.projectId === projectId),
-  ),
-  entries: entries.filter((e) =>
-    threads.some((t) => t.id === e.threadId && t.projectId === projectId),
-  ),
+  agendas: agendas.filter((t) => t.projectId === projectId),
   tasks: tasks.filter((t) => t.projectId === projectId),
-  taskThreadLinks: taskThreadLinks.filter((l) =>
+  taskAgendaLinks: taskAgendaLinks.filter((l) =>
     tasks.some((t) => t.id === l.taskId && t.projectId === projectId),
   ),
   parts: parts.filter((p) => p.projectId === projectId),
@@ -137,7 +129,7 @@ describe('부팅', () => {
     expect(data.currentProjectId).toBe('p1')
     expect(data.allMembers).toHaveLength(members.length)
     expect(data.allTasks).toHaveLength(snapshotOf('p1').tasks.length)
-    expect(data.taskThreads).toHaveLength(snapshotOf('p1').taskThreadLinks.length)
+    expect(data.taskAgendas).toHaveLength(snapshotOf('p1').taskAgendaLinks.length)
   })
 
   it('로그인 전이면(401) 나머지는 받지 않고 anonymous 로 선다', async () => {
@@ -251,30 +243,30 @@ describe('바로 저장하는 수정', () => {
     expect(data.allTasks.find((t) => t.id === 'k4')!.ownerId).toBe('u2')
   })
 
-  it('안건 수정도 보낸 필드만 실어 보내고 응답으로 갈아끼운다', async () => {
+  it('안건 수정도 보낸 필드만 실어 보내고 응답으로 갈아끼운다 — 결정 판 · 정한 때는 서버 값', async () => {
     const data = await booted()
-    const thread = useThreadStore()
-    const t3 = data.allThreads.find((t) => t.id === 't3')!
-    on('PATCH /api/threads/t3', (body) => json({ ...t3, ...(body as object) }))
-
-    thread.updateThread('t3', { options: [' 사내 모델만 ', ''] })
-    expect(calls.at(-1)!.body).toEqual({ options: ['사내 모델만'] })
-    await flush()
-    expect(data.allThreads.find((t) => t.id === 't3')!.options).toEqual(['사내 모델만'])
-  })
-
-  it('이력 글 고치기는 그 안건 경로로 보내고 응답 줄로 갈아끼운다', async () => {
-    const data = await booted()
-    const thread = useThreadStore()
-    const e1 = data.allEntries.find((e) => e.id === 'e1')!
-    on('PATCH /api/threads/t1/entries/e1', (body) =>
-      json({ ...e1, ...(body as object), note: '서버가 다듬음' }),
+    const agenda = useAgendaStore()
+    const t3 = data.allAgendas.find((t) => t.id === 't3')!
+    on('PATCH /api/agendas/t3', (body) =>
+      json({
+        ...t3,
+        ...(body as object),
+        decidedAt: '2026-11-04T01:00:00Z',
+        decisionRev: 7,
+      }),
     )
 
-    thread.updateEntry('e1', { text: ' 우분투 24.04 로 한다 ' })
-    expect(calls.at(-1)!.body).toEqual({ text: '우분투 24.04 로 한다' })
+    agenda.updateAgenda('t3', { decision: ' 사내 모델만 쓴다 \n', state: 'decided' })
+    expect(calls.at(-1)!.body).toEqual({ decision: '사내 모델만 쓴다', state: 'decided' })
+    /* 서버가 돌려주기 전에도 같은 규칙으로 먼저 선다 */
+    expect(data.allAgendas.find((t) => t.id === 't3')!.decisionRev).toBe(1)
     await flush()
-    expect(data.allEntries.find((e) => e.id === 'e1')!.note).toBe('서버가 다듬음')
+    expect(data.allAgendas.find((t) => t.id === 't3')).toMatchObject({
+      decision: '사내 모델만 쓴다',
+      state: 'decided',
+      decidedAt: '2026-11-04T01:00:00Z',
+      decisionRev: 7,
+    })
   })
 
   it('본문은 모아서 보내고, 새 줄은 서버가 붙인 id 로 다음에 실어 보낸다', async () => {
@@ -329,86 +321,49 @@ describe('만드는 것', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: ['t1'],
+      agendaIds: ['t1'],
     })
     expect(data.allTasks.some((t) => t.id === 'srv-task')).toBe(false)
 
     expect(await pending).toBe('srv-task')
     expect(data.allTasks.find((t) => t.id === 'srv-task')!.key).toBe('HW-99')
-    expect(data.taskThreads).toContainEqual({ taskId: 'srv-task', threadId: 't1' })
+    expect(data.taskAgendas).toContainEqual({ taskId: 'srv-task', agendaId: 't1' })
   })
 
   it('만들기가 실패하면 알리고 null 이다 — 아무것도 들어가지 않는다', async () => {
     const data = await booted()
-    const thread = useThreadStore()
-    const before = data.allThreads.length
-    on('POST /api/projects/p1/threads', () =>
+    const agenda = useAgendaStore()
+    const before = data.allAgendas.length
+    on('POST /api/projects/p1/agendas', () =>
       json({ code: 'VALIDATION_ERROR', message: '제목을 적어 주세요.' }, 422),
     )
 
-    expect(await thread.addThread({ title: '배포 창구' })).toBeNull()
+    expect(await agenda.addAgenda({ title: '배포 창구' })).toBeNull()
     expect(toastError).toHaveBeenCalledOnce()
-    expect(data.allThreads).toHaveLength(before)
+    expect(data.allAgendas).toHaveLength(before)
   })
 
-  it('이력 한 줄은 응답의 줄을 넣고 안건을 갈아끼운다 — 항목을 싣는다', async () => {
+  it('안건 등록은 결정내용 · 상태까지 싣고, 응답을 기다렸다가 넣는다', async () => {
     const data = await booted()
-    const thread = useThreadStore()
-    const t4 = data.allThreads.find((t) => t.id === 't4')!
-    on('POST /api/threads/t4/entries', (body) =>
-      json(
-        {
-          entry: {
-            id: 'srv-e',
-            threadId: 't4',
-            ...(body as object),
-            createdAt: '2026-10-11T01:00:00Z',
-          },
-          thread: { ...t4, state: 'decided', ownerId: 'u1' },
-        },
-        201,
-      ),
-    )
-
-    expect(await thread.addEntry('t4', 'decide', '주 1회 백업', '', 'u1', 'srv-i')).toBe(true)
+    const made = { ...data.allAgendas.find((t) => t.id === 't4')!, id: 'srv-t', title: '새 안건' }
+    on('POST /api/projects/p1/agendas', () => json(made, 201))
+    expect(
+      await useAgendaStore().addAgenda({
+        title: ' 새 안건 ',
+        decision: '정했다',
+        state: 'decided',
+      }),
+    ).toBe('srv-t')
     expect(calls.at(-1)!.body).toEqual({
-      kind: 'decide',
-      itemId: 'srv-i',
-      text: '주 1회 백업',
-      detail: [],
-      note: '',
-      ownerId: 'u1',
+      title: '새 안건',
+      description: '',
+      decision: '정했다',
+      state: 'decided',
+      dueDate: null,
+      ownerId: null,
+      partId: null,
     })
-    expect(data.allEntries.at(-1)!.id).toBe('srv-e')
-    expect(data.allThreads.find((t) => t.id === 't4')!.state).toBe('decided')
-  })
-
-  it('결정 항목 — 더하면 항목을 넣고 안건을 갈아끼우고, 지우면 빼고 다시 잰 안건으로', async () => {
-    const data = await booted()
-    const thread = useThreadStore()
-    const t1 = data.allThreads.find((t) => t.id === 't1')!
-    expect(data.allDecisionItems.filter((i) => i.threadId === 't1').map((i) => i.id)).toEqual([
-      'di1',
-    ])
-    const made = {
-      id: 'srv-i',
-      threadId: 't1',
-      title: '커널 버전',
-      createdAt: '2026-10-11T01:00:00Z',
-      creatorId: 'u0',
-    }
-    on('POST /api/threads/t1/items', () =>
-      json({ item: made, thread: { ...t1, state: 'open' } }, 201),
-    )
-    expect(await thread.addItem('t1', '  커널 버전 ')).toBe('srv-i')
-    expect(calls.at(-1)!.body).toEqual({ title: '커널 버전' })
-    expect(data.allDecisionItems.at(-1)).toEqual(made)
-    expect(data.allThreads.find((t) => t.id === 't1')!.state).toBe('open')
-
-    on('DELETE /api/threads/t1/items/srv-i', () => json({ thread: { ...t1, state: 'decided' } }))
-    await thread.deleteItem('srv-i')
-    expect(data.allDecisionItems.some((i) => i.id === 'srv-i')).toBe(false)
-    expect(data.allThreads.find((t) => t.id === 't1')!.state).toBe('decided')
+    expect(data.allAgendas[0].id).toBe('srv-t')
   })
 
   it('프로젝트를 만들면 그 프로젝트로 옮겨 스냅샷을 받는다', async () => {
@@ -418,11 +373,11 @@ describe('만드는 것', () => {
     on('GET /api/projects/p9/snapshot', () =>
       json({
         project: made,
-        threads: [],
+        agendas: [],
         decisionItems: [],
         entries: [],
         tasks: [],
-        taskThreadLinks: [],
+        taskAgendaLinks: [],
         parts: [],
         partMembers: [],
       }),
@@ -492,39 +447,29 @@ describe('만드는 것', () => {
   })
 })
 
-describe('안건 · 이력 줄 지우기 · 변경 이력 (서버 갈래)', () => {
-  it('안건 DELETE 204 뒤 안건 · 이력 줄 · 작업 연결을 스토어에서 뺀다', async () => {
+describe('안건 지우기 · 변경 이력 (서버 갈래)', () => {
+  it('안건 DELETE 204 뒤 안건 · 작업 연결을 스토어에서 뺀다', async () => {
     const data = await booted()
-    on('DELETE /api/threads/t1', () => new Response(null, { status: 204 }))
-    await useThreadStore().deleteThread('t1')
-    expect(calls.at(-1)!.route).toBe('DELETE /api/threads/t1')
-    expect(data.allThreads.some((t) => t.id === 't1')).toBe(false)
-    expect(data.allEntries.some((e) => e.threadId === 't1')).toBe(false)
-    expect(data.taskThreads.some((l) => l.threadId === 't1')).toBe(false)
+    on('DELETE /api/agendas/t1', () => new Response(null, { status: 204 }))
+    await useAgendaStore().deleteAgenda('t1')
+    expect(calls.at(-1)!.route).toBe('DELETE /api/agendas/t1')
+    expect(data.allAgendas.some((t) => t.id === 't1')).toBe(false)
+    expect(data.taskAgendas.some((l) => l.agendaId === 't1')).toBe(false)
   })
 
-  it('409 THREAD_HAS_CHILDREN 은 ApiError 로 던지고 아무것도 빼지 않는다', async () => {
+  it('서버 오류는 ApiError 로 던지고 아무것도 빼지 않는다', async () => {
     const data = await booted()
-    on('DELETE /api/threads/t1', () =>
-      json({ code: 'THREAD_HAS_CHILDREN', message: '하위 안건이 있어 지울 수 없습니다.' }, 409),
+    on('DELETE /api/agendas/t1', () =>
+      json({ code: 'FORBIDDEN', message: '권한이 없습니다.' }, 403),
     )
-    await expect(useThreadStore().deleteThread('t1')).rejects.toMatchObject({
-      status: 409,
-      code: 'THREAD_HAS_CHILDREN',
+    await expect(useAgendaStore().deleteAgenda('t1')).rejects.toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
     })
-    expect(data.allThreads.some((t) => t.id === 't1')).toBe(true)
+    expect(data.allAgendas.some((t) => t.id === 't1')).toBe(true)
   })
 
-  it('이력 줄 DELETE 는 응답의 안건(다시 잰 상태)으로 갈아끼우고 줄을 뺀다', async () => {
-    const data = await booted()
-    const t1 = data.allThreads.find((t) => t.id === 't1')!
-    on('DELETE /api/threads/t1/entries/e1', () => json({ thread: { ...t1, state: 'queued' } }))
-    await useThreadStore().deleteEntry('e1')
-    expect(data.allEntries.some((e) => e.id === 'e1')).toBe(false)
-    expect(data.allThreads.find((t) => t.id === 't1')!.state).toBe('queued')
-  })
-
-  it('변경 이력은 GET /api/threads/{id}/history', async () => {
+  it('변경 이력은 GET /api/agendas/{id}/history', async () => {
     await booted()
     const rows = [
       {
@@ -535,10 +480,10 @@ describe('안건 · 이력 줄 지우기 · 변경 이력 (서버 갈래)', () =
         changes: [{ field: 'created', from: null, to: null, subject: '' }],
       },
     ]
-    on('GET /api/threads/t1/history', () => json(rows))
+    on('GET /api/agendas/t1/history', () => json(rows))
     const history = useHistoryStore()
-    await history.load('thread', 't1')
-    expect(history.entriesOf('thread', 't1')).toEqual(rows)
+    await history.load('agenda', 't1')
+    expect(history.entriesOf('agenda', 't1')).toEqual(rows)
   })
 })
 
@@ -600,7 +545,7 @@ describe('파트 (서버 갈래)', () => {
       start: null,
       due: null,
       priority: 'normal' as const,
-      threadIds: [],
+      agendaIds: [],
     }
 
     await task.addTask(input)

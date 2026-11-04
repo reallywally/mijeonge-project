@@ -30,7 +30,7 @@ describe('fetch 래퍼', () => {
 
   it('204 는 본문 없이 undefined 다', async () => {
     answer(new Response(null, { status: 204 }))
-    await expect(request('DELETE', '/tasks/k1/threads/t1')).resolves.toBeUndefined()
+    await expect(request('DELETE', '/tasks/k1/agendas/t1')).resolves.toBeUndefined()
   })
 
   it('에러는 상태와 { code, message, detail } 을 그대로 들고 온다', async () => {
@@ -99,11 +99,9 @@ describe('스냅샷', () => {
       status: 'active',
       closedAt: null,
     },
-    threads: [],
-    decisionItems: [],
-    entries: [],
+    agendas: [],
     tasks: [],
-    taskThreadLinks: [{ taskId: 'k1', threadId: 't1' }],
+    taskAgendaLinks: [{ taskId: 'k1', agendaId: 't1' }],
     parts: [{ id: 'pt1', projectId: 'p1', name: '인프라', active: true }],
     partMembers: [{ partId: 'pt1', memberId: 'u3' }],
   }
@@ -111,18 +109,9 @@ describe('스냅샷', () => {
   it('JSON 키를 data 스토어 이름으로 옮긴다', () => {
     const records = toRecords(snapshot)
     expect(Object.keys(records).sort()).toEqual(
-      [
-        'allDecisionItems',
-        'allEntries',
-        'allTasks',
-        'allThreads',
-        'partMembers',
-        'parts',
-        'project',
-        'taskThreads',
-      ].sort(),
+      ['allTasks', 'allAgendas', 'partMembers', 'parts', 'project', 'taskAgendas'].sort(),
     )
-    expect(records.taskThreads).toBe(snapshot.taskThreadLinks)
+    expect(records.taskAgendas).toBe(snapshot.taskAgendaLinks)
     expect(records.parts).toBe(snapshot.parts)
     expect(records.partMembers).toBe(snapshot.partMembers)
   })

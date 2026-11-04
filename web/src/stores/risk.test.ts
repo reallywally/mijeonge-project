@@ -40,25 +40,32 @@ describe('보고서 받기', () => {
 
     expect(risk.report?.asOf).toBe('2026-10-15')
     expect(risk.report?.settings).toEqual(DEFAULT_RISK_SETTINGS)
-    expect(ids(risk.threads, 'threadId')).toEqual(['t5', 't3', 't8', 't9', 't4', 't7'])
-    expect(ids(risk.threads, 'level')).toEqual(['high', 'medium', 'medium', 'medium', 'low', 'low'])
+    expect(ids(risk.agendas, 'agendaId')).toEqual(['t5', 't3', 't8', 't9', 't4', 't7'])
+    expect(ids(risk.agendas, 'level')).toEqual([
+      'medium',
+      'medium',
+      'medium',
+      'medium',
+      'low',
+      'low',
+    ])
     expect(ids(risk.tasks, 'taskId')).toEqual(['k22', 'k3', 'k13'])
     expect(ids(risk.owners, 'memberId')).toEqual(['u4', 'u1', 'u2', 'u3', null])
   })
 
-  it('내 파트면 threads · tasks 만 거르고 owners 는 그대로다', async () => {
+  it('내 파트면 agendas · tasks 만 거르고 owners 는 그대로다', async () => {
     await signedIn('u3@inno-ax.com')
     const risk = useRiskStore()
     const part = usePartStore()
     await risk.load()
 
     expect(part.scope).toBe('mine')
-    expect(ids(risk.threads, 'threadId')).toEqual(['t9', 't4'])
+    expect(ids(risk.agendas, 'agendaId')).toEqual(['t9', 't4'])
     expect(ids(risk.tasks, 'taskId')).toEqual(['k22', 'k3'])
     expect(risk.owners).toHaveLength(5)
 
     part.setScope('all')
-    expect(risk.threads).toHaveLength(6)
+    expect(risk.agendas).toHaveLength(6)
     expect(risk.tasks).toHaveLength(3)
   })
 
@@ -72,7 +79,7 @@ describe('보고서 받기', () => {
     data.setProject('p3')
     expect(risk.report).toBeNull()
     await risk.load()
-    expect(risk.report?.threads).toEqual([])
+    expect(risk.report?.agendas).toEqual([])
   })
 })
 
@@ -92,7 +99,7 @@ describe('기준 바꾸기', () => {
     await expect(risk.saveSettings(next)).resolves.toEqual({ ok: true })
 
     expect(risk.report?.settings).toEqual(next)
-    expect(ids(risk.threads, 'level')).toEqual(['high', 'high', 'high', 'high', 'medium', 'low'])
+    expect(ids(risk.agendas, 'level')).toEqual(['high', 'high', 'high', 'high', 'medium', 'low'])
     await expect(fetchRiskSettings('p1')).resolves.toEqual(next)
   })
 
@@ -148,7 +155,7 @@ describe('AI 요약', () => {
 
     const done = risk.summarize()
     expect(spy.mock.calls[0][0]).toBe('p1')
-    expect(spy.mock.calls[0][1]).toEqual({ threadIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
+    expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
     expect(risk.summarizing).toBe(true)
     expect(risk.canSummarize).toBe(false)
 
@@ -157,13 +164,13 @@ describe('AI 요약', () => {
     expect(risk.summary).toMatchObject({
       status: 'done',
       asOf: '2026-10-15',
-      threadIds: ['t9', 't4'],
+      agendaIds: ['t9', 't4'],
       taskIds: ['k22', 'k3'],
     })
     expect(risk.summary?.text).toContain('먼저 정할 것')
-    expect(risk.summary?.text).toContain('[[thread:t9]]')
+    expect(risk.summary?.text).toContain('[[agenda:t9]]')
     /* 보이지 않는 줄은 근거로도 안 나온다 */
-    expect(risk.summary?.text).not.toContain('[[thread:t5]]')
+    expect(risk.summary?.text).not.toContain('[[agenda:t5]]')
     expect(risk.summaryChanged).toBe(false)
   })
 

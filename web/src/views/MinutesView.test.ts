@@ -247,23 +247,26 @@ describe('상세 — AI 정리 → 등록 → 나온 것', () => {
     expect($$('[data-minutes-row]').map((r) => r.dataset.minutesRow)).toEqual([
       'n1',
       'n2',
-      'e1',
+      'update:t2',
       't1',
       't2',
       't3',
     ])
     expect($$('[data-minutes-quote]')).toHaveLength(6)
-    expect($('[data-minutes-row="e1"] [data-minutes-thread="t3"]')!.textContent).toContain(
-      '사내망에서 외부 모델 호출 허용 범위',
+    expect($('[data-minutes-row="update:t2"] [data-minutes-agenda="t2"]')!.textContent).toContain(
+      'DB 결정',
     )
+    /* 기존 안건은 지금 결정내용을 지운 글로 보이고, 바꿀 글은 고칠 수 있다 */
+    expect($('[data-minutes-current-decision]')!.textContent).toContain('mysql 을 쓴다')
+    expect(($('[data-minutes-update-decision]') as HTMLTextAreaElement).value).toContain(
+      '- 운영 DB 도 같은 버전으로 구성한다',
+    )
+    /* 새 안건은 결정내용을 적을 수 있다 */
+    expect($$('[data-minutes-agenda-decision]')).toHaveLength(2)
     expect($('[data-minutes-row="t3"] [data-owner-hint]')!.textContent).toContain(
       '회의록: 최 선임 — 골라 주세요',
     )
     expect($('[data-minutes-apply]')!.textContent).toContain('등록 6건')
-    /* 이력 줄은 결정 항목 이름을 고칠 수 있다 — 비운 미룸은 안건 전체 */
-    const item = $('[data-minutes-row="e1"] input[aria-label="결정 항목"]') as HTMLInputElement
-    expect(item.value).toBe('')
-    expect(item.placeholder).toBe('비우면 안건 전체를 미룸')
   })
 
   it('새 안건을 끄면 "안건 연결이 빠집니다", 등록하면 검토가 닫히고 나온 것 칩 · 요약이 는다', async () => {
@@ -279,14 +282,12 @@ describe('상세 — AI 정리 → 등록 → 나온 것', () => {
     expect($$('[data-minutes-row]')).toEqual([])
     expect($('[data-minutes-apply]')).toBeNull()
     expect($('[data-minutes-result]')!.textContent).toContain(
-      '새 안건 1 · 이력 1 · 작업 2건을 등록했습니다',
+      '새 안건 1 · 기존 안건 1 · 작업 2건을 등록했습니다',
     )
     expect($('[data-minutes-made-empty]')).toBeNull()
-    expect($$('[data-made-thread]').map((b) => b.textContent)).toEqual([
+    expect($$('[data-made-agenda]').map((b) => b.textContent)).toEqual([
       expect.stringContaining('기간계 테스트 데이터 마스킹 범위'),
     ])
-    /* 이력 — 새 안건의 미룸 · t3 의 미룸 */
-    expect($$('[data-made-entry]')).toHaveLength(2)
     expect($$('[data-made-task]').map((b) => b.textContent?.trim())).toEqual([
       'HW-23가상비서 대화 로그 현황 조사',
       'HW-24운영 DB 계정 · 권한 표 작성',
@@ -306,15 +307,6 @@ describe('상세 — AI 정리 → 등록 → 나온 것', () => {
     expect(source.textContent).toContain('10월 셋째 주 주간 회의')
     expect(source.getAttribute('href')).toBe('/minutes/m1')
     expect(router.currentRoute.value.path).toBe('/minutes/m1')
-  })
-
-  it('나온 이력 칩을 누르면 안건 상세 — 그 이력 줄에 "회의록에서" 칩', async () => {
-    await drafted()
-    await click($('[data-minutes-apply]'))
-    const t3 = $$('[data-made-entry]').find((b) => b.textContent?.includes('외부 모델'))
-    await click(t3)
-    const dialog = $('[role="dialog"]')!
-    expect(dialog.querySelectorAll('[data-minutes-source="m1"]')).toHaveLength(1)
   })
 
   it('검토 중에 떠나면 묻는다 — 등록을 끝냈으면 묻지 않는다', async () => {
@@ -341,7 +333,7 @@ describe('지우기', () => {
     expect(made).toHaveLength(3)
 
     await click($('[data-minutes-remove]'))
-    expect($('[data-minutes-remove-note]')!.textContent).toContain('여기서 나온 7건은 남습니다')
+    expect($('[data-minutes-remove-note]')!.textContent).toContain('여기서 나온 5건은 남습니다')
     await click($('[data-minutes-remove-confirm]'))
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/minutes')
@@ -351,9 +343,7 @@ describe('지우기', () => {
       null,
       null,
     ])
-    expect(
-      [...data.allThreads, ...data.allEntries, ...data.allTasks].some((r) => r.minutesId === 'm1'),
-    ).toBe(false)
+    expect([...data.allAgendas, ...data.allTasks].some((r) => r.minutesId === 'm1')).toBe(false)
   })
 
   it('프로젝트 관리자 · 시스템 관리자는 남의 회의록을 지울 수 있지만 고칠 수는 없다', async () => {

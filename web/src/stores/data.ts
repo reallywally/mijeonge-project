@@ -3,27 +3,22 @@ import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
 import {
-  decisionItems,
-  entries,
   members,
   partMembers as partMemberFixtures,
   parts as partFixtures,
   projectGrants,
   projects,
   tasks,
-  taskThreadLinks,
-  threads,
+  taskAgendaLinks,
+  agendas,
 } from '@/fixtures'
 import { canSeeProject } from '@/lib/access'
-import { CC_MAX } from '@/lib/check'
 import { assignableMembers, memberLabel } from '@/lib/member'
 import { toastError } from '@/lib/notify'
 import { makeTaskKeyPrefix, orderProjects } from '@/lib/project'
 import { recall, remember } from '@/lib/storage'
 import { useAuthStore } from '@/stores/auth'
 import type {
-  DecisionItem,
-  Entry,
   Member,
   Part,
   PartMember,
@@ -33,14 +28,14 @@ import type {
   ProjectPatch,
   ProjectRole,
   Task,
-  TaskThreadLink,
-  Thread,
+  TaskAgendaLink,
+  Agenda,
 } from '@/types/domain'
 
 const REMEMBERED_PROJECT = 'innoflow.projectId'
 
 /**
- * 레코드가 사는 곳. 화면이 쓰는 계산은 thread · task 스토어가 맡는다.
+ * 레코드가 사는 곳. 화면이 쓰는 계산은 agenda · task 스토어가 맡는다.
  *
  * 서버 모드에서는 고른 프로젝트 하나치(스냅샷)만 들고, 목업 모드에서는 픽스처 전부를 들고 거른다.
  * 레코드를 한곳에 모아 두면 도메인 스토어끼리 서로의 레코드를 부르며 고리를 만들 일이 없다.
@@ -61,20 +56,15 @@ export const useDataStore = defineStore('data', () => {
      프로젝트를 바꿔 돌아와도 앞의 수정이 남는다. 복사해서 시작한다. */
   const allProjects = ref<Project[]>(mock ? structuredClone(projects) : [])
   const allMembers = ref<Member[]>(mock ? structuredClone(members) : [])
-  const allThreads = ref<Thread[]>(mock ? structuredClone(threads) : [])
-  /** 결정 항목 — 지운 것은 없다(스냅샷이 싣지 않는다). 배열 순서가 안건 안의 순서다 */
-  const allDecisionItems = ref<DecisionItem[]>(mock ? structuredClone(decisionItems) : [])
-  const allEntries = ref<Entry[]>(mock ? structuredClone(entries) : [])
+  const allAgendas = ref<Agenda[]>(mock ? structuredClone(agendas) : [])
   const allTasks = ref<Task[]>(mock ? structuredClone(tasks) : [])
-  const taskThreads = ref<TaskThreadLink[]>(mock ? structuredClone(taskThreadLinks) : [])
+  const taskAgendas = ref<TaskAgendaLink[]>(mock ? structuredClone(taskAgendaLinks) : [])
   /* 목업의 확인 요청 보내기가 화면에서 결정하거나 만든 것까지 서버처럼 따지게 */
   if (mock)
     api.provideMockWorld(() => ({
-      threads: allThreads.value,
-      decisionItems: allDecisionItems.value,
-      entries: allEntries.value,
+      agendas: allAgendas.value,
       tasks: allTasks.value,
-      taskThreads: taskThreads.value,
+      taskAgendas: taskAgendas.value,
     }))
   /** 파트와 소속. 서버 모드는 고른 프로젝트 하나치, 목업은 전부 — 프로젝트로 거르는 것은 part 스토어다 */
   const parts = ref<Part[]>(mock ? structuredClone(partFixtures) : [])
@@ -111,11 +101,9 @@ export const useDataStore = defineStore('data', () => {
     const at = allProjects.value.findIndex((p) => p.id === records.project.id)
     if (at >= 0) allProjects.value[at] = records.project
     else allProjects.value.push(records.project)
-    allThreads.value = records.allThreads
-    allDecisionItems.value = records.allDecisionItems
-    allEntries.value = records.allEntries
+    allAgendas.value = records.allAgendas
     allTasks.value = records.allTasks
-    taskThreads.value = records.taskThreads
+    taskAgendas.value = records.taskAgendas
     parts.value = records.parts
     partMembers.value = records.partMembers
     loadedProjectId.value = records.project.id
@@ -148,11 +136,9 @@ export const useDataStore = defineStore('data', () => {
   /** 목업 — 픽스처를 새로 들이고, 프로젝트는 목업 서버에서 받는다(내가 볼 수 있고 지우지 않은 것 · 진행 → 준비 → 종료) */
   async function bootMock() {
     allProjects.value = await api.fetchProjects()
-    allThreads.value = structuredClone(threads)
-    allDecisionItems.value = structuredClone(decisionItems)
-    allEntries.value = structuredClone(entries)
+    allAgendas.value = structuredClone(agendas)
     allTasks.value = structuredClone(tasks)
-    taskThreads.value = structuredClone(taskThreadLinks)
+    taskAgendas.value = structuredClone(taskAgendaLinks)
     parts.value = structuredClone(partFixtures)
     partMembers.value = structuredClone(partMemberFixtures)
     allMembers.value = await api.fetchMembers()
@@ -455,41 +441,6 @@ export const useDataStore = defineStore('data', () => {
     return true
   }
 
-  /**
-   * 목업 갈래가 서버처럼 참조를 거른다 — null · 21명 이상이면 422(겹치기 전에 센다),
-   * 새로 넣은 사람이 고른 프로젝트의 활성 멤버가 아니면 MEMBER_NOT_IN_PROJECT 로 걸린 자리 전부(겹친 자리까지)를 짚는다.
-   * 이미 참조에 있던 사람(kept)은 그사이 빠졌어도 그대로 둘 수 있다. 거절했으면 서버와 같은 코드로 알리고 true
-   */
-  function rejectCc(ccIds: string[] | null | undefined, kept: string[] = []) {
-    if (!mock || ccIds === undefined) return false
-    if (ccIds === null || ccIds.length > CC_MAX) {
-      toastError(
-        new ApiError(422, {
-          code: 'VALIDATION_ERROR',
-          message: '입력값이 올바르지 않습니다.',
-          detail: {
-            ccIds: ccIds === null ? '참조는 목록이어야 합니다.' : `참조는 ${CC_MAX}명까지입니다.`,
-          },
-        }),
-      )
-      return true
-    }
-    const detail: Record<string, string> = {}
-    ccIds.forEach((id, i) => {
-      if (!kept.includes(id) && !assignable.value.some((m) => m.id === id))
-        detail[`ccIds.${i}`] = '이 프로젝트에 부여되지 않았거나 비활성인 사람입니다.'
-    })
-    if (Object.keys(detail).length === 0) return false
-    toastError(
-      new ApiError(400, {
-        code: 'MEMBER_NOT_IN_PROJECT',
-        message: '이 프로젝트에 부여되지 않은 사람입니다.',
-        detail,
-      }),
-    )
-    return true
-  }
-
   /** 사용자 관리에서 등록 · 수정한 것을 멤버 목록에 맞춘다 */
   function upsertMember(member: Member) {
     const at = allMembers.value.findIndex((m) => m.id === member.id)
@@ -501,11 +452,9 @@ export const useDataStore = defineStore('data', () => {
   function clear() {
     allProjects.value = []
     allMembers.value = []
-    allThreads.value = []
-    allDecisionItems.value = []
-    allEntries.value = []
+    allAgendas.value = []
     allTasks.value = []
-    taskThreads.value = []
+    taskAgendas.value = []
     parts.value = []
     partMembers.value = []
     projectMembers.value = {}
@@ -528,11 +477,9 @@ export const useDataStore = defineStore('data', () => {
     mock,
     allProjects,
     allMembers,
-    allThreads,
-    allDecisionItems,
-    allEntries,
+    allAgendas,
     allTasks,
-    taskThreads,
+    taskAgendas,
     parts,
     partMembers,
     projectMembers,
@@ -561,7 +508,6 @@ export const useDataStore = defineStore('data', () => {
     upsertMember,
     rejectOwner,
     rejectPart,
-    rejectCc,
     renameProject,
     grantMember,
     revokeMember,

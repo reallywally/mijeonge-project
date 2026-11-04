@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     admin,
+    agenda,
     auth,
     chat,
     check,
@@ -17,7 +18,6 @@ from app.api import (
     search,
     task,
     test,
-    thread,
 )
 from app.api.deps import require_json, require_scope
 from app.config import settings
@@ -49,7 +49,7 @@ for scoped in (
     part.router,
     task.router,
     comment.router,
-    thread.router,
+    agenda.router,
     search.router,
     chat.router,
     risk.router,

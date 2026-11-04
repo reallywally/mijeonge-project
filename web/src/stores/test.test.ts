@@ -92,13 +92,13 @@ describe('작업 · 안건 상세의 칩', () => {
   it('그 작업 · 안건을 태그한 테스트만 목록에서 거른다', async () => {
     const store = await boot()
     expect(keys(store.testsTagging('task', 'k21'))).toEqual(['HW-T6'])
-    expect(keys(store.testsTagging('thread', 't2'))).toEqual(['HW-T4'])
+    expect(keys(store.testsTagging('agenda', 't2'))).toEqual(['HW-T4'])
     expect(store.testsTagging('task', 'k1')).toEqual([])
     expect(store.refChip({ kind: 'task', id: 'k21' })).toMatchObject({
       label: 'HW-21',
       title: '개발자 계정 배포',
     })
-    expect(store.refChip({ kind: 'thread', id: 'gone' }).missing).toBe(true)
+    expect(store.refChip({ kind: 'agenda', id: 'gone' }).missing).toBe(true)
   })
 })
 

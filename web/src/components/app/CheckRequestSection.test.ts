@@ -7,10 +7,10 @@ import { MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
-import { useThreadStore } from '@/stores/thread'
-import ThreadDetailDialog from './ThreadDetailDialog.vue'
+import { useAgendaStore } from '@/stores/agenda'
+import AgendaDetailDialog from './AgendaDetailDialog.vue'
 
-/* 안건 상세의 확인 요청 — [확인 요청] 이 열리는 세 조건 · 받는 사람 N명 · 누르면 바로 보냄 · 보낸 뒤 현황 · 참조 */
+/* 안건 상세의 확인 요청 — [확인 요청] 이 열리는 세 조건 · 받는 사람 N명 · 누르면 바로 보냄 · 보낸 뒤 현황 */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
 async function signedIn(email: string) {
@@ -18,9 +18,9 @@ async function signedIn(email: string) {
   await useDataStore().retry()
 }
 
-async function mountDetail(threadId: string) {
-  const w = mount(ThreadDetailDialog, {
-    props: { threadId, open: true },
+async function mountDetail(agendaId: string) {
+  const w = mount(AgendaDetailDialog, {
+    props: { agendaId, open: true },
     attachTo: document.body,
   })
   await flushPromises()
@@ -49,9 +49,13 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
+/* t6 은 결정됐지만 연결 작업이 없다 — 박지훈(u2) 담당 작업 k3 을 걸어 받을 사람을 만든다 */
+const linkT6 = () => useDataStore().taskAgendas.push({ taskId: 'k3', agendaId: 't6' })
+
 describe('[확인 요청]', () => {
   it('t6 — 결정됨 · 안 보냄 · 받을 사람 있음이라 열린다. 곁에 받는 사람 1명, 펼치면 이름', async () => {
     await signedIn('u1@inno-ax.com')
+    linkT6()
     await mountDetail('t6')
 
     expect(sendButton()!.disabled).toBe(false)
@@ -65,6 +69,7 @@ describe('[확인 요청]', () => {
 
   it('누르면 입력 창 없이 바로 보내고, 버튼 자리에 이 결정의 확인 현황이 선다', async () => {
     await signedIn('u1@inno-ax.com')
+    linkT6()
     await mountDetail('t6')
 
     await click(sendButton())
@@ -75,42 +80,39 @@ describe('[확인 요청]', () => {
     expect($$('[data-check-current] [data-check-row]')).toHaveLength(1)
     expect($('[data-check-current]')!.textContent).toContain('박지훈')
     expect(mockDb().checks.at(-1)).toMatchObject({
-      threadId: 't6',
-      entryId: 'e6',
+      agendaId: 't6',
+      decisionRev: 1,
+      decision: expect.stringContaining('테스트 기간만 2주 줄인다'),
       recipientId: 'u2',
     })
   })
 
-  it('결정 전이면 닫히고 까닭을 한 줄로', async () => {
+  it('결정 전이면 확인 요청 칸이 아예 없다', async () => {
     await signedIn('u1@inno-ax.com')
     await mountDetail('t3')
-    expect(sendButton()!.disabled).toBe(true)
-    expect(block()).toBe('not-decided')
-    expect($('[data-check-block]')!.textContent).toContain('결정된 안건만 보낼 수 있어요')
+    expect($('[data-check-section]')).toBeNull()
+    expect(sendButton()).toBeNull()
   })
 
-  it('받을 사람이 없으면 닫힌다 — 참조를 빼면 바로 PATCH 되고 버튼이 닫힌다', async () => {
+  it('받을 사람이 없으면 닫히고 까닭을 한 줄로 — 연결 작업이 없는 t6', async () => {
     await signedIn('u1@inno-ax.com')
     await mountDetail('t6')
-    expect($$('[data-cc]').map((c) => c.dataset.cc)).toEqual(['u2'])
-
-    await click($('[data-cc="u2"] [data-cc-remove]'))
-    expect(useDataStore().allThreads.find((t) => t.id === 't6')!.ccIds).toEqual([])
     expect(sendButton()!.disabled).toBe(true)
     expect(block()).toBe('no-recipients')
     expect($('[data-check-block]')!.textContent).toContain('받을 사람이 없어요')
     expect($('[data-check-recipients]')).toBeNull()
   })
 
-  it('결정을 바꾸면 다시 열리고, 앞 결정 묶음은 접혀서 아래에 있다', async () => {
+  it('결정내용을 바꾸면 다시 열리고, 앞 판 묶음은 접혀서 아래에 있다 — 보낼 때의 결정내용으로', async () => {
     await signedIn('u1@inno-ax.com')
-    await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null, 'di2')
+    useAgendaStore().updateAgenda('t2', { decision: 'PostgreSQL 로 바꾼다' })
     await mountDetail('t2')
 
     expect(sendButton()!.disabled).toBe(false)
-    expect($('[data-check-recipients]')!.textContent).toContain('받는 사람 3명')
-    expect($('[data-check-older="e3"]')).toBeNull()
+    expect($('[data-check-recipients]')!.textContent).toContain('받는 사람 1명')
+    expect($('[data-check-older="1"]')).toBeNull()
     await click($('[data-check-older-toggle]'))
-    expect($('[data-check-older="e3"]')!.textContent).toContain('확인 1 / 3')
+    expect($('[data-check-older="1"]')!.textContent).toContain('확인 1 / 3')
+    expect($('[data-check-older="1"]')!.textContent).toContain('mysql 을 쓴다')
   })
 })

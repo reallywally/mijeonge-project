@@ -64,7 +64,7 @@ class TestCase(Base):
     due: Mapped[date | None] = mapped_column(Date)
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     part_id: Mapped[str | None] = mapped_column(String(36))
-    # 마지막으로 기준을 확인했을 때 닿는 안건들의 Entry seq 최댓값 — 시각이 아니라 seq 로 본다 (Q15)
+    # 마지막으로 기준을 확인했을 때 닿는 안건들의 결정 바뀜(agenda_history) seq 최댓값 (Q15)
     basis_seq: Mapped[int | None] = mapped_column(BigInteger)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -79,7 +79,7 @@ class TestRef(Base):
     __test__ = False
     __tablename__ = "test_ref"
     __table_args__ = (
-        CheckConstraint("(task_id is null) <> (thread_id is null)", name="one_target"),
+        CheckConstraint("(task_id is null) <> (agenda_id is null)", name="one_target"),
         ForeignKeyConstraint(
             ["test_id", "project_id"],
             ["test_case.id", "test_case.project_id"],
@@ -89,17 +89,17 @@ class TestRef(Base):
             ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
         ),
         ForeignKeyConstraint(
-            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+            ["agenda_id", "project_id"], ["agenda.id", "agenda.project_id"], ondelete="CASCADE"
         ),
         UniqueConstraint("test_id", "task_id"),
-        UniqueConstraint("test_id", "thread_id"),
+        UniqueConstraint("test_id", "agenda_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     test_id: Mapped[str] = mapped_column(String(36))
     project_id: Mapped[str] = mapped_column(String(36))
     task_id: Mapped[str | None] = mapped_column(String(36))
-    thread_id: Mapped[str | None] = mapped_column(String(36))
+    agenda_id: Mapped[str | None] = mapped_column(String(36))
 
 
 class TestHistory(Base):

@@ -635,6 +635,29 @@
 - [x] 검사 — `lib/gantt.test.ts`(order 정렬) · `stores/task.test.ts`(같은 상위 · 다른 상위 · 최상위 · 같은 자리 · 권한 · 4단 · 고리 · 이력 · 새 작업 맨 끝) · `stores/server.test.ts`(요청 모양 · 응답 갈아끼우기 · 실패 되돌리기 · 보내기 전 막기) · `api/tasks.test.ts`(목업 코드 · 서버 경로) · `TaskGantt.test.ts`(이벤트를 직접 불러 emit · 막기 · 잠금 · 되돌리기 · 테스트 간트는 꺼짐)
 - [ ] 브라우저에서 끌어 본다(marker 표시 · 자동 스크롤). 서버 모드로 한 번 돌려 본다
 
+## 23단계 · 안건 간소화 — 제목 · 설명 · 결정내용 · 상태
+
+계약은 `docs/api/agenda.md`(2026-11-04 합의). `thread` → `agenda` 이름 바꾸기에 이어 안건을 네 칸으로 줄인다 —
+후보 · 참조 · 상위 안건 · 결정 항목 · 이력 줄(Entry)을 걷고, 상태는 사람이 고른다. `decidedAt` · `decisionRev` 는 서버가 찍는다.
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 결정 판 | `lib/agenda` `nextDecisionMarks` — 결정내용(앞뒤 공백 뗀 값)이 바뀌거나 decided 가 되면 판 +1(둘 다여도 1), decided 에서 벗어나면 `decidedAt` null. 목업 등록 · PATCH · 회의록 반영이 쓰고, 서버 모드도 PATCH 전에 먼저 세운 뒤 응답으로 갈아끼운다 | 확인 요청 버튼이 바로 서게 |
+| 상세 | 왼쪽 `AgendaFields`(제목 · 설명 · 결정내용, 벗어나면 PATCH), 오른쪽 `AgendaPropertyPanel` 맨 위 `AgendaStateSelect`. 확인 요청 칸은 결정일 때만, 변경 이력은 그대로 | 계약 '화면' |
+| 등록 | 제목 · 설명 · 결정내용 · 상태 넷 — 속성 패널 없이 한 칸 | 담당자 · 기한 · 파트는 상세에서 |
+| 목록 | 상태 배지 · 제목 아래 결정내용 첫 줄. '1/2' · 미룬 횟수 · 마지막 기록 · 이력 수 · '3번 이상 미뤄짐' 거르기는 걷음 | 계약 '화면' |
+| 변경 이력 | 안건은 칸 표(created · deleted · title · description · decision · state · ownerId · partId · dueDate)에 없는 칸을 그리지 않고, 그것뿐인 줄은 뺀다 | 옛 줄의 options · ccIds · entry… · item… |
+| 확인 요청 | `decisionRev` · `decision` 을 찍는다. 묶음은 `agendaId#decisionRev`, 받는 사람은 연결 작업 담당자만 | 참조가 없어졌다 |
+| 테스트 기준 | 목업은 안건 변경 이력을 서버 시드와 같은 seq(등록 줄 1 ~ 10 → 이행 '결정내용' 줄 t1 11 · t2 12 · t5 13 · t6 14 → 목업이 남긴 줄)로 세고, 결정내용 칸 · decided 로 바뀐 줄로 기준 바뀜을 낸다. 픽스처 `basisSeq` 는 tc2 12 · tc3 null · tc4 11(바뀜이 있던 tc4 만 계속 있음) | 계약 '따라 바뀌는 기능' · 이행 5 |
+| 회의록 | 초안 `agendas` 에 decision · state · partId, 기존 안건은 `updates`(통째로 갈아끼우기). 고름 · 오류 열쇠는 `update:<안건 id>` | 계약에 tempId 가 없다 |
+| 근거 칩 | `[[thread:ID]]` 도 같은 안건 칩으로 읽는다 | 저장된 옛 리포트 · 대화 |
+
+- [x] `types/domain.ts` · `fixtures`(결정내용은 이행 규칙 2 ~ 4 로 만든 글, 확인 요청 판 · 글, 이력에 이행 줄) · `api/agendas` · `api/checks` · `api/minutes` · `api/tests` · `api/reports` · `api/risk` · `mockAuth`
+- [x] `stores/agenda`(rows · 등록 · 고치기 · 지우기만) · `check` · `minutes` · `minutesDraft` · `task`(작업 상세의 안건 줄) · `lib/history` · `lib/check` · `lib/minutes` · `lib/progress` · `lib/risk`
+- [x] `AgendaDecisionPanel` · `DecisionEntryForm` · `EntryKindBadge` · `CcField` 걷음, `AgendaStateSelect` 새로
+- [x] 검사 — `lib/agenda.test.ts`(판 · 정한 때 · 첫 줄) · `stores/agenda.test.ts` · `AgendaListView.test.ts` · 확인 요청 · 회의록 · 테스트 기준 · 변경 이력 · 근거 칩
+- [ ] 서버 모드로 한 번 돌려 본다(Q67 답 뒤)
+
 ---
 
 ## 진행 상황
@@ -664,6 +687,7 @@
 | 20 작업 권한 · 지우기 | **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-02) — 고치기는 작성자 · 담당자 · 관리자만(상세 읽기 전용 · 목록 · 칸반 · 간트 잠금) · 작성자 칸 · 작업 지우기(확인 · 409) |
 | 21 안건 권한 · 지우기 · 변경 이력 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-02) — 안건 · 이력 줄 고치기 · 지우기는 작성자 · 담당자 · 관리자(줄은 남긴 사람도) · 작성자 칸 · 안건 지우기(확인 · 409) · 줄 지우기(상태 재계산) · 변경 이력 칸 |
 | 22 간트 줄 끌기 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-03) — 상위 · 형제 순서(`Task.order` · `POST /api/tasks/{id}/move`) |
+| 23 안건 간소화 | 계약 **합의** (2026-11-04, `docs/api/agenda.md`) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-04). Q67 열림 |
 
 ## 아직 안 정한 것
 

@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError
-from app.models import Task, TaskComment, TaskHistory, TaskLine, TaskLog, TaskThreadLink, TestRef
+from app.models import Task, TaskAgendaLink, TaskComment, TaskHistory, TaskLine, TaskLog, TestRef
 from app.models.task import TASK_LINE_KINDS, TASK_PRIORITIES, TASK_STATUSES
 from app.schemas.task import TaskLineKindIn, TaskPriorityIn, TaskStatusIn
 from app.services import search as search_service
@@ -35,7 +35,7 @@ NEW_TASK = {
     "start": None,
     "due": None,
     "priority": "normal",
-    "threadIds": ["t1"],
+    "agendaIds": ["t1"],
 }
 
 
@@ -77,15 +77,15 @@ async def test_keys_come_from_the_project_counter(client: httpx.AsyncClient) -> 
 
 
 async def test_key_prefix_follows_the_project(client: httpx.AsyncClient) -> None:
-    body = NEW_TASK | {"threadIds": [], "ownerId": None}
+    body = NEW_TASK | {"agendaIds": [], "ownerId": None}
     task = (await client.post("/api/projects/p2/tasks", json=body)).json()
     assert task["key"] == "PAS-3"
 
 
-async def test_thread_ids_are_linked_on_creation(client: httpx.AsyncClient) -> None:
+async def test_agenda_ids_are_linked_on_creation(client: httpx.AsyncClient) -> None:
     task = (await client.post("/api/projects/p1/tasks", json=NEW_TASK)).json()
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert {"taskId": task["id"], "threadId": "t1"} in snap["taskThreadLinks"]
+    assert {"taskId": task["id"], "agendaId": "t1"} in snap["taskAgendaLinks"]
 
 
 async def test_add_task_on_unknown_project_is_404(client: httpx.AsyncClient) -> None:
@@ -208,33 +208,33 @@ async def test_unknown_line_is_404(client: httpx.AsyncClient) -> None:
     assert res.status_code == 404
 
 
-async def test_thread_link_is_idempotent(client: httpx.AsyncClient) -> None:
-    first = await client.put("/api/tasks/k1/threads/t4")
-    second = await client.put("/api/tasks/k1/threads/t4")
+async def test_agenda_link_is_idempotent(client: httpx.AsyncClient) -> None:
+    first = await client.put("/api/tasks/k1/agendas/t4")
+    second = await client.put("/api/tasks/k1/agendas/t4")
     assert first.status_code == 200
-    assert first.json() == second.json() == {"taskId": "k1", "threadId": "t4"}
+    assert first.json() == second.json() == {"taskId": "k1", "agendaId": "t4"}
 
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert [link for link in snap["taskThreadLinks"] if link["taskId"] == "k1"] == [
-        {"taskId": "k1", "threadId": "t4"}
+    assert [link for link in snap["taskAgendaLinks"] if link["taskId"] == "k1"] == [
+        {"taskId": "k1", "agendaId": "t4"}
     ]
 
 
 async def test_unlinking_what_is_not_linked_still_works(client: httpx.AsyncClient) -> None:
-    assert (await client.delete("/api/tasks/k1/threads/t4")).status_code == 204
+    assert (await client.delete("/api/tasks/k1/agendas/t4")).status_code == 204
 
-    await client.put("/api/tasks/k1/threads/t4")
-    assert (await client.delete("/api/tasks/k1/threads/t4")).status_code == 204
-    assert (await client.delete("/api/tasks/k1/threads/t4")).status_code == 204
+    await client.put("/api/tasks/k1/agendas/t4")
+    assert (await client.delete("/api/tasks/k1/agendas/t4")).status_code == 204
+    assert (await client.delete("/api/tasks/k1/agendas/t4")).status_code == 204
 
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert {"taskId": "k1", "threadId": "t4"} not in snap["taskThreadLinks"]
+    assert {"taskId": "k1", "agendaId": "t4"} not in snap["taskAgendaLinks"]
 
 
 async def test_link_needs_both_sides_in_one_project(client: httpx.AsyncClient) -> None:
-    assert (await client.put("/api/tasks/k1/threads/t10")).status_code == 400
-    assert (await client.put("/api/tasks/없는작업/threads/t4")).status_code == 404
-    assert (await client.put("/api/tasks/k1/threads/없는안건")).status_code == 404
+    assert (await client.put("/api/tasks/k1/agendas/t10")).status_code == 400
+    assert (await client.put("/api/tasks/없는작업/agendas/t4")).status_code == 404
+    assert (await client.put("/api/tasks/k1/agendas/없는안건")).status_code == 404
 
 
 async def test_meeting_routes_are_gone(client: httpx.AsyncClient) -> None:
@@ -397,7 +397,7 @@ async def test_delete_is_logical(client: httpx.AsyncClient, session: AsyncSessio
     API 로는 어디서도 없는 것처럼 보인다. 번호는 다시 안 쓴다.
     """
     made = (
-        await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"threadIds": ["t1"]})
+        await client.post("/api/projects/p1/tasks", json=NEW_TASK | {"agendaIds": ["t1"]})
     ).json()
     task_id = made["id"]
     comment = await client.post(f"/api/tasks/{task_id}/comments", json={"body": "남김"})
@@ -411,7 +411,7 @@ async def test_delete_is_logical(client: httpx.AsyncClient, session: AsyncSessio
     row = await session.get(Task, task_id)
     assert row is not None
     assert row.is_deleted is True and row.deleted_by == "admin" and row.deleted_at is not None
-    for model in (TaskLine, TaskComment, TaskThreadLink, TaskLog, TaskHistory, TestRef):
+    for model in (TaskLine, TaskComment, TaskAgendaLink, TaskLog, TaskHistory, TestRef):
         left = await session.scalar(
             select(func.count()).select_from(model).where(model.task_id == task_id)
         )
@@ -431,8 +431,8 @@ async def test_delete_is_logical(client: httpx.AsyncClient, session: AsyncSessio
         ("DELETE", f"/api/tasks/{task_id}", None),
         ("PATCH", f"/api/tasks/{task_id}", {"title": "살리기"}),
         ("PATCH", f"/api/tasks/{task_id}/lines/{line_id}", {"done": True}),
-        ("PUT", f"/api/tasks/{task_id}/threads/t2", None),
-        ("DELETE", f"/api/tasks/{task_id}/threads/t1", None),
+        ("PUT", f"/api/tasks/{task_id}/agendas/t2", None),
+        ("DELETE", f"/api/tasks/{task_id}/agendas/t1", None),
         ("GET", f"/api/tasks/{task_id}/comments", None),
         ("POST", f"/api/tasks/{task_id}/comments", {"body": "또"}),
         ("GET", f"/api/tasks/{task_id}/history", None),
@@ -449,7 +449,7 @@ async def test_delete_is_logical(client: httpx.AsyncClient, session: AsyncSessio
 
     snap = (await client.get("/api/projects/p1/snapshot")).json()
     assert task_id not in {t["id"] for t in snap["tasks"]}
-    assert all(link["taskId"] != task_id for link in snap["taskThreadLinks"])
+    assert all(link["taskId"] != task_id for link in snap["taskAgendaLinks"])
     # 테스트는 남고 태그만 안 보인다 — 줄은 DB 에 남아 있다
     test = await client.get("/api/tests/tc1")
     assert test.status_code == 200
@@ -474,8 +474,8 @@ async def test_delete_is_logical(client: httpx.AsyncClient, session: AsyncSessio
     listed = await search_service.list_tasks(session, "p1")
     assert task_id not in {t.id for t in listed.tasks}
     assert made["key"] not in await search_service.tasks_by_key(session, "p1", [made["key"]])
-    thread = await search_service.get_thread(session, "p1", "t1")
-    assert task_id not in {t.id for t in thread.tasks}
+    agenda = await search_service.get_agenda(session, "p1", "t1")
+    assert task_id not in {t.id for t in agenda.tasks}
 
     # 상위로도 못 쓴다 — 단건 · 일괄 모두 원래 없을 때와 같은 400
     res = await client.post("/api/projects/p1/tasks", json={"title": "밑", "parentId": task_id})

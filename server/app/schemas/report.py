@@ -38,16 +38,17 @@ class PreviousReport(Schema):
 
 
 class DecisionFacts(Schema):
-    decided_thread_ids: list[str]
-    deferred_thread_ids: list[str]
-    risky_thread_ids: list[str]
+    decided_agenda_ids: list[str]
+    # 미룸을 걷기(docs/api/agenda.md) 전에 만든 리포트의 facts 에만 있다 — 새 리포트는 싣지 않는다
+    deferred_agenda_ids: list[str] | None = Field(default=None, exclude_if=lambda v: v is None)
+    risky_agenda_ids: list[str]
 
 
 class TaskWeight(Schema):
     open_children: int
     open_lines: int
     total_lines: int
-    thread_count: int
+    agenda_count: int
     priority: TaskPriority
 
 

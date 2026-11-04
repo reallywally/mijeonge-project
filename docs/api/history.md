@@ -3,6 +3,9 @@
 > 결정은 `docs/api/decisions.md` Q59. 순서는 `server/PLAN.md` 17단계 · `web/PLAN.md` 17단계.
 > 작업 상태 기록(`task_log`, `docs/api/task-flow.md`)은 **그대로 둔다** — 리포트 · N일째의 근거다.
 > 이 문서의 이력은 화면에 보이기 위한 것이고 셈에 쓰지 않는다.
+> **2026-11-04 고침 (안건 간소화, `agenda.md`)** — 안건 이력은 `agenda_history`(옛 `thread_history`)이고 칸은 아래 '칸 — 안건' 의 고친 표다.
+> 결정이 언제 어떻게 바뀌었는지는 **이 이력이 유일한 기록**이 되어, 이제 테스트 '기준 바뀜'(`test.md`)과 리스크 '오래 멈춤'(`risk.md`)이 이 이력을 센다.
+> 작업 이력의 안건 링크 칸 `thread` → **`agenda`**, 테스트 이력의 태그 칸 `threadRef` → **`agendaRef`**(이행 0032 가 지난 줄도 바꿨다). 경로는 `GET /api/agendas/{agendaId}/history`, 없거나 지운 안건은 404 `AGENDA_NOT_FOUND`.
 
 지금은 작업 · 테스트를 누가 언제 무엇을 바꿨는지 모른다. 작업은 상태만 남고(`task_log`), 테스트는
 마지막으로 바뀐 때 · 누가만 남는다(Q54). **바꾼 일 한 번(요청 하나)을 한 줄로** 남기고 상세에서 보인다.
@@ -86,10 +89,10 @@ export interface HistoryEntry {
 | `relatedIds` | 더 남기지 않는다 — 2026-10-27 ~ 28 연관 작업(Q61, Q62 로 걷음) 때 남은 줄만 | 작업 id 배열(건 순서) |
 | `body` | `PATCH` 의 `body` 가 줄 글 · 종류 · 체크 · 들여쓰기 · 순서 중 하나라도 바꿈 | 본문 글(아래 '본문') 또는 빈 본문이면 `null`. 2026-11-01 전 줄은 `null` · `null` |
 | `lineDone` | `PATCH .../lines/{lineId}` 가 값을 바꿈 | `false` · `true` (또는 반대), `subject` = 그 줄의 글 |
-| `thread` | 안건 링크 `PUT`(새로 걸 때) · `DELETE`(있던 것을 뗄 때) | 걸기 `null` → 안건 id, 떼기 안건 id → `null` |
+| `agenda` (2026-11-04 전 `thread`) | 안건 링크 `PUT`(새로 걸 때) · `DELETE`(있던 것을 뗄 때) | 걸기 `null` → 안건 id, 떼기 안건 id → `null` |
 | `dependsOn` | 더 남기지 않는다 — 선행 작업(Q63 로 걷음) 때 **뒤 작업**에 남은 줄만 | 걸기 `null` → 선행 작업 id, 떼기 반대 |
 
-등록 때 함께 건 안건(`threadIds`)은 `created` 에 들어간 것으로 본다 — 따로 줄을 안 만든다.
+등록 때 함께 건 안건(`agendaIds`)은 `created` 에 들어간 것으로 본다 — 따로 줄을 안 만든다.
 
 ### 본문 (`body`) — 값과 합치기 (Q65)
 
@@ -119,13 +122,29 @@ export interface HistoryEntry {
 | `status` | `POST .../status` | 상태 값. **같은 상태로 다시 보내도** 남긴다(`from = to`) — N일째가 다시 0 이 된 까닭 |
 | ~~`failedStep`~~ | 2026-10-27 걷음(Q60) — 지난 줄에만 있다 | 단계 번호 또는 `null` |
 | `resultNote` | 상태 바꾸기가 값을 바꿈 | 글(`''` 이 아니라 비면 `null`) |
-| `taskRef` · `threadRef` | 태그 `PUT`(새로) · `DELETE`(있던 것) | 걸기 `null` → id, 떼기 id → `null` |
+| `taskRef` · `agendaRef`(2026-11-04 전 `threadRef`) | 태그 `PUT`(새로) · `DELETE`(있던 것) | 걸기 `null` → id, 떼기 id → `null` |
 | `basis` | `POST .../basis` ("그대로 맞다") | `null` · `null` |
 
 - 상태 바꾸기의 줄은 `status` 를 맨 앞에 두고 `resultNote` 가 뒤따른다
 - 작업 · 테스트 모두 한 줄 안의 칸 순서는 위 표의 순서다
 
-### 칸 — 안건 (`thread_history`, 2026-11-02)
+### 칸 — 안건 (`agenda_history`, 2026-11-04 고침)
+
+| `field` | 언제 | `from` · `to` |
+| --- | --- | --- |
+| `created` · `deleted` | 등록 · 회의록 반영 / 삭제 | `null` · `null` (늘 그 줄의 유일한 칸) |
+| `title` · `description` · `decision` | `PATCH` · 회의록 반영(`updates`) | 글 |
+| `state` | `PATCH` · 회의록 반영(`updates`) | `queued` · `open` · `decided` |
+| `ownerId` · `partId` | `PATCH` | id 또는 `null` |
+| `dueDate` | `PATCH` | `YYYY-MM-DD` 또는 `null` |
+
+- 한 줄 안의 칸 순서는 위 표의 순서다. 값이 같으면 안 남기고, 남길 칸이 없으면 줄 없음. `subject` 는 늘 `''`
+- 등록은 결정내용 · 상태를 같이 적어도 `created` 한 칸뿐이다
+- 이행(0032)이 채운 결정내용은 `backfilled: true` 줄 하나(`decision` `''` → 결정내용, 바꾼 사람 · 때 = 그 결정 줄을 남긴 사람 · 시각)로 남는다
+- 이행 전 줄의 칸(`options` · `ccIds` · `entryText` · `entryNote` · `entryDeleted` · `itemCreated` · `itemTitle` · `itemDeleted`)은 DB 에 그대로다 — 화면은 모르는 칸을 건너뛴다
+- 화면 칸 이름: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 파트 · 기한
+
+### ~~칸 — 안건 (`thread_history`, 2026-11-02)~~ — 옛 표 (2026-11-04 전)
 
 | `field` | 언제 | `from` · `to` · `subject` |
 | --- | --- | --- |
@@ -153,9 +172,9 @@ export interface HistoryEntry {
 | --- | --- | --- | --- |
 | GET | `/api/tasks/{taskId}/history` | 작업의 변경 이력 | `HistoryEntry[]` |
 | GET | `/api/tests/{testId}/history` | 테스트의 변경 이력 | `HistoryEntry[]` |
-| GET | `/api/threads/{threadId}/history` | 안건의 변경 이력 (2026-11-02) | `HistoryEntry[]` |
+| GET | `/api/agendas/{agendaId}/history` | 안건의 변경 이력 (2026-11-02, 2026-11-04 경로 바꿈) | `HistoryEntry[]` |
 
-- 경계는 `require_scope` 그대로 — 없거나 못 보는 프로젝트면 404 `TASK_NOT_FOUND` · `TEST_NOT_FOUND` · `THREAD_NOT_FOUND`. 지운 안건도 `THREAD_NOT_FOUND`
+- 경계는 `require_scope` 그대로 — 없거나 못 보는 프로젝트면 404 `TASK_NOT_FOUND` · `TEST_NOT_FOUND` · `AGENDA_NOT_FOUND`. 지운 안건도 `AGENDA_NOT_FOUND`
 - 쓰기 응답은 그대로다 — 이력은 응답에 실리지 않는다. 화면은 상세의 이력 칸이 열려 있으면 쓰기 뒤에 다시 부른다
 - 늘어나는 오류 코드 없음
 
@@ -164,6 +183,7 @@ export interface HistoryEntry {
 - 시드는 작업 · 테스트마다 **등록 한 줄**(`backfilled = false`, 바꾼 사람 = 작업은 등록한 사람(`Task.creatorId`, 2026-11-02 — 그전엔 담당자) · 테스트는 만든 사람)을 등록 시각에 둔다. 등록한 사람 기록이 없는 작업(`web/src/fixtures/tasks.ts` 의 `CREATOR_OF` 에 없는 것)은 null 이다
 - 시연용으로 둘을 더한다 — `k20` 에 `status todo → doing`(2026-10-08T00:00:00Z, `task_log` 시연 줄과 같은 때) · `HW-T7` 에 `status testing → fail` + `resultNote`(그 테스트의 바뀐 시각)
 - 목업(`web/src/fixtures`)도 같은 줄을 둔다
+- 안건(2026-11-04 고침) — `created` 줄 뒤에 결정내용이 있는 `t1` · `t2` · `t5` · `t6` 에 이행 줄 `hh-<id>-2`(`agenda.md` '시드 · 목업')
 - 안건(2026-11-02) — 시드 · 목업은 안건마다 `created` 한 줄(`backfilled = false`, 바꾼 사람 = 그 안건의 `creatorId` = 시드의 담당자, 담당 없는 `t4` 는 `null`, 시각 = 안건의 `createdAt`), id 는 `hh-<안건 id>-1`(예: `hh-t1-1`). 순서는 안건 배열 순. 마이그레이션 `0029_thread_perm` 은 있던 안건마다 `created` backfill 줄(바꾼 사람 없음, id 는 uuid4 hex)
 
 ## 화면 (프론트가 정할 것의 테두리)
@@ -202,7 +222,7 @@ export interface HistoryEntry {
 - 테스트 상태 줄의 `resultNote` — 앞뒤 공백을 뗀 저장 값으로 비교하고, 빈 값은 양쪽 모두 `null` 로 적는다. fail · blocked 가 아니면 메모를 버리므로 `"메모" → null` 이 남는다. `failedStep` 도 fail 이 아니면 `null` 로 바뀌어 남는다
 - 테스트 상태는 `status` 칸을 **늘** 넣는다(같은 값이어도) — 그래서 상태 요청은 늘 한 줄을 만든다
 - `basis` — `POST .../basis` 는 **늘** 한 줄을 남긴다. 기준 값(`basis_seq`)이 그대로여도 '확인했다' 는 일 자체를 남긴다
-- 테스트를 만들 때 같이 건 태그(`refs`)는 `created` 에 든 것으로 본다 — 작업의 `threadIds` 와 같다
+- 테스트를 만들 때 같이 건 태그(`refs`)는 `created` 에 든 것으로 본다 — 작업의 `agendaIds` 와 같다
 - 등록 줄의 `changedAt` 은 그 작업 · 테스트의 `createdAt` 과 같은 값, 상태 줄의 `changedAt` 은 `statusChangedAt` 과 같은 값이다
 - `changedBy` — 바꾼 요청의 로그인한 사람. 본문 줄 체크 · 안건 링크 · 선행 떼기 · 테스트 고치기 · 태그 · 기준 확인 라우트가 이제 요청한 사람을 받는다(응답 · 권한은 그대로)
 

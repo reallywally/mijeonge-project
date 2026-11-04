@@ -158,14 +158,14 @@ def tool_results(call: dict[str, Any]) -> list[dict[str, Any]]:
 async def test_tool_then_answer(session: AsyncSession) -> None:
     await seed(session)
     fake = FakeClient(
-        Turn(tools=[("get_thread", {"thread_id": "t1"})]),
-        Turn(texts=["서버 OS 는 ", "우분투로 정했습니다 [[thread:t1]]"]),
+        Turn(tools=[("get_agenda", {"agenda_id": "t1"})]),
+        Turn(texts=["서버 OS 는 ", "우분투로 정했습니다 [[agenda:t1]]"]),
     )
     events = await run(session, fake)
 
     assert [e.type for e in events] == ["tool", "delta", "delta", "done"]
-    assert events[0].name == "get_thread"
-    assert events[-1].refs[0].model_dump() == {"kind": "thread", "id": "t1"}
+    assert events[0].name == "get_agenda"
+    assert events[-1].refs[0].model_dump() == {"kind": "agenda", "id": "t1"}
 
     # 도구 결과가 다음 차례에 JSON 문자열로 실려 간다 — id · 이력 kind 를 그대로
     assert len(fake.calls) == 2
@@ -175,9 +175,10 @@ async def test_tool_then_answer(session: AsyncSession) -> None:
     assert result["tool_use_id"] == "tu1_0"
     assert result["is_error"] is False
     doc = json.loads(result["content"])
-    assert doc["thread"]["id"] == "t1"
-    assert doc["thread"]["title"] == "서버 OS 결정"
-    assert [entry["kind"] for entry in doc["entries"]] == ["decide"]
+    assert doc["agenda"]["id"] == "t1"
+    assert doc["agenda"]["title"] == "서버 OS 결정"
+    assert doc["agenda"]["decision"] == "우분투 최신 버전으로 한다"
+    assert "entries" not in doc and "items" not in doc
 
 
 async def test_request_follows_the_settings(session: AsyncSession) -> None:
@@ -195,8 +196,8 @@ async def test_request_follows_the_settings(session: AsyncSession) -> None:
     assert call["tool_choice"] == {"type": "auto"}
     assert "thinking" not in call
     assert {tool["name"] for tool in call["tools"]} == {
-        "search_threads",
-        "get_thread",
+        "search_agendas",
+        "get_agenda",
         "search_tasks",
         "get_task",
         "list_tasks",
@@ -229,9 +230,9 @@ async def test_text_between_rounds_is_kept_apart(session: AsyncSession) -> None:
 
 def test_refs_are_unique_and_in_order() -> None:
     refs = chat_service.extract_refs(
-        "[[task:k4]] 와 [[thread:t1]], 다시 [[task:k4]]. [[thread:]] [[meeting:m1]] [[thread:t2"
+        "[[task:k4]] 와 [[agenda:t1]], 다시 [[task:k4]]. [[agenda:]] [[meeting:m1]] [[agenda:t2"
     )
-    assert [(r.kind, r.id) for r in refs] == [("task", "k4"), ("thread", "t1")]
+    assert [(r.kind, r.id) for r in refs] == [("task", "k4"), ("agenda", "t1")]
 
 
 # --- ② SSE 이벤트 순서 · 모양 ------------------------------------------------
@@ -240,8 +241,8 @@ def test_refs_are_unique_and_in_order() -> None:
 async def test_sse_events_order_and_shape(client: httpx.AsyncClient) -> None:
     use(
         FakeClient(
-            Turn(tools=[("get_thread", {"thread_id": "t1"})]),
-            Turn(texts=["우분투로 ", "정했습니다 [[thread:t1]]"]),
+            Turn(tools=[("get_agenda", {"agenda_id": "t1"})]),
+            Turn(texts=["우분투로 ", "정했습니다 [[agenda:t1]]"]),
         )
     )
     res = await client.post(URL, json=ASK)
@@ -252,14 +253,14 @@ async def test_sse_events_order_and_shape(client: httpx.AsyncClient) -> None:
     assert [name for name, _ in events] == ["tool", "delta", "delta", "done"]
     # event 줄과 data 의 type 이 같다
     assert all(data["type"] == name for name, data in events)
-    assert events[0][1] == {"type": "tool", "name": "get_thread", "label": "안건 이력 읽는 중"}
+    assert events[0][1] == {"type": "tool", "name": "get_agenda", "label": "안건 이력 읽는 중"}
     assert events[1][1] == {"type": "delta", "text": "우분투로 "}
-    assert events[3][1] == {"type": "done", "refs": [{"kind": "thread", "id": "t1"}]}
+    assert events[3][1] == {"type": "done", "refs": [{"kind": "agenda", "id": "t1"}]}
 
 
 async def test_search_tool_label_carries_the_query(client: httpx.AsyncClient) -> None:
     # sqlite 에는 pg_trgm 이 없어 검색 자체는 실패한다 — 라벨은 도구를 부르기 전에 나간다
-    label = chat_service.tool_label("search_threads", {"query": " OS "})
+    label = chat_service.tool_label("search_agendas", {"query": " OS "})
     assert label == '"OS" 안건 찾는 중'
     assert chat_service.tool_label("search_tasks", {}) == "작업 찾는 중"
 
@@ -462,7 +463,7 @@ async def test_tools_cannot_read_other_projects(session: AsyncSession) -> None:
     """t10 · x1 은 p2 의 것이다. p1 에서 묻는 대화의 도구로는 있는지조차 못 본다."""
     await seed(session)
     fake = FakeClient(
-        Turn(tools=[("get_thread", {"thread_id": "t10"}), ("get_task", {"task_id": "x1"})]),
+        Turn(tools=[("get_agenda", {"agenda_id": "t10"}), ("get_task", {"task_id": "x1"})]),
         Turn(texts=["못 찾았습니다."]),
     )
     events = await run(session, fake, project_id="p1")
@@ -480,7 +481,7 @@ async def test_tool_input_cannot_override_the_project(session: AsyncSession) -> 
     """도구 입력에 project_id 를 끼워 넣어도 경로의 프로젝트만 본다."""
     await seed(session)
     content, is_error = await chat_service.run_tool(
-        session, "p1", "get_thread", {"thread_id": "t10", "project_id": "p2"}
+        session, "p1", "get_agenda", {"agenda_id": "t10", "project_id": "p2"}
     )
     assert is_error
     assert "이관" not in content
@@ -488,7 +489,7 @@ async def test_tool_input_cannot_override_the_project(session: AsyncSession) -> 
 
 async def test_bad_tool_input_is_a_tool_error(session: AsyncSession) -> None:
     await seed(session)
-    content, is_error = await chat_service.run_tool(session, "p1", "get_thread", {"id": "t1"})
+    content, is_error = await chat_service.run_tool(session, "p1", "get_agenda", {"id": "t1"})
     assert is_error and "입력이 올바르지 않다" in json.loads(content)["error"]
     content, is_error = await chat_service.run_tool(session, "p1", "drop_table", {})
     assert is_error and "없는 도구" in json.loads(content)["error"]
@@ -497,13 +498,13 @@ async def test_bad_tool_input_is_a_tool_error(session: AsyncSession) -> None:
 async def test_search_tools_stay_in_project(pg_session: AsyncSession) -> None:
     """Postgres 에서만 — '서버 OS' 는 p1 의 안건이다. p2 에서 찾으면 안 나온다."""
     content, is_error = await chat_service.run_tool(
-        pg_session, "p1", "search_threads", {"query": "서버 OS"}
+        pg_session, "p1", "search_agendas", {"query": "서버 OS"}
     )
     assert not is_error
     assert "t1" in [hit["id"] for hit in json.loads(content)]
 
     content, is_error = await chat_service.run_tool(
-        pg_session, "p2", "search_threads", {"query": "서버 OS"}
+        pg_session, "p2", "search_agendas", {"query": "서버 OS"}
     )
     assert (content, is_error) == ("[]", False)
 
@@ -920,7 +921,7 @@ async def test_decision_risks_tool_round(session: AsyncSession) -> None:
     (result,) = tool_results(fake.calls[1])
     assert result["is_error"] is False
     report = json.loads(result["content"])
-    assert set(report) == {"asOf", "settings", "threads", "tasks", "owners"}
+    assert set(report) == {"asOf", "settings", "agendas", "tasks", "owners"}
     # 오늘은 프롬프트의 오늘과 같은 한국 시간이다
     assert report["asOf"] == today_kst().isoformat()
     assert {"taskId": "k22", "signal": "decidedButBlocked"}.items() <= next(
@@ -934,7 +935,7 @@ async def test_decision_risks_by_member(session: AsyncSession) -> None:
     whole = await risks(session, {})
     mine = await risks(session, {"member_id": "u3"})
 
-    assert mine["threads"] == [t for t in whole["threads"] if t["ownerId"] == "u3"]
+    assert mine["agendas"] == [t for t in whole["agendas"] if t["ownerId"] == "u3"]
     assert mine["tasks"] == [t for t in whole["tasks"] if t["ownerId"] == "u3"]
     assert any(t["taskId"] == "k22" for t in mine["tasks"])
     # 사람별 표는 거르지 않는다
@@ -946,7 +947,7 @@ async def test_decision_risks_by_part_id_or_name(session: AsyncSession) -> None:
     whole = await risks(session, {})
     by_id = await risks(session, {"part_id": "pt1"})
 
-    assert by_id["threads"] == [t for t in whole["threads"] if t["partId"] == "pt1"]
+    assert by_id["agendas"] == [t for t in whole["agendas"] if t["partId"] == "pt1"]
     assert by_id["tasks"] == [t for t in whole["tasks"] if t["partId"] == "pt1"]
     assert any(t["taskId"] == "k22" for t in by_id["tasks"])
     assert by_id["owners"] == whole["owners"]
@@ -954,7 +955,7 @@ async def test_decision_risks_by_part_id_or_name(session: AsyncSession) -> None:
     assert await risks(session, {"part_id": " 인프라 "}) == by_id
     # 둘 다 주면 둘 다 맞는 것만
     both = await risks(session, {"member_id": "u1", "part_id": "pt1"})
-    assert all(t["ownerId"] == "u1" and t["partId"] == "pt1" for t in both["threads"])
+    assert all(t["ownerId"] == "u1" and t["partId"] == "pt1" for t in both["agendas"])
     assert not any(t["taskId"] == "k22" for t in both["tasks"])
 
 
@@ -983,7 +984,7 @@ async def test_decision_risks_cannot_switch_project(session: AsyncSession) -> No
     """입력에 project_id 를 끼워 넣어도 경로의 프로젝트만 계산한다."""
     await seed(session)
     report = await risks(session, {"project_id": "p1"}, project="p2")
-    assert not any(t["threadId"] in {"t3", "t5"} for t in report["threads"])
+    assert not any(t["agendaId"] in {"t3", "t5"} for t in report["agendas"])
     assert not any(t["taskId"] == "k22" for t in report["tasks"])
 
 

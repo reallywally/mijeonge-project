@@ -15,14 +15,13 @@ import { isMockMode } from '@/api/mode'
 import { mockMinutesDraft, mockMinutesTools, projects } from '@/fixtures'
 import { canDeleteComment, canEditComment, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
-import { change } from '@/lib/history'
+import { agendaPatchChanges, change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
 import { inheritedPartId } from '@/lib/part'
-import { threadStateOf } from '@/lib/thread'
+import { AGENDA_STATES, BLANK_DECISION, nextDecisionMarks } from '@/lib/agenda'
 import { batchDepthProblems, nextTaskOrder, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
 import type {
-  DecisionItem,
-  Entry,
+  AgendaState,
   Me,
   Minutes,
   MinutesApplyInput,
@@ -31,13 +30,12 @@ import type {
   MinutesEvent,
   MinutesInput,
   MinutesItem,
-  ProposedEntry,
-  ProposedEntryBody,
   ProposedMinutesTask,
-  ProposedThread,
+  ProposedAgenda,
+  ProposedUpdate,
   Task,
-  TaskThreadLink,
-  Thread,
+  TaskAgendaLink,
+  Agenda,
 } from '@/types/domain'
 
 /* 회의록 (docs/api/minutes.md). 게시판(쓰기 · 읽기 · 고치기 · 지우기)과, 저장된 회의록 하나의 [AI 정리].
@@ -165,48 +163,49 @@ const strings = (v: unknown): string[] | null =>
 
 const str = (v: unknown) => (typeof v === 'string' ? v : null)
 
-/** 아는 칸만 옮긴다 — 화면이 고쳐서 그대로 apply 로 돌려보내므로 모르는 칸을 싣지 않는다 */
-function toEntryBody(v: unknown): ProposedEntryBody | null {
+const isState = (v: unknown): v is AgendaState =>
+  typeof v === 'string' && (AGENDA_STATES as string[]).includes(v)
+
+/* 아는 칸만 옮긴다 — 화면이 고쳐서 그대로 apply 로 돌려보내므로 모르는 칸을 싣지 않는다.
+   ownerHint · quote 는 화면만 쓰는 칸이라 없으면 '' 로 받는다 (API.md 열린 질문) */
+function toAgenda(v: unknown): ProposedAgenda | null {
   if (!isRecord(v)) return null
-  const { kind, ownerId } = v
-  const text = str(v.text)
-  const note = str(v.note)
-  const ownerHint = str(v.ownerHint)
-  const detail = strings(v.detail)
-  /* 항목 이름은 2026-11-03 에 붙었다 — 아직 안 싣는 서버가 있어도 초안째 버리지 않고 '' 로 받는다 */
-  const itemTitle = v.itemTitle === undefined ? '' : str(v.itemTitle)
-  if (kind !== 'decide' && kind !== 'defer' && kind !== 'refine') return null
-  if (text === null || note === null || ownerHint === null || detail === null) return null
-  if (itemTitle === null) return null
+  const [tempId, title, description, decision] = [v.tempId, v.title, v.description, v.decision].map(
+    str,
+  )
+  const ownerHint = v.ownerHint === undefined ? '' : str(v.ownerHint)
+  const quote = v.quote === undefined ? '' : str(v.quote)
+  const partId = v.partId === undefined ? null : v.partId
+  const { ownerId, dueDate, state } = v
+  if (tempId === null || title === null || description === null || decision === null) return null
+  if (ownerHint === null || quote === null || !isState(state)) return null
   if (ownerId !== null && typeof ownerId !== 'string') return null
-  return { kind, itemTitle, text, detail, note, ownerId, ownerHint }
+  if (partId !== null && typeof partId !== 'string') return null
+  if (!isDayOrNull(dueDate)) return null
+  return {
+    tempId,
+    title,
+    description,
+    decision,
+    state,
+    ownerId,
+    ownerHint,
+    dueDate,
+    partId,
+    quote,
+  }
 }
 
-function toThread(v: unknown): ProposedThread | null {
+function toUpdate(v: unknown): ProposedUpdate | null {
   if (!isRecord(v)) return null
-  const [tempId, title, description, ownerHint, quote] = [
-    v.tempId,
-    v.title,
-    v.description,
-    v.ownerHint,
-    v.quote,
-  ].map(str)
-  const options = strings(v.options)
-  const { ownerId, dueDate } = v
-  const entry = v.entry === null ? null : toEntryBody(v.entry)
-  if (tempId === null || title === null || description === null) return null
-  if (ownerHint === null || quote === null || options === null) return null
-  if (ownerId !== null && typeof ownerId !== 'string') return null
-  if (!isDayOrNull(dueDate) || (v.entry !== null && entry === null)) return null
-  return { tempId, title, description, options, ownerId, ownerHint, dueDate, entry, quote }
-}
-
-function toEntry(v: unknown): ProposedEntry | null {
-  const body = toEntryBody(v)
-  if (!body || !isRecord(v)) return null
-  const [tempId, threadId, quote] = [v.tempId, v.threadId, v.quote].map(str)
-  if (tempId === null || threadId === null || quote === null) return null
-  return { ...body, tempId, threadId, quote }
+  const agendaId = str(v.agendaId)
+  const decision = str(v.decision)
+  if (agendaId === null || decision === null || !isState(v.state)) return null
+  const quote = v.quote === undefined ? undefined : str(v.quote)
+  if (quote === null) return null
+  return quote === undefined
+    ? { agendaId, decision, state: v.state }
+    : { agendaId, decision, state: v.state, quote }
 }
 
 function toTask(v: unknown): ProposedMinutesTask | null {
@@ -214,11 +213,11 @@ function toTask(v: unknown): ProposedMinutesTask | null {
   if (!task || !isRecord(v)) return null
   const ownerHint = str(v.ownerHint)
   const quote = str(v.quote)
-  const threadTempIds = strings(v.threadTempIds)
-  const threadIds = strings(v.threadIds)
-  if (ownerHint === null || quote === null || threadTempIds === null || threadIds === null)
+  const agendaTempIds = strings(v.agendaTempIds)
+  const agendaIds = strings(v.agendaIds)
+  if (ownerHint === null || quote === null || agendaTempIds === null || agendaIds === null)
     return null
-  return { ...task, ownerHint, threadTempIds, threadIds, quote }
+  return { ...task, ownerHint, agendaTempIds, agendaIds, quote }
 }
 
 function every<T>(v: unknown, to: (x: unknown) => T | null): T[] | null {
@@ -229,11 +228,11 @@ function every<T>(v: unknown, to: (x: unknown) => T | null): T[] | null {
 
 function toDraft(v: unknown): MinutesDraft | null {
   if (!isRecord(v) || !isDayOrNull(v.meetingDate) || typeof v.summary !== 'string') return null
-  const threads = every(v.threads, toThread)
-  const entries = every(v.entries, toEntry)
+  const agendas = every(v.agendas, toAgenda)
+  const updates = every(v.updates, toUpdate)
   const tasks = every(v.tasks, toTask)
-  if (!threads || !entries || !tasks) return null
-  return { meetingDate: v.meetingDate, summary: v.summary, threads, entries, tasks }
+  if (!agendas || !updates || !tasks) return null
+  return { meetingDate: v.meetingDate, summary: v.summary, agendas, updates, tasks }
 }
 
 /** event 줄이 type 이다. 모르는 event 는 건너뛰고(null), 아는 event 의 data 가 모양이 아니면 깨진 스트림이다 */
@@ -322,10 +321,10 @@ function reject(code: string, message: string, detail: Record<string, string>) {
 }
 
 /**
- * 서버와 같은 순서로 본다 — 404 회의록 → 422 모양 → 400 안건 → 400 담당자(안건 → 이력 → 작업) → 400 상위 작업.
- * 만들 때는 새 안건(queued · 공통) → 그 이력 → 기존 안건의 이력 → 작업(todo · 본문 [] · key 배열 순) → 링크.
+ * 서버와 같은 순서로 본다 — 404 회의록 → 422 모양 → 400 안건 → 400 담당자(안건 → 작업) → 400 파트 → 400 상위 작업.
+ * 만들 때는 새 안건 → 기존 안건 갈아끼우기(PATCH 와 같은 이력) → 작업(todo · 본문 [] · key 배열 순) → 링크.
  * 만든 것에는 minutesId 를 달고, 회의록 요약을 저장한다(목업 서버의 것).
- * 안건 · 이력 · 작업 데이터는 고치지 않고 결과만 낸다 — 넣는 것은 스토어가 서버 모드와 같은 길로 한다
+ * 안건 · 작업 데이터는 고치지 않고 결과만 낸다 — 넣는 것은 스토어가 서버 모드와 같은 길로 한다
  */
 function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyResult {
   const me = requireMe()
@@ -335,47 +334,46 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
   if (Object.keys(shape).length > 0) throw invalid(shape)
 
   const world = mockWorld()
-  const ownThread = (threadId: string) =>
-    world.threads.find((t) => t.id === threadId && t.projectId === projectId)
+  const ownAgenda = (agendaId: string) =>
+    world.agendas.find((t) => t.id === agendaId && t.projectId === projectId)
   const notFound: Record<string, string> = {}
-  input.entries.forEach((e, i) => {
-    if (!ownThread(e.threadId)) notFound[`entries.${i}.threadId`] = '안건을 찾을 수 없습니다.'
+  input.updates.forEach((u, i) => {
+    if (!ownAgenda(u.agendaId)) notFound[`updates.${i}.agendaId`] = '안건을 찾을 수 없습니다.'
   })
   input.tasks.forEach((t, i) =>
-    t.threadIds.forEach((threadId, j) => {
-      if (!ownThread(threadId)) notFound[`tasks.${i}.threadIds.${j}`] = '안건을 찾을 수 없습니다.'
+    t.agendaIds.forEach((agendaId, j) => {
+      if (!ownAgenda(agendaId)) notFound[`tasks.${i}.agendaIds.${j}`] = '안건을 찾을 수 없습니다.'
     }),
   )
-  reject('THREAD_NOT_FOUND', '안건을 찾을 수 없습니다.', notFound)
+  reject('AGENDA_NOT_FOUND', '안건을 찾을 수 없습니다.', notFound)
 
-  /* 새로 지정하는 담당자는 그 프로젝트의 활성 멤버 — 안건 담당자를 그대로 적는 이력 줄은 새 지정이 아니다 */
+  /* 새로 지정하는 담당자는 그 프로젝트의 활성 멤버 */
   const db = mockDb()
-  const assignable = (ownerId: string | null, kept: string | null = null) =>
+  const assignable = (ownerId: string | null) =>
     ownerId === null ||
-    ownerId === kept ||
     (db.members.some((m) => m.id === ownerId && m.active) &&
       db.grants.some((g) => g.projectId === projectId && g.memberId === ownerId))
   const lost = '담당자를 찾을 수 없습니다.'
-  const threadOwners: Record<string, string> = {}
-  input.threads.forEach((t, i) => {
-    if (!assignable(t.ownerId)) threadOwners[`threads.${i}.ownerId`] = lost
+  const agendaOwners: Record<string, string> = {}
+  input.agendas.forEach((t, i) => {
+    if (!assignable(t.ownerId)) agendaOwners[`agendas.${i}.ownerId`] = lost
   })
-  reject('THREAD_OWNER_NOT_FOUND', lost, threadOwners)
-  const entryOwners: Record<string, string> = {}
-  input.threads.forEach((t, i) => {
-    if (t.entry && !assignable(t.entry.ownerId, t.ownerId))
-      entryOwners[`threads.${i}.entry.ownerId`] = lost
-  })
-  input.entries.forEach((e, i) => {
-    if (!assignable(e.ownerId, ownThread(e.threadId)?.ownerId ?? null))
-      entryOwners[`entries.${i}.ownerId`] = lost
-  })
-  reject('ENTRY_OWNER_NOT_FOUND', lost, entryOwners)
+  reject('AGENDA_OWNER_NOT_FOUND', lost, agendaOwners)
   const taskOwners: Record<string, string> = {}
   input.tasks.forEach((t, i) => {
     if (!assignable(t.ownerId)) taskOwners[`tasks.${i}.ownerId`] = lost
   })
   reject('TASK_OWNER_NOT_FOUND', lost, taskOwners)
+  /* 새 안건의 파트 — 그 프로젝트의 활성 파트 */
+  const parts: Record<string, string> = {}
+  input.agendas.forEach((t, i) => {
+    if (
+      t.partId !== null &&
+      !db.parts.some((p) => p.id === t.partId && p.projectId === projectId && p.active)
+    )
+      parts[`agendas.${i}.partId`] = '파트를 찾을 수 없습니다.'
+  })
+  reject('PART_NOT_FOUND', '파트를 찾을 수 없습니다.', parts)
 
   const ownTask = (taskId: string) =>
     world.tasks.find((t) => t.id === taskId && t.projectId === projectId)
@@ -395,97 +393,37 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
   )
 
   const createdAt = nowIso()
-  const clean = (lines: string[]) => lines.map((s) => s.trim()).filter(Boolean)
-  /* 항목 — 같은 이름(앞뒤 공백 뗌)의 항목이 그 안건에 있으면 거기, 없으면 새로 만든다.
-     결정 · 세부 추가인데 이름이 비었으면 안건 제목, 미룸인데 비었으면 안건 전체(null) */
-  const items: DecisionItem[] = []
-  const itemsOf = (threadId: string) => [
-    ...world.decisionItems.filter((i) => i.threadId === threadId),
-    ...items.filter((i) => i.threadId === threadId),
-  ]
-  const itemFor = (thread: Thread, e: ProposedEntryBody): string | null => {
-    const title = e.itemTitle.trim() || (e.kind === 'defer' ? '' : thread.title)
-    if (!title) return null
-    const found = itemsOf(thread.id).find((i) => i.title === title)
-    if (found) return found.id
-    const item: DecisionItem = {
-      id: nextId('mni'),
-      threadId: thread.id,
-      title,
-      createdAt,
-      creatorId: me.id,
-    }
-    items.push(item)
-    return item.id
-  }
-  const toEntryRow = (thread: Thread, e: ProposedEntryBody): Entry => ({
-    id: nextId('mne'),
-    threadId: thread.id,
-    itemId: itemFor(thread, e),
-    kind: e.kind,
-    text: e.text.trim(),
-    detail: clean(e.detail),
-    note: e.note.trim(),
-    ownerId: e.ownerId,
-    createdAt,
-    minutesId,
-    creatorId: me.id,
-  })
-  /* 이력이 안건에 남기는 흔적 — POST /threads/{id}/entries 와 같다. 상태는 항목 · 줄로 다시 잰다 */
-  const entries: Entry[] = []
-  const touch = (thread: Thread, e: ProposedEntryBody) => {
-    if (e.kind === 'decide' && e.ownerId) thread.ownerId = e.ownerId
-    thread.state = threadStateOf(itemsOf(thread.id), [
-      ...world.entries.filter((x) => x.threadId === thread.id),
-      ...entries.filter((x) => x.threadId === thread.id),
-    ])
-  }
-
-  const threadIdByTempId: Record<string, string> = {}
-  const threads: Thread[] = input.threads.map((t) => {
-    const thread: Thread = {
+  const agendaIdByTempId: Record<string, string> = {}
+  const agendas: Agenda[] = input.agendas.map((t) => {
+    const decision = t.decision.trim()
+    const agenda: Agenda = {
       id: nextId('mnt'),
       projectId,
       title: t.title.trim(),
       description: t.description.trim(),
-      options: clean(t.options),
-      dueDate: t.dueDate,
-      state: 'queued',
+      decision,
+      state: t.state,
       ownerId: t.ownerId,
-      parentThreadId: null,
-      partId: null,
-      ccIds: [],
-      createdAt,
-      minutesId,
       creatorId: me.id,
+      dueDate: t.dueDate,
+      partId: t.partId,
+      createdAt,
+      ...nextDecisionMarks(BLANK_DECISION, { decision, state: t.state }, createdAt),
+      minutesId,
     }
-    threadIdByTempId[t.tempId] = thread.id
-    return thread
+    agendaIdByTempId[t.tempId] = agenda.id
+    return agenda
   })
 
-  input.threads.forEach((t, i) => {
-    if (!t.entry) return
-    entries.push(toEntryRow(threads[i], t.entry))
-    touch(threads[i], t.entry)
-  })
-
-  /* 한 안건에 항목별 이력이 여럿 올 수 있다 — 안건 사본은 하나로 이어 고친다 */
-  const afters = new Map<string, Thread>()
-  for (const e of input.entries) {
-    const before = ownThread(e.threadId)!
-    /* 데이터 스토어의 반응형 객체라 structuredClone 을 못 쓴다 — 칸을 떠서 고친다 */
-    const after = afters.get(before.id) ?? {
-      ...before,
-      options: [...before.options],
-      ccIds: [...before.ccIds],
-    }
-    afters.set(before.id, after)
-    entries.push(toEntryRow(after, e))
-    touch(after, e)
-  }
-  const updatedThreads = [...afters.values()].filter((after) => {
-    const before = ownThread(after.id)!
-    return after.state !== before.state || after.ownerId !== before.ownerId
+  /* 기존 안건 — 결정내용 · 상태를 통째로 갈아끼운다. 데이터 스토어의 반응형 객체라 칸을 떠서 고친다.
+     칸이 하나라도 바뀐 안건만 싣는다(서버와 같게, API.md Q67) */
+  const updatedAgendas: Agenda[] = input.updates.flatMap((u) => {
+    const before = ownAgenda(u.agendaId)!
+    const patch = { decision: u.decision.trim(), state: u.state }
+    const changes = agendaPatchChanges(before, patch)
+    if (changes.length === 0) return []
+    recordMockHistory('agenda', before.id, changes)
+    return [{ ...before, ...patch, ...nextDecisionMarks(before, patch, createdAt) }]
   })
 
   const prefix = projects.find((p) => p.id === projectId)?.taskKeyPrefix ?? 'TASK'
@@ -534,36 +472,20 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     return task
   })
 
-  const links: TaskThreadLink[] = []
+  const links: TaskAgendaLink[] = []
   input.tasks.forEach((t, i) => {
-    const threadIds = [...t.threadTempIds.map((tempId) => threadIdByTempId[tempId]), ...t.threadIds]
-    for (const threadId of new Set(threadIds)) links.push({ taskId: tasks[i].id, threadId })
+    const agendaIds = [...t.agendaTempIds.map((tempId) => agendaIdByTempId[tempId]), ...t.agendaIds]
+    for (const agendaId of new Set(agendaIds)) links.push({ taskId: tasks[i].id, agendaId })
   })
 
   /* 등록 때 함께 건 안건은 created 에 든 것으로 본다 — 따로 줄을 안 만든다 */
   for (const t of tasks) recordMockHistory('task', t.id, [change('created', null, null)])
-  for (const t of threads) recordMockHistory('thread', t.id, [change('created', null, null)])
-  /* 새로 만든 결정 항목은 그 안건의 이력에 '결정 항목 추가' 로 */
-  for (const threadId of new Set(items.map((i) => i.threadId)))
-    recordMockHistory(
-      'thread',
-      threadId,
-      items.filter((i) => i.threadId === threadId).map((i) => change('itemCreated', null, i.title)),
-    )
+  for (const t of agendas) recordMockHistory('agenda', t.id, [change('created', null, null)])
 
   /* 안 보냈거나 null 이면 지금 요약 그대로. 요약은 사람이 고친 것이 아니라 updatedAt 은 그대로 */
   if (input.summary != null) minutes.summary = input.summary.trim()
 
-  return {
-    threads,
-    entries,
-    updatedThreads,
-    tasks,
-    links,
-    threadIdByTempId,
-    taskIdByTempId,
-    decisionItems: items,
-  }
+  return { agendas, updatedAgendas, tasks, links, agendaIdByTempId, taskIdByTempId }
 }
 
 /** 고른 초안을 한 번에 등록한다 — 한 트랜잭션이라 하나라도 틀리면 아무것도 안 남는다. 만든 것에 출처가 붙는다 */

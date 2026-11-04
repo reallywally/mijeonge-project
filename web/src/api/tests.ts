@@ -2,7 +2,7 @@ import { id, mockError, request } from '@/api/client'
 import { recordMockHistory } from '@/api/history'
 import { forbidden, later, mockDb, mockWorld, requireMe, requireProject } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
-import { projects } from '@/fixtures'
+import { agendas, projects } from '@/fixtures'
 import type { MockTestCase } from '@/fixtures'
 import { canDeleteComment, canSeeProject } from '@/lib/access'
 import { kstToday, nowIso } from '@/lib/date'
@@ -34,33 +34,59 @@ function requireTest(me: Me, testId: string): MockTestCase {
 const hasChildren = (testId: string) => mockDb().tests.some((t) => t.parentId === testId)
 
 /** 닿는 안건 — 직접 태그한 안건 + 태그한 작업에 걸린 안건 */
-function touchingThreadIds(refs: TestRef[]): Set<string> {
+function touchingAgendaIds(refs: TestRef[]): Set<string> {
   const world = mockWorld()
-  const ids = new Set(refs.filter((r) => r.kind === 'thread').map((r) => r.id))
+  const ids = new Set(refs.filter((r) => r.kind === 'agenda').map((r) => r.id))
   const taskIds = new Set(refs.filter((r) => r.kind === 'task').map((r) => r.id))
-  for (const l of world.taskThreads) if (taskIds.has(l.taskId)) ids.add(l.threadId)
+  for (const l of world.taskAgendas) if (taskIds.has(l.taskId)) ids.add(l.agendaId)
   return ids
 }
 
-/** 닿는 안건의 Entry 와 그 seq — 목업은 배열 순서가 등록 순서다 */
-function touchingEntries(refs: TestRef[]) {
-  const threads = touchingThreadIds(refs)
-  return mockWorld()
-    .entries.map((entry, i) => ({ entry, seq: i + 1 }))
-    .filter((x) => threads.has(x.entry.threadId))
+/**
+ * 안건 변경 이력의 seq — 서버 시드와 같게 센다: 픽스처의 등록 줄(`hh-<id>-1`, 안건 배열 순) → 이행 줄(`hh-<id>-2`)
+ * → 목업이 남긴 줄(`mh<n>`, 남긴 순). 그중 '결정 변경' 줄(결정내용 칸이 있거나 상태가 decided 로 바뀐 줄)만 낸다
+ */
+function decisionRows(): { agendaId: string; seq: number }[] {
+  const order = agendas.map((t) => t.id)
+  const rank = (agendaId: string, id: string) => {
+    if (id.startsWith('mh')) return [2, Number(id.slice(2))]
+    const pass = Number(id.split('-').at(-1))
+    return [pass === 1 ? 0 : 1, order.indexOf(agendaId)]
+  }
+  const rows = Object.entries(mockDb().agendaHistory)
+    .flatMap(([agendaId, list]) => list.map((e) => ({ agendaId, e, key: rank(agendaId, e.id) })))
+    .sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1])
+  return rows
+    .map((r, i) => ({ ...r, seq: i + 1 }))
+    .filter((r) =>
+      r.e.changes.some(
+        (c) => c.field === 'decision' || (c.field === 'state' && c.to === 'decided'),
+      ),
+    )
+    .map((r) => ({ agendaId: r.agendaId, seq: r.seq }))
 }
 
-/** 기준을 지금으로 — 닿는 안건의 가장 큰 Entry seq. 없으면 null */
+function touchingRows(refs: TestRef[]) {
+  const agendas = touchingAgendaIds(refs)
+  return decisionRows().filter((x) => agendas.has(x.agendaId))
+}
+
+/** 기준을 지금으로 — 닿는 안건의 가장 큰 결정 변경 seq. 없으면 null */
 function latestSeq(refs: TestRef[]): number | null {
-  const seqs = touchingEntries(refs).map((x) => x.seq)
+  const seqs = touchingRows(refs).map((x) => x.seq)
   return seqs.length ? Math.max(...seqs) : null
 }
 
-function changedEntryIds(t: MockTestCase): string[] {
+/** basis 뒤로 결정이 바뀐 안건 — 처음 바뀐 순, 겹치지 않게 */
+function changedAgendaIds(t: MockTestCase): string[] {
   const basis = t.basisSeq ?? 0
-  return touchingEntries(t.refs)
-    .filter((x) => (x.entry.kind === 'decide' || x.entry.kind === 'change') && x.seq > basis)
-    .map((x) => x.entry.id)
+  return [
+    ...new Set(
+      touchingRows(t.refs)
+        .filter((x) => x.seq > basis)
+        .map((x) => x.agendaId),
+    ),
+  ]
 }
 
 /** 서버 응답처럼 늘 새 객체로 — 며칠째 · 신호를 지금 센다 */
@@ -70,20 +96,20 @@ function toCase(t: MockTestCase): TestCase {
   const today = kstToday()
   const staleDays = (mockDb().riskSettings[t.projectId] ?? DEFAULT_RISK_SETTINGS).staleDays
   const statusDays = testStatusDays(t.statusChangedAt, today)
-  const changed = changedEntryIds(t)
+  const changed = changedAgendaIds(t)
   const signals = testSignals(
     {
       status: t.status,
       statusDays,
       start: t.start,
       due: t.due,
-      changedEntryIds: changed,
+      changedAgendaIds: changed,
       isGroup: hasChildren(t.id),
     },
     today,
     staleDays,
   )
-  return structuredClone({ ...rest, statusDays, signals, changedEntryIds: changed })
+  return structuredClone({ ...rest, statusDays, signals, changedAgendaIds: changed })
 }
 
 /** 태그 순서 — 작업 먼저, 그 안은 작업 · 안건의 seq(목업은 배열 순서) */
@@ -92,7 +118,7 @@ function sortRefs(refs: TestRef[]): TestRef[] {
   const order = (r: TestRef) =>
     r.kind === 'task'
       ? world.tasks.findIndex((t) => t.id === r.id)
-      : world.threads.findIndex((t) => t.id === r.id)
+      : world.agendas.findIndex((t) => t.id === r.id)
   return [...refs].sort((a, b) =>
     a.kind !== b.kind ? (a.kind === 'task' ? -1 : 1) : order(a) - order(b),
   )
@@ -104,11 +130,11 @@ function requireRefTarget(projectId: string, ref: TestRef) {
   if (ref.kind === 'task') {
     if (!world.tasks.some((t) => t.id === ref.id && t.projectId === projectId))
       throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
-  } else if (ref.kind === 'thread') {
-    if (!world.threads.some((t) => t.id === ref.id && t.projectId === projectId))
-      throw mockError(404, 'THREAD_NOT_FOUND', '안건을 찾을 수 없습니다.')
+  } else if (ref.kind === 'agenda') {
+    if (!world.agendas.some((t) => t.id === ref.id && t.projectId === projectId))
+      throw mockError(404, 'AGENDA_NOT_FOUND', '안건을 찾을 수 없습니다.')
   } else {
-    throw invalid({ kind: 'task 또는 thread 여야 합니다.' })
+    throw invalid({ kind: 'task 또는 agenda 여야 합니다.' })
   }
 }
 

@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import type { TaskInput } from '@/types/domain'
 
 /* 파트 — 목업 갈래로 로그인해서 [내 파트 | 전체] 와 파트 관리가 서버처럼 도는지 본다.
@@ -31,7 +31,7 @@ const blankTask = (over: Partial<TaskInput> = {}): TaskInput => ({
   start: null,
   due: null,
   priority: 'normal',
-  threadIds: [],
+  agendaIds: [],
   ...over,
 })
 
@@ -48,7 +48,7 @@ describe('[내 파트 | 전체]', () => {
     await signedIn('u3@inno-ax.com')
     const part = usePartStore()
     const task = useTaskStore()
-    const thread = useThreadStore()
+    const agenda = useAgendaStore()
 
     expect(part.canNarrow).toBe(true)
     expect(part.scope).toBe('mine')
@@ -56,7 +56,7 @@ describe('[내 파트 | 전체]', () => {
     expect(task.visibleRows.map((r) => r.task.key)).toContain('HW-4')
     expect(task.statusCounts.all).toBe(10)
     expect(task.undatedCount).toBe(0)
-    expect(thread.visibleRows.map((r) => r.thread.id).sort()).toEqual([
+    expect(agenda.visibleRows.map((r) => r.agenda.id).sort()).toEqual([
       't1',
       't2',
       't4',
@@ -173,16 +173,16 @@ describe('작업 · 안건의 partId (목업 서버)', () => {
 
   it('안건은 안 보내면 공통이고, 수정으로 파트를 바꾼다', async () => {
     await signedIn('u1@inno-ax.com')
-    const thread = useThreadStore()
+    const agenda = useAgendaStore()
     const data = useDataStore()
-    const id = await thread.addThread({ title: '배포 창구' })
-    expect(data.allThreads.find((t) => t.id === id)!.partId).toBeNull()
-    const placed = await thread.addThread({ title: 'GPU 신청', partId: 'pt2' })
-    expect(data.allThreads.find((t) => t.id === placed)!.partId).toBe('pt2')
+    const id = await agenda.addAgenda({ title: '배포 창구' })
+    expect(data.allAgendas.find((t) => t.id === id)!.partId).toBeNull()
+    const placed = await agenda.addAgenda({ title: 'GPU 신청', partId: 'pt2' })
+    expect(data.allAgendas.find((t) => t.id === placed)!.partId).toBe('pt2')
 
-    expect(thread.updateThread('t6', { partId: 'pt3' })).toBe(true)
-    expect(data.allThreads.find((t) => t.id === 't6')!.partId).toBe('pt3')
-    expect(thread.updateThread('t6', { partId: 'nope' })).toBe(false)
+    expect(agenda.updateAgenda('t6', { partId: 'pt3' })).toBe(true)
+    expect(data.allAgendas.find((t) => t.id === 't6')!.partId).toBe('pt3')
+    expect(agenda.updateAgenda('t6', { partId: 'nope' })).toBe(false)
     expect(lastError()).toMatchObject({ code: 'PART_NOT_FOUND' })
   })
 })

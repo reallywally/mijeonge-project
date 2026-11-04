@@ -141,6 +141,36 @@ export interface AgendaPatch {   // PATCH — 보낸 필드만
 
 서버 시드와 `web/src/fixtures` 는 지금처럼 **값 · 배열 순서까지 같게** 맞춘다. 결정내용은 위 이행 규칙으로 만든 글을 그대로 쓴다.
 
+| 안건 | `state` | `decision` (줄바꿈은 `\n`) | `decidedAt` | `decisionRev` |
+| --- | --- | --- | --- | --- |
+| `t1` | `decided` | `우분투 최신 버전으로 한다` | `2026-09-09T02:00:00Z` | 1 |
+| `t2` | `decided` | `mysql 을 쓴다\n- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n- supabase 는 비용 때문에 뺀다` | `2026-09-10T06:05:00Z` | 1 |
+| `t3` | `open` | `''` | `null` | 0 |
+| `t4` | `queued` | `''` | `null` | 0 |
+| `t5` | `open` | `요청(in) 항목: 계약번호 · 상품코드 · 가입일 셋을 넘긴다` | `null` | 1 |
+| `t6` | `decided` | `테스트 기간: 전체 일정은 그대로 두고 테스트 기간만 2주 줄인다\n- 늘어난 개발 기간은 그대로 둔다\n- 통합 테스트를 3주에서 1주로 줄인다\n\n전체 일정: 전체 일정은 미루지 않는다` | `2026-09-15T07:00:00Z` | 1 |
+| `t7` · `t8` · `t9` · `t10` | `queued` | `''` | `null` | 0 |
+
+- 변경 이력 — 안건마다 `created` 한 줄(`hh-<id>-1`) 뒤에, 결정내용이 있는 넷(`t1` → `t2` → `t5` → `t6`)에 이행이 채운 줄 `hh-<id>-2`(`backfilled: true`, `[{ field: 'decision', from: '', to: <결정내용> }]`, 바꾼 사람 · 때 = 결정 줄을 남긴 사람 · 시각 — `t1` u3 `2026-09-09T02:00:00Z` · `t2` u3 `2026-09-10T06:05:00Z` · `t5` u4 `2026-09-10T07:00:00Z` · `t6` u1 `2026-09-15T07:00:00Z`). seq 는 등록 줄 1 ~ 10 다음 11 ~ 14
+- 확인 요청 `c1` ~ `c3` 은 `t2` 의 판 1 · `decision: 'mysql 을 쓴다'`, `c4` 는 `t1` 의 판 1 · `decision: '우분투 최신 버전으로 한다'`(옛 줄의 `text` — 세부는 없다). id · 보낸 사람 · 받는 사람 · 시각은 그대로(`check.md` '시드 · 목업')
+- 테스트 `basis_seq` — tc2 12 · tc3 `null` · tc4 11 · tc6 `null`(tc4 만 기준 바뀜 `['t2']`, `test.md`)
+
+## 구현에서 메운 것 (2026-11-04, 서버)
+
+계약이 비워 둔 자리는 이렇게 정했다. 화면이 불편하면 새 Q 로 다시 연다.
+
+- **등록의 결정 시각 · 판** — 빈 안건(대기 · 결정내용 없음)에서 바뀐 것으로 본다. `decided` 로 등록하면 `decidedAt = createdAt` · 판 1, 결정내용만 적어도 판 1. 회의록 반영으로 만든 안건도 같다(`services/agenda.py` 의 `apply_fields` 하나)
+- **공백** — 제목은 앞뒤 공백을 떼고 저장한다. 결정내용은 **보낸 그대로** 저장하고 판을 올릴지만 뗀 값으로 견준다(공백만 바꿔도 이력의 `decision` 칸은 남는다). 회의록 반영의 결정내용은 앞뒤 공백을 떼고 넣는다
+- **PATCH 의 422** — `title` · `description` · `decision` · `state` 에 `null`, 세 값 밖의 `state`. 서버가 정하는 `creatorId` · `decidedAt` · `decisionRev` 와 걷은 `options` · `ccIds` · `parentAgendaId` 는 실어 와도 버린다(등록도 같다). 담당자 · 파트 검사는 그대로(`AGENDA_OWNER_NOT_FOUND` · `PART_NOT_FOUND` · `PART_ARCHIVED`)
+- **걷은 경로** — `/api/agendas/{id}/entries…` · `…/items…` · 옛 `/api/threads…` 는 404(경로가 없다)
+- **변경 이력** — 등록(손 · 회의록 반영)은 `created` 한 줄뿐이다. 결정내용 · 상태를 같이 적어 등록해도 칸으로 나누지 않는다
+- **이행 2** — '항목이 하나' 는 지우지 않은 항목 수, 이름은 앞뒤 공백을 떼고 견준다. `refine` 의 세부(`entry_detail`)도 그 `refine` 줄 밑에 `- ` 줄로 붙인다. 지운 안건도 같은 규칙으로 채운다(안 보일 뿐)
+- **이행 3** — '결정 줄' 은 결정내용에 쓴 `decide` · `change` 줄이다(`refine` 은 안 든다). `decided` 인데 쓴 결정 줄이 없으면(항목을 다 지운 경우) `decidedAt` 은 안건 등록 시각 — `decided` 면 시각이 늘 있게
+- **이행 4** — `check_request.decision` 은 그 줄의 `text` 만(세부 없이). 지운 줄을 가리킨 요청도 같은 순번을 받는다
+- **이행 5 — 테스트 기준을 지키는 방법**: 지우지 않은 `decide` · `change` 줄이 있던 안건(지운 안건은 빼고)마다 `agenda_history` 에 `backfilled` 줄 하나 — `[{ field: 'decision', from: '', to: <결정내용> }]`, 바꾼 사람 · 때 = 결정내용에 쓴 결정 줄 중 가장 늦은 것(없으면 마지막 결정 줄). **넣는 순서는 그 안건의 옛 마지막 결정 줄 `seq` 순**이라, 테스트마다 '옛 규칙으로 바뀜이 없던 닿는 안건' 의 새 줄 `seq` 최댓값을 `basis_seq` 로 두면 바뀜이 있던 안건만 그 뒤에 선다(그런 안건이 없으면 바뀜 있던 테스트는 0, 없던 테스트는 `null`). 옛 규칙이 항목을 보지 않았으니 지운 항목의 결정 줄도 '바뀜' 으로 센다 — 그런 안건은 결정내용이 `''` 여도 줄이 선다
+- **이행 7** — 이력 JSON 의 칸 이름도 바꾼다: `task_history` 의 `thread` → `agenda`, `test_history` 의 `threadRef` → `agendaRef`. 저장한 리포트(`project_report.facts`)의 `decidedThreadIds` · `deferredThreadIds` · `riskyThreadIds` → `…AgendaIds`, `weight.threadCount` → `agendaCount`. 리포트 본문 · 지난 대화의 `[[thread:ID]]` 는 글이라 그대로 둔다(프론트가 같은 칩으로 읽는다). 시퀀스 이름(`thread_seq_seq` …)도 바꾼다
+- **이행 8** — downgrade 는 걷은 표를 빈 채로 다시 세우고, 이행이 넣은 '결정내용' 줄을 거두고, 테스트 `basis_seq` 를 비우고(셀 이력 줄이 없다), 미룸 문턱을 2 로 채운다. 확인 요청은 가리킬 이력 줄이 없어 지운다
+
 ## 화면 (프론트)
 
 - 라우트 `/threads…` → `/agendas…`. 컴포넌트 · 스토어 · api 파일 이름도 `Agenda…`

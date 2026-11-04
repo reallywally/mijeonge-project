@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed } from 'lucide-vue-next'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
-import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
+import AgendaCreateDialog from '@/components/app/AgendaCreateDialog.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -13,8 +13,8 @@ import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
-import type { TaskLine, TaskPriority, TaskStatus, Thread } from '@/types/domain'
+import { useAgendaStore } from '@/stores/agenda'
+import type { TaskLine, TaskPriority, TaskStatus, Agenda } from '@/types/domain'
 
 /* 작업 추가 — 작업 상세와 같은 모양의 팝업이다. 세 탭(목록 · 간트 · 칸반) 어디서든 같은 것이 뜬다.
    상세는 고치는 즉시 들어가지만 여기는 아직 작업이 없으니 골라 두었다가 '만들기'로 한꺼번에 넣는다.
@@ -27,7 +27,7 @@ const emit = defineEmits<{ (e: 'created', id: string): void }>()
 const data = useDataStore()
 const taskStore = useTaskStore()
 const partStore = usePartStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 
 const title = ref('')
 const body = ref<TaskLine[]>([])
@@ -40,7 +40,7 @@ const parent = ref<string | null>(null)
 /* 파트는 상위 작업의 것이 골라진 채 연다. 손으로 고르기 전까지는 상위를 바꾸면 따라 바뀐다 */
 const partId = ref<string | null>(null)
 const partPicked = ref(false)
-const threadIds = ref<string[]>([])
+const agendaIds = ref<string[]>([])
 const keepOpen = ref(false)
 const saving = ref(false)
 /* 본문 편집기는 자기 줄을 들고 있으니, 폼을 비울 때는 새로 띄운다 */
@@ -65,7 +65,7 @@ function resetForm() {
   parent.value = props.parentId
   partId.value = partStore.partForChildOf(props.parentId)
   partPicked.value = false
-  threadIds.value = []
+  agendaIds.value = []
   bodyKey.value += 1
   void nextTick(fitTitle)
 }
@@ -90,32 +90,32 @@ watch(
 )
 
 /* 골라 둔 안건 — 상세의 표와 같은 줄 모양으로 보여 준다 */
-const pickedThreads = computed(() =>
-  threadIds.value
-    .map((id) => threadStore.threads.find((t) => t.id === id))
-    .filter((t): t is Thread => t !== undefined)
-    .map(taskStore.threadRow),
+const pickedAgendas = computed(() =>
+  agendaIds.value
+    .map((id) => agendaStore.agendas.find((t) => t.id === id))
+    .filter((t): t is Agenda => t !== undefined)
+    .map(taskStore.agendaRow),
 )
-const threadChoices = computed(() =>
-  threadStore.threads.filter((t) => !threadIds.value.includes(t.id)),
+const agendaChoices = computed(() =>
+  agendaStore.agendas.filter((t) => !agendaIds.value.includes(t.id)),
 )
 
 const toggle = (list: string[], id: string, on: boolean) =>
   on ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id)
 
-/* 찾는 안건이 없으면 안건 추가 팝업을 이 위에 띄운다 — 적은 제목을 채워 열고, 배경 · 후보 · 담당 · 기한까지
+/* 찾는 안건이 없으면 안건 추가 팝업을 이 위에 띄운다 — 적은 제목을 채워 열고, 설명 · 결정내용 · 상태까지
    여기서 적는다(안건 화면에 다녀오지 않게). 만들면 이 작업에 건다 */
-const newThreadOpen = ref(false)
-const newThreadTitle = ref('')
+const newAgendaOpen = ref(false)
+const newAgendaTitle = ref('')
 
-function createThread(title: string) {
-  newThreadTitle.value = title
-  newThreadOpen.value = true
+function createAgenda(title: string) {
+  newAgendaTitle.value = title
+  newAgendaOpen.value = true
 }
 
-function onThreadCreated(id: string) {
-  newThreadOpen.value = false
-  threadIds.value = toggle(threadIds.value, id, true)
+function onAgendaCreated(id: string) {
+  newAgendaOpen.value = false
+  agendaIds.value = toggle(agendaIds.value, id, true)
 }
 
 const parentPath = computed(() => {
@@ -147,7 +147,7 @@ async function submit() {
     start: start.value || null,
     due: due.value || null,
     priority: priority.value,
-    threadIds: [...threadIds.value],
+    agendaIds: [...agendaIds.value],
     /* 늘 보낸다 — 상위를 따르는 것도 화면이 이미 골라 두었다 */
     partId: partId.value,
   })
@@ -222,12 +222,12 @@ function onKeydown(e: KeyboardEvent) {
           </section>
 
           <TaskLinks
-            :threads="pickedThreads"
-            :thread-choices="threadChoices"
+            :agendas="pickedAgendas"
+            :agenda-choices="agendaChoices"
             :navigable="false"
-            @link-thread="(id) => (threadIds = toggle(threadIds, id, true))"
-            @unlink-thread="(id) => (threadIds = toggle(threadIds, id, false))"
-            @create-thread="createThread"
+            @link-agenda="(id) => (agendaIds = toggle(agendaIds, id, true))"
+            @unlink-agenda="(id) => (agendaIds = toggle(agendaIds, id, false))"
+            @create-agenda="createAgenda"
           />
         </div>
 
@@ -244,10 +244,10 @@ function onKeydown(e: KeyboardEvent) {
           @update:part-id="pickPart"
         >
           <p
-            v-if="threadIds.length && status !== 'blocked'"
+            v-if="agendaIds.length && status !== 'blocked'"
             class="rounded-md border border-border bg-background px-3 py-2.5 text-xs leading-relaxed text-muted-foreground text-pretty"
           >
-            안건을 {{ threadIds.length }}건 걸었습니다. 그 안건이 정해지기 전까지 상태를 막힘으로
+            안건을 {{ agendaIds.length }}건 걸었습니다. 그 안건이 정해지기 전까지 상태를 막힘으로
             두면 칸반의 막힘 칸에 섭니다.
           </p>
         </TaskPropertyPanel>
@@ -266,11 +266,11 @@ function onKeydown(e: KeyboardEvent) {
         </Button>
       </div>
 
-      <ThreadCreateDialog
-        v-model:open="newThreadOpen"
-        :initial-title="newThreadTitle"
+      <AgendaCreateDialog
+        v-model:open="newAgendaOpen"
+        :initial-title="newAgendaTitle"
         link-note="만들면 이 작업을 만들 때 같이 연결됩니다"
-        @created="onThreadCreated"
+        @created="onAgendaCreated"
       />
     </DialogScrollContent>
   </Dialog>

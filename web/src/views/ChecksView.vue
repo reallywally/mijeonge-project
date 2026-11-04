@@ -3,9 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { Check, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import CheckStateLabel from '@/components/app/CheckStateLabel.vue'
-import CheckThreadChip from '@/components/app/CheckThreadChip.vue'
+import CheckAgendaChip from '@/components/app/CheckAgendaChip.vue'
 import IdCell from '@/components/app/IdCell.vue'
-import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { firstLine } from '@/lib/agenda'
 import { dayTime } from '@/lib/date'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
@@ -40,8 +41,8 @@ const tabs = computed<{ key: Tab; label: string; count: number }[]>(() => [
 
 const nameOf = (id: string) => data.memberName(id) ?? '알 수 없음'
 /** 요청이 알린 결정 한 줄 */
-const decisionText = (entryId: string) =>
-  data.allEntries.find((e) => e.id === entryId)?.text ?? '지워진 결정'
+/* 보낼 때 찍어 둔 결정내용의 첫 줄 */
+const decisionText = (decision: string) => firstLine(decision) || '(결정내용 없음)'
 
 const busyId = ref<string | null>(null)
 async function confirm(checkId: string) {
@@ -52,23 +53,23 @@ async function confirm(checkId: string) {
 }
 
 const expanded = ref<string[]>([])
-function toggle(entryId: string) {
-  expanded.value = expanded.value.includes(entryId)
-    ? expanded.value.filter((id) => id !== entryId)
-    : [...expanded.value, entryId]
+function toggle(key: string) {
+  expanded.value = expanded.value.includes(key)
+    ? expanded.value.filter((k) => k !== key)
+    : [...expanded.value, key]
 }
 
 /* 칩을 누르면 안건 상세 팝업. 이 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 */
-const threadDetailId = ref<string | null>(null)
-const threadOpen = computed({
-  get: () => threadDetailId.value !== null,
+const agendaDetailId = ref<string | null>(null)
+const agendaOpen = computed({
+  get: () => agendaDetailId.value !== null,
   set: (open: boolean) => {
-    if (!open) threadDetailId.value = null
+    if (!open) agendaDetailId.value = null
   },
 })
 
-function openThread(id: string) {
-  threadDetailId.value = id
+function openAgenda(id: string) {
+  agendaDetailId.value = id
 }
 </script>
 
@@ -179,10 +180,10 @@ function openThread(id: string) {
                 <TableCell><IdCell :id="c.id" /></TableCell>
                 <TableCell class="min-w-0 py-2.5">
                   <div class="flex min-w-0">
-                    <CheckThreadChip :thread-id="c.threadId" @open="openThread" />
+                    <CheckAgendaChip :agenda-id="c.agendaId" @open="openAgenda" />
                   </div>
                   <p class="mt-1.5 truncate text-sm" data-check-decision>
-                    {{ decisionText(c.entryId) }}
+                    {{ decisionText(c.decision) }}
                   </p>
                 </TableCell>
                 <TableCell class="text-sm">{{ nameOf(c.senderId) }}</TableCell>
@@ -235,14 +236,14 @@ function openThread(id: string) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <template v-for="b in checks.sent" :key="b.entryId">
-                <TableRow class="hover:bg-transparent" :data-check-sent="b.entryId">
+              <template v-for="b in checks.sent" :key="b.key">
+                <TableRow class="hover:bg-transparent" :data-check-sent="b.key">
                   <TableCell class="min-w-0 py-2.5">
                     <div class="flex min-w-0">
-                      <CheckThreadChip :thread-id="b.threadId" @open="openThread" />
+                      <CheckAgendaChip :agenda-id="b.agendaId" @open="openAgenda" />
                     </div>
                     <p class="mt-1.5 truncate text-sm" data-check-decision>
-                      {{ decisionText(b.entryId) }}
+                      {{ decisionText(b.decision) }}
                     </p>
                   </TableCell>
                   <TableCell class="text-sm text-muted-foreground">{{
@@ -252,13 +253,13 @@ function openThread(id: string) {
                     <button
                       type="button"
                       class="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-sm hover:bg-accent"
-                      :aria-expanded="expanded.includes(b.entryId)"
+                      :aria-expanded="expanded.includes(b.key)"
                       data-check-expand
-                      @click="toggle(b.entryId)"
+                      @click="toggle(b.key)"
                     >
                       <span data-check-progress>확인 {{ b.confirmed }} / {{ b.rows.length }}</span>
                       <ChevronDown
-                        v-if="expanded.includes(b.entryId)"
+                        v-if="expanded.includes(b.key)"
                         class="size-3.5 text-muted-foreground"
                       />
                       <ChevronRight v-else class="size-3.5 text-muted-foreground" />
@@ -266,9 +267,9 @@ function openThread(id: string) {
                   </TableCell>
                 </TableRow>
                 <TableRow
-                  v-if="expanded.includes(b.entryId)"
+                  v-if="expanded.includes(b.key)"
                   class="bg-muted/50 hover:bg-muted/50"
-                  :data-check-people="b.entryId"
+                  :data-check-people="b.key"
                 >
                   <TableCell colspan="3" class="py-1.5">
                     <ol class="flex flex-col">
@@ -296,10 +297,6 @@ function openThread(id: string) {
       </div>
     </div>
 
-    <ThreadDetailDialog
-      v-model:open="threadOpen"
-      :thread-id="threadDetailId"
-      @open-thread="openThread"
-    />
+    <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
   </AppShell>
 </template>

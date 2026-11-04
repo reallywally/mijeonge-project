@@ -1,14 +1,13 @@
 import { kstToday, localDay, monthDay } from '@/lib/date'
 import type {
-  Entry,
   PersonProgress,
   ProgressFacts,
   RiskSettings,
   Task,
   TaskAttention,
   TaskAttentionSignal,
-  TaskThreadLink,
-  Thread,
+  TaskAgendaLink,
+  Agenda,
 } from '@/types/domain'
 
 /* 프로젝트 진행 리포트의 규칙 계산 — 서버 services/progress.py 와 같은 규칙(docs/api/report.md '규칙이 세는 것').
@@ -92,19 +91,18 @@ export interface ProgressInput {
   /** 그 프로젝트의 작업 — 배열 순서가 등록 순서다 */
   tasks: Task[]
   /** 그 프로젝트의 안건 — 배열 순서가 등록 순서다 */
-  threads: Thread[]
-  entries: Entry[]
-  links: TaskThreadLink[]
+  agendas: Agenda[]
+  links: TaskAgendaLink[]
   settings: RiskSettings
   /** 만드는 날 — KST YYYY-MM-DD */
   today: string
   previous: ProgressFacts['previous']
-  /** 리스크 계산(DecisionRiskReport.threads)의 high · medium — 점수 순. 10개로 자르는 것은 여기서 한다 */
-  riskyThreadIds: string[]
+  /** 리스크 계산(DecisionRiskReport.agendas)의 high · medium — 점수 순. 10개로 자르는 것은 여기서 한다 */
+  riskyAgendaIds: string[]
 }
 
 /** 막힘인데 걸린 안건이 있고 전부 결정됨 — risk.md 의 decidedButBlocked 와 같은 판정 */
-export function isDecidedButBlocked(task: Task, linked: Thread[]) {
+export function isDecidedButBlocked(task: Task, linked: Agenda[]) {
   return (
     task.status === 'blocked' && linked.length > 0 && linked.every((t) => t.state === 'decided')
   )
@@ -112,7 +110,7 @@ export function isDecidedButBlocked(task: Task, linked: Thread[]) {
 
 /** 지난 7일의 진행 — 같은 데이터 · 같은 날이면 늘 같은 facts */
 export function progressFacts(input: ProgressInput): ProgressFacts {
-  const { tasks, threads, entries, links, settings, today } = input
+  const { tasks, agendas, links, settings, today } = input
   const { periodStart, periodEnd } = reportPeriod(today)
   const inPeriod = (iso: string) => {
     const day = localDay(iso)
@@ -122,13 +120,13 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
   const byId = new Map(tasks.map((t) => [t.id, t]))
   const seq = new Map(tasks.map((t, i) => [t.id, i]))
   const bySeq = (a: string, b: string) => (seq.get(a) ?? 0) - (seq.get(b) ?? 0)
-  const threadById = new Map(threads.map((t) => [t.id, t]))
+  const agendaById = new Map(agendas.map((t) => [t.id, t]))
 
-  const linkedThreads = new Map<string, Thread[]>()
+  const linkedAgendas = new Map<string, Agenda[]>()
   for (const l of links) {
-    const th = threadById.get(l.threadId)
+    const th = agendaById.get(l.agendaId)
     if (!th || !byId.has(l.taskId)) continue
-    linkedThreads.set(l.taskId, [...(linkedThreads.get(l.taskId) ?? []), th])
+    linkedAgendas.set(l.taskId, [...(linkedAgendas.get(l.taskId) ?? []), th])
   }
   const children = new Map<string, string[]>()
   for (const t of tasks)
@@ -163,12 +161,10 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
   const createdTaskIds = tasks.filter((t) => inPeriod(t.createdAt)).map((t) => t.id)
 
   /* ── 결정 ── */
-  const threadsWith = (kinds: Entry['kind'][]) => {
-    const hit = new Set(
-      entries.filter((e) => kinds.includes(e.kind) && inPeriod(e.createdAt)).map((e) => e.threadId),
-    )
-    return threads.filter((t) => hit.has(t.id)).map((t) => t.id)
-  }
+  /* 정해진 때(decidedAt)가 기간 안인 안건 — 등록 순 */
+  const decidedAgendaIds = agendas
+    .filter((t) => t.decidedAt !== null && inPeriod(t.decidedAt))
+    .map((t) => t.id)
 
   /* ── 손쓸 작업 ── */
   const all: TaskAttention[] = []
@@ -189,7 +185,7 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
       notStarted:
         t.status === 'todo' &&
         (startPassed || (t.due !== null && daysBetween(today, t.due) <= settings.dueSoonDays)),
-      decidedButBlocked: isDecidedButBlocked(t, linkedThreads.get(t.id) ?? []),
+      decidedButBlocked: isDecidedButBlocked(t, linkedAgendas.get(t.id) ?? []),
     }
     const signals = SIGNAL_ORDER.filter((s) => hit[s])
     if (signals.length === 0) continue
@@ -205,7 +201,7 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
         openChildren: openDescendants(t.id),
         openLines: checks.filter((l) => !l.done).length,
         totalLines: checks.length,
-        threadCount: linkedThreads.get(t.id)?.length ?? 0,
+        agendaCount: linkedAgendas.get(t.id)?.length ?? 0,
         priority: t.priority,
       },
       score: signals.reduce((sum, s) => sum + ATTENTION_SCORE[s], 0),
@@ -260,9 +256,8 @@ export function progressFacts(input: ProgressInput): ProgressFacts {
     },
     previous: input.previous ? { ...input.previous } : null,
     decisions: {
-      decidedThreadIds: threadsWith(['decide', 'change']),
-      deferredThreadIds: threadsWith(['defer']),
-      riskyThreadIds: input.riskyThreadIds.slice(0, 10),
+      decidedAgendaIds,
+      riskyAgendaIds: input.riskyAgendaIds.slice(0, 10),
     },
     attention,
     /* 손쓸 작업이 많은 사람 먼저 → memberId 순, 담당자 없음은 맨 뒤 */

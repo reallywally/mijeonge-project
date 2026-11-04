@@ -189,7 +189,7 @@ describe('작업 상세 — 지우기', () => {
 
   it('확인을 받고 지우면 스토어에서 빠지고 팝업이 닫힌다 — 안건 연결도 같이', async () => {
     const data = useDataStore()
-    data.taskThreads.push({ taskId: 'k21', threadId: 't1' })
+    data.taskAgendas.push({ taskId: 'k21', agendaId: 't1' })
     const w = await mountDetail('k21')
     deleteButton()!.click()
     await flushPromises()
@@ -201,7 +201,7 @@ describe('작업 상세 — 지우기', () => {
     $('[data-delete-confirm]')!.click()
     await flushPromises()
     expect(data.allTasks.some((t) => t.id === 'k21')).toBe(false)
-    expect(data.taskThreads.some((l) => l.taskId === 'k21')).toBe(false)
+    expect(data.taskAgendas.some((l) => l.taskId === 'k21')).toBe(false)
     expect(w.emitted('update:open')?.at(-1)).toEqual([false])
   })
 

@@ -41,8 +41,8 @@ export const useRiskStore = defineStore('risk', () => {
   )
 
   /* [내 파트 | 전체] 를 작업 · 안건 화면과 같은 규칙으로 따른다. 사람별(owners)은 거르지 않는다 */
-  const threads = computed(() =>
-    (current.value?.threads ?? []).filter((t) => partStore.showsThread(t.threadId)),
+  const agendas = computed(() =>
+    (current.value?.agendas ?? []).filter((t) => partStore.showsAgenda(t.agendaId)),
   )
   const tasks = computed(() =>
     (current.value?.tasks ?? []).filter((t) => partStore.showsTask(t.taskId)),
@@ -99,17 +99,17 @@ export const useRiskStore = defineStore('risk', () => {
 
   /** 지금 화면에 보이는 줄 — '내 파트' 로 거른 결과 그대로. 이것을 보낸다 */
   const visibleIds = computed<RiskSummaryInput>(() => ({
-    threadIds: threads.value.map((t) => t.threadId),
+    agendaIds: agendas.value.map((t) => t.agendaId),
     taskIds: tasks.value.map((t) => t.taskId),
   }))
   const visibleCount = computed(
-    () => visibleIds.value.threadIds.length + visibleIds.value.taskIds.length,
+    () => visibleIds.value.agendaIds.length + visibleIds.value.taskIds.length,
   )
   const summarizing = computed(() => summary.value?.status === 'streaming')
   /** 보이는 줄이 0건이거나 계약의 상한을 넘으면 부르지 않는다 */
   const tooManyToSummarize = computed(
     () =>
-      visibleIds.value.threadIds.length > api.MAX_RISK_SUMMARY_IDS ||
+      visibleIds.value.agendaIds.length > api.MAX_RISK_SUMMARY_IDS ||
       visibleIds.value.taskIds.length > api.MAX_RISK_SUMMARY_IDS,
   )
   const canSummarize = computed(
@@ -124,7 +124,7 @@ export const useRiskStore = defineStore('risk', () => {
     const s = summary.value
     if (!s) return false
     return (
-      !sameIds(s.threadIds, visibleIds.value.threadIds) ||
+      !sameIds(s.agendaIds, visibleIds.value.agendaIds) ||
       !sameIds(s.taskIds, visibleIds.value.taskIds)
     )
   })
@@ -136,7 +136,7 @@ export const useRiskStore = defineStore('risk', () => {
     const mine = new AbortController()
     summaryController = mine
     const input: RiskSummaryInput = {
-      threadIds: [...visibleIds.value.threadIds],
+      agendaIds: [...visibleIds.value.agendaIds],
       taskIds: [...visibleIds.value.taskIds],
     }
     summary.value = { ...input, asOf: current.value.asOf, text: '', status: 'streaming', error: '' }
@@ -193,7 +193,7 @@ export const useRiskStore = defineStore('risk', () => {
     report: current,
     loading,
     error,
-    threads,
+    agendas,
     tasks,
     owners,
     load,

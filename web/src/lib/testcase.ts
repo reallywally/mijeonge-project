@@ -80,7 +80,7 @@ export interface SignalInput {
   statusDays: number
   start: string | null
   due: string | null
-  changedEntryIds: string[]
+  changedAgendaIds: string[]
   isGroup: boolean
 }
 
@@ -101,7 +101,7 @@ export function testSignals(t: SignalInput, today: string, staleDays: number): T
     out.push('notStarted')
   if (t.status === 'blocked' && t.statusDays > staleDays) out.push('longBlocked')
   if (t.status === 'fail' && t.statusDays > staleDays) out.push('failedIdle')
-  if (t.changedEntryIds.length > 0) out.push('basisChanged')
+  if (t.changedAgendaIds.length > 0) out.push('basisChanged')
   return out
 }
 

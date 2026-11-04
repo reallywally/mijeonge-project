@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 import { Check, ChevronDown, ChevronRight, Loader2, Send } from 'lucide-vue-next'
 import CheckStateLabel from '@/components/app/CheckStateLabel.vue'
 import { Button } from '@/components/ui/button'
+import { firstLine } from '@/lib/agenda'
 import { CHECK_BLOCK_LABEL, type CheckBatch } from '@/lib/check'
 import { dayTime } from '@/lib/date'
 import { useCheckStore } from '@/stores/check'
@@ -12,12 +13,12 @@ import { useDataStore } from '@/stores/data'
 /* 안건 상세의 확인 요청 — 결정된 안건의 '이 결정 확인해 주세요' 버튼 하나.
    누르면 바로 보낸다(내용 · 사람 고르기 없음). 받는 사람은 서버가 정하고, 여기서는 같은 셈으로 미리 센다.
    보낸 뒤에는 버튼 자리에 이 결정의 확인 현황, 앞 결정 묶음은 접어서 아래에 둔다 */
-const props = defineProps<{ threadId: string }>()
+const props = defineProps<{ agendaId: string }>()
 
 const data = useDataStore()
 const checks = useCheckStore()
 
-const state = computed(() => checks.forThread(props.threadId))
+const state = computed(() => checks.forAgenda(props.agendaId))
 const recipientNames = computed(() =>
   (state.value?.recipientIds ?? []).map((id) => data.memberName(id) ?? '알 수 없음'),
 )
@@ -27,7 +28,7 @@ const sending = ref(false)
 const busyId = ref<string | null>(null)
 
 watch(
-  () => props.threadId,
+  () => props.agendaId,
   () => {
     showNames.value = false
     showOlder.value = false
@@ -39,7 +40,7 @@ watch(
 async function send() {
   if (sending.value || state.value?.block !== null) return
   sending.value = true
-  const count = await checks.send(props.threadId)
+  const count = await checks.send(props.agendaId)
   sending.value = false
   if (count !== null) toast.success(`${count}명에게 확인을 요청했습니다.`)
 }
@@ -52,8 +53,8 @@ async function confirm(checkId: string) {
 }
 
 const nameOf = (id: string) => data.memberName(id) ?? '알 수 없음'
-const decisionText = (b: CheckBatch) =>
-  data.allEntries.find((e) => e.id === b.entryId)?.text ?? '지워진 결정'
+/* 보낼 때 찍어 둔 결정내용의 첫 줄 */
+const decisionText = (b: CheckBatch) => firstLine(b.decision) || '(결정내용 없음)'
 </script>
 
 <template>
@@ -65,7 +66,7 @@ const decisionText = (b: CheckBatch) =>
   >
     <div class="flex items-center gap-2">
       <span class="text-xs font-medium">확인 요청</span>
-      <span class="text-xs text-muted-foreground">결정을 연결 작업 담당자 · 참조에게 알립니다</span>
+      <span class="text-xs text-muted-foreground">결정을 연결 작업 담당자에게 알립니다</span>
       <Loader2
         v-if="checks.loading"
         class="size-3 animate-spin text-muted-foreground"
@@ -175,9 +176,9 @@ const decisionText = (b: CheckBatch) =>
       <template v-if="showOlder">
         <div
           v-for="b in state.older"
-          :key="b.entryId"
+          :key="b.decisionRev"
           class="flex flex-col rounded-md border border-border"
-          :data-check-older="b.entryId"
+          :data-check-older="b.decisionRev"
         >
           <div
             class="flex items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground"

@@ -31,12 +31,12 @@ const mock = {
     requireProject(requireMe(), projectId)
     const settings = settingsOf(projectId)
     const fixed = riskReports[projectId]
-    if (!fixed) return { asOf: RISK_AS_OF, settings, threads: [], tasks: [], owners: [] }
+    if (!fixed) return { asOf: RISK_AS_OF, settings, agendas: [], tasks: [], owners: [] }
     const report = structuredClone(fixed)
     return {
       ...report,
       settings,
-      threads: report.threads.map((t) => ({ ...t, level: levelOf(t.score, settings) })),
+      agendas: report.agendas.map((t) => ({ ...t, level: levelOf(t.score, settings) })),
     }
   },
   settings(projectId: string): RiskSettings {
@@ -55,7 +55,6 @@ const mock = {
       )
     const saved: RiskSettings = {
       dueSoonDays: input.dueSoonDays,
-      deferCount: input.deferCount,
       staleDays: input.staleDays,
       highScore: input.highScore,
       mediumScore: input.mediumScore,
@@ -66,17 +65,17 @@ const mock = {
   /** 서버처럼 다시 계산한 보고서를 보낸 id 로 거르고(모르는 id 는 버린다) 정해 둔 문구를 만든다 */
   summary(projectId: string, input: RiskSummaryInput): { text: string; refs: ChatRef[] } {
     if (
-      !Array.isArray(input.threadIds) ||
+      !Array.isArray(input.agendaIds) ||
       !Array.isArray(input.taskIds) ||
-      input.threadIds.length > MAX_RISK_SUMMARY_IDS ||
+      input.agendaIds.length > MAX_RISK_SUMMARY_IDS ||
       input.taskIds.length > MAX_RISK_SUMMARY_IDS
     )
       throw mockError(422, 'VALIDATION_ERROR', '입력값이 올바르지 않습니다.')
     const report = mock.report(projectId)
-    const threads = report.threads.filter((t) => input.threadIds.includes(t.threadId))
+    const agendas = report.agendas.filter((t) => input.agendaIds.includes(t.agendaId))
     const tasks = report.tasks.filter((t) => input.taskIds.includes(t.taskId))
     const text = mockRiskSummary(
-      { ...report, threads, tasks },
+      { ...report, agendas, tasks },
       (memberId) => (memberId && memberOf(memberId)?.name) || '담당자 없음',
     )
     return { text, refs: collectRefs(text) }
@@ -95,7 +94,7 @@ export const fetchRiskSettings = (projectId: string) =>
     ? later(() => mock.settings(projectId))
     : request<RiskSettings>('GET', `/projects/${id(projectId)}/risk-settings`)
 
-/** 다섯 값을 통째로. 범위 밖 · highScore <= mediumScore 는 422 VALIDATION_ERROR (detail 에 필드 이름) */
+/** 네 값을 통째로. 범위 밖 · highScore <= mediumScore 는 422 VALIDATION_ERROR (detail 에 필드 이름) */
 export const putRiskSettings = (projectId: string, settings: RiskSettings) =>
   isMockMode()
     ? later(() => mock.put(projectId, settings))
@@ -119,7 +118,7 @@ export async function* streamRiskSummary(
   input: RiskSummaryInput,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const body: RiskSummaryInput = { threadIds: [...input.threadIds], taskIds: [...input.taskIds] }
+  const body: RiskSummaryInput = { agendaIds: [...input.agendaIds], taskIds: [...input.taskIds] }
   if (isMockMode()) yield* settle(mockSummaryEvents(projectId, body, signal))
   else yield* settle(postSse(`/projects/${id(projectId)}/risks/summary`, body, signal))
 }

@@ -46,8 +46,8 @@ const rows = computed(() =>
     taskCount: data.holdsRecordsOf(project.id)
       ? data.allTasks.filter((t) => t.projectId === project.id).length
       : '—',
-    threadCount: data.holdsRecordsOf(project.id)
-      ? data.allThreads.filter((t) => t.projectId === project.id).length
+    agendaCount: data.holdsRecordsOf(project.id)
+      ? data.allAgendas.filter((t) => t.projectId === project.id).length
       : '—',
   })),
 )
@@ -228,7 +228,7 @@ function onCreated() {
                   row.taskCount
                 }}</TableCell>
                 <TableCell class="text-right text-sm text-muted-foreground">{{
-                  row.threadCount
+                  row.agendaCount
                 }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">

@@ -11,15 +11,15 @@ import httpx
 import httpx2
 import pytest
 from anthropic import RateLimitError
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import settings
 from app.llm.anthropic_provider import AnthropicProvider
 from app.main import app
-from app.models import Entry, Member, Minutes, Task, TaskThreadLink, Thread
-from app.schemas.minutes import ProposedEntry, ProposedMinutesTask, ProposedThread
+from app.models import Agenda, AgendaHistory, Minutes, Task, TaskAgendaLink
+from app.schemas.minutes import ProposedAgenda, ProposedMinutesTask, ProposedUpdate
 from app.services import minutes as minutes_service
 from app.services import minutes_draft
 from app.services import task as task_service
@@ -41,34 +41,25 @@ def _fresh_limiter() -> None:
     chat_api.get_rate_limiter().reset()
 
 
-def new_thread(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
+def new_agenda(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
     return {
         "tempId": temp_id,
         "title": title,
         "description": "",
-        "options": [],
+        "decision": "",
+        "state": "queued",
         "ownerId": None,
         "ownerHint": "",
         "dueDate": None,
-        "entry": None,
+        "partId": None,
         "quote": "",
     } | extra
 
 
-def body(kind: str, text: str, **extra: Any) -> dict[str, Any]:
-    return {
-        "kind": kind,
-        "itemTitle": "",
-        "text": text,
-        "detail": [],
-        "note": "",
-        "ownerId": None,
-        "ownerHint": "",
-    } | extra
-
-
-def old_entry(temp_id: str, thread_id: str, kind: str, text: str, **extra: Any) -> dict[str, Any]:
-    return body(kind, text) | {"tempId": temp_id, "threadId": thread_id, "quote": ""} | extra
+def update_row(
+    agenda_id: str, decision: str, state: str = "decided", **extra: Any
+) -> dict[str, Any]:
+    return {"agendaId": agenda_id, "decision": decision, "state": state, "quote": ""} | extra
 
 
 def task(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
@@ -82,42 +73,47 @@ def task(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
         "due": None,
         "priority": "normal",
         "ownerHint": "",
-        "threadTempIds": [],
-        "threadIds": [],
+        "agendaTempIds": [],
+        "agendaIds": [],
         "quote": "",
     } | extra
 
 
 def minutes(
-    threads: list[dict[str, Any]] | None = None,
-    entries: list[dict[str, Any]] | None = None,
+    agendas: list[dict[str, Any]] | None = None,
+    updates: list[dict[str, Any]] | None = None,
     tasks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    return {"threads": threads or [], "entries": entries or [], "tasks": tasks or []}
+    return {"agendas": agendas or [], "updates": updates or [], "tasks": tasks or []}
 
 
 FULL = minutes(
-    threads=[
-        new_thread(
+    agendas=[
+        new_agenda(
             "n1",
             "  운영 DB 백업 보관 기간  ",
             description="감사 대응 때문에 보관 기간을 정해야 한다",
-            options=["30일", "  ", "90일"],
+            state="open",
             ownerId="u3",
+            ownerHint="김 책임",
             dueDate="2026-10-30",
-            entry=body(
-                "defer", "보관 기간 결정을 미룸", note="보안팀 의견 대기", ownerHint="김 책임"
-            ),
             quote="백업 보관 기간은 보안팀 의견 듣고 다시 보자",
         ),
-        new_thread("n2", "개발 서버 접근 권한 범위", ownerHint="박 선임"),
+        new_agenda(
+            "n2",
+            "개발 서버 접근 권한 범위",
+            decision="  개발자 넷만 연다  ",
+            state="decided",
+            ownerHint="박 선임",
+            partId="pt1",
+        ),
     ],
-    entries=[
-        old_entry("e1", "t4", "refine", "주 1회 전체 백업으로 좁힘", detail=["일요일 새벽", ""]),
-        old_entry("e2", "t7", "decide", "검색 tool 부터 만든다", ownerId="u2"),
+    updates=[
+        update_row("t4", "주 1회 전체 백업\n- 일요일 새벽", state="open", quote="백업은 주 1회"),
+        update_row("t7", "검색 tool 부터 만든다"),
     ],
     tasks=[
-        task("t1", "백업 스크립트 작성", ownerId="u3", threadTempIds=["n1"], threadIds=["t4"]),
+        task("t1", "백업 스크립트 작성", ownerId="u3", agendaTempIds=["n1"], agendaIds=["t4"]),
         task("t2", "보존 기간 비교표", parentTempId="t1", due="2026-10-24"),
         task("t3", "환경 설정 하위 정리", parentId="k4", ownerHint="누군가"),
     ],
@@ -130,10 +126,10 @@ async def count(session: AsyncSession, model: type[Any]) -> int:
 
 async def counts(session: AsyncSession) -> tuple[int, int, int, int]:
     return (
-        await count(session, Thread),
-        await count(session, Entry),
+        await count(session, Agenda),
+        await count(session, AgendaHistory),
         await count(session, Task),
-        await count(session, TaskThreadLink),
+        await count(session, TaskAgendaLink),
     )
 
 
@@ -147,43 +143,25 @@ async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncS
     out = res.json()
     assert set(out) == MINUTES_SHAPES["MinutesApplyResult"]
 
-    # 새 안건 — 요청 순서, 제목은 앞뒤 공백을 떼고, 후보의 빈 줄은 뺀다. 파트는 공통 · 참조 없음
-    n1, n2 = out["threads"]
-    assert out["threadIdByTempId"] == {"n1": n1["id"], "n2": n2["id"]}
+    # 새 안건 — 요청 순서, 제목 · 결정내용은 앞뒤 공백을 뗀다
+    n1, n2 = out["agendas"]
+    assert out["agendaIdByTempId"] == {"n1": n1["id"], "n2": n2["id"]}
     assert n1["title"] == "운영 DB 백업 보관 기간"
-    assert n1["options"] == ["30일", "90일"]
     assert n1["ownerId"] == "u3" and n1["dueDate"] == "2026-10-30"
-    assert n1["partId"] is None and n1["ccIds"] == [] and n1["projectId"] == "p1"
-    # 미룸 이력이 붙어 queued → open, 이력 없는 새 안건은 등록만 된 상태
-    assert n1["state"] == "open"
-    assert n2["state"] == "queued" and n2["ownerId"] is None
+    assert n1["partId"] is None and n1["projectId"] == "p1"
+    assert n1["state"] == "open" and n1["decision"] == "" and n1["decisionRev"] == 0
+    assert n1["creatorId"] == "admin"
+    # 등록과 같은 규칙 — 결정된 채로 서면 등록 시각 · 판 1
+    assert n2["state"] == "decided" and n2["decision"] == "개발자 넷만 연다"
+    assert n2["decidedAt"] == n2["createdAt"] and n2["decisionRev"] == 1
+    assert n2["partId"] == "pt1" and n2["ownerId"] is None
 
-    # 이력 — 새 안건 것 먼저, 그다음 기존 안건 것. createdAt 은 지금(Z · 초까지)
-    entries = out["entries"]
-    assert [(e["threadId"], e["kind"]) for e in entries] == [
-        (n1["id"], "defer"),
-        ("t4", "refine"),
-        ("t7", "decide"),
-    ]
-    assert entries[0]["note"] == "보안팀 의견 대기"
-    assert entries[1]["detail"] == ["일요일 새벽"]
-    assert entries[2]["ownerId"] == "u2"
-    assert all(e["createdAt"].endswith("Z") and len(e["createdAt"]) == 20 for e in entries)
-
-    # 새로 만든 결정 항목 — 만든 순서(Q66). n1 의 미룸('')은 안건 전체라 항목이 없고,
-    # t4 · t7 은 항목이 없던 안건이라 안건 제목으로 하나씩 생긴다
-    made = out["decisionItems"]
-    assert [(i["threadId"], i["title"], i["creatorId"]) for i in made] == [
-        ("t4", "개발 서버 백업 주기", "admin"),
-        ("t7", "가상비서 tool 만드는 순서", "admin"),
-    ]
-    assert [e["itemId"] for e in entries] == [None, made[0]["id"], made[1]["id"]]
-
-    # 이력 때문에 바뀐 기존 안건 — t4 는 queued → open, t7 은 decided 에 담당자가 그 사람으로
-    updated = {t["id"]: t for t in out["updatedThreads"]}
-    assert set(updated) == {"t4", "t7"}
-    assert updated["t4"]["state"] == "open"
-    assert updated["t7"]["state"] == "decided" and updated["t7"]["ownerId"] == "u2"
+    # 기존 안건 — 결정내용을 통째로 갈아끼운다(PATCH 와 같은 규칙), 요청 순서
+    t4, t7 = out["updatedAgendas"]
+    assert t4["id"] == "t4" and t4["state"] == "open" and t4["decisionRev"] == 1
+    assert t4["decision"] == "주 1회 전체 백업\n- 일요일 새벽" and t4["decidedAt"] is None
+    assert t7["id"] == "t7" and t7["state"] == "decided" and t7["decisionRev"] == 1
+    assert t7["decidedAt"] is not None
 
     # 작업 — 배열 순서대로 발번(p1 은 HW-22 까지 썼다), todo · 본문 [] · 상위는 tempId 를 풀어서
     tasks = out["tasks"]
@@ -200,28 +178,54 @@ async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncS
 
     # 링크 — 새 안건(tempId) · 기존 안건(id) 둘 다
     assert out["links"] == [
-        {"taskId": ids["t1"], "threadId": n1["id"]},
-        {"taskId": ids["t1"], "threadId": "t4"},
+        {"taskId": ids["t1"], "agendaId": n1["id"]},
+        {"taskId": ids["t1"], "agendaId": "t4"},
     ]
 
-    # 출처 — 만든 안건 · 이력(새 · 기존 안건 모두) · 작업에 그 회의록. 기존 안건 자체에는 안 붙는다
-    assert all(row["minutesId"] == "m1" for row in [*out["threads"], *entries, *tasks])
-    assert all(t["minutesId"] is None for t in out["updatedThreads"])
+    # 출처 — 만든 안건 · 작업에 그 회의록. 기존 안건 자체에는 안 붙는다
+    assert all(row["minutesId"] == "m1" for row in [*out["agendas"], *tasks])
+    assert all(t["minutesId"] is None for t in out["updatedAgendas"])
 
     after = await counts(session)
-    assert [a - b for a, b in zip(after, before, strict=True)] == [2, 3, 3, 2]
+    # 이력 — 새 안건마다 '등록', 기존 안건마다 바뀐 칸 한 줄
+    assert [a - b for a, b in zip(after, before, strict=True)] == [2, 4, 3, 2]
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    state = {t["id"]: t["state"] for t in snap["threads"]}
+    state = {t["id"]: t["state"] for t in snap["agendas"]}
     assert state["t4"] == "open" and state[n1["id"]] == "open"
-    assert {"taskId": ids["t1"], "threadId": n1["id"]} in snap["taskThreadLinks"]
-    # 스냅샷에도 실린다
+    assert {"taskId": ids["t1"], "agendaId": n1["id"]} in snap["taskAgendaLinks"]
     sourced = {
-        row["id"]
-        for key in ("threads", "entries", "tasks")
-        for row in snap[key]
-        if row["minutesId"] == "m1"
+        row["id"] for key in ("agendas", "tasks") for row in snap[key] if row["minutesId"] == "m1"
     }
-    assert sourced == {row["id"] for row in [*out["threads"], *entries, *tasks]}
+    assert sourced == {row["id"] for row in [*out["agendas"], *tasks]}
+
+
+async def test_update_leaves_the_same_history_as_patch(client: httpx.AsyncClient) -> None:
+    res = await client.post(APPLY, json=minutes(updates=[update_row("t1", "우분투 24.04 로 한다")]))
+    assert res.status_code == 201, res.text
+    (row,) = res.json()["updatedAgendas"]
+    # 상태는 이미 decided — 결정 시각은 그대로, 판만 오른다
+    assert row["decidedAt"] == "2026-09-09T02:00:00Z" and row["decisionRev"] == 2
+    history = (await client.get("/api/agendas/t1/history")).json()
+    assert history[-1]["changedBy"] == "admin" and not history[-1]["backfilled"]
+    assert history[-1]["changes"] == [
+        {
+            "field": "decision",
+            "from": "우분투 최신 버전으로 한다",
+            "to": "우분투 24.04 로 한다",
+            "subject": "",
+        }
+    ]
+
+
+async def test_update_without_a_change_is_left_out(client: httpx.AsyncClient) -> None:
+    """같은 결정 · 같은 상태면 바뀐 것이 없다 — updatedAgendas 에도 이력에도 안 남는다."""
+    before = len((await client.get("/api/agendas/t1/history")).json())
+    res = await client.post(
+        APPLY, json=minutes(updates=[update_row("t1", " 우분투 최신 버전으로 한다 ")])
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["updatedAgendas"] == []
+    assert len((await client.get("/api/agendas/t1/history")).json()) == before
 
 
 async def test_apply_drops_quote_and_owner_hint(client: httpx.AsyncClient) -> None:
@@ -229,56 +233,39 @@ async def test_apply_drops_quote_and_owner_hint(client: httpx.AsyncClient) -> No
     res = await client.post(APPLY, json=FULL)
     out = res.json()
     text = json.dumps(out, ensure_ascii=False)
-    assert "보안팀 의견 듣고" not in text and "김 책임" not in text
-    assert "quote" not in out["threads"][0]
+    assert "보안팀 의견 듣고" not in text and "김 책임" not in text and "백업은 주 1회" not in text
+    assert "quote" not in out["agendas"][0]
 
 
-async def test_apply_without_quote_and_hint_keys(client: httpx.AsyncClient) -> None:
+async def test_apply_without_optional_keys(client: httpx.AsyncClient) -> None:
     payload = minutes(
-        threads=[{"tempId": "n1", "title": "안건만"}],
-        entries=[{"tempId": "e1", "threadId": "t8", "kind": "defer", "text": "미룸"}],
-        tasks=[{"tempId": "t1", "title": "할 일", "threadTempIds": ["n1"]}],
+        agendas=[{"tempId": "n1", "title": "안건만"}],
+        updates=[{"agendaId": "t8", "decision": "상품 셋만", "state": "open"}],
+        tasks=[{"tempId": "t1", "title": "할 일", "agendaTempIds": ["n1"]}],
     )
     res = await client.post(APPLY, json=payload)
     assert res.status_code == 201, res.text
+    assert res.json()["agendas"][0]["state"] == "queued"
 
 
 @pytest.mark.parametrize(
     "payload",
     [
         minutes(tasks=[task("t1", "작업만")]),
-        minutes(entries=[old_entry("e1", "t9", "decide", "공통 코드는 3자리")]),
-        minutes(threads=[new_thread("n1", "안건만")]),
+        minutes(updates=[update_row("t9", "공통 코드는 3자리")]),
+        minutes(agendas=[new_agenda("n1", "안건만")]),
     ],
-    ids=["tasks", "entries", "threads"],
+    ids=["tasks", "updates", "agendas"],
 )
 async def test_apply_one_kind_only(client: httpx.AsyncClient, payload: dict[str, Any]) -> None:
     res = await client.post(APPLY, json=payload)
     assert res.status_code == 201, res.text
 
 
-async def test_decided_thread_stays_decided_on_defer(client: httpx.AsyncClient) -> None:
-    """한 번 정해진 것은 미룸 한 줄로 되돌아가지 않는다 — POST .../entries 와 같은 규칙."""
-    res = await client.post(APPLY, json=minutes(entries=[old_entry("e1", "t1", "defer", "재검토")]))
-    assert res.status_code == 201
-    assert res.json()["updatedThreads"] == []
-
-
-async def test_new_thread_decided_in_meeting(client: httpx.AsyncClient) -> None:
-    entry = body("decide", "록키로 간다", ownerId="u1")
-    res = await client.post(APPLY, json=minutes(threads=[new_thread("n1", "OS", entry=entry)]))
-    (thread,) = res.json()["threads"]
-    # decide 는 decided, 담당자를 적었으면 안건 담당자도 그 사람으로
-    assert thread["state"] == "decided" and thread["ownerId"] == "u1"
-
-
 async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
     payload = minutes(
-        threads=[new_thread(f"n{i}", "안건") for i in range(20)],
-        entries=[
-            old_entry(f"e{i}", thread_id, "refine", "세부")
-            for i, thread_id in enumerate(["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"])
-        ],
+        agendas=[new_agenda(f"n{i}", "안건") for i in range(20)],
+        updates=[update_row(f"t{n}", "세부", state="open") for n in range(1, 10)],
         tasks=[task(f"t{i}", "할 일") for i in range(30)],
     )
     res = await client.post(APPLY, json=payload)
@@ -293,49 +280,33 @@ async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
     ("payload", "field"),
     [
         (minutes(), "요청"),
-        (minutes(threads=[new_thread(f"n{i}", "안건") for i in range(21)]), "threads"),
+        (minutes(agendas=[new_agenda(f"n{i}", "안건") for i in range(21)]), "agendas"),
+        (minutes(updates=[update_row("t1", "가") for _ in range(21)]), "updates"),
         (minutes(tasks=[task(f"t{i}", "할 일") for i in range(31)]), "tasks"),
-        (minutes(threads=[new_thread("n1", "   ")]), "threads.0.title"),
+        (minutes(agendas=[new_agenda("n1", "   ")]), "agendas.0.title"),
+        # 한 안건에 갈아끼우기는 하나까지
         (
-            minutes(threads=[new_thread("n1", "가", entry=body("defer", " "))]),
-            "threads.0.entry.text",
+            minutes(updates=[update_row("t4", "가"), update_row("t4", "나")]),
+            "updates.1.agendaId",
         ),
-        (minutes(entries=[old_entry("e1", "t4", "refine", "")]), "entries.0.text"),
+        # tempId 는 새 안건 · 작업 전체에서 서로 다르다
         (
-            minutes(
-                entries=[
-                    old_entry("e1", "t4", "defer", "가"),
-                    old_entry("e2", "t4", "defer", "나"),
-                ]
-            ),
-            # 한 결정 항목에 이력은 하나까지 — 둘 다 안건 전체 미룸이다
-            "entries.1.itemTitle",
-        ),
-        # tempId 는 세 묶음 전체에서 서로 다르다
-        (
-            minutes(threads=[new_thread("x", "가")], entries=[old_entry("x", "t4", "defer", "나")]),
-            "entries.0.tempId",
-        ),
-        (
-            minutes(threads=[new_thread("n1", "가")], tasks=[task("n1", "나")]),
+            minutes(agendas=[new_agenda("n1", "가")], tasks=[task("n1", "나")]),
             "tasks.0.tempId",
         ),
-        (minutes(tasks=[task("t1", "가", threadTempIds=["n9"])]), "tasks.0.threadTempIds.0"),
+        (minutes(tasks=[task("t1", "가", agendaTempIds=["n9"])]), "tasks.0.agendaTempIds.0"),
         # 새 안건 tempId 는 작업의 상위가 될 수 없다
         (
-            minutes(threads=[new_thread("n1", "가")], tasks=[task("t1", "나", parentTempId="n1")]),
+            minutes(agendas=[new_agenda("n1", "가")], tasks=[task("t1", "나", parentTempId="n1")]),
             "tasks.0.parentTempId",
         ),
         (minutes(tasks=[task("t1", "가", parentTempId="t1")]), "tasks.0.parentTempId"),
         (minutes(tasks=[task("t1", "가", parentTempId="t0", parentId="k1")]), "tasks.0.parentId"),
         (minutes(tasks=[task("t1", "가", start="2026-10-20", due="2026-10-19")]), "tasks.0.due"),
-        # 타입 오류도 자리를 짚는다 — change · split 은 받지 않는다
-        (minutes(entries=[old_entry("e1", "t4", "change", "가")]), "entries.0.kind"),
-        (
-            minutes(threads=[new_thread("n1", "가", entry=body("split", "나"))]),
-            "threads.0.entry.kind",
-        ),
-        (minutes(threads=[new_thread("n1", "가", dueDate="다음 주")]), "threads.0.dueDate"),
+        # 타입 오류도 자리를 짚는다 — 상태는 셋뿐이다
+        (minutes(updates=[update_row("t4", "가", state="deferred")]), "updates.0.state"),
+        (minutes(agendas=[new_agenda("n1", "가", state="deferred")]), "agendas.0.state"),
+        (minutes(agendas=[new_agenda("n1", "가", dueDate="다음 주")]), "agendas.0.dueDate"),
     ],
 )
 async def test_rule_violation_is_422_with_position(
@@ -355,29 +326,24 @@ async def test_rule_violation_is_422_with_position(
     [
         # 다른 프로젝트의 안건(t10)도 없는 것과 같다
         (
-            minutes(entries=[old_entry("e1", "t10", "decide", "가")]),
-            "THREAD_NOT_FOUND",
-            "entries.0.threadId",
+            minutes(updates=[update_row("t10", "가")]),
+            "AGENDA_NOT_FOUND",
+            "updates.0.agendaId",
         ),
         (
-            minutes(tasks=[task("t1", "가", threadIds=["t4", "없음"])]),
-            "THREAD_NOT_FOUND",
-            "tasks.0.threadIds.1",
+            minutes(tasks=[task("t1", "가", agendaIds=["t4", "없음"])]),
+            "AGENDA_NOT_FOUND",
+            "tasks.0.agendaIds.1",
         ),
         (
-            minutes(threads=[new_thread("n1", "가", ownerId="없음")]),
-            "THREAD_OWNER_NOT_FOUND",
-            "threads.0.ownerId",
+            minutes(agendas=[new_agenda("n1", "가", ownerId="없음")]),
+            "AGENDA_OWNER_NOT_FOUND",
+            "agendas.0.ownerId",
         ),
         (
-            minutes(threads=[new_thread("n1", "가", entry=body("decide", "나", ownerId="없음"))]),
-            "ENTRY_OWNER_NOT_FOUND",
-            "threads.0.entry.ownerId",
-        ),
-        (
-            minutes(entries=[old_entry("e1", "t4", "decide", "가", ownerId="없음")]),
-            "ENTRY_OWNER_NOT_FOUND",
-            "entries.0.ownerId",
+            minutes(agendas=[new_agenda("n1", "가", partId="없음")]),
+            "PART_NOT_FOUND",
+            "agendas.0.partId",
         ),
         (
             minutes(tasks=[task("t1", "가", ownerId="없음")]),
@@ -406,11 +372,11 @@ async def test_reference_errors_are_400_and_leave_nothing(
 ) -> None:
     # 맞는 줄을 같이 실어도 아무것도 안 남는다
     payload = {
-        "threads": [new_thread("n0", "맞는 안건"), *payload["threads"]],
-        "entries": payload["entries"],
+        "agendas": [new_agenda("n0", "맞는 안건"), *payload["agendas"]],
+        "updates": payload["updates"],
         "tasks": [task("t0", "맞는 작업"), *payload["tasks"]],
     }
-    field = field.replace("threads.0", "threads.1").replace("tasks.0", "tasks.1")
+    field = field.replace("agendas.0", "agendas.1").replace("tasks.0", "tasks.1")
     before = await counts(session)
     res = await client.post(APPLY, json=payload)
     assert res.status_code == 400, res.text
@@ -420,10 +386,33 @@ async def test_reference_errors_are_400_and_leave_nothing(
     assert await counts(session) == before
 
 
+async def test_updates_need_the_agenda_edit_right(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    """결정내용 · 상태를 바꾸는 것은 PATCH 와 같은 넷만 — 회의록 반영도 같다 (auth.md '안건')."""
+    u2 = await as_member("u2")
+    before = await counts(session)
+    payload = minutes(
+        agendas=[new_agenda("n1", "새 안건")],
+        # t9 는 u2 담당 — 된다. t1 은 u3 의 안건 — 안 된다
+        updates=[update_row("t9", "3자리"), update_row("t1", "록키")],
+    )
+    res = await u2.post(APPLY, json=payload)
+    assert res.status_code == 403, res.text
+    assert res.json()["code"] == "FORBIDDEN"
+    assert res.json()["detail"] == {
+        "updates.1.agendaId": "이 안건의 결정내용 · 상태를 바꿀 권한이 없습니다."
+    }
+    assert await counts(session) == before
+
+    res = await u2.post(APPLY, json=minutes(updates=[update_row("t9", "3자리")]))
+    assert res.status_code == 201, res.text
+
+
 async def test_failure_midway_leaves_nothing(
     client: httpx.AsyncClient, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """두 번째 작업을 넣다 터져도 안건 · 이력 · 상태 · 올려 둔 번호까지 되돌린다."""
+    """두 번째 작업을 넣다 터져도 안건 · 이력 · 결정내용 · 올려 둔 번호까지 되돌린다."""
     real = task_service._insert_task
     calls = 0
 
@@ -443,25 +432,10 @@ async def test_failure_midway_leaves_nothing(
     assert calls == 2
     assert await counts(session) == before
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert {t["id"]: t["state"] for t in snap["threads"]}["t4"] == "queued"
+    t4 = next(t for t in snap["agendas"] if t["id"] == "t4")
+    assert t4["state"] == "queued" and t4["decision"] == ""
     res = await client.post(APPLY, json=minutes(tasks=[task("t1", "다시")]))
     assert res.json()["tasks"][0]["key"] == "HW-23"
-
-
-async def test_entry_may_keep_the_current_thread_owner(
-    client: httpx.AsyncClient, session: AsyncSession
-) -> None:
-    """안건 담당자를 그대로 적는 이력은 새로 지정하는 것이 아니다 — POST .../entries 와 같다."""
-    session.add(Member(id="u9", name="떠난 사람", email=None))
-    await session.flush()
-    await session.execute(update(Thread).where(Thread.id == "t9").values(owner_id="u9"))
-    await session.commit()
-
-    ok = minutes(entries=[old_entry("e1", "t9", "decide", "3자리", ownerId="u9")])
-    assert (await client.post(APPLY, json=ok)).status_code == 201
-    bad = minutes(entries=[old_entry("e1", "t8", "decide", "가", ownerId="u9")])
-    res = await client.post(APPLY, json=bad)
-    assert res.status_code == 400 and res.json()["code"] == "ENTRY_OWNER_NOT_FOUND"
 
 
 async def test_unknown_minutes_is_404(client: httpx.AsyncClient) -> None:
@@ -521,10 +495,9 @@ async def test_apply_uses_the_minutes_project(
     assert made_task["projectId"] == "p2" and made_task["key"] == "PAS-3"
     assert made_task["minutesId"] == other
     res = await client.post(
-        f"/api/minutes/{other}/apply",
-        json=minutes(entries=[old_entry("e1", "t4", "defer", "가")]),
+        f"/api/minutes/{other}/apply", json=minutes(updates=[update_row("t4", "가")])
     )
-    assert res.status_code == 400 and res.json()["code"] == "THREAD_NOT_FOUND"
+    assert res.status_code == 400 and res.json()["code"] == "AGENDA_NOT_FOUND"
 
 
 async def test_apply_needs_login(anon: httpx.AsyncClient) -> None:
@@ -536,68 +509,60 @@ async def test_apply_needs_login(anon: httpx.AsyncClient) -> None:
 
 def rows(payload: dict[str, Any]) -> minutes_service.Rows:
     return minutes_service.normalize(
-        [ProposedThread.model_validate(t) for t in payload["threads"]],
-        [ProposedEntry.model_validate(e) for e in payload["entries"]],
+        [ProposedAgenda.model_validate(t) for t in payload["agendas"]],
+        [ProposedUpdate.model_validate(e) for e in payload["updates"]],
         [ProposedMinutesTask.model_validate(t) for t in payload["tasks"]],
     )
 
 
-def test_normalize_trims_and_drops_blank_lines() -> None:
-    threads, entries, tasks = rows(FULL)
-    assert threads[0].title == "운영 DB 백업 보관 기간"
-    assert threads[0].options == ["30일", "90일"]
+def test_normalize_trims() -> None:
+    agendas, updates, tasks = rows(FULL)
+    assert agendas[0].title == "운영 DB 백업 보관 기간"
+    assert agendas[1].decision == "개발자 넷만 연다"
     # 담당자를 정했으면 부른 말은 비운다 — ownerHint 는 ownerId 가 null 일 때만
-    assert threads[0].owner_hint == ""
-    assert threads[0].entry is not None and threads[0].entry.owner_hint == "김 책임"
-    assert threads[1].owner_hint == "박 선임"
-    assert entries[0].detail == ["일요일 새벽"]
+    assert agendas[0].owner_hint == ""
+    assert agendas[1].owner_hint == "박 선임"
+    assert updates[0].decision == "주 1회 전체 백업\n- 일요일 새벽"
     assert tasks[2].owner_hint == "누군가"
 
 
 def test_shape_problems_points_every_place() -> None:
     bad = minutes(
-        threads=[new_thread("n1", " "), new_thread("n1", "가")],
-        entries=[old_entry("e1", "t4", "defer", ""), old_entry("e2", "t4", "defer", "나")],
-        tasks=[task("t1", "가", threadTempIds=["n1", "n7"])],
+        agendas=[new_agenda("n1", " "), new_agenda("n1", "가")],
+        updates=[update_row("t4", "가"), update_row("t4", "나")],
+        tasks=[task("t1", "가", agendaTempIds=["n1", "n7"])],
     )
     assert minutes_service.shape_problems(*rows(bad)) == {
-        "threads.0.title": "제목을 입력해 주세요.",
-        "threads.1.tempId": "초안의 다른 줄과 tempId 가 겹칩니다.",
-        "entries.0.text": "내용을 입력해 주세요.",
-        "entries.1.itemTitle": "한 결정 항목에 이력은 하나까지입니다.",
-        "tasks.0.threadTempIds.1": "이 초안에 없는 새 안건입니다.",
+        "agendas.0.title": "제목을 입력해 주세요.",
+        "agendas.1.tempId": "초안의 다른 줄과 tempId 가 겹칩니다.",
+        "updates.1.agendaId": "한 안건의 결정은 한 줄로 합쳐 주세요.",
+        "tasks.0.agendaTempIds.1": "이 초안에 없는 새 안건입니다.",
     }
     assert minutes_service.shape_problems(*rows(FULL)) == {}
 
 
 async def test_minutes_problems_in_order(session: AsyncSession) -> None:
-    """등록은 첫 것을, 초안 도구는 전부를 쓴다 — 422 → 없는 안건 → 담당자 → 상위 작업."""
+    """등록은 첫 것을, 초안 도구는 전부를 쓴다 — 422 → 없는 안건 → 담당자 → 파트 → 상위 작업."""
     await seed(session)
     bad = minutes(
-        threads=[
-            new_thread("n1", "", ownerId="없음", entry=body("defer", "가", ownerId="없는 사람"))
-        ],
-        entries=[
-            old_entry("e1", "t10", "defer", "가"),
-            old_entry("e2", "t4", "defer", "나", ownerId="없음"),
-        ],
-        tasks=[task("t1", "가", ownerId="없음", parentId="없음", threadIds=["없음"])],
+        agendas=[new_agenda("n1", "", ownerId="없음", partId="없음")],
+        updates=[update_row("t10", "가"), update_row("t4", "나")],
+        tasks=[task("t1", "가", ownerId="없음", parentId="없음", agendaIds=["없음"])],
     )
     found = await minutes_service.minutes_problems(session, "p1", *rows(bad))
     assert [(e.status_code, e.code) for e in found] == [
         (422, "VALIDATION_ERROR"),
-        (400, "THREAD_NOT_FOUND"),
-        (400, "THREAD_OWNER_NOT_FOUND"),
-        (400, "ENTRY_OWNER_NOT_FOUND"),
+        (400, "AGENDA_NOT_FOUND"),
+        (400, "AGENDA_OWNER_NOT_FOUND"),
+        (400, "PART_NOT_FOUND"),
         (400, "TASK_OWNER_NOT_FOUND"),
         (400, "TASK_PARENT_NOT_FOUND"),
     ]
     assert found[1].detail == {
-        "entries.0.threadId": "안건을 찾을 수 없습니다.",
-        "tasks.0.threadIds.0": "안건을 찾을 수 없습니다.",
+        "updates.0.agendaId": "안건을 찾을 수 없습니다.",
+        "tasks.0.agendaIds.0": "안건을 찾을 수 없습니다.",
     }
-    assert found[3].detail is not None
-    assert set(found[3].detail) == {"threads.0.entry.ownerId", "entries.1.ownerId"}
+    assert found[3].detail == {"agendas.0.partId": "파트를 찾을 수 없습니다."}
     assert await minutes_service.minutes_problems(session, "p1", *rows(FULL)) == []
 
 
@@ -618,9 +583,7 @@ async def test_seeded_minutes(client: httpx.AsyncClient) -> None:
     assert out["createdAt"].endswith("Z") and len(out["createdAt"]) == 20
     # 출처를 단 줄은 없다
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert all(
-        row["minutesId"] is None for key in ("threads", "entries", "tasks") for row in snap[key]
-    )
+    assert all(row["minutesId"] is None for key in ("agendas", "tasks") for row in snap[key])
 
 
 async def test_create_and_read(as_member: AsMember) -> None:
@@ -785,7 +748,7 @@ async def test_delete_keeps_what_came_out(
 ) -> None:
     """지우면 회의록만 없어지고, 나온 안건 · 이력 · 작업은 남아 출처만 빈다."""
     out = (await client.post(APPLY, json=FULL)).json()
-    made = {row["id"] for key in ("threads", "entries", "tasks") for row in out[key]}
+    made = {row["id"] for key in ("agendas", "tasks") for row in out[key]}
     before = await counts(session)
 
     res = await (await as_member("u1")).delete("/api/minutes/m1")
@@ -794,7 +757,7 @@ async def test_delete_keeps_what_came_out(
     assert await count(session, Minutes) == 0
 
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    rows = {row["id"]: row for key in ("threads", "entries", "tasks") for row in snap[key]}
+    rows = {row["id"]: row for key in ("agendas", "tasks") for row in snap[key]}
     assert made <= set(rows)
     assert all(rows[row_id]["minutesId"] is None for row_id in made)
 
@@ -829,14 +792,10 @@ async def test_board_needs_login(anon: httpx.AsyncClient) -> None:
 
 
 async def test_hand_made_rows_have_no_source(client: httpx.AsyncClient) -> None:
-    """손으로 만든 안건 · 이력 · 작업은 null 이다."""
-    thread = (await client.post("/api/projects/p1/threads", json={"title": "손으로"})).json()
-    added = await client.post(
-        f"/api/threads/{thread['id']}/entries", json={"kind": "defer", "text": "미룸"}
-    )
+    """손으로 만든 안건 · 작업은 null 이다."""
+    agenda = (await client.post("/api/projects/p1/agendas", json={"title": "손으로"})).json()
     made = (await client.post("/api/projects/p1/tasks", json={"title": "손으로"})).json()
-    assert thread["minutesId"] is None and made["minutesId"] is None
-    assert added.json()["entry"]["minutesId"] is None
+    assert agenda["minutesId"] is None and made["minutesId"] is None
 
 
 # --- draft ---------------------------------------------------------------------
@@ -850,36 +809,25 @@ TEXT = """\
 PROPOSED: dict[str, Any] = {
     "meeting_date": "2026-10-17",
     "summary": "백업 보관 기간은 미뤘고, 가상비서는 검색 tool 부터 만들기로 했다.",
-    "threads": [
+    "agendas": [
         {
             "temp_id": "n1",
             "title": " 운영 DB 백업 보관 기간 ",
-            "description": "",
-            "options": [],
+            "description": "보안팀 의견을 듣고 다시 보기로 했다",
+            "decision": "",
+            "state": "open",
             "owner_id": None,
             "owner_hint": "김 책임",
             "due_date": None,
-            "entry": {
-                "kind": "defer",
-                "text": "보관 기간 결정을 미룸",
-                "detail": [],
-                "note": "보안팀 의견 대기",
-                "owner_id": None,
-                "owner_hint": "김 책임",
-            },
+            "part_id": None,
             "quote": "백업 보관 기간은 보안팀 의견 듣고 다시 보자",
         }
     ],
-    "entries": [
+    "updates": [
         {
-            "temp_id": "e1",
-            "thread_id": "t7",
-            "kind": "decide",
-            "text": "검색 tool 부터 만든다",
-            "detail": [],
-            "note": "",
-            "owner_id": "u2",
-            "owner_hint": "박지훈",
+            "agenda_id": "t7",
+            "decision": "검색 tool 부터 만든다",
+            "state": "decided",
             "quote": "가상비서 tool 은 검색 tool 부터 만든다.",
         }
     ],
@@ -894,21 +842,21 @@ PROPOSED: dict[str, Any] = {
             "start": None,
             "due": None,
             "priority": "normal",
-            "thread_temp_ids": [],
-            "thread_ids": ["t7"],
+            "agenda_temp_ids": [],
+            "agenda_ids": ["t7"],
             "quote": "박지훈 담당",
         }
     ],
 }
 
-EMPTY = {"meeting_date": None, "summary": "잡담", "threads": [], "entries": [], "tasks": []}
+EMPTY = {"meeting_date": None, "summary": "잡담", "agendas": [], "updates": [], "tasks": []}
 
 
 def broken_draft() -> dict[str, Any]:
     bad = json.loads(json.dumps(PROPOSED))
-    bad["tasks"][0]["thread_temp_ids"] = ["n9"]
+    bad["tasks"][0]["agenda_temp_ids"] = ["n9"]
     bad["tasks"][0]["owner_id"] = "없음"
-    bad["entries"][0]["thread_id"] = "t10"
+    bad["updates"][0]["agenda_id"] = "t10"
     return bad
 
 
@@ -935,7 +883,7 @@ async def run(
 
 async def test_draft_events_and_shape(client: httpx.AsyncClient, session: AsyncSession) -> None:
     fake = FakeClient(
-        Turn(tools=[("get_thread", {"thread_id": "t7"}), ("list_members", {})]),
+        Turn(tools=[("get_agenda", {"agenda_id": "t7"}), ("list_members", {})]),
         Turn(tools=[("propose_minutes", PROPOSED)]),
     )
     use(fake)
@@ -949,7 +897,7 @@ async def test_draft_events_and_shape(client: httpx.AsyncClient, session: AsyncS
     assert [name for name, _ in events] == ["tool", "tool", "tool", "draft", "done"]
     assert all(data["type"] == name for name, data in events)
     assert [data["label"] for _, data in events[:3]] == [
-        "안건 이력 읽는 중",
+        "안건 결정내용 읽는 중",
         "멤버 확인 중",
         "초안 만드는 중",
     ]
@@ -958,17 +906,16 @@ async def test_draft_events_and_shape(client: httpx.AsyncClient, session: AsyncS
 
     draft = events[3][1]["draft"]
     assert set(draft) == MINUTES_SHAPES["MinutesDraft"]
-    assert set(draft["threads"][0]) == MINUTES_SHAPES["ProposedThread"]
-    assert set(draft["threads"][0]["entry"]) == MINUTES_SHAPES["ProposedEntryBody"]
-    assert set(draft["entries"][0]) == MINUTES_SHAPES["ProposedEntry"]
+    assert set(draft["agendas"][0]) == MINUTES_SHAPES["ProposedAgenda"]
+    assert set(draft["updates"][0]) == MINUTES_SHAPES["ProposedUpdate"]
     assert set(draft["tasks"][0]) == MINUTES_SHAPES["ProposedMinutesTask"]
     # 회의록에 회의 날짜(2026-10-16)가 있으면 그것이다 — Claude 가 본문에서 다르게 읽어도
     assert draft["meetingDate"] == "2026-10-16"
     # 검사 전에 다듬은 모양으로 낸다 — 제목 공백, 담당자를 정한 줄의 부른 말
-    assert draft["threads"][0]["title"] == "운영 DB 백업 보관 기간"
-    assert draft["threads"][0]["ownerHint"] == "김 책임"
-    assert draft["entries"][0]["ownerHint"] == ""
-    assert draft["tasks"][0]["threadIds"] == ["t7"]
+    assert draft["agendas"][0]["title"] == "운영 DB 백업 보관 기간"
+    assert draft["agendas"][0]["ownerHint"] == "김 책임"
+    assert draft["updates"][0]["quote"] == "가상비서 tool 은 검색 tool 부터 만든다."
+    assert draft["tasks"][0]["agendaIds"] == ["t7"]
 
     # 저장된 제목 · 회의 날짜 · 본문이 사용자 메시지 하나로 간다. 본문은 글자 그대로
     first = fake.calls[0]["messages"][0]
@@ -1008,8 +955,8 @@ async def test_draft_request_follows_the_settings(session: AsyncSession) -> None
     assert call["tool_choice"] == {"type": "auto"}
     assert call["betas"] == ["server-side-fallback-2026-07-01"]
     assert {tool["name"] for tool in call["tools"]} == {
-        "search_threads",
-        "get_thread",
+        "search_agendas",
+        "get_agenda",
         "search_tasks",
         "list_members",
         "propose_minutes",
@@ -1028,7 +975,7 @@ async def test_system_prompt_has_today_project_and_members(session: AsyncSession
     assert "- u2 · 박지훈 · 기간계 연동" in system
     assert "- u3 · 이도현 · 인프라" in system
     assert "admin" not in system
-    assert "search_threads 로 **이미 있는지 먼저 본다**" in system
+    assert "search_agendas 로 **이미 있는지 먼저 본다**" in system
 
 
 async def test_bad_draft_goes_back_then_fixed(session: AsyncSession) -> None:
@@ -1044,8 +991,8 @@ async def test_bad_draft_goes_back_then_fixed(session: AsyncSession) -> None:
     # 등록과 같은 검사 — 422 · 400 자리를 한 번에 다 돌려준다. 다른 프로젝트 안건(t10)은 없는 것
     problems = json.loads(result["content"])["problems"]
     assert set(problems) == {
-        "tasks.0.threadTempIds.0",
-        "entries.0.threadId",
+        "tasks.0.agendaTempIds.0",
+        "updates.0.agendaId",
         "tasks.0.ownerId",
     }
 
@@ -1076,7 +1023,7 @@ async def test_nothing_to_draft_is_empty(session: AsyncSession) -> None:
 
 
 async def test_round_limit_ends_in_failure(session: AsyncSession) -> None:
-    fake = FakeClient(Turn(tools=[("get_thread", {"thread_id": "t1"})]))
+    fake = FakeClient(Turn(tools=[("get_agenda", {"agenda_id": "t1"})]))
     events = await run(session, fake)
     assert len(fake.calls) == minutes_draft.MAX_ROUNDS
     assert events[-1].type == "error" and events[-1].code == "MINUTES_DRAFT_FAILED"
@@ -1087,7 +1034,7 @@ async def test_round_limit_ends_in_failure(session: AsyncSession) -> None:
 async def test_tools_stay_in_project_and_set(session: AsyncSession) -> None:
     """다른 프로젝트 안건은 못 읽고, 쥐여 주지 않은 챗봇 도구는 돌지 않는다."""
     fake = FakeClient(
-        Turn(tools=[("get_thread", {"thread_id": "t10"}), ("list_tasks", {})]),
+        Turn(tools=[("get_agenda", {"agenda_id": "t10"}), ("list_tasks", {})]),
         Turn(tools=[("propose_minutes", PROPOSED)]),
     )
     events = await run(session, fake)
@@ -1147,7 +1094,7 @@ async def test_draft_unknown_minutes_is_404(client: httpx.AsyncClient) -> None:
 
 def test_labels() -> None:
     assert (
-        minutes_draft.tool_label("search_threads", {"query": " 백업 "})
+        minutes_draft.tool_label("search_agendas", {"query": " 백업 "})
         == '"백업" 기존 안건 찾는 중'
     )
     assert minutes_draft.tool_label("propose_minutes", {}) == "초안 만드는 중"
@@ -1160,11 +1107,11 @@ async def test_apply_on_postgres(pg_client: httpx.AsyncClient) -> None:
     out = res.json()
     assert [t["key"] for t in out["tasks"]] == ["HW-23", "HW-24", "HW-25"]
     snap = (await pg_client.get("/api/projects/p1/snapshot")).json()
-    # 이력은 seq 순서 — 새 안건 것 먼저, 그다음 기존 안건 것
-    ids = [e["id"] for e in out["entries"]]
-    assert [e["id"] for e in snap["entries"] if e["id"] in ids] == ids
-    links = {(link["taskId"], link["threadId"]) for link in snap["taskThreadLinks"]}
-    assert {(link["taskId"], link["threadId"]) for link in out["links"]} <= links
+    # 새 안건은 seq 순서 — 요청 순서대로 맨 뒤에
+    ids = [t["id"] for t in out["agendas"]]
+    assert [t["id"] for t in snap["agendas"]][-2:] == ids
+    links = {(link["taskId"], link["agendaId"]) for link in snap["taskAgendaLinks"]}
+    assert {(link["taskId"], link["agendaId"]) for link in out["links"]} <= links
 
 
 async def test_board_on_postgres(pg_client: httpx.AsyncClient) -> None:
@@ -1182,6 +1129,6 @@ async def test_board_on_postgres(pg_client: httpx.AsyncClient) -> None:
     out = (await pg_client.post(APPLY, json=FULL)).json()
     assert (await pg_client.delete("/api/minutes/m1")).status_code == 204
     snap = (await pg_client.get("/api/projects/p1/snapshot")).json()
-    ids = {row["id"] for key in ("threads", "entries", "tasks") for row in out[key]}
-    left = [row for key in ("threads", "entries", "tasks") for row in snap[key] if row["id"] in ids]
+    ids = {row["id"] for key in ("agendas", "tasks") for row in out[key]}
+    left = [row for key in ("agendas", "tasks") for row in snap[key] if row["id"] in ids]
     assert len(left) == len(ids) and all(row["minutesId"] is None for row in left)

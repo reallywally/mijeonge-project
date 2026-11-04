@@ -45,7 +45,7 @@ async function click(el: Element | undefined | null) {
   await flushPromises()
 }
 
-const rows = (kind: 'thread' | 'task' | 'owner') =>
+const rows = (kind: 'agenda' | 'task' | 'owner') =>
   document.body.querySelectorAll(`[data-risk-${kind}]`)
 const button = (text: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
@@ -79,20 +79,20 @@ describe('표 셋', () => {
     await signedIn('u1@inno-ax.com')
     const w = await mountRisks()
 
-    expect(rows('thread')).toHaveLength(6)
+    expect(rows('agenda')).toHaveLength(6)
     expect(rows('task')).toHaveLength(3)
     expect(rows('owner')).toHaveLength(5)
     expect(w.find('[data-risk-settings]').text()).toBe(
-      '기한 임박 3일 · 미룸 2번 · 멈춤 7일 · high 6점 · medium 3점',
+      '기한 임박 3일 · 멈춤 7일 · high 6점 · medium 3점',
     )
     expect(w.text()).toContain('2026-10-15')
 
-    const first = rows('thread')[0]!.textContent ?? ''
+    const first = rows('agenda')[0]!.textContent ?? ''
     expect(first).toContain('보험료 산출 기간계 API 호출 in · out 정의')
-    expect(first).toContain('여러 번 미룸')
+    expect(first).not.toContain('여러 번 미룸')
     expect(first).toContain('작업을 막는 중')
-    expect(first).toContain('high')
-    expect(rows('thread')[1]!.textContent).toContain('15일')
+    expect(first).toContain('medium')
+    expect(rows('agenda')[1]!.textContent).toContain('15일')
     expect(rows('task')[0]!.textContent).toContain('풀어도 됨')
     expect(rows('task')[0]!.textContent).toContain('DB 결정')
     expect(rows('task')[1]!.textContent).toContain('결정이 기한보다 늦음')
@@ -105,12 +105,12 @@ describe('표 셋', () => {
     await mountRisks()
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
-    expect(rows('thread')).toHaveLength(2)
+    expect(rows('agenda')).toHaveLength(2)
     expect(rows('task')).toHaveLength(2)
     expect(rows('owner')).toHaveLength(5)
 
     await click(scopeButton('all'))
-    expect(rows('thread')).toHaveLength(6)
+    expect(rows('agenda')).toHaveLength(6)
     expect(rows('task')).toHaveLength(3)
   })
 
@@ -132,7 +132,7 @@ describe('줄을 누르면 상세', () => {
     await signedIn('u1@inno-ax.com')
     await mountRisks()
 
-    await click(rows('thread')[1])
+    await click(rows('agenda')[1])
     expect(dialog()?.textContent).toContain('사내망에서 외부 모델 호출 허용 범위')
   })
 
@@ -210,7 +210,7 @@ describe('AI 요약', () => {
   const card = () => document.body.querySelector('[data-risk-summary]')
   const line = () => document.body.querySelector('[data-summary-line]')?.textContent?.trim()
   const ANSWER =
-    '한 줄 총평 — [[thread:t9]] 가 병목입니다.\n- [[task:k3]] 기한 확인 [[thread:nope]]'
+    '한 줄 총평 — [[agenda:t9]] 가 병목입니다.\n- [[task:k3]] 기한 확인 [[agenda:nope]]'
 
   function answerWith(text = ANSWER) {
     return vi.spyOn(api, 'streamRiskSummary').mockImplementation(async function* () {
@@ -229,7 +229,7 @@ describe('AI 요약', () => {
 
     await click(button('AI 요약'))
     expect(spy).toHaveBeenCalledTimes(1)
-    expect(spy.mock.calls[0][1]).toEqual({ threadIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
+    expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
     expect(line()).toBe('2026-10-15 기준 · 보이는 4건')
     expect(button('다시 요약')).toBeTruthy()
     expect(card()?.textContent).toContain('가 병목입니다.')
@@ -241,14 +241,14 @@ describe('AI 요약', () => {
     await mountRisks()
     await click(button('AI 요약'))
 
-    const threadChip = card()?.querySelector('[data-ref-thread="t9"]')
-    expect(threadChip?.textContent).toContain('공통 코드 체계 확정')
+    const agendaChip = card()?.querySelector('[data-ref-agenda="t9"]')
+    expect(agendaChip?.textContent).toContain('공통 코드 체계 확정')
     expect(card()?.querySelector('[data-ref-task="k3"]')?.textContent).toContain('HW-3')
-    expect(card()?.querySelectorAll('[data-ref-thread]')).toHaveLength(1)
+    expect(card()?.querySelectorAll('[data-ref-agenda]')).toHaveLength(1)
     expect(card()?.textContent).not.toContain('nope')
     expect(card()?.innerHTML).not.toContain('[[')
 
-    await click(threadChip)
+    await click(agendaChip)
     expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain(
       '공통 코드 체계 확정',
     )
@@ -268,7 +268,7 @@ describe('AI 요약', () => {
     await click(button('다시 요약'))
     expect(spy).toHaveBeenCalledTimes(2)
     expect(spy.mock.calls[1][1]).toEqual({
-      threadIds: ['t5', 't3', 't8', 't9', 't4', 't7'],
+      agendaIds: ['t5', 't3', 't8', 't9', 't4', 't7'],
       taskIds: ['k22', 'k3', 'k13'],
     })
     expect(card()?.querySelector('[data-summary-changed]')).toBeNull()

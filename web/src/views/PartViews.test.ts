@@ -11,7 +11,7 @@ import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import TasksView from './TasksView.vue'
-import ThreadListView from './ThreadListView.vue'
+import AgendaListView from './AgendaListView.vue'
 
 /* 파트가 화면까지 닿는지 — [내 파트 | 전체] · 파트 칩 · 파트 거르기(?part= 포함) · 고르기.
    파트 관리 화면은 ProjectAdminViews.test 가 본다.
@@ -31,14 +31,14 @@ async function mountAt(path: string) {
       { path: '/tasks', component: TasksView },
       { path: '/tasks/new', component: TasksView },
       { path: '/tasks/:id', component: TasksView },
-      { path: '/threads', component: ThreadListView },
-      { path: '/threads/:id', component: ThreadListView },
+      { path: '/agendas', component: AgendaListView },
+      { path: '/agendas/:id', component: AgendaListView },
       { path: '/:rest(.*)', component: Blank },
     ],
   })
   router.push(path)
   await router.isReady()
-  const view = path.startsWith('/threads') ? ThreadListView : TasksView
+  const view = path.startsWith('/agendas') ? AgendaListView : TasksView
   const w = mount(view, { global: { plugins: [router] }, attachTo: document.body })
   await flushPromises()
   return w
@@ -161,7 +161,7 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 describe('안건 목록의 [내 파트 | 전체]', () => {
   it('기간계(u2)는 공통 둘과 기간계 안건만 보고, 전체로 바꾸면 다 본다', async () => {
     await signedIn('u2@inno-ax.com')
-    const w = await mountAt('/threads')
+    const w = await mountAt('/agendas')
     expect(w.text()).toContain('총 3건')
     expect(w.text()).not.toContain('서버 OS 결정')
 
@@ -173,7 +173,7 @@ describe('안건 목록의 [내 파트 | 전체]', () => {
 
   it('?part= 로 들어오면 그 파트로 걸러진 채 열리고, 초기화하면 풀린다', async () => {
     await signedIn('u1@inno-ax.com')
-    const w = await mountAt('/threads?part=pt1')
+    const w = await mountAt('/agendas?part=pt1')
     expect(w.text()).toContain('총 3건')
     expect(w.text()).toContain('서버 OS 결정')
 

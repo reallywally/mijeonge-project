@@ -1,10 +1,9 @@
-import type { RiskSettings, TaskRiskSignal, ThreadRiskSignal } from '@/types/domain'
+import type { RiskSettings, TaskRiskSignal, AgendaRiskSignal } from '@/types/domain'
 
 /* 결정 병목 리스크의 화면 말과 기준 검사 (docs/api/risk.md). 계산은 서버 몫이라 여기 없다 */
 
 export const DEFAULT_RISK_SETTINGS: RiskSettings = {
   dueSoonDays: 3,
-  deferCount: 2,
   staleDays: 7,
   highScore: 6,
   mediumScore: 3,
@@ -21,7 +20,6 @@ export const RISK_SETTING_FIELDS: {
   max: number
 }[] = [
   { key: 'dueSoonDays', label: '기한 임박', unit: '일', min: 1, max: 30 },
-  { key: 'deferCount', label: '여러 번 미룸', unit: '번', min: 1, max: 10 },
   { key: 'staleDays', label: '오래 멈춤', unit: '일', min: 1, max: 90 },
   { key: 'highScore', label: 'high 점수', unit: '점', min: 2, max: 30 },
   { key: 'mediumScore', label: 'medium 점수', unit: '점', min: 1, max: 29 },
@@ -48,12 +46,11 @@ export function riskSettingsProblems(settings: Record<RiskSettingKey, unknown>) 
 
 /** 화면 위의 기준 한 줄 */
 export const riskSettingsLine = (s: RiskSettings) =>
-  `기한 임박 ${s.dueSoonDays}일 · 미룸 ${s.deferCount}번 · 멈춤 ${s.staleDays}일 · high ${s.highScore}점 · medium ${s.mediumScore}점`
+  `기한 임박 ${s.dueSoonDays}일 · 멈춤 ${s.staleDays}일 · high ${s.highScore}점 · medium ${s.mediumScore}점`
 
-export const THREAD_SIGNAL_LABEL: Record<ThreadRiskSignal, string> = {
+export const AGENDA_SIGNAL_LABEL: Record<AgendaRiskSignal, string> = {
   overdue: '기한 지남',
   dueSoon: '기한 임박',
-  deferredRepeatedly: '여러 번 미룸',
   stale: '오래 멈춤',
   blocking: '작업을 막는 중',
   decisionAfterTaskDue: '작업 기한이 먼저',
@@ -63,6 +60,6 @@ export const THREAD_SIGNAL_LABEL: Record<ThreadRiskSignal, string> = {
 
 export const TASK_SIGNAL_LABEL: Record<TaskRiskSignal, string> = {
   decidedButBlocked: '풀어도 됨',
-  blockedWithoutThread: '막힌 이유 없음',
+  blockedWithoutAgenda: '막힌 이유 없음',
   dueBeforeDecision: '결정이 기한보다 늦음',
 }

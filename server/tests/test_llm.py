@@ -119,12 +119,12 @@ async def collect(provider: AnthropicProvider) -> list[LLMEvent]:
 
 
 async def test_risk_summary_runs_on_any_provider(client: httpx.AsyncClient) -> None:
-    fake = PlainProvider("먼저 ", "[[thread:t5]] 를 정합니다.")
+    fake = PlainProvider("먼저 ", "[[agenda:t5]] 를 정합니다.")
     use(fake)
     res = await client.post(URL, json=ALL)
     events = parse_sse(res.text)
     assert [name for name, _ in events] == ["delta", "delta", "done"]
-    assert events[-1][1]["refs"] == [{"kind": "thread", "id": "t5"}]
+    assert events[-1][1]["refs"] == [{"kind": "agenda", "id": "t5"}]
     ((system, user_text),) = fake.calls
     assert "리스크" in system and user_text.endswith("}")
 
@@ -150,23 +150,23 @@ async def test_no_provider_is_503(client: httpx.AsyncClient) -> None:
 
 async def test_chat_tool_loop_runs_on_any_provider(client: httpx.AsyncClient) -> None:
     fake = ScriptedProvider(
-        Step(calls=[("get_thread", {"thread_id": "t1"})]),
-        Step(texts=["우분투로 정했습니다 [[thread:t1]]"]),
+        Step(calls=[("get_agenda", {"agenda_id": "t1"})]),
+        Step(texts=["우분투로 정했습니다 [[agenda:t1]]"]),
     )
     use(fake)
     body = {"messages": [{"role": "user", "text": "서버 OS 뭐로 하기로 했지?"}]}
     events = parse_sse((await client.post("/api/projects/p1/chat", json=body)).text)
     assert [name for name, _ in events] == ["tool", "delta", "done"]
-    assert events[-1][1]["refs"] == [{"kind": "thread", "id": "t1"}]
+    assert events[-1][1]["refs"] == [{"kind": "agenda", "id": "t1"}]
 
     # 둘째 차례 = 질문 · 도구를 부른 답 · 도구 결과
     question, called, answered = fake.turns[1]
     assert question == UserMessage("서버 OS 뭐로 하기로 했지?")
-    assert isinstance(called, AssistantMessage) and called.calls[0].name == "get_thread"
+    assert isinstance(called, AssistantMessage) and called.calls[0].name == "get_agenda"
     assert isinstance(answered, UserMessage) and answered.text == ""
     (result,) = answered.results
     assert result.call_id == "c1_0" and result.is_error is False
-    assert json.loads(result.content)["thread"]["id"] == "t1"
+    assert json.loads(result.content)["agenda"]["id"] == "t1"
     assert "propose_tasks" in fake.tools[0]
 
 
@@ -194,8 +194,8 @@ async def test_minutes_draft_runs_on_any_provider(client: httpx.AsyncClient) -> 
     assert isinstance(first, UserMessage) and first.cache is True
     assert isinstance(nudge, UserMessage) and nudge.text == minutes_draft.NUDGE
     assert fake.tools[0] == [
-        "search_threads",
-        "get_thread",
+        "search_agendas",
+        "get_agenda",
         "search_tasks",
         "list_members",
         "propose_minutes",
@@ -235,13 +235,13 @@ async def test_anthropic_errors_become_llm_errors() -> None:
 
 def test_anthropic_params_from_neutral_messages() -> None:
     """원본(native)이 없는 답 · 도구 결과 · 캐시 표시를 Claude 의 모양으로."""
-    call = ToolCall(id="c1", name="get_thread", input={"thread_id": "t1"})
+    call = ToolCall(id="c1", name="get_agenda", input={"agenda_id": "t1"})
     assert to_param(AssistantMessage(text="앞의 답")) == {"role": "assistant", "content": "앞의 답"}
     assert to_param(AssistantMessage(text="볼게요", calls=[call])) == {
         "role": "assistant",
         "content": [
             {"type": "text", "text": "볼게요"},
-            {"type": "tool_use", "id": "c1", "name": "get_thread", "input": {"thread_id": "t1"}},
+            {"type": "tool_use", "id": "c1", "name": "get_agenda", "input": {"agenda_id": "t1"}},
         ],
     }
     results = [ToolResult(call_id="c1", content="{}", is_error=False)]

@@ -4,23 +4,20 @@ from typing import Annotated, Literal
 from pydantic import StringConstraints, field_validator
 from pydantic_core import PydanticCustomError
 
+from app.schemas.agenda import AgendaOut, AgendaState
 from app.schemas.base import Schema, Utc
-from app.schemas.task import ProposedTask, TaskOut, TaskThreadLinkOut
-from app.schemas.thread import DecisionItemOut, EntryOut, ThreadOut
+from app.schemas.task import ProposedTask, TaskAgendaLinkOut, TaskOut
 
 # docs/api/minutes.md — 60,000자면 대략 1시간 반 회의다
 MINUTES_TEXT_MAX = 60000
 MINUTES_TITLE_MAX = 200
 # 초안 검사 규칙의 개수 상한
-MINUTES_THREADS_MAX = 20
-MINUTES_ENTRIES_MAX = 20
+MINUTES_AGENDAS_MAX = 20
+MINUTES_UPDATES_MAX = 20
 MINUTES_TASKS_MAX = 30
 
-# 화면이 이력에 쓰는 셋뿐이다 — 결정을 바꾼 것도 decide 다
-MinutesEntryKind = Literal["decide", "defer", "refine"]
-
 MinutesToolName = Literal[
-    "search_threads", "get_thread", "search_tasks", "list_members", "propose_minutes"
+    "search_agendas", "get_agenda", "search_tasks", "list_members", "propose_minutes"
 ]
 
 
@@ -77,40 +74,33 @@ class MinutesPatch(Schema):
         return value
 
 
-class ProposedEntryBody(Schema):
-    kind: MinutesEntryKind
-    # 결정 항목의 이름. 등록할 때 그 안건에 같은 이름이 있으면 거기, 없으면 새로 만든다.
-    # '' 이면 decide · refine 은 안건 제목, defer 는 안건 전체 (services/minutes.py 의 _entry_item)
-    item_title: str = ""
-    text: str
-    detail: list[str] = []
-    note: str = ""
-    owner_id: str | None = None
-    # ownerId 를 못 정했을 때 회의록에서 부른 말. 등록할 때는 버린다
-    owner_hint: str = ""
-
-
-class ProposedThread(Schema):
+class ProposedAgenda(Schema):
     """새 안건. 검사 규칙은 `services/minutes.py` 의 `minutes_problems` 가 자리를 짚어 본다."""
 
     temp_id: str
     title: str
     description: str = ""
-    options: list[str] = []
+    # 이 회의에서 정해진 것. 아직이면 ''
+    decision: str = ""
+    state: AgendaState = "queued"
     owner_id: str | None = None
+    # ownerId 를 못 정했을 때 회의록에서 부른 말. 등록할 때는 버린다
     owner_hint: str = ""
     due_date: date | None = None
-    # 이 회의에서 정해졌거나 미뤄졌으면 그 이력. 등록만 된 안건이면 null
-    entry: ProposedEntryBody | None = None
+    # null 이면 프로젝트 공통
+    part_id: str | None = None
     # 근거 원문. 등록할 때는 버린다
     quote: str = ""
 
 
-class ProposedEntry(ProposedEntryBody):
-    """이미 있는 안건에 붙일 이력."""
+class ProposedUpdate(Schema):
+    """이미 있는 안건의 결정내용 · 상태를 통째로 갈아끼운다 — PATCH 와 같은 규칙 · 같은 이력."""
 
-    temp_id: str
-    thread_id: str
+    agenda_id: str
+    # 지금 결정내용과 이 회의의 결정을 합친 글 — AI 가 get_agenda 로 읽고 만든다
+    decision: str
+    state: AgendaState
+    # 근거 원문. 등록할 때는 버린다
     quote: str = ""
 
 
@@ -119,9 +109,9 @@ class ProposedMinutesTask(ProposedTask):
 
     owner_hint: str = ""
     # 이 초안의 새 안건(tempId)
-    thread_temp_ids: list[str] = []
+    agenda_temp_ids: list[str] = []
     # 이미 있는 안건(id)
-    thread_ids: list[str] = []
+    agenda_ids: list[str] = []
     quote: str = ""
 
 
@@ -129,8 +119,8 @@ class MinutesDraft(Schema):
     # 못 읽으면 null — 날짜 기준이 오늘이었다는 표시
     meeting_date: date | None
     summary: str
-    threads: list[ProposedThread]
-    entries: list[ProposedEntry]
+    agendas: list[ProposedAgenda]
+    updates: list[ProposedUpdate]
     tasks: list[ProposedMinutesTask]
 
 
@@ -141,23 +131,19 @@ class MinutesApplyInput(Schema):
     summary: (
         Annotated[str, StringConstraints(strip_whitespace=True, max_length=MINUTES_TEXT_MAX)] | None
     ) = None
-    threads: list[ProposedThread] = []
-    entries: list[ProposedEntry] = []
+    agendas: list[ProposedAgenda] = []
+    updates: list[ProposedUpdate] = []
     tasks: list[ProposedMinutesTask] = []
 
 
 class MinutesApplyResult(Schema):
     # 요청 순서 그대로
-    threads: list[ThreadOut]
-    # 새 안건의 이력 먼저, 그다음 기존 안건의 이력 — 각각 요청 순서
-    entries: list[EntryOut]
-    # 등록하면서 새로 만든 결정 항목 — 만든 순서 (Q66)
-    decision_items: list[DecisionItemOut]
-    # 이력 때문에 바뀐 기존 안건
-    updated_threads: list[ThreadOut]
+    agendas: list[AgendaOut]
+    # 결정내용 · 상태가 바뀐 기존 안건 — 요청 순서. 아무 칸도 안 바뀐 것은 빠진다
+    updated_agendas: list[AgendaOut]
     tasks: list[TaskOut]
-    links: list[TaskThreadLinkOut]
-    thread_id_by_temp_id: dict[str, str]
+    links: list[TaskAgendaLinkOut]
+    agenda_id_by_temp_id: dict[str, str]
     task_id_by_temp_id: dict[str, str]
 
 

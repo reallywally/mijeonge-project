@@ -10,7 +10,7 @@ TestStatus = Literal["draft", "ready", "testing", "pass", "fail", "blocked"]
 TestSignal = Literal[
     "longRunning", "overdue", "notStarted", "longBlocked", "failedIdle", "basisChanged"
 ]
-TestRefKind = Literal["task", "thread"]
+TestRefKind = Literal["task", "agenda"]
 
 TEXT_MAX = 4000
 # 지난 목적 · 사전조건 · 단계를 옮겨 담는 칸이라 넉넉히 (Q60)
@@ -52,7 +52,8 @@ class TestCaseOut(Schema):
     owner_id: str | None
     part_id: str | None
     signals: list[TestSignal]
-    changed_entry_ids: list[str]
+    # basis 뒤로 결정이 바뀐 닿는 안건 — 처음 바뀐 순 (docs/api/agenda.md)
+    changed_agenda_ids: list[str]
     created_by: str | None
     created_at: Utc
 

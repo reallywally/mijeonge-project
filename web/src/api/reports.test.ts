@@ -52,7 +52,7 @@ describe('목업 갈래', () => {
     const facts = (events[0] as { facts: ProgressFacts }).facts
     expect([facts.periodStart, facts.periodEnd]).toEqual(['2026-10-14', '2026-10-20'])
     expect(facts.attention[0].taskId).toBe('k20')
-    expect(facts.decisions.riskyThreadIds).toEqual(['t5', 't3', 't8', 't9'])
+    expect(facts.decisions.riskyAgendaIds).toEqual(['t5', 't3', 't8', 't9'])
     expect(facts.previous).toBeNull()
 
     const text = textOf(events)
@@ -67,7 +67,7 @@ describe('목업 갈래', () => {
     expect(done.type).toBe('done')
     if (done.type !== 'done') return
     expect(done.refs).toEqual([
-      { kind: 'thread', id: 't3' },
+      { kind: 'agenda', id: 't3' },
       { kind: 'task', id: 'k20' },
       { kind: 'task', id: 'k22' },
     ])
@@ -185,7 +185,7 @@ describe('서버 갈래', () => {
   const facts: ProgressFacts = {
     periodStart: '2026-10-14',
     periodEnd: '2026-10-20',
-    settings: { dueSoonDays: 3, deferCount: 2, staleDays: 7, highScore: 6, mediumScore: 3 },
+    settings: { dueSoonDays: 3, staleDays: 7, highScore: 6, mediumScore: 3 },
     progress: {
       todo: 0,
       doing: 0,
@@ -197,7 +197,7 @@ describe('서버 갈래', () => {
       createdTaskIds: [],
     },
     previous: null,
-    decisions: { decidedThreadIds: [], deferredThreadIds: [], riskyThreadIds: [] },
+    decisions: { decidedAgendaIds: [], riskyAgendaIds: [] },
     attention: [],
     people: [],
   }

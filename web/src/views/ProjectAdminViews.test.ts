@@ -299,8 +299,8 @@ describe('파트 관리 화면', () => {
     const { w } = await mountAt('/admin/projects/p1/parts?part=pt1')
     expect(w.get('a[data-link="tasks"]').attributes('href')).toBe('/tasks?view=list&part=pt1')
     expect(w.get('a[data-link="tasks"]').text()).toContain('작업 5건')
-    expect(w.get('a[data-link="threads"]').attributes('href')).toBe('/threads?part=pt1')
-    expect(w.get('a[data-link="threads"]').text()).toContain('안건 3건')
+    expect(w.get('a[data-link="agendas"]').attributes('href')).toBe('/agendas?part=pt1')
+    expect(w.get('a[data-link="agendas"]').text()).toContain('안건 3건')
   })
 
   it('찾아서 여럿을 골라 한 번에 더하고, 한 사람씩 뺀다', async () => {

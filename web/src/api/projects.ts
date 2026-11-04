@@ -20,8 +20,6 @@ import {
   projectDateRangeError,
 } from '@/lib/project'
 import type {
-  DecisionItem,
-  Entry,
   Member,
   Part,
   PartMember,
@@ -32,8 +30,8 @@ import type {
   ProjectRole,
   ProjectSnapshot,
   Task,
-  TaskThreadLink,
-  Thread,
+  TaskAgendaLink,
+  Agenda,
 } from '@/types/domain'
 
 /* 프로젝트 목록 · 등록 · 수정 · 삭제의 목업 갈래 — 서버처럼 권한 · 검증 · 소프트 삭제를 본다 */
@@ -154,11 +152,9 @@ export const createProject = (input: ProjectInput) =>
 /** 스냅샷을 data 스토어 이름으로 옮긴 것. JSON 키와 스토어 이름은 넷 다 다르다 (API.md 스냅샷 절) */
 export interface SnapshotRecords {
   project: Project
-  allThreads: Thread[]
-  allDecisionItems: DecisionItem[]
-  allEntries: Entry[]
+  allAgendas: Agenda[]
   allTasks: Task[]
-  taskThreads: TaskThreadLink[]
+  taskAgendas: TaskAgendaLink[]
   parts: Part[]
   partMembers: PartMember[]
 }
@@ -166,11 +162,9 @@ export interface SnapshotRecords {
 export function toRecords(snapshot: ProjectSnapshot): SnapshotRecords {
   return {
     project: snapshot.project,
-    allThreads: snapshot.threads,
-    allDecisionItems: snapshot.decisionItems,
-    allEntries: snapshot.entries,
+    allAgendas: snapshot.agendas,
     allTasks: snapshot.tasks,
-    taskThreads: snapshot.taskThreadLinks,
+    taskAgendas: snapshot.taskAgendaLinks,
     parts: snapshot.parts,
     partMembers: snapshot.partMembers,
   }

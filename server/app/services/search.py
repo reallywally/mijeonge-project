@@ -20,21 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
 from app.errors import ApiError, not_found
-from app.models import (
-    DecisionItem,
-    Entry,
-    EntryDetail,
-    Member,
-    Task,
-    TaskLine,
-    TaskThreadLink,
-    Thread,
-    ThreadOption,
-)
+from app.models import Agenda, Member, Task, TaskAgendaLink, TaskLine
 from app.schemas.search import (
-    ItemDoc,
+    AgendaDoc,
+    AgendaHit,
+    AgendaPlace,
+    LinkedAgenda,
     LinkedTask,
-    LinkedThread,
     SearchResult,
     SimilarPair,
     TaskBrief,
@@ -42,21 +34,18 @@ from app.schemas.search import (
     TaskHit,
     TaskList,
     TaskPlace,
-    ThreadDoc,
-    ThreadHit,
-    ThreadPlace,
 )
 from app.services import project as project_service
+from app.services.agenda import to_agenda
 from app.services.task import comment_count, status_since, to_task
-from app.services.thread import DECIDING_KINDS, to_entry, to_thread
 
-ThreadState = Literal["queued", "open", "decided"]
+AgendaState = Literal["queued", "open", "decided"]
 TaskStatus = Literal["todo", "doing", "blocked", "done"]
 
 # word_similarity 가 이보다 낮으면 안 낸다. 0.5 면 한 글자 틀린 세 글자(우분트 ↔ 우분투)까지 걸리고
 # 낱말이 겹치지 않는 것(MySQL ↔ PostgreSQL 0.33)은 빠진다
 THRESHOLD = 0.5
-# 글 안에 그대로 들어 있으면 이만큼은 준다 — 한국어는 조사가 붙어(미룸이다)
+# 글 안에 그대로 들어 있으면 이만큼은 준다 — 한국어는 조사가 붙어(정의가)
 # 낱말 유사도가 0.67 에 그친다. 1 보다 낮게 둬서 낱말째 맞은 것이 앞에 선다
 CONTAINS_SCORE = 0.9
 SNIPPET_WIDTH = 80
@@ -69,7 +58,7 @@ TASK_LIST_MAX = 300
 SIMILAR_THRESHOLD = 0.3
 
 # 같은 점수면 이 순서로 고른다 (API.md '검색')
-_THREAD_PLACES: tuple[ThreadPlace, ...] = ("title", "description", "option", "entry")
+_AGENDA_PLACES: tuple[AgendaPlace, ...] = ("title", "description", "decision")
 _TASK_PLACES: tuple[TaskPlace, ...] = ("title", "body")
 
 
@@ -153,84 +142,48 @@ def _place[T: tuple[Any, ...]](
     )
 
 
-async def search_threads(
+async def search_agendas(
     session: AsyncSession,
     project_id: str,
     query: str,
-    state: ThreadState | None = None,
+    state: AgendaState | None = None,
     limit: int = 10,
-) -> list[ThreadHit]:
+) -> list[AgendaHit]:
     query = clean_query(query)
     await _pin_threshold(session)
 
     def scoped(owner: Select[Any]) -> Select[Any]:
         # 프로젝트로 먼저 거른다 — 도구가 다른 프로젝트 id 를 넣어도 못 읽는다
-        owner = owner.where(Thread.project_id == project_id, Thread.is_deleted.is_(False))
-        return owner.where(Thread.state == state) if state is not None else owner
+        owner = owner.where(Agenda.project_id == project_id, Agenda.is_deleted.is_(False))
+        return owner.where(Agenda.state == state) if state is not None else owner
 
-    title_hit, title_score = _match(Thread.title, query)
-    desc_hit, desc_score = _match(Thread.description, query)
-    option_hit, option_score = _match(ThreadOption.text, query)
-    text_hit, text_score = _match(Entry.text, query)
-    note_hit, note_score = _match(Entry.note, query)
-    detail_hit, detail_score = _match(EntryDetail.text, query)
+    title_hit, title_score = _match(Agenda.title, query)
+    desc_hit, desc_score = _match(Agenda.description, query)
+    decision_hit, decision_score = _match(Agenda.decision, query)
 
-    owner = select(Thread.id.label("owner_id"))
-    # 지운 줄은 검색에 안 걸린다
-    by_entry = owner.join(Entry, (Entry.thread_id == Thread.id) & Entry.is_deleted.is_(False))
+    owner = select(Agenda.id.label("owner_id"))
     parts = [
-        _place(scoped(owner).where(title_hit), "title", Thread.title, title_score, 0),
-        _place(scoped(owner).where(desc_hit), "description", Thread.description, desc_score, 0),
-        _place(
-            scoped(owner.join(ThreadOption, ThreadOption.thread_id == Thread.id)).where(option_hit),
-            "option",
-            ThreadOption.text,
-            option_score,
-            ThreadOption.sort_order,
-        ),
-        _place(scoped(by_entry).where(text_hit), "entry", Entry.text, text_score, Entry.seq),
-        _place(scoped(by_entry).where(note_hit), "entry", Entry.note, note_score, Entry.seq),
-        _place(
-            scoped(by_entry.join(EntryDetail, EntryDetail.entry_id == Entry.id)).where(detail_hit),
-            "entry",
-            EntryDetail.text,
-            detail_score,
-            Entry.seq,
-        ),
+        _place(scoped(owner).where(title_hit), "title", Agenda.title, title_score, 0),
+        _place(scoped(owner).where(desc_hit), "description", Agenda.description, desc_score, 0),
+        _place(scoped(owner).where(decision_hit), "decision", Agenda.decision, decision_score, 0),
     ]
-    found = _best((await session.execute(union_all(*parts))).all(), _THREAD_PLACES)
+    found = _best((await session.execute(union_all(*parts))).all(), _AGENDA_PLACES)
     if not found:
         return []
 
-    threads = (await session.execute(select(Thread).where(Thread.id.in_(found)))).scalars().all()
-    ranked = sorted(threads, key=lambda row: (-found[row.id][0], row.seq))[:limit]
-    decisions = await _decisions(session, [row.id for row in ranked])
+    agendas = (await session.execute(select(Agenda).where(Agenda.id.in_(found)))).scalars().all()
+    ranked = sorted(agendas, key=lambda row: (-found[row.id][0], row.seq))[:limit]
     return [
-        ThreadHit(
+        AgendaHit(
             id=row.id,
             title=row.title,
             state=row.state,
             matched=found[row.id][1],
             snippet=snippet(found[row.id][2], query),
-            decision=decisions.get(row.id, ""),
+            decision=row.decision,
         )
         for row in ranked
     ]
-
-
-async def _decisions(session: AsyncSession, thread_ids: Sequence[str]) -> dict[str, str]:
-    """안건마다 마지막 decide · change 줄의 text — 결정이 바뀐 안건은 이것이 지금의 결정이다."""
-    rows = await session.execute(
-        select(Entry.thread_id, Entry.text)
-        .where(
-            Entry.thread_id.in_(thread_ids),
-            Entry.kind.in_(DECIDING_KINDS),
-            Entry.is_deleted.is_(False),
-        )
-        .order_by(Entry.seq)
-    )
-    # seq 오름차순으로 덮어쓰면 마지막 줄이 남는다
-    return {thread_id: text for thread_id, text in rows.all()}
 
 
 async def search_tasks(
@@ -285,69 +238,35 @@ async def search(session: AsyncSession, project_id: str, query: str, limit: int)
     await project_service.load_project(session, project_id)
     query = clean_query(query)
     return SearchResult(
-        threads=await search_threads(session, project_id, query, limit=limit),
+        agendas=await search_agendas(session, project_id, query, limit=limit),
         tasks=await search_tasks(session, project_id, query, limit=limit),
     )
 
 
-async def get_thread(session: AsyncSession, project_id: str, thread_id: str) -> ThreadDoc:
+async def get_agenda(session: AsyncSession, project_id: str, agenda_id: str) -> AgendaDoc:
     found = await session.execute(
-        select(Thread).where(
-            Thread.id == thread_id,
-            Thread.project_id == project_id,
-            Thread.is_deleted.is_(False),
+        select(Agenda).where(
+            Agenda.id == agenda_id,
+            Agenda.project_id == project_id,
+            Agenda.is_deleted.is_(False),
         )
     )
-    thread = found.scalar_one_or_none()
-    if thread is None:
-        raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
+    agenda = found.scalar_one_or_none()
+    if agenda is None:
+        raise not_found("AGENDA_NOT_FOUND", "안건을 찾을 수 없습니다.")
 
-    entries = (
-        (
-            await session.execute(
-                select(Entry)
-                .where(Entry.thread_id == thread.id, Entry.is_deleted.is_(False))
-                .order_by(Entry.seq)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    items = (
-        await session.scalars(
-            select(DecisionItem)
-            .where(DecisionItem.thread_id == thread.id, DecisionItem.is_deleted.is_(False))
-            .order_by(DecisionItem.sort_order, DecisionItem.seq)
-        )
-    ).all()
-    # seq 오름차순으로 덮어쓰면 항목마다 마지막 decide · change 줄이 남는다
-    decision_of = {
-        row.item_id: row.text
-        for row in entries
-        if row.item_id is not None and row.kind in DECIDING_KINDS
-    }
     tasks = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
-        .join(TaskThreadLink, TaskThreadLink.task_id == Task.id)
+        .join(TaskAgendaLink, TaskAgendaLink.task_id == Task.id)
         .where(
-            TaskThreadLink.thread_id == thread.id,
-            TaskThreadLink.project_id == project_id,
+            TaskAgendaLink.agenda_id == agenda.id,
+            TaskAgendaLink.project_id == project_id,
             Task.is_deleted.is_(False),
         )
         .order_by(Task.seq)
     )
-    return ThreadDoc(
-        thread=to_thread(thread),
-        items=[
-            ItemDoc(
-                id=item.id,
-                title=item.title,
-                decided=item.id in decision_of,
-                decision=decision_of.get(item.id, ""),
-            )
-            for item in items
-        ],
-        entries=[to_entry(row) for row in entries],
+    return AgendaDoc(
+        agenda=to_agenda(agenda),
         tasks=[
             LinkedTask(id=id_, key=key, title=title, status=status)
             for id_, key, title, status in tasks.all()
@@ -383,15 +302,15 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
     if task is None:
         raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
 
-    threads = await session.execute(
-        select(Thread.id, Thread.title, Thread.state)
-        .join(TaskThreadLink, TaskThreadLink.thread_id == Thread.id)
+    agendas = await session.execute(
+        select(Agenda.id, Agenda.title, Agenda.state)
+        .join(TaskAgendaLink, TaskAgendaLink.agenda_id == Agenda.id)
         .where(
-            TaskThreadLink.task_id == task.id,
-            TaskThreadLink.project_id == project_id,
-            Thread.is_deleted.is_(False),
+            TaskAgendaLink.task_id == task.id,
+            TaskAgendaLink.project_id == project_id,
+            Agenda.is_deleted.is_(False),
         )
-        .order_by(Thread.seq)
+        .order_by(Agenda.seq)
     )
     children = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
@@ -410,8 +329,8 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
             LinkedTask(id=id_, key=key, title=title, status=status)
             for id_, key, title, status in children.all()
         ],
-        threads=[
-            LinkedThread(id=id_, title=title, state=state) for id_, title, state in threads.all()
+        agendas=[
+            LinkedAgenda(id=id_, title=title, state=state) for id_, title, state in agendas.all()
         ],
     )
 

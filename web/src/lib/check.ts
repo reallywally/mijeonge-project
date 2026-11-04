@@ -1,49 +1,37 @@
-import type { CheckRequest, Entry, Task, TaskThreadLink, Thread } from '@/types/domain'
+import type { CheckRequest, Task, TaskAgendaLink, Agenda } from '@/types/domain'
 
 /* 확인 요청의 규칙 (docs/api/check.md) — 목업 갈래와 안건 상세가 같이 쓴다.
    서버가 정하는 것을 화면이 미리 보여 주려고 같은 셈을 한 벌만 둔다 */
 
-/** 참조는 0 ~ 20명 */
-export const CC_MAX = 20
-
 export const isPending = (c: CheckRequest) => c.confirmedAt === null
 
-/** 그 안건의 최근 결정 — decide · change 이력 중 마지막. entries 는 등록 순서다(snapshot.md) */
-export function latestDecision(entries: Entry[], threadId: string): Entry | null {
-  for (let i = entries.length - 1; i >= 0; i -= 1) {
-    const e = entries[i]
-    if (e.threadId === threadId && (e.kind === 'decide' || e.kind === 'change')) return e
-  }
-  return null
-}
-
-/** 그 결정으로 보낸 줄 — 들어온 순서(받는 사람 순서) 그대로 */
-export const checksOfEntry = (checks: CheckRequest[], entryId: string) =>
-  checks.filter((c) => c.entryId === entryId)
+/** 그 결정 판으로 보낸 줄 — 들어온 순서(받는 사람 순서) 그대로 */
+export const checksOfRev = (checks: CheckRequest[], agendaId: string, decisionRev: number) =>
+  checks.filter((c) => c.agendaId === agendaId && c.decisionRev === decisionRev)
 
 /** 받는 사람을 셀 때 쓰는 것 — 스냅샷의 작업 · 링크와 이 프로젝트의 활성 멤버 */
 export interface CheckRecipientWorld {
-  thread: Thread
+  agenda: Agenda
   tasks: Task[]
-  taskThreads: TaskThreadLink[]
+  taskAgendas: TaskAgendaLink[]
   senderId: string | null
   /** 지금 이 프로젝트에 부여된 활성 멤버인가 */
   eligible: (memberId: string) => boolean
 }
 
 /**
- * 받는 사람 — ① 연결된 작업의 담당자(작업 순) ② 참조(ccIds 순).
+ * 받는 사람 — 연결된 작업의 담당자(작업 순).
  * 겹치면 처음 자리 하나, 누른 사람은 빼고, 활성 멤버가 아니면 조용히 건너뛴다
  */
 export function checkRecipients(w: CheckRecipientWorld): string[] {
   const linked = new Set(
-    w.taskThreads.filter((l) => l.threadId === w.thread.id).map((l) => l.taskId),
+    w.taskAgendas.filter((l) => l.agendaId === w.agenda.id).map((l) => l.taskId),
   )
   const owners = w.tasks
     .filter((t) => linked.has(t.id) && t.ownerId !== null)
     .map((t) => t.ownerId as string)
   const out: string[] = []
-  for (const id of [...owners, ...w.thread.ccIds]) {
+  for (const id of owners) {
     if (id === w.senderId || out.includes(id) || !w.eligible(id)) continue
     out.push(id)
   }
@@ -54,12 +42,11 @@ export function checkRecipients(w: CheckRecipientWorld): string[] {
 export type CheckBlock = 'not-decided' | 'sent' | 'no-recipients'
 
 export function checkBlock(
-  thread: Thread,
-  decision: Entry | null,
+  agenda: Agenda,
   sent: boolean,
   recipientCount: number,
 ): CheckBlock | null {
-  if (thread.state !== 'decided' || !decision) return 'not-decided'
+  if (agenda.state !== 'decided') return 'not-decided'
   if (sent) return 'sent'
   if (recipientCount === 0) return 'no-recipients'
   return null
@@ -68,34 +55,41 @@ export function checkBlock(
 export const CHECK_BLOCK_LABEL: Record<CheckBlock, string> = {
   'not-decided': '결정된 안건만 보낼 수 있어요',
   sent: '이 결정은 보냈어요',
-  'no-recipients': '받을 사람이 없어요 — 연결 작업 담당자나 참조를 더하세요',
+  'no-recipients': '받을 사람이 없어요 — 작업을 연결하고 담당자를 정하세요',
 }
 
-/** 한 번에 보낸 묶음 — 같은 결정(entryId)으로 보낸 줄들 */
+/** 한 번에 보낸 묶음 — 같은 결정 판으로 보낸 줄들 */
 export interface CheckBatch {
-  entryId: string
-  threadId: string
+  /** 묶음을 가르는 이름 — agendaId#decisionRev */
+  key: string
+  agendaId: string
+  decisionRev: number
+  /** 보낼 때 찍어 둔 결정내용 */
+  decision: string
   senderId: string
   createdAt: string
   rows: CheckRequest[]
   confirmed: number
 }
 
-/** 결정별로 묶는다. 묶음 순서는 처음 보낸 순서 */
-export function groupByEntry(rows: CheckRequest[]): CheckBatch[] {
+/** 결정 판별로 묶는다. 묶음 순서는 처음 보낸 순서 */
+export function groupByRev(rows: CheckRequest[]): CheckBatch[] {
   const by = new Map<string, CheckBatch>()
   for (const c of rows) {
-    let b = by.get(c.entryId)
+    const key = `${c.agendaId}#${c.decisionRev}`
+    let b = by.get(key)
     if (!b) {
       b = {
-        entryId: c.entryId,
-        threadId: c.threadId,
+        key,
+        agendaId: c.agendaId,
+        decisionRev: c.decisionRev,
+        decision: c.decision,
         senderId: c.senderId,
         createdAt: c.createdAt,
         rows: [],
         confirmed: 0,
       }
-      by.set(c.entryId, b)
+      by.set(key, b)
     }
     b.rows.push(c)
     if (!isPending(c)) b.confirmed += 1

@@ -18,36 +18,22 @@ PROJECT_KEYS = {
     "status",
     "closedAt",
 }
-THREAD_KEYS = {
+# docs/api/agenda.md '모양' 그대로 (2026-11-04)
+AGENDA_KEYS = {
     "id",
     "projectId",
     "title",
     "description",
-    "options",
-    "dueDate",
+    "decision",
     "state",
     "ownerId",
     # 등록한 사람 — 기록이 없던 지난 안건은 null
     "creatorId",
-    "parentThreadId",
-    "createdAt",
+    "dueDate",
     "partId",
-    "ccIds",
-    "minutesId",
-}
-ENTRY_KEYS = {
-    "id",
-    "threadId",
-    # 결정 항목 — decide · change · refine 은 늘 있다. defer 는 null 이면 안건 전체
-    "itemId",
-    "kind",
-    "text",
-    "detail",
-    "note",
-    "ownerId",
-    # 줄을 남긴 사람 — 기록이 없던 지난 줄은 null
-    "creatorId",
     "createdAt",
+    "decidedAt",
+    "decisionRev",
     "minutesId",
 }
 TASK_KEYS = {
@@ -102,23 +88,18 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
     assert set(snap) == {
         # 고른 프로젝트 자신 — 딥링크로 바로 들어와도 헤더가 선다 (API.md Q7)
         "project",
-        "threads",
-        # 결정 항목 — 안건 등록 순 → 안건 안의 항목 순
-        "decisionItems",
-        "entries",
+        "agendas",
         "tasks",
-        "taskThreadLinks",
+        "taskAgendaLinks",
         # 파트 — 보관 포함 전부. 거르는 것은 화면이다 (docs/api/part.md)
         "parts",
         "partMembers",
     }
     assert set(snap["project"]) == PROJECT_KEYS
-    assert set(snap["threads"][0]) == THREAD_KEYS
-    assert set(snap["entries"][0]) == ENTRY_KEYS
-    assert set(snap["decisionItems"][0]) == {"id", "threadId", "title", "createdAt", "creatorId"}
+    assert set(snap["agendas"][0]) == AGENDA_KEYS
     assert set(snap["tasks"][0]) == TASK_KEYS
     assert set(snap["tasks"][3]["body"][0]) == {"id", "kind", "text", "done", "level"}
-    assert set(snap["taskThreadLinks"][0]) == {"taskId", "threadId"}
+    assert set(snap["taskAgendaLinks"][0]) == {"taskId", "agendaId"}
 
 
 async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> None:
@@ -127,7 +108,7 @@ async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> Non
     p2 = (await client.get("/api/projects/p2/snapshot")).json()
 
     assert [t["key"] for t in p2["tasks"]] == ["PAS-1", "PAS-2"]
-    assert [t["id"] for t in p2["threads"]] == ["t10"]
+    assert [t["id"] for t in p2["agendas"]] == ["t10"]
     assert all(t["projectId"] == "p1" for t in p1["tasks"])
     assert len(p1["tasks"]) == 22
 
@@ -135,18 +116,13 @@ async def test_snapshot_only_holds_one_project(client: httpx.AsyncClient) -> Non
 async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> None:
     """**배열 순서가 곧 화면 순서다.**
 
-    `stores/thread.ts` 의 `rows` 와 작업 목록에는 정렬이 아예 없다. 게다가 안건 이력은
-    같은 날짜의 줄을 배열 인덱스(seqNo)로 가른다. 그래서 등록 순서(`seq`)로 내보낸다 —
-    `created_at` 으로 세우면 안 된다. 픽스처의 t5(09-07)처럼 적은 순서와 시각 순서가 다른
+    `stores/agenda.ts` 의 `rows` 와 작업 목록에는 정렬이 아예 없다. 그래서 등록 순서(`seq`)로
+    내보낸다 — `created_at` 으로 세우면 안 된다. 픽스처의 t5(09-07)처럼 적은 순서와 시각 순서가 다른
     안건도 있다 — t1 ~ t4(09-08 ~ 09-10) 뒤에 선다.
     """
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
-    assert [t["id"] for t in snap["threads"]] == [f"t{n}" for n in range(1, 10)]
-    # 목업(`web/src/fixtures/threads.ts`)의 배열 순서 그대로
-    assert [e["id"] for e in snap["entries"]] == ["e2", "e1", "e3", "e4", "e8", "e5", "e7", "e6"]
-    # 결정 항목 — 안건 등록 순 → 안건 안의 항목 순
-    assert [i["id"] for i in snap["decisionItems"]] == ["di1", "di2", "di5", "di6", "di4", "di7"]
+    assert [t["id"] for t in snap["agendas"]] == [f"t{n}" for n in range(1, 10)]
     assert [t["key"] for t in snap["tasks"]] == [f"HW-{n}" for n in range(1, 23)]
 
 
@@ -156,21 +132,47 @@ async def test_created_at_is_utc_and_dates_are_days(client: httpx.AsyncClient) -
     시드가 픽스처의 값을 그대로 넣으므로 목업과 한 글자씩 같다.
     """
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    thread = next(t for t in snap["threads"] if t["id"] == "t1")
-    assert thread["createdAt"] == "2026-09-08T00:30:00Z"  # fixtures/threads.ts 의 t1
-    entry = next(e for e in snap["entries"] if e["id"] == "e3")
-    assert entry["createdAt"] == "2026-09-10T06:05:00Z"
+    agenda = next(t for t in snap["agendas"] if t["id"] == "t1")
+    assert agenda["createdAt"] == "2026-09-08T00:30:00Z"  # fixtures/agendas.ts 의 t1
+    assert agenda["decidedAt"] == "2026-09-09T02:00:00Z"
+    assert agenda["dueDate"] == "2026-09-12"
 
 
-async def test_entry_detail_is_flattened_to_strings(client: httpx.AsyncClient) -> None:
+async def test_seed_decisions_follow_the_migration_rule(client: httpx.AsyncClient) -> None:
+    """결정내용 · 상태 · 결정 시각 · 판 — 이행 규칙(0032)으로 지난 시드에서 만든 값 그대로."""
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    decide = next(e for e in snap["entries"] if e["id"] == "e3")
-    assert decide["detail"] == [
-        "postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다",
-        "supabase 는 비용 때문에 뺀다",
-    ]
-    outside = next(e for e in snap["entries"] if e["id"] == "e1")
-    assert outside["detail"] == []
+    got = {
+        t["id"]: (t["decision"], t["state"], t["decidedAt"], t["decisionRev"])
+        for t in snap["agendas"]
+    }
+    assert got["t1"] == ("우분투 최신 버전으로 한다", "decided", "2026-09-09T02:00:00Z", 1)
+    assert got["t2"] == (
+        "mysql 을 쓴다\n"
+        "- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n"
+        "- supabase 는 비용 때문에 뺀다",
+        "decided",
+        "2026-09-10T06:05:00Z",
+        1,
+    )
+    assert got["t3"] == ("", "open", None, 0)
+    assert got["t5"] == (
+        "요청(in) 항목: 계약번호 · 상품코드 · 가입일 셋을 넘긴다",
+        "open",
+        None,
+        1,
+    )
+    assert got["t6"] == (
+        "테스트 기간: 전체 일정은 그대로 두고 테스트 기간만 2주 줄인다\n"
+        "- 늘어난 개발 기간은 그대로 둔다\n"
+        "- 통합 테스트를 3주에서 1주로 줄인다\n"
+        "\n"
+        "전체 일정: 전체 일정은 미루지 않는다",
+        "decided",
+        "2026-09-15T07:00:00Z",
+        1,
+    )
+    for agenda_id in ("t4", "t7", "t8", "t9"):
+        assert got[agenda_id] == ("", "queued", None, 0)
 
 
 async def test_task_body_keeps_its_order(client: httpx.AsyncClient) -> None:
@@ -188,10 +190,10 @@ async def test_task_body_keeps_its_order(client: httpx.AsyncClient) -> None:
     assert blocked["status"] == "blocked"
 
 
-async def test_task_thread_links(client: httpx.AsyncClient) -> None:
+async def test_task_agenda_links(client: httpx.AsyncClient) -> None:
     snap = (await client.get("/api/projects/p1/snapshot")).json()
-    assert {"taskId": "k4", "threadId": "t1"} in snap["taskThreadLinks"]
-    assert len(snap["taskThreadLinks"]) == 6
+    assert {"taskId": "k4", "agendaId": "t1"} in snap["taskAgendaLinks"]
+    assert len(snap["taskAgendaLinks"]) == 6
 
 
 async def test_unknown_project_is_404(client: httpx.AsyncClient) -> None:

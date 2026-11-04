@@ -181,7 +181,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 - **준비 · 종료는 표시만 한다** — 준비 중 · 닫힌 프로젝트에도 쓰기는 그대로 된다 (막는 것은 나중에 정한다)
 - `GET /api/projects` 는 `active` → `planned` → `closed` 순서로, 그 안에서는 전과 같은 순서(id)로 낸다
 - **지운 프로젝트는 어디서도 없는 것이다** — 목록에서 빠지고, 그 프로젝트를 가리키는 모든 경로
-  (`/api/projects/{id}/...` · 그 소속의 `/api/tasks/...` · `/threads/...` · `/comments/...` · `/parts/...` ·
+  (`/api/projects/{id}/...` · 그 소속의 `/api/tasks/...` · `/agendas/...`(2026-11-04 전 `/threads/...`) · `/comments/...` · `/parts/...` ·
   `/checks/...` · `/minutes/...` · `/reports/...` · `/tests/...`)가 **시스템 관리자에게도** 원래 없을 때와 같은 404 다.
   `Me.projectRoles` · 확인 요청 배지(`/api/checks/pending-count`)에서도 빠진다
 - 레코드 · 부여 · `taskKeyPrefix` 는 남는다 — 지운 프로젝트의 접두사로 새 프로젝트를 만들면 409 `PROJECT_PREFIX_TAKEN` (되살릴 여지). 되살리는 API 는 아직 없다
@@ -192,16 +192,16 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | --- | --- |
 | `GET /api/projects` | **내가 볼 수 있는 프로젝트만.** 시스템 관리자는 전부(지운 것은 빼고). 빈 배열이면 화면은 '부여받은 프로젝트가 없습니다 — 관리자에게 요청하세요' 를 띄운다(시스템 관리자만 등록 화면으로 간다) |
 | `POST /api/projects` | 시스템 관리자만. 그 밖은 403 `FORBIDDEN` |
-| `/api/projects/{projectId}/...` 전부 · `/api/tasks/...` · `/api/threads/...` · `/api/comments/...` | 그 프로젝트에 부여받았거나 시스템 관리자여야 한다. 아니면 404 (`PROJECT_NOT_FOUND` · `TASK_NOT_FOUND` · `THREAD_NOT_FOUND` · `COMMENT_NOT_FOUND` — 원래 없을 때와 같은 코드) |
+| `/api/projects/{projectId}/...` 전부 · `/api/tasks/...` · `/api/agendas/...` · `/api/comments/...` | 그 프로젝트에 부여받았거나 시스템 관리자여야 한다. 아니면 404 (`PROJECT_NOT_FOUND` · `TASK_NOT_FOUND` · `AGENDA_NOT_FOUND` · `COMMENT_NOT_FOUND` — 원래 없을 때와 같은 코드) |
 | 담당자 지정 (`ownerId` — 작업 · 안건 등록 · 수정 · 한 번에 등록 · 이력) | **새로 지정하는** 담당자는 그 프로젝트의 활성 멤버여야 한다. 아니면 지금처럼 400(`TASK_OWNER_NOT_FOUND` 등 지금 코드 그대로). 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다 |
 | `POST /api/tasks/{taskId}/comments` | **`authorId` 를 받지 않는다** — 작성자는 로그인한 사람이다. 보내도 무시한다 |
 | `PATCH` · `DELETE /api/comments/{commentId}` | 고치기는 **작성자만**, 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자. 그 밖은 403 `FORBIDDEN` |
-| 작업 고치기 — `PATCH /api/tasks/{taskId}` · `PATCH …/lines/{lineId}` · `PUT` · `DELETE …/threads/{threadId}` | **생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 작업으로 본다 — 담당자는 남에게 넘길 수 있고, 남은 자기를 담당자로 넣을 수 없다. 하위 작업 등록(`parentId`)은 상위를 고치는 것이 아니라 권한을 안 본다. 댓글 · 확인 요청 규칙은 그대로 |
+| 작업 고치기 — `PATCH /api/tasks/{taskId}` · `PATCH …/lines/{lineId}` · `PUT` · `DELETE …/agendas/{agendaId}` | **생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 작업으로 본다 — 담당자는 남에게 넘길 수 있고, 남은 자기를 담당자로 넣을 수 없다. 하위 작업 등록(`parentId`)은 상위를 고치는 것이 아니라 권한을 안 본다. 댓글 · 확인 요청 규칙은 그대로 |
 | 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. 권한을 먼저 보고 그다음 하위 작업(409 `TASK_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 작업은 없는 작업과 같은 404 로 간다 (`API.md` 엔드포인트 표) |
-| 안건 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}` | **생성자(`Thread.creatorId`) · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02) — 작업과 달리 **담당자도 지운다**. 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 안건으로 본다(작업과 같다). 지우기는 권한을 먼저 보고 그다음 떼어낸 하위 안건(409 `THREAD_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 안건은 없는 안건과 같은 404 로 간다(그 아래 경로 · 그 안건의 확인 요청 id 경로까지) |
-| 이력 줄 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}/entries/{entryId}` | **그 줄 생성자(`Entry.creatorId`) · 안건 생성자 · 안건 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 지운 줄은 404 `ENTRY_NOT_FOUND` |
-| 결정 항목 — `POST` · `PATCH` · `DELETE /api/threads/{threadId}/items[/{itemId}]` | 더하기는 **프로젝트 멤버 누구나**(줄 남기기와 같다). 이름 바꾸기 · 지우기는 이력 줄과 같은 기준 — **그 항목 생성자(`DecisionItem.creatorId`) · 안건 생성자 · 안건 담당자 · 그 프로젝트 관리자 · 시스템 관리자**. 그 밖은 403 `FORBIDDEN`. 지운 항목은 404 `ITEM_NOT_FOUND` (2026-11-03) |
-| 이력 줄 남기기 — `POST /api/threads/{threadId}/entries` | **바뀌지 않는다** — 프로젝트 멤버 누구나(회의에서 누구든 결정을 적는다). `creatorId` 는 요청한 사람으로 찍는다 (2026-11-02) |
+| 안건 고치기 · 지우기 — `PATCH` · `DELETE /api/agendas/{agendaId}` (2026-11-04 `/api/threads/…` 에서) | **생성자(`Agenda.creatorId`) · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02) — 작업과 달리 **담당자도 지운다**. 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 안건으로 본다(작업과 같다). **결정내용 · 상태를 바꾸는 것도 PATCH 라 같은 넷만 된다**(2026-11-04) — 회의록 반영의 `updates` 도 같다(403 `FORBIDDEN`, `detail` 은 `updates.N.agendaId`). 지우기는 논리 삭제다 — 지운 안건은 없는 안건과 같은 404 로 간다(그 아래 경로 · 그 안건의 확인 요청 id 경로까지). ~~떼어낸 하위 안건 409 `THREAD_HAS_CHILDREN`~~ 은 하위 안건을 걷어 없어졌다 |
+| ~~이력 줄 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}/entries/{entryId}`~~ | **2026-11-04 걷음** — 이력 줄(`Entry`)이 없어졌다(`agenda.md`). 옛 규칙: 그 줄 생성자 · 안건 생성자 · 안건 담당자 · 관리자 |
+| ~~결정 항목 — `/api/threads/{threadId}/items[/{itemId}]`~~ | **2026-11-04 걷음** — 결정 항목이 없어졌다 |
+| ~~이력 줄 남기기 — `POST /api/threads/{threadId}/entries`~~ | **2026-11-04 걷음** — 멤버 누구나 결정을 적던 길이 없어졌다. 결정은 위 PATCH 로만 바뀐다 |
 | 챗봇 `propose_tasks` · `list_members` 도구 | 그 프로젝트의 활성 멤버만 담당자 후보로 본다 |
 | `GET /api/members` | `Member` 에 `active` 가 늘어난다. 로그인만 하면 누구나 부를 수 있다 |
 
@@ -214,7 +214,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | 400 | `INVALID_CREDENTIALS` | 내 비밀번호 바꾸기에서 현재 비밀번호가 틀림 |
 | 403 | `FORBIDDEN` | 로그인은 했지만 권한이 모자람 |
 | 409 | `TASK_HAS_CHILDREN` | 하위 작업이 있는 작업을 지움 (2026-11-02) |
-| 409 | `THREAD_HAS_CHILDREN` | 떼어낸 하위 안건이 있는 안건을 지움 (2026-11-02) |
+| ~~409~~ | ~~`THREAD_HAS_CHILDREN`~~ | 떼어낸 하위 안건이 있는 안건을 지움 (2026-11-02) — 하위 안건을 걷어 안 나온다 (2026-11-04) |
 | 429 | `TOO_MANY_ATTEMPTS` | 로그인 시도가 IP 당 분당 10회를 넘음 |
 | 404 | `MEMBER_NOT_FOUND` | 없는 멤버 |
 | 409 | `EMAIL_TAKEN` | 이미 쓰는 이메일 |

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Member
 from app.services import chat as chat_service
-from tests.conftest import AsMember, decide
+from tests.conftest import AsMember
 from tests.test_contract_types import contract_keys
 
 
@@ -46,7 +46,7 @@ HIDDEN = [
     ),
     ("POST", "/api/projects/p1/tasks", {"title": "몰래"}, "PROJECT_NOT_FOUND"),
     ("POST", "/api/projects/p1/tasks/batch", {"tasks": []}, "PROJECT_NOT_FOUND"),
-    ("POST", "/api/projects/p1/threads", {"title": "몰래"}, "PROJECT_NOT_FOUND"),
+    ("POST", "/api/projects/p1/agendas", {"title": "몰래"}, "PROJECT_NOT_FOUND"),
     ("GET", "/api/projects/p1/members", None, "PROJECT_NOT_FOUND"),
     ("PATCH", "/api/projects/p1", {"name": "몰래"}, "PROJECT_NOT_FOUND"),
     ("PATCH", "/api/tasks/k4", {"title": "몰래"}, "TASK_NOT_FOUND"),
@@ -55,12 +55,10 @@ HIDDEN = [
     ("POST", "/api/tasks/k4/move", {"parentId": None, "beforeId": None}, "TASK_NOT_FOUND"),
     ("GET", "/api/tasks/k4/comments", None, "TASK_NOT_FOUND"),
     ("POST", "/api/tasks/k4/comments", {"body": "몰래"}, "TASK_NOT_FOUND"),
-    ("PATCH", "/api/threads/t1", {"title": "몰래"}, "THREAD_NOT_FOUND"),
-    ("POST", "/api/threads/t1/entries", {"kind": "raise", "text": "몰래"}, "THREAD_NOT_FOUND"),
-    ("PATCH", "/api/threads/t1/entries/e1", {"text": "몰래"}, "THREAD_NOT_FOUND"),
-    ("DELETE", "/api/threads/t1/entries/e1", None, "THREAD_NOT_FOUND"),
-    ("DELETE", "/api/threads/t1", None, "THREAD_NOT_FOUND"),
-    ("GET", "/api/threads/t1/history", None, "THREAD_NOT_FOUND"),
+    ("PATCH", "/api/agendas/t1", {"title": "몰래"}, "AGENDA_NOT_FOUND"),
+    ("POST", "/api/agendas/t1/checks", None, "AGENDA_NOT_FOUND"),
+    ("DELETE", "/api/agendas/t1", None, "AGENDA_NOT_FOUND"),
+    ("GET", "/api/agendas/t1/history", None, "AGENDA_NOT_FOUND"),
     ("PATCH", "/api/comments/cm1", {"body": "몰래"}, "COMMENT_NOT_FOUND"),
     ("DELETE", "/api/comments/cm1", None, "COMMENT_NOT_FOUND"),
 ]
@@ -88,7 +86,7 @@ async def test_ungranted_project_is_404(
     assert missing.json() == res.json()
 
 
-async def test_link_to_a_thread_in_an_ungranted_project_is_404(
+async def test_link_to_a_agenda_in_an_ungranted_project_is_404(
     client: httpx.AsyncClient, as_member: AsMember
 ) -> None:
     """작업은 보여도 안건이 안 보이면 안건이 없는 것이다.
@@ -97,14 +95,14 @@ async def test_link_to_a_thread_in_an_ungranted_project_is_404(
     """
     await _revoke(client, "p1", "u2")
     u2 = await as_member("u2")
-    res = await u2.put("/api/tasks/x1/threads/t1")
+    res = await u2.put("/api/tasks/x1/agendas/t1")
     assert res.status_code == 404
-    assert res.json()["code"] == "THREAD_NOT_FOUND"
+    assert res.json()["code"] == "AGENDA_NOT_FOUND"
 
     # 둘 다 보이는 시스템 관리자에게는 원래대로 400 이다
-    admin = await client.put("/api/tasks/x1/threads/t1")
+    admin = await client.put("/api/tasks/x1/agendas/t1")
     assert admin.status_code == 400
-    assert admin.json()["code"] == "TASK_THREAD_LINK_OTHER_PROJECT"
+    assert admin.json()["code"] == "TASK_AGENDA_LINK_OTHER_PROJECT"
 
 
 # --- 부여는 받았는데 모자라면 403 ----------------------------------------------------
@@ -126,7 +124,7 @@ async def test_user_cannot_manage(as_member: AsMember) -> None:
     assert (await u2.get("/api/projects/p1/members")).status_code == 200
     assert (await u2.post("/api/projects/p1/tasks", json={"title": "할 일"})).status_code == 201
     # 안건은 u2 가 맡은 t9 — 남의 안건은 403 이다(아래 '안건')
-    assert (await u2.patch("/api/threads/t9", json={"title": "바꾼 제목"})).status_code == 200
+    assert (await u2.patch("/api/agendas/t9", json={"title": "바꾼 제목"})).status_code == 200
 
 
 async def test_project_admin_manages_only_their_project(as_member: AsMember) -> None:
@@ -262,20 +260,14 @@ async def test_new_owner_must_be_an_active_project_member(
         patched = await client.patch("/api/tasks/k1", json={"ownerId": owner})
         assert patched.json()["code"] == "TASK_OWNER_NOT_FOUND", owner
 
-        thread = await client.post(
-            "/api/projects/p1/threads", json={"title": "안건", "ownerId": owner}
+        agenda = await client.post(
+            "/api/projects/p1/agendas", json={"title": "안건", "ownerId": owner}
         )
-        assert thread.status_code == 400
-        assert thread.json()["code"] == "THREAD_OWNER_NOT_FOUND"
+        assert agenda.status_code == 400
+        assert agenda.json()["code"] == "AGENDA_OWNER_NOT_FOUND"
 
-        thread_patch = await client.patch("/api/threads/t4", json={"ownerId": owner})
-        assert thread_patch.json()["code"] == "THREAD_OWNER_NOT_FOUND"
-
-        entry = await client.post(
-            "/api/threads/t4/entries", json={"kind": "decide", "text": "정함", "ownerId": owner}
-        )
-        assert entry.status_code == 400
-        assert entry.json()["code"] == "ENTRY_OWNER_NOT_FOUND"
+        agenda_patch = await client.patch("/api/agendas/t4", json={"ownerId": owner})
+        assert agenda_patch.json()["code"] == "AGENDA_OWNER_NOT_FOUND"
 
     batch = await client.post(
         "/api/projects/p1/tasks/batch",
@@ -393,8 +385,8 @@ async def _edits(c: httpx.AsyncClient, task: dict[str, Any], done: bool) -> list
     return [
         (await c.patch(f"/api/tasks/{task_id}", json={"priority": "high"})).status_code,
         (await c.patch(f"/api/tasks/{task_id}/lines/{line_id}", json={"done": done})).status_code,
-        (await c.put(f"/api/tasks/{task_id}/threads/t1")).status_code,
-        (await c.delete(f"/api/tasks/{task_id}/threads/t1")).status_code,
+        (await c.put(f"/api/tasks/{task_id}/agendas/t1")).status_code,
+        (await c.delete(f"/api/tasks/{task_id}/agendas/t1")).status_code,
     ]
 
 
@@ -411,8 +403,8 @@ async def test_task_edit_is_for_creator_owner_and_admins(as_member: AsMember) ->
         await u3.patch(
             f"/api/tasks/{task['id']}/lines/{task['body'][0]['id']}", json={"done": True}
         ),
-        await u3.put(f"/api/tasks/{task['id']}/threads/t1"),
-        await u3.delete(f"/api/tasks/{task['id']}/threads/t1"),
+        await u3.put(f"/api/tasks/{task['id']}/agendas/t1"),
+        await u3.delete(f"/api/tasks/{task['id']}/agendas/t1"),
     ):
         assert res.status_code == 403
         assert res.json()["code"] == "FORBIDDEN"
@@ -494,44 +486,34 @@ async def test_task_with_children_is_409(client: httpx.AsyncClient, as_member: A
     assert (await client.delete("/api/tasks/k12")).status_code == 204
 
 
-# --- 안건 · 이력 줄 — 고치기 · 지우기 (docs/api/auth.md '안건') -----------------------------
+# --- 안건 — 고치기 · 지우기 (docs/api/auth.md '안건') -----------------------------------------
 # 작업과 달리 담당자도 지운다 (2026-11-02 사용자 결정)
 
 
-async def _thread_by(c: httpx.AsyncClient, owner_id: str | None) -> dict[str, Any]:
-    res = await c.post("/api/projects/p1/threads", json={"title": "권한 보기", "ownerId": owner_id})
+async def _agenda_by(c: httpx.AsyncClient, owner_id: str | None) -> dict[str, Any]:
+    res = await c.post("/api/projects/p1/agendas", json={"title": "권한 보기", "ownerId": owner_id})
     assert res.status_code == 201, res.json()
-    thread: dict[str, Any] = res.json()
-    return thread
+    agenda: dict[str, Any] = res.json()
+    return agenda
 
 
-async def _entry_on(c: httpx.AsyncClient, thread_id: str) -> str:
-    res = await c.post(f"/api/threads/{thread_id}/entries", json={"kind": "defer", "text": "줄"})
-    assert res.status_code == 201, res.json()
-    entry_id: str = res.json()["entry"]["id"]
-    return entry_id
-
-
-async def test_thread_edit_and_delete_are_for_creator_owner_and_admins(
+async def test_agenda_edit_and_delete_are_for_creator_owner_and_admins(
     as_member: AsMember,
 ) -> None:
     """u2 가 만들고 u4 가 맡은 안건 — u1 은 p1 관리자, admin 은 시스템 관리자, u3 는 남."""
     u2 = await as_member("u2")
-    thread = await _thread_by(u2, "u4")
-    assert thread["creatorId"] == "u2" and thread["ownerId"] == "u4"
+    agenda = await _agenda_by(u2, "u4")
+    assert agenda["creatorId"] == "u2" and agenda["ownerId"] == "u4"
     for who in ("u2", "u4", "u1", "admin"):
         c = await as_member(who)
         assert (
-            await c.patch(f"/api/threads/{thread['id']}", json={"title": who})
+            await c.patch(f"/api/agendas/{agenda['id']}", json={"title": who})
         ).status_code == 200
 
     u3 = await as_member("u3")
-    entry_id = await _entry_on(u2, thread["id"])
     for method, url, body in [
-        ("PATCH", f"/api/threads/{thread['id']}", {"title": "남이 고침"}),
-        ("DELETE", f"/api/threads/{thread['id']}", None),
-        ("PATCH", f"/api/threads/{thread['id']}/entries/{entry_id}", {"text": "남이 고침"}),
-        ("DELETE", f"/api/threads/{thread['id']}/entries/{entry_id}", None),
+        ("PATCH", f"/api/agendas/{agenda['id']}", {"title": "남이 고침"}),
+        ("DELETE", f"/api/agendas/{agenda['id']}", None),
     ]:
         res = await u3.request(method, url, json=body)
         assert res.status_code == 403, (method, url)
@@ -539,49 +521,36 @@ async def test_thread_edit_and_delete_are_for_creator_owner_and_admins(
 
     # 지우기는 넷 다 된다 — 담당자도
     for who in ("u2", "u4", "u1", "admin"):
-        made = await _thread_by(u2, "u4")
-        res = await (await as_member(who)).delete(f"/api/threads/{made['id']}")
+        made = await _agenda_by(u2, "u4")
+        res = await (await as_member(who)).delete(f"/api/agendas/{made['id']}")
         assert res.status_code == 204, who
-        gone = await (await as_member(who)).patch(f"/api/threads/{made['id']}", json={})
-        assert gone.status_code == 404 and gone.json()["code"] == "THREAD_NOT_FOUND"
+        gone = await (await as_member(who)).patch(f"/api/agendas/{made['id']}", json={})
+        assert gone.status_code == 404 and gone.json()["code"] == "AGENDA_NOT_FOUND"
 
 
-async def test_anyone_in_the_project_may_add_an_entry(as_member: AsMember) -> None:
-    """남기기는 그대로 — 회의에서 누구든 결정을 적는다."""
-    thread = await _thread_by(await as_member("u2"), None)
-    res = await decide(await as_member("u3"), thread["id"], "정함")
-    assert res.status_code == 201
-    assert res.json()["entry"]["creatorId"] == "u3"
-
-
-async def test_entry_edit_is_for_its_creator_and_thread_editors(as_member: AsMember) -> None:
-    """u2 가 만든 담당 없는 안건에 u3 가 남긴 줄 — u4 는 남이다."""
-    thread = await _thread_by(await as_member("u2"), None)
-    entry_id = await _entry_on(await as_member("u3"), thread["id"])
-    url = f"/api/threads/{thread['id']}/entries/{entry_id}"
-
-    u4 = await as_member("u4")
-    for method, body in (("PATCH", {"text": "남"}), ("DELETE", None)):
-        res = await u4.request(method, url, json=body)
-        assert res.status_code == 403 and res.json()["code"] == "FORBIDDEN", method
-    # 줄을 남긴 사람은 안건을 못 고쳐도 자기 줄은 고친다
+async def test_decision_and_state_are_for_the_same_four(as_member: AsMember) -> None:
+    """결정내용 · 상태를 바꾸는 것도 PATCH 다 — 이력 줄을 누구나 남기던 길은 없어졌다."""
+    agenda = await _agenda_by(await as_member("u2"), "u4")
+    url = f"/api/agendas/{agenda['id']}"
     u3 = await as_member("u3")
-    assert (await u3.patch(f"/api/threads/{thread['id']}", json={"title": "x"})).status_code == 403
-    for who in ("u3", "u2", "u1", "admin"):
-        res = await (await as_member(who)).patch(url, json={"text": f"{who} 고침"})
+    for body in ({"decision": "정함"}, {"state": "decided"}):
+        res = await u3.patch(url, json=body)
+        assert res.status_code == 403 and res.json()["code"] == "FORBIDDEN", body
+    for who in ("u2", "u4", "u1", "admin"):
+        res = await (await as_member(who)).patch(url, json={"decision": f"{who} 정함"})
         assert res.status_code == 200, who
+    # 회의록 반영도 같은 넷만 기존 안건의 결정을 갈아끼운다
+    res = await u3.post(
+        "/api/minutes/m1/apply",
+        json={"updates": [{"agendaId": agenda["id"], "decision": "몰래", "state": "decided"}]},
+    )
+    assert res.status_code == 403 and res.json()["code"] == "FORBIDDEN"
 
-    # 안건 담당자도 남의 줄을 고치고 지운다
-    owned = await _thread_by(await as_member("u2"), "u4")
-    other = await _entry_on(await as_member("u3"), owned["id"])
-    res = await u4.delete(f"/api/threads/{owned['id']}/entries/{other}")
-    assert res.status_code == 200
 
-
-async def test_thread_edit_judges_the_thread_before_the_change(as_member: AsMember) -> None:
-    thread = await _thread_by(await as_member("u2"), "u4")
+async def test_agenda_edit_judges_the_agenda_before_the_change(as_member: AsMember) -> None:
+    agenda = await _agenda_by(await as_member("u2"), "u4")
     u3 = await as_member("u3")
-    url = f"/api/threads/{thread['id']}"
+    url = f"/api/agendas/{agenda['id']}"
     assert (await u3.patch(url, json={"ownerId": "u3"})).status_code == 403
     u4 = await as_member("u4")
     handed = await u4.patch(url, json={"ownerId": "u3"})
@@ -590,8 +559,8 @@ async def test_thread_edit_judges_the_thread_before_the_change(as_member: AsMemb
     assert (await u3.patch(url, json={"title": "새 담당"})).status_code == 200
 
 
-async def test_thread_without_a_creator_is_for_owner_and_admins(as_member: AsMember) -> None:
+async def test_agenda_without_a_creator_is_for_owner_and_admins(as_member: AsMember) -> None:
     """시드 t4 는 담당도 등록한 사람도 없다 — 관리자만 고친다."""
     u2 = await as_member("u2")
-    assert (await u2.patch("/api/threads/t4", json={"title": "x"})).status_code == 403
-    assert (await (await as_member("u1")).patch("/api/threads/t4", json={})).status_code == 200
+    assert (await u2.patch("/api/agendas/t4", json={"title": "x"})).status_code == 403
+    assert (await (await as_member("u1")).patch("/api/agendas/t4", json={})).status_code == 200

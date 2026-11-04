@@ -35,7 +35,7 @@
    경로를 잇느라 선 조상(작업 규칙 3)의 링크는 끌어오지 않는다 — 남의 파트 묶음 아래 작업 하나를 맡았다고 그 파트의 결정이 다 딸려 오면 안 된다
 
 - 규칙은 `web/src/lib/` 의 순수 함수 하나에 둔다. 목록 · 칸반 · 간트 · 안건 목록이 같이 쓴다
-- 상세 화면을 주소(`/tasks/:id` · `/threads/:id`)로 직접 열면 '내 파트' 여도 **연다** — 거르는 것은 목록이다
+- 상세 화면을 주소(`/tasks/:id` · `/agendas/:id`(2026-11-04 전 `/threads/:id`))로 직접 열면 '내 파트' 여도 **연다** — 거르는 것은 목록이다
 - 보관한 파트도 규칙은 같다(그 파트의 옛 작업은 그 파트 사람에게 계속 보인다)
 
 ## 테이블
@@ -46,7 +46,7 @@ part          id · project_id → project(cascade) · name · active · created
 part_member   part_id → part(cascade) · member_id → member · created_at
               pk(part_id, member_id)
 task.part_id    null 가능. FK (part_id, project_id) → part(id, project_id)
-thread.part_id  null 가능. FK (part_id, project_id) → part(id, project_id)
+agenda.part_id  null 가능. FK (part_id, project_id) → part(id, project_id)   (2026-11-04 thread → agenda)
 ```
 
 - 파트는 **같은 프로젝트**의 것만 단다 — 부모 · 링크와 같은 방식(복합 FK · `decisions.md` Q13 · Q16)
@@ -72,7 +72,7 @@ export interface PartMember {
 
 // 늘어나는 필드
 interface Task   { partId: string | null }
-interface Thread { partId: string | null }
+interface Agenda { partId: string | null }   // 2026-11-04 전 Thread
 
 // ProjectSnapshot 에 키 둘이 는다
 interface ProjectSnapshot { parts: Part[]; partMembers: PartMember[] }
@@ -98,9 +98,9 @@ interface ProjectSnapshot { parts: Part[]; partMembers: PartMember[] }
 | --- | --- |
 | `POST .../tasks` · `POST .../tasks/batch` | `partId` 를 받는다. **키를 안 보내면 상위 작업의 `partId` 를 따른다**(최상위면 `null`). `null` 을 보내면 공통. 일괄 등록은 배열 순서대로 이 규칙을 적용한다 — 챗봇 초안은 `partId` 를 안 실으니 부모를 따른다 |
 | `PATCH /api/tasks/{taskId}` | `partId` 를 바꾼다(`null` 로 공통). **하위 작업은 따라 바뀌지 않는다** — 필요하면 화면이 하나씩 바꾼다 |
-| `POST .../threads` · `PATCH /api/threads/{threadId}` | `partId` 를 받는다. 등록에서 안 보내면 `null` |
+| `POST .../agendas` · `PATCH /api/agendas/{agendaId}` (2026-11-04 전 `threads`) | `partId` 를 받는다. 등록에서 안 보내면 `null` |
 | 위 전부 | 이 프로젝트의 파트가 아니면 400 `PART_NOT_FOUND`, **새로** 다는 파트가 보관이면 400 `PART_ARCHIVED`. 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다 |
-| `GET .../snapshot` | `parts` · `partMembers` 가 는다. `Task` · `Thread` 에 `partId` |
+| `GET .../snapshot` | `parts` · `partMembers` 가 는다. `Task` · `Agenda` 에 `partId` |
 | `DELETE /api/projects/{projectId}/members/{memberId}` | 그 프로젝트 파트들의 `part_member` 도 지운다 |
 
 ## 오류 코드 (늘어나는 것)

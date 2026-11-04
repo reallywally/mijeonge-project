@@ -42,7 +42,7 @@ const names: HistoryNames = {
   member: (id) => data.memberName(id),
   part: (id) => partStore.partName(id),
   task: (id) => data.allTasks.find((t) => t.id === id)?.key ?? null,
-  thread: (id) => data.allThreads.find((t) => t.id === id)?.title ?? null,
+  agenda: (id) => data.allAgendas.find((t) => t.id === id)?.title ?? null,
   test: (id) => testStore.byId[id]?.key ?? null,
 }
 

@@ -19,9 +19,9 @@ import {
   minutesRows,
   MOCK_PASSWORD,
   mockMinutesDraft,
-  taskThreadLinks,
+  taskAgendaLinks,
 } from '@/fixtures'
-import { toMinutesApplyInput } from '@/lib/minutes'
+import { toMinutesApplyInput, updateKey } from '@/lib/minutes'
 import type { MinutesApplyInput, MinutesEvent, MinutesInput } from '@/types/domain'
 
 /* 회의록 api — 게시판 CRUD · 권한, 목업 갈래의 스트림 · 검사 · 생성 순서 · 출처, 서버 갈래의 경로 · SSE 읽기 (docs/api/minutes.md) */
@@ -55,9 +55,11 @@ const fullInput = (): MinutesApplyInput =>
   toMinutesApplyInput(
     structuredClone(mockMinutesDraft),
     Object.fromEntries(
-      [...mockMinutesDraft.threads, ...mockMinutesDraft.entries, ...mockMinutesDraft.tasks].map(
-        (r) => [r.tempId, true],
-      ),
+      [
+        ...mockMinutesDraft.agendas.map((t) => t.tempId),
+        ...mockMinutesDraft.updates.map((u) => updateKey(u.agendaId)),
+        ...mockMinutesDraft.tasks.map((t) => t.tempId),
+      ].map((k) => [k, true]),
     ),
   )
 
@@ -73,8 +75,8 @@ async function rejected(p: Promise<unknown>) {
 describe('픽스처', () => {
   it('quote 는 예시 회의록에서 글자 그대로 옮긴 것이다', () => {
     const d = mockMinutesDraft
-    for (const r of [...d.threads, ...d.entries, ...d.tasks])
-      expect(MINUTES_EXAMPLE, r.tempId).toContain(r.quote)
+    for (const r of [...d.agendas, ...d.tasks]) expect(MINUTES_EXAMPLE, r.tempId).toContain(r.quote)
+    for (const u of d.updates) expect(MINUTES_EXAMPLE, u.agendaId).toContain(u.quote)
   })
 
   it('시드 회의록 m1 — p1 · u1 · 본문은 예시 글 그대로 · 요약 없음', () => {
@@ -91,11 +93,17 @@ describe('픽스처', () => {
     ])
   })
 
-  it('계약대로 — 새 안건 2(하나는 미룸) · t3 에 미룸 1 · 작업 3(n1 · t2 · ownerHint 만)', () => {
+  it('계약대로 — 새 안건 2(대기 · 논의중) · t2 결정내용 갈아끼우기 1 · 작업 3(n1 · t2 · ownerHint 만)', () => {
     const d = mockMinutesDraft
-    expect(d.threads.map((t) => t.entry?.kind ?? null)).toEqual([null, 'defer'])
-    expect(d.entries.map((e) => [e.threadId, e.kind])).toEqual([['t3', 'defer']])
-    expect(d.tasks.map((t) => [t.threadTempIds, t.threadIds, t.ownerId, t.ownerHint])).toEqual([
+    expect(d.agendas.map((t) => [t.state, t.decision])).toEqual([
+      ['queued', ''],
+      ['open', ''],
+    ])
+    /* 지금 결정내용에 이번 회의 것을 합친 글 */
+    expect(d.updates.map((u) => [u.agendaId, u.state])).toEqual([['t2', 'decided']])
+    expect(d.updates[0].decision).toContain('mysql 을 쓴다\n')
+    expect(d.updates[0].decision).toContain('- 운영 DB 도 같은 버전으로 구성한다')
+    expect(d.tasks.map((t) => [t.agendaTempIds, t.agendaIds, t.ownerId, t.ownerHint])).toEqual([
       [['n1'], [], 'u4', ''],
       [[], ['t2'], 'u3', ''],
       [[], [], null, '최 선임'],
@@ -259,22 +267,25 @@ describe('목업 apply', () => {
     await signIn('u1')
   })
 
-  it('새 안건 → 그 이력 → 기존 안건 이력 → 작업 → 링크 순으로 만든다', async () => {
+  it('새 안건 → 기존 안건 갈아끼우기 → 작업 → 링크 순으로 만든다', async () => {
     const r = await applyMinutes('m1', fullInput())
 
-    expect(r.threads.map((t) => [t.title, t.state, t.partId, t.ownerId])).toEqual([
-      ['가상비서 대화 로그 보관 기간', 'queued', null, 'u4'],
-      /* 미룸 이력이 붙어 논의중으로 */
-      ['기간계 테스트 데이터 마스킹 범위', 'open', null, 'u2'],
+    expect(r.agendas.map((t) => [t.title, t.state, t.decision, t.partId, t.ownerId])).toEqual([
+      ['가상비서 대화 로그 보관 기간', 'queued', '', null, 'u4'],
+      ['기간계 테스트 데이터 마스킹 범위', 'open', '', null, 'u2'],
     ])
-    expect(r.threadIdByTempId).toEqual({ n1: r.threads[0].id, n2: r.threads[1].id })
-    /* 새 안건 것 먼저, 그다음 기존 안건 것 */
-    expect(r.entries.map((e) => [e.threadId, e.kind])).toEqual([
-      [r.threads[1].id, 'defer'],
-      ['t3', 'defer'],
+    expect(r.agendas.map((t) => [t.decidedAt, t.decisionRev])).toEqual([
+      [null, 0],
+      [null, 0],
     ])
-    /* t3 는 이미 논의중이라 미룸으로 바뀌지 않는다 */
-    expect(r.updatedThreads).toEqual([])
+    expect(r.agendaIdByTempId).toEqual({ n1: r.agendas[0].id, n2: r.agendas[1].id })
+    /* t2 — 결정내용이 통째로 바뀌어 판이 오른다. 이미 결정이라 정한 때는 그대로 */
+    expect(r.updatedAgendas.map((t) => [t.id, t.state, t.decisionRev, t.decidedAt])).toEqual([
+      ['t2', 'decided', 2, '2026-09-10T06:05:00Z'],
+    ])
+    expect(r.updatedAgendas[0].decision).toBe(mockMinutesDraft.updates[0].decision)
+    expect(r).not.toHaveProperty('entries')
+    expect(r).not.toHaveProperty('decisionItems')
     expect(r.tasks.map((t) => [t.key, t.title, t.status, t.body, t.ownerId, t.due])).toEqual([
       ['HW-23', '가상비서 대화 로그 현황 조사', 'todo', [], 'u4', '2026-10-22'],
       ['HW-24', '운영 DB 계정 · 권한 표 작성', 'todo', [], 'u3', '2026-10-21'],
@@ -282,33 +293,45 @@ describe('목업 apply', () => {
     ])
     expect(r.taskIdByTempId).toEqual({ t1: r.tasks[0].id, t2: r.tasks[1].id, t3: r.tasks[2].id })
     expect(r.links).toEqual([
-      { taskId: r.tasks[0].id, threadId: r.threads[0].id },
-      { taskId: r.tasks[1].id, threadId: 't2' },
+      { taskId: r.tasks[0].id, agendaId: r.agendas[0].id },
+      { taskId: r.tasks[1].id, agendaId: 't2' },
     ])
     /* 데이터를 고치지 않는다 — 넣는 것은 스토어 몫 */
-    expect(taskThreadLinks.some((l) => l.taskId === r.tasks[0].id)).toBe(false)
+    expect(taskAgendaLinks.some((l) => l.taskId === r.tasks[0].id)).toBe(false)
   })
 
-  it('만든 안건 · 이력 · 작업에 출처를 달고, 회의록 요약을 저장한다', async () => {
+  it('새 안건을 결정으로 등록하면 등록 시각이 정한 때, 판은 1', async () => {
+    const input = fullInput()
+    input.agendas[1] = { ...input.agendas[1], decision: '전 항목 마스킹', state: 'decided' }
+    const r = await applyMinutes('m1', input)
+    expect(r.agendas[1]).toMatchObject({ state: 'decided', decisionRev: 1 })
+    expect(r.agendas[1].decidedAt).toBe(r.agendas[1].createdAt)
+  })
+
+  it('갈아끼우기는 PATCH 와 같은 이력을 남긴다 — 바뀐 칸만', async () => {
+    const r = await applyMinutes('m1', fullInput())
+    const rows = mockDb().agendaHistory.t2
+    expect(rows.at(-1)!.changes).toEqual([
+      {
+        field: 'decision',
+        from: 'mysql 을 쓴다\n- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n- supabase 는 비용 때문에 뺀다',
+        to: r.updatedAgendas[0].decision,
+        subject: '',
+      },
+    ])
+  })
+
+  it('만든 안건 · 작업에 출처를 달고, 회의록 요약을 저장한다 — 기존 안건에는 달지 않는다', async () => {
     const r = await applyMinutes('m1', { ...fullInput(), summary: '  고친 요약  ' })
-    expect([...r.threads, ...r.entries, ...r.tasks].map((x) => x.minutesId)).toEqual(
-      Array(2 + 2 + 3).fill('m1'),
-    )
+    expect([...r.agendas, ...r.tasks].map((x) => x.minutesId)).toEqual(Array(2 + 3).fill('m1'))
+    expect(r.updatedAgendas.map((t) => [t.id, t.minutesId])).toEqual([['t2', null]])
     const saved = await fetchMinutes('m1')
     expect(saved.summary).toBe('고친 요약')
     /* 요약은 사람이 고친 것이 아니다 — 고친 시각은 그대로 */
     expect(saved.updatedAt).toBe(minutesRows[0].updatedAt)
 
-    /* 기존 안건 자체에는 붙이지 않는다 */
-    const input = fullInput()
-    input.entries[0] = { ...input.entries[0], kind: 'decide' }
     /* null 은 안 보낸 것과 같다 */
-    const again = await applyMinutes('m1', {
-      ...input,
-      summary: null,
-    } as unknown as MinutesApplyInput)
-    expect(again.updatedThreads.map((t) => [t.id, t.minutesId])).toEqual([['t3', null]])
-    /* 요약을 안 보내면 그대로 */
+    await applyMinutes('m1', { ...fullInput(), summary: null } as unknown as MinutesApplyInput)
     expect((await fetchMinutes('m1')).summary).toBe('고친 요약')
   })
 
@@ -326,73 +349,22 @@ describe('목업 apply', () => {
     expect(long).toMatchObject({ status: 422, detail: { summary: expect.any(String) } })
   })
 
-  it('결정 이력은 기존 안건을 결정됨으로, 처리한 사람을 담당자로 바꿔 updatedThreads 에 싣는다', async () => {
-    const input = fullInput()
-    input.entries[0] = { ...input.entries[0], kind: 'decide', ownerId: 'u2' }
-    const r = await applyMinutes('m1', input)
-    expect(r.updatedThreads.map((t) => [t.id, t.state, t.ownerId])).toEqual([
-      ['t3', 'decided', 'u2'],
-    ])
-  })
-
-  it('항목 — 같은 이름이면 그 항목, 없으면 새 항목. 비운 결정은 안건 제목, 비운 미룸은 안건 전체', async () => {
-    const input = fullInput()
-    const base = input.entries[0]
-    input.entries = [
-      { ...base, tempId: 'x1', threadId: 't5', kind: 'decide', itemTitle: ' 응답(out) 항목 ' },
-      { ...base, tempId: 'x2', threadId: 't5', kind: 'refine', itemTitle: '오류 코드' },
-      { ...base, tempId: 'x3', threadId: 't3', kind: 'defer', itemTitle: '' },
-    ]
-    input.threads[1].entry = { ...input.threads[1].entry!, kind: 'decide', itemTitle: '' }
-    const r = await applyMinutes('m1', input)
-
-    expect(r.decisionItems.map((i) => [i.threadId, i.title])).toEqual([
-      [r.threads[1].id, '기간계 테스트 데이터 마스킹 범위'],
-      ['t5', '오류 코드'],
-    ])
-    const made = Object.fromEntries(r.decisionItems.map((i) => [i.title, i.id]))
-    expect(r.entries.map((e) => [e.threadId, e.itemId])).toEqual([
-      [r.threads[1].id, made['기간계 테스트 데이터 마스킹 범위']],
-      ['t5', 'di6'],
-      ['t5', made['오류 코드']],
-      ['t3', null],
-    ])
-    /* 새 안건은 하나뿐인 항목이 정해져 결정됨, t5 는 새 항목이 아직이라 논의중 그대로(담당자만 바뀐다) */
-    expect(r.threads[1].state).toBe('decided')
-    expect(r.updatedThreads.map((t) => [t.id, t.state, t.ownerId])).toEqual([['t5', 'open', 'u1']])
-  })
-
-  it('한 안건에 항목이 다르면 이력이 여럿이어도 된다 — 같은 항목 둘은 422', async () => {
-    const input = fullInput()
-    const base = { ...input.entries[0], threadId: 't5', kind: 'decide' as const }
-    input.entries = [
-      { ...base, tempId: 'x1', itemTitle: '요청(in) 항목' },
-      { ...base, tempId: 'x2', itemTitle: '응답(out) 항목' },
-    ]
-    const r = await applyMinutes('m1', input)
-    expect(r.updatedThreads.map((t) => [t.id, t.state])).toEqual([['t5', 'decided']])
-
-    input.entries[1].itemTitle = ' 요청(in) 항목'
-    const e = await rejected(applyMinutes('m1', input))
-    expect(e.detail).toEqual({ 'entries.1.itemTitle': '한 항목에 이력은 하나까지입니다.' })
-  })
-
   it('422 — detail 이 보낸 줄의 자리를 짚는다', async () => {
     const input = fullInput()
-    input.threads[0].title = '  '
-    input.threads[1].entry!.text = ''
-    input.entries.push({ ...input.entries[0], tempId: 'e2' })
-    input.tasks[0].threadTempIds = ['n9']
+    input.agendas[0].title = '  '
+    input.agendas[1].state = 'done' as never
+    input.updates.push({ ...input.updates[0] })
+    input.tasks[0].agendaTempIds = ['n9']
     input.tasks[1].start = '2026-10-30'
     input.tasks[2].parentTempId = 't9'
     input.tasks[2].tempId = 'n1'
     const e = await rejected(applyMinutes('m1', input))
     expect(e).toMatchObject({ status: 422, code: 'VALIDATION_ERROR' })
     expect(e.detail).toEqual({
-      'threads.0.title': expect.any(String),
-      'threads.1.entry.text': expect.any(String),
-      'entries.1.itemTitle': '한 항목에 이력은 하나까지입니다.',
-      'tasks.0.threadTempIds.0': '이 초안의 새 안건이 아닙니다.',
+      'agendas.0.title': expect.any(String),
+      'agendas.1.state': expect.any(String),
+      'updates.1.agendaId': '한 안건에 하나까지입니다.',
+      'tasks.0.agendaTempIds.0': '이 초안의 새 안건이 아닙니다.',
       'tasks.1.due': expect.any(String),
       'tasks.2.parentTempId': expect.any(String),
       'tasks.2.tempId': '임시 이름이 겹칩니다.',
@@ -400,12 +372,12 @@ describe('목업 apply', () => {
   })
 
   it('하나도 안 고르면 422(자리는 `요청`) · 작업 31개면 422(자리는 `tasks`)', async () => {
-    const none = await rejected(applyMinutes('m1', { threads: [], entries: [], tasks: [] }))
+    const none = await rejected(applyMinutes('m1', { agendas: [], updates: [], tasks: [] }))
     expect(none).toMatchObject({ status: 422 })
     expect(Object.keys(none.detail!)).toEqual(['요청'])
     const task = fullInput().tasks[2]
     const many = Array.from({ length: 31 }, (_, i) => ({ ...task, tempId: `t${i + 1}` }))
-    const over = await rejected(applyMinutes('m1', { threads: [], entries: [], tasks: many }))
+    const over = await rejected(applyMinutes('m1', { agendas: [], updates: [], tasks: many }))
     expect(over.detail).toEqual({ tasks: '작업은 30개까지입니다.' })
   })
 
@@ -419,42 +391,47 @@ describe('목업 apply', () => {
     expect(e.detail).toEqual({ 'tasks.2.parentTempId': expect.any(String) })
   })
 
-  it('400 THREAD_NOT_FOUND — 없는 안건 · 다른 프로젝트 안건의 자리', async () => {
+  it('400 AGENDA_NOT_FOUND — 없는 안건 · 다른 프로젝트 안건의 자리', async () => {
     const input = fullInput()
-    input.entries[0].threadId = 't10'
-    input.tasks[1].threadIds = ['t2', 'zz']
+    input.updates[0].agendaId = 't10'
+    input.tasks[1].agendaIds = ['t2', 'zz']
     /* 400 이 여럿 걸려도 앞 순서의 하나만 낸다 */
     input.tasks[0].ownerId = 'u5'
     const e = await rejected(applyMinutes('m1', input))
-    expect(e).toMatchObject({ status: 400, code: 'THREAD_NOT_FOUND' })
+    expect(e).toMatchObject({ status: 400, code: 'AGENDA_NOT_FOUND' })
     expect(e.detail).toEqual({
-      'entries.0.threadId': '안건을 찾을 수 없습니다.',
-      'tasks.1.threadIds.1': '안건을 찾을 수 없습니다.',
+      'updates.0.agendaId': '안건을 찾을 수 없습니다.',
+      'tasks.1.agendaIds.1': '안건을 찾을 수 없습니다.',
     })
   })
 
-  it('담당자는 안건 → 이력 → 작업 순으로 따로 코드를 낸다', async () => {
+  it('담당자는 안건 → 작업 순으로 따로 코드를 내고, 새 안건의 파트는 그 프로젝트의 활성 파트', async () => {
     const input = fullInput()
-    input.threads[1].ownerId = 'u5' // 비활성
-    input.entries[0].ownerId = 'u0' // 부여 안 됨
+    input.agendas[1].ownerId = 'u5' // 비활성
     input.tasks[0].ownerId = 'u5'
+    input.agendas[0].partId = 'zz'
     let e = await rejected(applyMinutes('m1', input))
     expect(e).toMatchObject({
-      code: 'THREAD_OWNER_NOT_FOUND',
-      detail: { 'threads.1.ownerId': expect.any(String) },
+      code: 'AGENDA_OWNER_NOT_FOUND',
+      detail: { 'agendas.1.ownerId': expect.any(String) },
     })
 
-    input.threads[1].ownerId = 'u2'
-    e = await rejected(applyMinutes('m1', input))
-    expect(e).toMatchObject({ code: 'ENTRY_OWNER_NOT_FOUND' })
-    expect(e.detail).toEqual({ 'entries.0.ownerId': '담당자를 찾을 수 없습니다.' })
-
-    input.entries[0].ownerId = 'u1'
+    input.agendas[1].ownerId = 'u2'
     e = await rejected(applyMinutes('m1', input))
     expect(e).toMatchObject({
       code: 'TASK_OWNER_NOT_FOUND',
       detail: { 'tasks.0.ownerId': expect.any(String) },
     })
+
+    input.tasks[0].ownerId = 'u1'
+    e = await rejected(applyMinutes('m1', input))
+    expect(e).toMatchObject({
+      code: 'PART_NOT_FOUND',
+      detail: { 'agendas.0.partId': expect.any(String) },
+    })
+
+    input.agendas[0].partId = 'pt2'
+    expect((await applyMinutes('m1', input)).agendas[0].partId).toBe('pt2')
   })
 
   it('400 TASK_PARENT_NOT_FOUND — 다른 프로젝트의 작업 밑에는 못 붙인다. 있는 작업이면 파트를 따른다', async () => {
@@ -537,7 +514,7 @@ describe('서버 갈래', () => {
   it('POST /minutes/{id}/draft 는 본문 없이 보내고 tool · draft · done 을 읽는다', async () => {
     const fake = serve(
       streamOf(
-        sse({ type: 'tool', name: 'search_threads', label: '기존 안건 찾는 중' }) +
+        sse({ type: 'tool', name: 'search_agendas', label: '기존 안건 찾는 중' }) +
           sse({ type: 'draft', draft: mockMinutesDraft }) +
           sse({ type: 'done' }),
       ),
@@ -554,7 +531,7 @@ describe('서버 갈래', () => {
   it('스트림 중 error 는 그 code 의 ApiError, 초안 없이 done 이면 끊긴 것', async () => {
     serve(
       streamOf(
-        sse({ type: 'tool', name: 'search_threads', label: '찾는 중' }) +
+        sse({ type: 'tool', name: 'search_agendas', label: '찾는 중' }) +
           sse({
             type: 'error',
             code: 'MINUTES_EMPTY',
@@ -590,7 +567,7 @@ describe('서버 갈래', () => {
   })
 
   it('apply 는 POST /minutes/{id}/apply 에 고른 것과 요약을 그대로', async () => {
-    const fake = serve(new Response(JSON.stringify({ threads: [] }), { status: 201 }))
+    const fake = serve(new Response(JSON.stringify({ agendas: [] }), { status: 201 }))
     await applyMinutes('m1', fullInput())
     expect(fullInput().summary).toBe(mockMinutesDraft.summary)
     expect(fake.mock.calls[0][0]).toBe('/api/minutes/m1/apply')

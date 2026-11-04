@@ -54,7 +54,7 @@ export const minutesRows: Minutes[] = [
   },
 ]
 
-/** p1 기준 — 새 안건 2(n2 는 미룸 이력) · 기존 안건 t3 에 미룸 1 · 작업 3(n1 에 · t2 에 · ownerHint 만) */
+/** p1 기준 — 새 안건 2(n2 는 논의중) · 기존 안건 t2 의 결정내용 갈아끼우기 1 · 작업 3(n1 에 · t2 에 · ownerHint 만) */
 export const mockMinutesDraft: MinutesDraft = {
   meetingDate: '2026-10-16',
   summary:
@@ -62,53 +62,47 @@ export const mockMinutesDraft: MinutesDraft = {
     '운영 DB 는 MySQL 같은 버전으로 구성하고, 계정 · 권한 표를 10월 21일까지 만든다.\n' +
     '가상비서 대화 로그 보관 기간을 새 안건으로 올렸다 — 10월 30일까지 정한다.\n' +
     '기간계 테스트 데이터 마스킹 범위는 기간계팀 기준 문서를 받은 뒤 다시 본다.',
-  threads: [
+  agendas: [
     {
       tempId: 'n1',
       title: '가상비서 대화 로그 보관 기간',
       description:
-        '대화 로그에 고객 개인정보가 섞일 수 있어 보관 기간을 정해야 한다. 법무 검토 의견을 받아 정한다.',
-      options: ['30일', '90일', '1년'],
+        '대화 로그에 고객 개인정보가 섞일 수 있어 보관 기간을 정해야 한다. 후보는 30일 · 90일 · 1년, 법무 검토 의견을 받아 정한다.',
+      decision: '',
+      state: 'queued',
       ownerId: 'u4',
       ownerHint: '',
       dueDate: '2026-10-30',
-      entry: null,
+      partId: null,
       quote:
         '후보는 30일 / 90일 / 1년. 법무 검토 의견을 받아 10월 30일까지 정하기로 함. 담당은 정하늘 님.',
     },
     {
+      /* 논의했지만 보류 — 결정내용 없이 논의중 */
       tempId: 'n2',
       title: '기간계 테스트 데이터 마스킹 범위',
-      description: '통합 테스트에 쓸 기간계 데이터를 어디까지 가릴지.',
-      options: ['전 항목 마스킹', '주민번호 · 연락처만 마스킹'],
+      description:
+        '통합 테스트에 쓸 기간계 데이터를 어디까지 가릴지. 전 항목 마스킹 · 주민번호 · 연락처만 마스킹 중에서. 기간계팀 마스킹 기준 문서를 받은 뒤 다시 본다.',
+      decision: '',
+      state: 'open',
       ownerId: 'u2',
       ownerHint: '',
       dueDate: null,
-      entry: {
-        kind: 'defer',
-        /* 항목 없이 안건 전체를 미룬 것 */
-        itemTitle: '',
-        text: '기간계팀 마스킹 기준 문서를 받은 뒤 다시 본다',
-        detail: [],
-        note: '기간계팀 기준 문서가 아직 없다. 박지훈이 기간계팀에 요청해 두었다.',
-        ownerId: 'u2',
-        ownerHint: '',
-      },
+      partId: null,
       quote: '기간계팀 마스킹 기준 문서를 받은 뒤 다시 보기로 하고 이번에는 보류.',
     },
   ],
-  entries: [
+  /* 기존 결정내용에 이번 회의 것을 합친 글 — 통째로 갈아끼운다 */
+  updates: [
     {
-      tempId: 'e1',
-      threadId: 't3',
-      kind: 'defer',
-      itemTitle: '',
-      text: '정보보안팀 회신이 없어 이번에도 정하지 못했다',
-      detail: [],
-      note: '다음 주 수요일 보안 검토 회의 결과를 보고 다시 논의한다.',
-      ownerId: 'u1',
-      ownerHint: '',
-      quote: '정보보안팀 회신이 아직 없어 이번 회의에서도 정하지 못함.',
+      agendaId: 't2',
+      decision:
+        'mysql 을 쓴다\n' +
+        '- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n' +
+        '- supabase 는 비용 때문에 뺀다\n' +
+        '- 운영 DB 도 같은 버전으로 구성한다',
+      state: 'decided',
+      quote: 'MySQL 로 정한 대로 운영 DB 도 같은 버전으로 구성.',
     },
   ],
   tasks: [
@@ -122,8 +116,8 @@ export const mockMinutesDraft: MinutesDraft = {
       start: null,
       due: '2026-10-22',
       priority: 'normal',
-      threadTempIds: ['n1'],
-      threadIds: [],
+      agendaTempIds: ['n1'],
+      agendaIds: [],
       quote: '정하늘 님이 다음 주 목요일까지 지금 쌓이고 있는 대화 로그 현황을 조사해 오기로 함.',
     },
     {
@@ -136,8 +130,8 @@ export const mockMinutesDraft: MinutesDraft = {
       start: null,
       due: '2026-10-21',
       priority: 'normal',
-      threadTempIds: [],
-      threadIds: ['t2'],
+      agendaTempIds: [],
+      agendaIds: ['t2'],
       quote: '계정 · 권한은 이도현 님이 10월 21일까지 표로 만들어 공유하기로 함.',
     },
     {
@@ -151,8 +145,8 @@ export const mockMinutesDraft: MinutesDraft = {
       start: null,
       due: '2026-10-28',
       priority: 'normal',
-      threadTempIds: [],
-      threadIds: [],
+      agendaTempIds: [],
+      agendaIds: [],
       quote: '통합 테스트 시나리오 초안은 최 선임이 10월 28일까지 공유해 주기로 함.',
     },
   ],
@@ -160,6 +154,6 @@ export const mockMinutesDraft: MinutesDraft = {
 
 /** 목업 draft 가 초안 앞에 흘리는 진행 줄 둘 — 라벨은 서버의 것과 같은 모양(minutes.md '구현') */
 export const mockMinutesTools: { name: string; label: string }[] = [
-  { name: 'search_threads', label: '"대화 로그" 기존 안건 찾는 중' },
+  { name: 'search_agendas', label: '"대화 로그" 기존 안건 찾는 중' },
   { name: 'list_members', label: '멤버 확인 중' },
 ]

@@ -14,7 +14,7 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, cast
+from typing import cast
 
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -24,9 +24,9 @@ from app.config import Settings
 from app.llm import LLMError, LLMProvider, Message, Reply, ToolResult, ToolSpec, UserMessage
 from app.models import Member, Part, PartMember
 from app.schemas.minutes import (
-    MINUTES_ENTRIES_MAX,
+    MINUTES_AGENDAS_MAX,
     MINUTES_TASKS_MAX,
-    MINUTES_THREADS_MAX,
+    MINUTES_UPDATES_MAX,
     MinutesDoneEvent,
     MinutesDraft,
     MinutesDraftEvent,
@@ -47,7 +47,7 @@ MAX_FAILURES = 5
 # Claude 를 부르는 횟수의 상한 — 안건을 찾는 차례 몇 번 + 초안을 고치는 차례 다섯 번이 들어가야 한다
 MAX_ROUNDS = 10
 
-READ_TOOLS = ("search_threads", "get_thread", "search_tasks", "list_members")
+READ_TOOLS = ("search_agendas", "get_agenda", "search_tasks", "list_members")
 
 EMPTY_MESSAGE = "회의록에서 정할 것 · 할 일을 찾지 못했습니다."
 FAILED_MESSAGE = "초안을 정리하지 못했습니다. 회의록을 조금 나눠 다시 정리해 주세요."
@@ -56,7 +56,7 @@ REFUSED_MESSAGE = "이 회의록은 정리할 수 없습니다. 내용을 바꿔
 
 NUDGE = (
     "초안을 아직 내지 않았다. 글로 답하지 말고 propose_minutes 로 초안을 내라. "
-    "정리할 것이 없으면 threads · entries · tasks 를 모두 빈 배열로 해서 부른다."
+    "정리할 것이 없으면 agendas · updates · tasks 를 모두 빈 배열로 해서 부른다."
 )
 WRAP_UP = (
     "도구를 부를 수 있는 횟수가 거의 다 찼다. 더 찾지 말고 지금 propose_minutes 로 초안을 내라."
@@ -66,46 +66,45 @@ SYSTEM_PROMPT = """\
 너는 사내 업무 도구 innoFlow 의 회의록 정리 도우미다. 지금 프로젝트는 '{project_name}' 이다.
 오늘은 {today} 이다(한국 시간).
 사용자 메시지로 오는 회의록(제목 · 회의 날짜 · 본문)을 읽고
-**새 안건 · 이미 있는 안건에 붙일 이력 · 작업** 초안으로 나눠
+**새 안건 · 이미 있는 안건의 결정 갈아끼우기 · 작업** 초안으로 나눠
 propose_minutes 로 낸다. 너는 아무것도 저장하지 못한다 — 사람이 초안을 고르고 고쳐 [등록] 을 누른다.
 
 ## 이 프로젝트의 멤버 (담당자로 둘 수 있는 사람)
 {members}
 
 ## 나누는 규칙
-1. 정해진 것 → 이력 kind 'decide'. 결정을 바꾼 것도 decide 다.
-   "다음에 다시" · "확인 후" 처럼 미룬 것 → 'defer', 사유를 note 에.
-   범위를 좁히거나 조건을 더한 것 → 'refine'. 이 셋 말고는 쓰지 않는다
-2. 아직 안 정했고 다음에 정해야 할 것 → 새 안건(entry: null). 후보가 말로 나오면 options 에
-3. 새 안건이 이 회의에서 바로 정해졌거나 미뤄졌으면 그 새 안건의 entry 에 이력을 단다
-4. 누가 하기로 한 일 → 작업. 어느 안건의 결정에서 나온 일이면 그 안건에 건다 —
-   이 초안의 새 안건이면 thread_temp_ids, 이미 있는 안건이면 thread_ids 에
-5. 새 안건을 내기 전에 search_threads 로 **이미 있는지 먼저 본다**. 있으면 새로 만들지 말고
-   그 안건에 붙일 이력(entries)으로 낸다. 검색은 글자 일부가 맞는 것을 찾으니 짧은 낱말로,
-   안 나오면 표현을 바꿔 다시 찾는다. 헷갈리면 get_thread 로 읽어 본다
-6. 안건 안에서 따로 정하는 것 하나하나가 결정 항목이다
-   (예: '로그인 방식' 안건의 'SSO 여부' · '세션 길이').
-   이력마다 item_title 에 그 항목의 이름을 짧게 적는다 — get_thread 의 items 에 같은 것이 있으면
-   그 이름을 글자 그대로 쓴다. 한 안건에서 결정이 여럿 나왔으면 항목을 나눠 이력을 여러 개 낸다.
-   **한 항목에 이력은 하나까지다** — 같은 항목에 여러 말이 나왔으면 한 줄로 합치고
-   detail 에 나눠 적는다.
-   안건에 정할 것이 하나뿐이면 item_title 은 '' 로 둔다(안건 제목을 쓴다).
-   안건 전체를 미룬 것이면 defer 의 item_title 을 '' 로 둔다
-7. 회의록에 없는 것을 지어내지 않는다.
+1. 안건은 제목 · 배경(description) · 결정내용(decision) · 상태(state) 넷이다.
+   상태는 queued 대기(등록만) · open 논의중(다뤘지만 아직) · decided 결정 셋이다
+2. 아직 안 정했고 다음에 정해야 할 것 → 새 안건(decision '', state 'queued').
+   이 회의에서 다뤘지만 못 정했으면 state 'open' 으로 두고,
+   미룬 사유 · 후보가 나왔으면 description 에 적는다
+3. 새 안건이 이 회의에서 바로 정해졌으면 decision 에 무엇으로 정했는지 적고 state 'decided'
+4. 이미 있는 안건에 대해 이 회의에서 정한 것 · 바꾼 것 · 덧붙인 것이 있으면 updates 에 낸다.
+   updates 의 decision 은 **그 안건의 결정내용을 통째로 갈아끼운다** —
+   반드시 get_agenda 로 지금 결정내용을 읽고, 이어 갈 것은 남기고 바뀐 것은 고쳐 합친 글을 낸다.
+   한 안건에 updates 는 하나까지다. state 는 정해졌으면 'decided', 다뤘지만 아직이면 'open'
+5. 결정내용은 여러 줄 글이다. 따로 정한 것이 여럿이면 '항목: 결정' 줄로 나누고,
+   조건별 상세는 '- ' 줄로 아래에 붙인다
+6. 누가 하기로 한 일 → 작업. 어느 안건의 결정에서 나온 일이면 그 안건에 건다 —
+   이 초안의 새 안건이면 agenda_temp_ids, 이미 있는 안건이면 agenda_ids 에
+7. 새 안건을 내기 전에 search_agendas 로 **이미 있는지 먼저 본다**. 있으면 새로 만들지 말고
+   updates 로 낸다. 검색은 글자 일부가 맞는 것을 찾으니 짧은 낱말로,
+   안 나오면 표현을 바꿔 다시 찾는다. 헷갈리면 get_agenda 로 읽어 본다
+8. 회의록에 없는 것을 지어내지 않는다.
    quote 는 근거가 된 회의록의 한두 문장을 **글자 그대로** 옮긴다
-8. 사람: 위 멤버 목록으로 id 를 잇는다. 이름이 멤버에 없거나 여럿에 걸리면("김 책임" 등)
+9. 사람: 위 멤버 목록으로 id 를 잇는다. 이름이 멤버에 없거나 여럿에 걸리면("김 책임" 등)
    owner_id 는 null 로 두고 회의록에서 부른 말을 owner_hint 에 적는다.
-   owner_id 를 정했으면 owner_hint 는 ''
-9. 날짜: {date_rule}
+   owner_id 를 정했으면 owner_hint 는 ''. 새 안건의 part_id 는 null(공통)로 둔다
+10. 날짜: {date_rule}
    말하지 않은 기한은 채우지 않는다(null). 작업 우선순위는 말하지 않았으면 normal
-10. summary 는 회의 요약 서너 줄. 한국어로 짧게
-11. temp_id 는 새 안건 n1, n2 …, 이력 e1, e2 …, 작업 t1, t2 … — 초안 안에서 서로 다르다.
+11. summary 는 회의 요약 서너 줄. 한국어로 짧게
+12. temp_id 는 새 안건 n1, n2 …, 작업 t1, t2 … — 초안 안에서 서로 다르다.
     작업의 상위는 같은 초안의 앞 작업(parent_temp_id)이다. 이미 있는 작업 밑에 붙일 때만 parent_id.
     작업은 4단까지다(최상위가 1단)
-12. 개수: 새 안건 {threads_max}개 · 이력 {entries_max}개 · 작업 {tasks_max}개까지
-13. 정리할 것이 하나도 없으면 threads · entries · tasks 를 모두 빈 배열로 해서
+13. 개수: 새 안건 {agendas_max}개 · 기존 안건 결정 {updates_max}개 · 작업 {tasks_max}개까지
+14. 정리할 것이 하나도 없으면 agendas · updates · tasks 를 모두 빈 배열로 해서
     propose_minutes 를 부른다
-14. propose_minutes 가 오류를 돌려주면 problems 가 짚은 자리를 고쳐 다시 부른다.
+15. propose_minutes 가 오류를 돌려주면 problems 가 짚은 자리를 고쳐 다시 부른다.
     통과하면 거기서 끝난다 — 글로 답하지 않는다
 """
 
@@ -119,21 +118,11 @@ _OWNER_HINT = {
     "description": "owner_id 를 못 정했을 때 회의록에서 부른 말('김 책임'). 아니면 ''",
 }
 _QUOTE = {"type": "string", "description": "근거 — 회의록의 한두 문장을 글자 그대로"}
-_ENTRY_FIELDS: dict[str, Any] = {
-    "kind": {"type": "string", "enum": ["decide", "defer", "refine"]},
-    "item_title": {
-        "type": "string",
-        "description": (
-            "결정 항목의 이름(200자까지). 정할 것이 하나뿐이거나 안건 전체를 미룬 것이면 ''"
-        ),
-    },
-    "text": {"type": "string", "description": "한 줄 — 결정이면 무엇으로, 미룸이면 무엇을"},
-    "detail": {"type": "array", "items": {"type": "string"}, "description": "조건별 상세"},
-    "note": {"type": "string", "description": "왜 — 미룸이면 사유. 없으면 ''"},
-    "owner_id": _OWNER,
-    "owner_hint": _OWNER_HINT,
+_STATE = {
+    "type": "string",
+    "enum": ["queued", "open", "decided"],
+    "description": "queued 대기 · open 논의중 · decided 결정",
 }
-_ENTRY_REQUIRED = ["kind", "item_title", "text", "detail", "note", "owner_id", "owner_hint"]
 
 PROPOSE_TOOL: ToolSpec = {
     "name": "propose_minutes",
@@ -149,9 +138,9 @@ PROPOSE_TOOL: ToolSpec = {
                 "description": "회의록에서 읽은 회의 날짜 YYYY-MM-DD. 못 읽으면 null",
             },
             "summary": {"type": "string", "description": "회의 요약 서너 줄"},
-            "threads": {
+            "agendas": {
                 "type": "array",
-                "maxItems": MINUTES_THREADS_MAX,
+                "maxItems": MINUTES_AGENDAS_MAX,
                 "description": "새 안건 — 이미 있는 안건이 아닐 때만",
                 "items": {
                     "type": "object",
@@ -159,54 +148,55 @@ PROPOSE_TOOL: ToolSpec = {
                         "temp_id": {"type": "string", "description": "n1, n2 …"},
                         "title": {"type": "string"},
                         "description": {"type": "string", "description": "배경. 없으면 ''"},
-                        "options": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "후보 선택지. 없으면 []",
+                        "decision": {
+                            "type": "string",
+                            "description": "이 회의에서 정한 것(여러 줄 글). 아직이면 ''",
                         },
+                        "state": _STATE,
                         "owner_id": _OWNER,
                         "owner_hint": _OWNER_HINT,
                         "due_date": {
                             "type": ["string", "null"],
                             "description": "결정 기한 YYYY-MM-DD. 말하지 않았으면 null",
                         },
-                        "entry": {
-                            "type": ["object", "null"],
-                            "description": "이 회의에서 정해졌거나 미뤄졌으면 그 이력. 아니면 null",
-                            "properties": _ENTRY_FIELDS,
-                            "required": _ENTRY_REQUIRED,
-                        },
+                        "part_id": {"type": ["string", "null"], "description": "늘 null(공통)"},
                         "quote": _QUOTE,
                     },
                     "required": [
                         "temp_id",
                         "title",
                         "description",
-                        "options",
+                        "decision",
+                        "state",
                         "owner_id",
                         "owner_hint",
                         "due_date",
-                        "entry",
+                        "part_id",
                         "quote",
                     ],
                 },
             },
-            "entries": {
+            "updates": {
                 "type": "array",
-                "maxItems": MINUTES_ENTRIES_MAX,
-                "description": "이미 있는 안건에 붙일 이력 — 한 결정 항목에 하나까지",
+                "maxItems": MINUTES_UPDATES_MAX,
+                "description": (
+                    "이미 있는 안건의 결정내용 · 상태를 통째로 갈아끼운다 — 한 안건에 하나까지"
+                ),
                 "items": {
                     "type": "object",
                     "properties": {
-                        "temp_id": {"type": "string", "description": "e1, e2 …"},
-                        "thread_id": {
+                        "agenda_id": {
                             "type": "string",
-                            "description": "search_threads · get_thread 로 찾은 안건의 id",
+                            "description": "search_agendas · get_agenda 로 찾은 안건의 id",
                         },
-                        **_ENTRY_FIELDS,
+                        "decision": {
+                            "type": "string",
+                            "description": "get_agenda 의 지금 결정내용과 이 회의의 결정을 합친 글",
+                        },
+                        "state": _STATE,
                         "quote": _QUOTE,
                     },
-                    "required": ["temp_id", "thread_id", *_ENTRY_REQUIRED, "quote"],
+                    "required": ["agenda_id", "decision", "state", "quote"],
                 },
             },
             "tasks": {
@@ -231,12 +221,12 @@ PROPOSE_TOOL: ToolSpec = {
                         "start": _DATE_OR_NULL,
                         "due": _DATE_OR_NULL,
                         "priority": {"type": "string", "enum": ["low", "normal", "high"]},
-                        "thread_temp_ids": {
+                        "agenda_temp_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "걸 새 안건의 temp_id. 없으면 []",
                         },
-                        "thread_ids": {
+                        "agenda_ids": {
                             "type": "array",
                             "items": {"type": "string"},
                             "description": "걸 이미 있는 안건의 id. 없으면 []",
@@ -253,14 +243,14 @@ PROPOSE_TOOL: ToolSpec = {
                         "start",
                         "due",
                         "priority",
-                        "thread_temp_ids",
-                        "thread_ids",
+                        "agenda_temp_ids",
+                        "agenda_ids",
                         "quote",
                     ],
                 },
             },
         },
-        "required": ["meeting_date", "summary", "threads", "entries", "tasks"],
+        "required": ["meeting_date", "summary", "agendas", "updates", "tasks"],
     },
 }
 
@@ -356,8 +346,8 @@ def system_prompt(context: MinutesContext, today: date, meeting_date: date | Non
         project_name=context.project_name,
         today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})",
         members=members or "(없음)",
-        threads_max=MINUTES_THREADS_MAX,
-        entries_max=MINUTES_ENTRIES_MAX,
+        agendas_max=MINUTES_AGENDAS_MAX,
+        updates_max=MINUTES_UPDATES_MAX,
         tasks_max=MINUTES_TASKS_MAX,
         date_rule=date_rule,
     )
@@ -367,10 +357,10 @@ def tool_label(name: MinutesToolName, raw: object) -> str:
     query = raw.get("query") if isinstance(raw, dict) else None
     shown = f'"{query.strip()[:30]}" ' if isinstance(query, str) and query.strip() else ""
     match name:
-        case "search_threads":
+        case "search_agendas":
             return f"{shown}기존 안건 찾는 중"
-        case "get_thread":
-            return "안건 이력 읽는 중"
+        case "get_agenda":
+            return "안건 결정내용 읽는 중"
         case "search_tasks":
             return f"{shown}기존 작업 찾는 중"
         case "list_members":
@@ -394,12 +384,12 @@ async def check_draft(session: AsyncSession, project_id: str, raw: object) -> Ch
     맞으면 초안을 돌려준다."""
     try:
         draft = MinutesDraft.model_validate(raw)
-        threads, entries, tasks = minutes_service.normalize(
-            draft.threads, draft.entries, draft.tasks
+        agendas, updates, tasks = minutes_service.normalize(
+            draft.agendas, draft.updates, draft.tasks
         )
-        if not threads and not entries and not tasks:
+        if not agendas and not updates and not tasks:
             return Checked(content=json.dumps({"ok": True}), is_error=False, empty=True)
-        found = await minutes_service.minutes_problems(session, project_id, threads, entries, tasks)
+        found = await minutes_service.minutes_problems(session, project_id, agendas, updates, tasks)
         if found:
             # 등록은 첫 오류만 내지만 Claude 에게는 한 번에 다 보여 준다 — 고치는 차례를 아낀다
             problems = {
@@ -412,7 +402,7 @@ async def check_draft(session: AsyncSession, project_id: str, raw: object) -> Ch
                 ),
                 is_error=True,
             )
-        cleaned = draft.model_copy(update={"threads": threads, "entries": entries, "tasks": tasks})
+        cleaned = draft.model_copy(update={"agendas": agendas, "updates": updates, "tasks": tasks})
         return Checked(content=json.dumps({"ok": True}), is_error=False, draft=cleaned)
     except ValidationError as exc:
         return Checked(

@@ -39,21 +39,21 @@ describe('목업 갈래', () => {
     const { events, error } = await collect(
       streamRiskSummary(
         'p1',
-        { threadIds: ['t5', 't3'], taskIds: ['k22'] },
+        { agendaIds: ['t5', 't3'], taskIds: ['k22'] },
         new AbortController().signal,
       ),
     )
     expect(error).toBeNull()
     const text = textOf(events)
-    expect(text.startsWith('한 줄 총평 — 지금 가장 큰 병목은 [[thread:t5]]')).toBe(true)
-    expect(text).toContain('먼저 정할 것\n1. [[thread:t5]]')
+    expect(text.startsWith('한 줄 총평 — 지금 가장 큰 병목은 [[agenda:t5]]')).toBe(true)
+    expect(text).toContain('먼저 정할 것\n1. [[agenda:t5]]')
     expect(text).toContain('바로 풀 수 있는 것\n- [[task:k22]]')
     expect(events.at(-1)).toEqual({
       type: 'done',
       refs: [
-        { kind: 'thread', id: 't5' },
+        { kind: 'agenda', id: 't5' },
         { kind: 'task', id: 'k18' },
-        { kind: 'thread', id: 't3' },
+        { kind: 'agenda', id: 't3' },
         { kind: 'task', id: 'k22' },
       ],
     })
@@ -63,7 +63,7 @@ describe('목업 갈래', () => {
     const { events } = await collect(
       streamRiskSummary(
         'p1',
-        { threadIds: ['t1', 'zz'], taskIds: ['k1'] },
+        { agendaIds: ['t1', 'zz'], taskIds: ['k1'] },
         new AbortController().signal,
       ),
     )
@@ -74,7 +74,7 @@ describe('목업 갈래', () => {
   it('배열이 100개를 넘으면 422', async () => {
     const many = Array.from({ length: 101 }, (_, i) => `x${i}`)
     const { error } = await collect(
-      streamRiskSummary('p1', { threadIds: many, taskIds: [] }, new AbortController().signal),
+      streamRiskSummary('p1', { agendaIds: many, taskIds: [] }, new AbortController().signal),
     )
     expect(error).toBeInstanceOf(ApiError)
     expect(error).toMatchObject({ status: 422, code: 'VALIDATION_ERROR' })
@@ -103,7 +103,7 @@ describe('서버 갈래', () => {
     const events: ChatEvent[] = []
     for await (const e of streamRiskSummary(
       'p 1',
-      { threadIds: ['t5'], taskIds: ['k22'] },
+      { agendaIds: ['t5'], taskIds: ['k22'] },
       controller.signal,
     ))
       events.push(e)
@@ -111,7 +111,7 @@ describe('서버 갈래', () => {
     expect(fake).toHaveBeenCalledWith('/api/projects/p%201/risks/summary', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify({ threadIds: ['t5'], taskIds: ['k22'] }),
+      body: JSON.stringify({ agendaIds: ['t5'], taskIds: ['k22'] }),
       signal: controller.signal,
     })
     expect(events).toEqual([
@@ -133,7 +133,7 @@ describe('서버 갈래', () => {
     const error = await (async () => {
       for await (const e of streamRiskSummary(
         'p1',
-        { threadIds: ['t5'], taskIds: [] },
+        { agendaIds: ['t5'], taskIds: [] },
         new AbortController().signal,
       ))
         void e

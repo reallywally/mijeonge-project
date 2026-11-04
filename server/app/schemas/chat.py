@@ -14,8 +14,8 @@ TEXT_MAX = 2000
 ANSWER_MAX = 20000
 
 ToolName = Literal[
-    "search_threads",
-    "get_thread",
+    "search_agendas",
+    "get_agenda",
     "search_tasks",
     "get_task",
     "list_tasks",
@@ -44,7 +44,7 @@ class ChatProposal(TaskProposal):
 
 class ChatMessage(Schema):
     role: Literal["user", "assistant"]
-    # 화면에 보인 글 그대로 — 근거 표시([[thread:ID]])도 지우지 않고 돌아온다
+    # 화면에 보인 글 그대로 — 근거 표시([[agenda:ID]])도 지우지 않고 돌아온다
     text: str
     # assistant 에만. 그 답이 낸 초안과 화면에서의 결과
     proposal: ChatProposal | None = None
@@ -83,7 +83,7 @@ class ChatInput(Schema):
 
 
 class ChatRef(Schema):
-    kind: Literal["thread", "task"]
+    kind: Literal["agenda", "task"]
     id: str
 
 
@@ -125,7 +125,7 @@ ChatEvent = DeltaEvent | ToolEvent | ProposalEvent | DoneEvent | ErrorEvent
 # 도구 입력. Claude 가 넣는 값이라 경계처럼 검증한다 — 키는 도구 정의와 같은 snake_case 로 받는다
 
 
-class SearchThreadsInput(Schema):
+class SearchAgendasInput(Schema):
     query: str
     state: Literal["queued", "open", "decided"] | None = None
     limit: int = Field(default=10, ge=1, le=20)
@@ -137,8 +137,8 @@ class SearchTasksInput(Schema):
     limit: int = Field(default=10, ge=1, le=20)
 
 
-class GetThreadInput(Schema):
-    thread_id: str
+class GetAgendaInput(Schema):
+    agenda_id: str
 
 
 class GetTaskInput(Schema):

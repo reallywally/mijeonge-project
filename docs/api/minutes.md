@@ -8,6 +8,78 @@
 > AI 정리는 **저장된 회의록 하나**에서 [AI 정리] 로 부르고, 거기서 등록한 안건 · 이력 · 작업에는 **출처(`minutesId`)** 가 붙는다.
 > 붙여넣은 글을 바로 정리하던 `POST /api/projects/{projectId}/minutes/draft` · `…/apply` 는 없어졌다.
 
+> **2026-11-04 고침 (안건 간소화, `agenda.md`)** — 초안의 셋은 **새 안건 · 기존 안건의 결정 갈아끼우기 · 작업**이다.
+> 새 안건은 `{ tempId, title, description, decision, state, ownerId, ownerHint, dueDate, partId, quote }`,
+> 옛 `entries`(기존 안건 이력) → **`updates: { agendaId, decision, state, quote }[]`** — 기존 안건의 결정내용을 **통째로 갈아끼운다**
+> (Claude 가 `get_agenda` 로 지금 결정내용을 읽고 합친 글을 낸다). 반영은 `PATCH /api/agendas/{id}` 와 같은 규칙 · 같은 변경 이력이다.
+> 결과는 `{ agendas, updatedAgendas, tasks, links, agendaIdByTempId, taskIdByTempId }` — `entries` · `decisionItems` · `itemTitle` 은 없어졌다.
+> 이름은 `thread` → `agenda`(`agendaTempIds` · `agendaIds` · `AGENDA_NOT_FOUND` · `AGENDA_OWNER_NOT_FOUND`, 도구 `search_agendas` · `get_agenda`).
+> 아래 본문의 옛 모양(`threads` · `entries` · `ProposedEntry`)은 이 고침이 대신한다 — 고친 모양은 '2026-11-04 모양' 절이다.
+
+## 2026-11-04 모양
+
+```ts
+export interface MinutesDraft {
+  meetingDate: string | null
+  summary: string
+  agendas: ProposedAgenda[]
+  updates: ProposedUpdate[]
+  tasks: ProposedMinutesTask[]
+}
+
+/** 새 안건 — 회의에서 바로 정했으면 decision 을 적고 state 'decided' */
+export interface ProposedAgenda {
+  tempId: string          // 'n1', 'n2' …
+  title: string
+  description: string     // 배경. 미룬 사유 · 후보도 여기에. 없으면 ''
+  decision: string        // 정한 것. 없으면 ''
+  state: AgendaState      // 등록만이면 'queued', 다뤘지만 아직이면 'open'
+  ownerId: string | null
+  ownerHint: string       // ownerId 를 못 정했을 때 회의록에서 부른 말. 없으면 ''
+  dueDate: string | null
+  partId: string | null   // null 이면 공통. Claude 는 늘 null 로 낸다
+  quote: string
+}
+
+/** 이미 있는 안건의 결정내용 · 상태를 통째로 갈아끼운다. 한 안건에 하나 */
+export interface ProposedUpdate {
+  agendaId: string
+  decision: string        // 지금 결정내용과 이 회의의 결정을 합친 글
+  state: AgendaState
+  quote?: string          // 초안에는 늘 싣는다. apply 는 안 보내도 되고 실어 와도 버린다
+}
+
+export interface ProposedMinutesTask extends ProposedTask {
+  ownerHint: string
+  agendaTempIds: string[]
+  agendaIds: string[]
+  quote: string
+}
+
+export interface MinutesApplyInput {
+  summary?: string
+  agendas: ProposedAgenda[]
+  updates: ProposedUpdate[]
+  tasks: ProposedMinutesTask[]
+}
+
+export interface MinutesApplyResult {
+  agendas: Agenda[]                 // 요청 순서
+  updatedAgendas: Agenda[]          // updates 로 칸이 하나라도 바뀐 기존 안건 — 요청 순서
+  tasks: Task[]
+  links: TaskAgendaLink[]
+  agendaIdByTempId: Record<string, string>
+  taskIdByTempId: Record<string, string>
+}
+```
+
+- **검사** — 개수 새 안건 0 ~ 20 · 갈아끼우기 0 ~ 20 · 작업 0 ~ 30, 셋 합이 1 이상(아니면 422 `요청`). `tempId` 는 새 안건 · 작업 사이에서 겹치면 422. 제목은 앞뒤 공백을 떼고 비면 422(`agendas.N.title`). **한 안건에 갈아끼우기는 하나** — 같은 `agendaId` 둘이면 422 `updates.N.agendaId`. `state` 가 세 값 밖이면 422(`agendas.N.state` · `updates.N.state`). 작업 규칙은 `tasks/batch` 그대로
+- **400** — 하나만 낸다. 순서는 `AGENDA_NOT_FOUND`(`updates.N.agendaId` · `tasks.N.agendaIds.M`) → `AGENDA_OWNER_NOT_FOUND`(`agendas.N.ownerId`) → `PART_NOT_FOUND` · `PART_ARCHIVED`(`agendas.N.partId`) → `TASK_OWNER_NOT_FOUND` → `TASK_PARENT_NOT_FOUND` → `TASK_DEPTH_EXCEEDED`. `ENTRY_OWNER_NOT_FOUND` 는 없어졌다
+- **403 `FORBIDDEN`** — 갈아끼우는 안건을 고칠 수 없는 사람(생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자가 아님, `auth.md` '안건'). `detail` 은 걸린 자리 전부 `{ "updates.N.agendaId": "이 안건의 결정내용 · 상태를 바꿀 권한이 없습니다." }`. 422 · 400 다음에 본다. 새 안건 · 작업은 그대로 멤버 누구나
+- **만드는 순서** — 새 안건(등록과 같은 규칙: 결정 시각 · 판, 변경 이력 `created` 한 줄, `minutesId` = 그 회의록) → 갈아끼우기(PATCH 와 같은 `apply_fields` · 같은 변경 이력, 바꾼 사람 = 요청한 사람. 기존 안건에 `minutesId` 는 안 붙인다) → 작업 → 링크
+- 결정내용은 앞뒤 공백을 떼고 넣는다. 같은 결정내용 · 같은 상태면 바뀐 것이 없다 — `updatedAgendas` 에도 이력에도 안 남는다
+- `draft` 의 진행 라벨: `get_agenda` 는 '안건 결정내용 읽는 중'(전에는 '안건 이력 읽는 중')
+
 회의록을 게시판에 올리고, 글마다 **[AI 정리]** 를 누르면 Claude 가 **새 안건 · 기존 안건에 붙일 이력 · 작업** 초안으로 나눠 보여 준다. 사람이 고르고 고친 뒤 **[등록]** 을 눌러야 저장된다.
 회의록은 이력으로 남고, 거기서 나온 안건 · 이력 · 작업은 "어느 회의에서 나왔나" 를 되짚을 수 있다.
 

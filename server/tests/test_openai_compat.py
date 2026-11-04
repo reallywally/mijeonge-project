@@ -143,35 +143,35 @@ async def test_tool_calls_arrive_in_pieces() -> None:
     fake = FakeOpenAI(
         [
             chunk("볼게요"),
-            chunk(calls=[call_piece(0, id_="call_a", name="get_thread", args='{"thread')]),
+            chunk(calls=[call_piece(0, id_="call_a", name="get_agenda", args='{"agenda')]),
             chunk(calls=[call_piece(0, args='_id": "t1"}')]),
             chunk(calls=[call_piece(1, id_="call_b", name="list_members", args="")]),
             chunk(finish="tool_calls"),
         ]
     )
-    tools = [t for t in chat_service.TOOLS if t["name"] in ("get_thread", "list_members")]
+    tools = [t for t in chat_service.TOOLS if t["name"] in ("get_agenda", "list_members")]
     events = await one_turn(fake, tools=tools, max_tokens=123)
     reply = events[-1]
     assert isinstance(reply, Reply) and reply.stop == "tool_use"
     assert reply.message.text == "볼게요"
     assert list(reply.message.calls) == [
-        ToolCall(id="call_a", name="get_thread", input={"thread_id": "t1"}),
+        ToolCall(id="call_a", name="get_agenda", input={"agenda_id": "t1"}),
         ToolCall(id="call_b", name="list_members", input={}),
     ]
 
     (call,) = fake.calls
     assert call["max_completion_tokens"] == 123
     assert call["tool_choice"] == "auto"
-    get_thread = next(t for t in call["tools"] if t["function"]["name"] == "get_thread")
-    assert get_thread["type"] == "function"
-    assert get_thread["function"]["parameters"] == tools[0]["input_schema"]
+    get_agenda = next(t for t in call["tools"] if t["function"]["name"] == "get_agenda")
+    assert get_agenda["type"] == "function"
+    assert get_agenda["function"]["parameters"] == tools[0]["input_schema"]
 
 
 async def test_calls_with_stop_still_count_and_broken_json_goes_through() -> None:
     """도구를 불러 놓고 stop 으로 끝내도 tool_use 다. 깨진 입력은 글자 그대로 넘긴다."""
     fake = FakeOpenAI(
         [
-            chunk(calls=[call_piece(0, id_="c", name="get_thread", args="{깨짐")]),
+            chunk(calls=[call_piece(0, id_="c", name="get_agenda", args="{깨짐")]),
             chunk(finish="stop"),
         ]
     )
@@ -181,7 +181,7 @@ async def test_calls_with_stop_still_count_and_broken_json_goes_through() -> Non
 
 
 def test_messages_in_openai_shape() -> None:
-    call = ToolCall(id="c1", name="get_thread", input={"thread_id": "t1"})
+    call = ToolCall(id="c1", name="get_agenda", input={"agenda_id": "t1"})
     messages = [
         UserMessage("회의록", cache=True),
         AssistantMessage(text="", calls=[call], native=object()),
@@ -200,7 +200,7 @@ def test_messages_in_openai_shape() -> None:
                 {
                     "id": "c1",
                     "type": "function",
-                    "function": {"name": "get_thread", "arguments": '{"thread_id": "t1"}'},
+                    "function": {"name": "get_agenda", "arguments": '{"agenda_id": "t1"}'},
                 }
             ],
         },
@@ -234,23 +234,23 @@ async def test_chat_runs_on_openai_shape(client: httpx.AsyncClient) -> None:
     fake = FakeOpenAI(
         [
             chunk(
-                calls=[call_piece(0, id_="call_1", name="get_thread", args='{"thread_id":"t1"}')]
+                calls=[call_piece(0, id_="call_1", name="get_agenda", args='{"agenda_id":"t1"}')]
             ),
             chunk(finish="tool_calls"),
         ],
-        [chunk("우분투로 정했습니다 [[thread:t1]]"), chunk(finish="stop")],
+        [chunk("우분투로 정했습니다 [[agenda:t1]]"), chunk(finish="stop")],
     )
     llm = provider(fake)
     app.dependency_overrides[chat_api.get_llm] = lambda: llm
     events = parse_sse((await client.post("/api/projects/p1/chat", json=QUESTION)).text)
     assert [name for name, _ in events] == ["tool", "delta", "done"]
-    assert events[-1][1]["refs"] == [{"kind": "thread", "id": "t1"}]
+    assert events[-1][1]["refs"] == [{"kind": "agenda", "id": "t1"}]
 
     second = fake.calls[1]["messages"]
     assert [m["role"] for m in second] == ["system", "user", "assistant", "tool"]
     assert second[2]["tool_calls"][0]["id"] == "call_1"
     assert second[3]["tool_call_id"] == "call_1"
-    assert json.loads(second[3]["content"])["thread"]["id"] == "t1"
+    assert json.loads(second[3]["content"])["agenda"]["id"] == "t1"
 
 
 async def test_minutes_draft_runs_on_openai_shape(client: httpx.AsyncClient) -> None:

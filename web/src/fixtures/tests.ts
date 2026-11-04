@@ -10,8 +10,8 @@ import type { TestCase } from '@/types/domain'
  * 서버처럼 decide 줄(e3)을 '바뀐 결정' 으로 쓴다.
  */
 
-/** 목업이 들고 있는 한 줄 — 서버의 test_case 행. basisSeq 는 Entry 의 등록 순서(1부터, 픽스처 배열 순서)다 */
-export type MockTestCase = Omit<TestCase, 'statusDays' | 'signals' | 'changedEntryIds'> & {
+/** 목업이 들고 있는 한 줄 — 서버의 test_case 행. basisSeq 는 안건 변경 이력의 seq 다 — 등록 줄 1 ~ 10, 이행 줄 t1 11 · t2 12 · t5 13 · t6 14 (서버 시드와 같다) */
+export type MockTestCase = Omit<TestCase, 'statusDays' | 'signals' | 'changedAgendaIds'> & {
   basisSeq: number | null
 }
 
@@ -78,7 +78,7 @@ export const testCases: MockTestCase[] = [
     ),
     testData: 'dev01 / 발급 메일의 임시 비밀번호',
     refs: [{ kind: 'task', id: 'k4' }],
-    basisSeq: 3,
+    basisSeq: 12,
   }),
   mk(3, '비밀번호 5회 틀림 잠금', 'u2', {
     parentId: 'tc1',
@@ -94,8 +94,8 @@ export const testCases: MockTestCase[] = [
       '1. 틀린 비밀번호로 네 번 로그인한다 → 매번 남은 횟수가 보인다',
       '2. 다섯 번째로 틀린다 → 계정이 잠겼다는 안내가 뜬다',
     ),
-    refs: [{ kind: 'thread', id: 't3' }],
-    basisSeq: 4,
+    refs: [{ kind: 'agenda', id: 't3' }],
+    basisSeq: null,
   }),
   mk(4, '비밀번호 변경 주기', 'u4', {
     parentId: 'tc1',
@@ -110,8 +110,8 @@ export const testCases: MockTestCase[] = [
       '단계',
       '1. 주기가 지난 계정으로 로그인한다 → 비밀번호 바꾸기 화면으로 간다',
     ),
-    refs: [{ kind: 'thread', id: 't2' }],
-    basisSeq: 2,
+    refs: [{ kind: 'agenda', id: 't2' }],
+    basisSeq: 11,
   }),
   mk(5, '계정 배포 시나리오', 'u3', {
     status: 'draft',

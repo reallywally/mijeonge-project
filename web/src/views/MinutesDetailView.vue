@@ -16,11 +16,10 @@ import {
   X,
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
-import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
 import MinutesReview from '@/components/app/MinutesReview.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
-import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
-import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
+import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -36,7 +35,6 @@ import { outcomeCount } from '@/lib/minutes'
 import { useDataStore } from '@/stores/data'
 import { useMinutesStore } from '@/stores/minutes'
 import { useMinutesDraftStore } from '@/stores/minutesDraft'
-import { useThreadStore } from '@/stores/thread'
 
 /* 회의록 상세 — 글 그대로 읽고, [AI 정리] 를 누르면 검토가 이 안에서 펼쳐진다.
    [등록] 하면 검토를 닫고 '이 회의록에서 나온 것' 이 는다. 초안은 서버가 들고 있지 않아 떠나면 잃는다 — 묻고, 떠나면 비운다 */
@@ -45,7 +43,6 @@ const router = useRouter()
 const data = useDataStore()
 const minutes = useMinutesStore()
 const draft = useMinutesDraftStore()
-const threadStore = useThreadStore()
 
 const minutesId = computed(() => String(route.params.minutesId ?? ''))
 const loadState = ref<'loading' | 'ready' | 'missing' | 'error'>('loading')
@@ -81,9 +78,6 @@ watch(
 
 const outcome = computed(() => minutes.outcomeOf(minutesId.value))
 const madeCount = computed(() => outcomeCount(outcome.value))
-const threadRow = (id: string) => threadStore.rows.find((r) => r.thread.id === id)
-const threadTitle = (id: string) =>
-  data.allThreads.find((t) => t.id === id)?.title ?? '찾을 수 없는 안건'
 
 /* 정리 — 검토 · 정리 중은 이 회의록의 것만 그린다 */
 const mine = computed(() => draft.minutesId === minutesId.value)
@@ -104,8 +98,7 @@ function discardDraft() {
 const resultLine = computed(() => {
   const r = mine.value ? draft.lastResult : null
   if (!r) return ''
-  const appended = r.entries.filter((e) => !r.threads.some((t) => t.id === e.threadId)).length
-  return `새 안건 ${r.threads.length} · 이력 ${appended} · 작업 ${r.tasks.length}건을 등록했습니다`
+  return `새 안건 ${r.agendas.length} · 기존 안건 ${r.updatedAgendas.length} · 작업 ${r.tasks.length}건을 등록했습니다`
 })
 
 /* 떠날 때 — 받는 중 · 검토 중이면 묻는다. 다른 회의록으로 옮길 때도 같다 */
@@ -157,12 +150,12 @@ async function remove() {
 }
 
 /* 칩을 누르면 상세 팝업. 이 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 — 떠나는 확인이 뜨지 않게 */
-const threadDetailId = ref<string | null>(null)
+const agendaDetailId = ref<string | null>(null)
 const taskDetailId = ref<string | null>(null)
-const threadOpen = computed({
-  get: () => threadDetailId.value !== null,
+const agendaOpen = computed({
+  get: () => agendaDetailId.value !== null,
   set: (open: boolean) => {
-    if (!open) threadDetailId.value = null
+    if (!open) agendaDetailId.value = null
   },
 })
 const taskOpen = computed({
@@ -171,16 +164,16 @@ const taskOpen = computed({
     if (!open) taskDetailId.value = null
   },
 })
-function openThread(id: string) {
+function openAgenda(id: string) {
   taskDetailId.value = null
-  threadDetailId.value = id
+  agendaDetailId.value = id
 }
 function openTask(id: string) {
-  threadDetailId.value = null
+  agendaDetailId.value = null
   taskDetailId.value = id
 }
 function closeDetails() {
-  threadDetailId.value = null
+  agendaDetailId.value = null
   taskDetailId.value = null
 }
 </script>
@@ -320,34 +313,19 @@ function closeDetails() {
               아직 정리하지 않았어요
             </p>
             <div v-else class="flex flex-col gap-2">
-              <div v-if="outcome.threads.length > 0" class="flex flex-wrap items-center gap-1.5">
+              <div v-if="outcome.agendas.length > 0" class="flex flex-wrap items-center gap-1.5">
                 <span class="w-10 shrink-0 text-xs text-muted-foreground">안건</span>
                 <button
-                  v-for="t in outcome.threads"
+                  v-for="t in outcome.agendas"
                   :key="t.id"
                   type="button"
                   class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-                  :data-made-thread="t.id"
-                  @click="openThread(t.id)"
+                  :data-made-agenda="t.id"
+                  @click="openAgenda(t.id)"
                 >
                   <ListTree class="size-3 shrink-0 text-muted-foreground" />
                   <span class="truncate">{{ t.title }}</span>
-                  <ThreadStateBadge :state="t.state" :defer-count="threadRow(t.id)?.deferCount" />
-                </button>
-              </div>
-              <div v-if="outcome.entries.length > 0" class="flex flex-wrap items-center gap-1.5">
-                <span class="w-10 shrink-0 text-xs text-muted-foreground">이력</span>
-                <button
-                  v-for="e in outcome.entries"
-                  :key="e.id"
-                  type="button"
-                  class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-                  :title="e.text"
-                  :data-made-entry="e.id"
-                  @click="openThread(e.threadId)"
-                >
-                  <EntryKindBadge :kind="e.kind" />
-                  <span class="truncate">{{ threadTitle(e.threadId) }}</span>
+                  <AgendaStateBadge :state="t.state" />
                 </button>
               </div>
               <div v-if="outcome.tasks.length > 0" class="flex flex-wrap items-center gap-1.5">
@@ -396,7 +374,7 @@ function closeDetails() {
 
           <!-- 검토 -->
           <template v-if="reviewing">
-            <MinutesReview @open-thread="openThread" />
+            <MinutesReview @open-agenda="openAgenda" />
             <div
               class="sticky bottom-0 flex items-center gap-2.5 border-t border-border bg-background py-3"
             >
@@ -430,7 +408,7 @@ function closeDetails() {
           <DialogDescription class="text-pretty" data-minutes-remove-note>
             {{
               madeCount > 0
-                ? `여기서 나온 ${madeCount}건은 남습니다. 그 안건 · 이력 · 작업에서 회의록 출처만 빠집니다.`
+                ? `여기서 나온 ${madeCount}건은 남습니다. 그 안건 · 작업에서 회의록 출처만 빠집니다.`
                 : '지운 회의록은 되돌릴 수 없습니다.'
             }}
           </DialogDescription>
@@ -450,16 +428,12 @@ function closeDetails() {
       </DialogContent>
     </Dialog>
 
-    <ThreadDetailDialog
-      v-model:open="threadOpen"
-      :thread-id="threadDetailId"
-      @open-thread="openThread"
-    />
+    <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
     <TaskDetailDialog
       v-model:open="taskOpen"
       :task-id="taskDetailId"
       @open-task="openTask"
-      @open-thread="openThread"
+      @open-agenda="openAgenda"
     />
   </AppShell>
 </template>

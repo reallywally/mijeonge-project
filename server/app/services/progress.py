@@ -16,13 +16,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
-    Entry,
+    Agenda,
     ProjectReport,
     Task,
+    TaskAgendaLink,
     TaskLine,
     TaskLog,
-    TaskThreadLink,
-    Thread,
 )
 from app.schemas.report import (
     DecisionFacts,
@@ -38,7 +37,7 @@ from app.schemas.report import (
 from app.schemas.risk import DecisionRiskReport, RiskSettings
 from app.services import risk as risk_service
 from app.services import task as task_service
-from app.services.access import live_task_ids, live_thread_ids
+from app.services.access import live_agenda_ids, live_task_ids
 from app.time import KST, as_utc
 
 PERIOD_DAYS = 7
@@ -142,15 +141,15 @@ async def _lines(session: AsyncSession, project_id: str) -> dict[str, tuple[int,
     return found
 
 
-async def _thread_counts(session: AsyncSession, project_id: str) -> dict[str, int]:
+async def _agenda_counts(session: AsyncSession, project_id: str) -> dict[str, int]:
     rows = await session.execute(
-        select(TaskThreadLink.task_id, func.count())
+        select(TaskAgendaLink.task_id, func.count())
         .where(
-            TaskThreadLink.project_id == project_id,
-            TaskThreadLink.task_id.in_(live_task_ids()),
-            TaskThreadLink.thread_id.in_(live_thread_ids()),
+            TaskAgendaLink.project_id == project_id,
+            TaskAgendaLink.task_id.in_(live_task_ids()),
+            TaskAgendaLink.agenda_id.in_(live_agenda_ids()),
         )
-        .group_by(TaskThreadLink.task_id)
+        .group_by(TaskAgendaLink.task_id)
     )
     return dict(rows.tuples().all())
 
@@ -179,24 +178,22 @@ async def _period_logs(
 
 async def _period_decisions(
     session: AsyncSession, project_id: str, start: date, end: date
-) -> tuple[list[str], list[str]]:
+) -> list[str]:
+    """기간 안에 정해진 안건 — `decided_at` 의 KST 날짜가 기간 안. 안건 등록 순."""
     rows = await session.execute(
-        select(Entry.thread_id, Entry.kind, Entry.created_at, Thread.seq)
-        .join(Thread, Thread.id == Entry.thread_id)
+        select(Agenda.id, Agenda.decided_at)
         .where(
-            Thread.project_id == project_id,
-            Thread.is_deleted.is_(False),
-            Entry.is_deleted.is_(False),
-            Entry.kind.in_(("decide", "change", "defer")),
+            Agenda.project_id == project_id,
+            Agenda.is_deleted.is_(False),
+            Agenda.decided_at.is_not(None),
         )
+        .order_by(Agenda.seq)
     )
-    decided: dict[str, int] = {}
-    deferred: dict[str, int] = {}
-    for thread_id, kind, created_at, seq in rows.tuples():
-        if not start <= kst_day(created_at) <= end:
-            continue
-        (deferred if kind == "defer" else decided)[thread_id] = seq
-    return sorted(decided, key=decided.__getitem__), sorted(deferred, key=deferred.__getitem__)
+    return [
+        agenda_id
+        for agenda_id, decided_at in rows.tuples()
+        if decided_at is not None and start <= kst_day(decided_at) <= end
+    ]
 
 
 async def _previous(session: AsyncSession, project_id: str) -> PreviousReport | None:
@@ -272,10 +269,10 @@ async def progress_with_risks(
     graph = await _read_graph(session, project_id)
     tasks = graph.tasks
     lines = await _lines(session, project_id)
-    thread_counts = await _thread_counts(session, project_id)
+    agenda_counts = await _agenda_counts(session, project_id)
     since_map = await task_service.status_since_map(session, project_id)
     completed, started = await _period_logs(session, project_id, start, today)
-    decided, deferred = await _period_decisions(session, project_id, start, today)
+    decided = await _period_decisions(session, project_id, start, today)
     previous = await _previous(session, project_id)
     decided_but_blocked = {t.task_id for t in risks.tasks if t.signal == "decidedButBlocked"}
 
@@ -316,7 +313,7 @@ async def progress_with_risks(
                 open_children=graph.open_descendants(task.id),
                 open_lines=open_lines,
                 total_lines=total_lines,
-                thread_count=thread_counts.get(task.id, 0),
+                agenda_count=agenda_counts.get(task.id, 0),
                 priority=PRIORITIES.get(task.priority, "normal"),
             ),
             score=score,
@@ -351,9 +348,8 @@ async def progress_with_risks(
         ),
         previous=previous,
         decisions=DecisionFacts(
-            decided_thread_ids=decided,
-            deferred_thread_ids=deferred,
-            risky_thread_ids=[t.thread_id for t in risks.threads if t.level in ("high", "medium")][
+            decided_agenda_ids=decided,
+            risky_agenda_ids=[t.agenda_id for t in risks.agendas if t.level in ("high", "medium")][
                 :RISKY_MAX
             ],
         ),

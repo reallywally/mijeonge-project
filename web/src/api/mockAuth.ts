@@ -2,28 +2,24 @@ import { mockError } from '@/api/client'
 import {
   accounts,
   checkRequests,
-  decisionItems,
-  entries,
   members,
   minutesRows,
   partMembers,
   parts,
   projectGrants,
   projects,
-  taskThreadLinks,
+  taskAgendaLinks,
   tasks,
   taskHistory,
   testCases,
   testHistory,
-  threadHistory,
-  threads,
+  agendaHistory,
+  agendas,
 } from '@/fixtures'
 import type { MockAccount, MockProjectGrant, MockTestCase } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
 import type {
   CheckRequest,
-  DecisionItem,
-  Entry,
   HistoryEntry,
   Me,
   Member,
@@ -35,8 +31,8 @@ import type {
   Report,
   RiskSettings,
   Task,
-  TaskThreadLink,
-  Thread,
+  TaskAgendaLink,
+  Agenda,
 } from '@/types/domain'
 
 /*
@@ -76,7 +72,7 @@ interface MockDb {
   /** 변경 이력 — 작업 · 테스트 · 안건 id 마다 등록 순서대로 */
   taskHistory: Record<string, HistoryEntry[]>
   testHistory: Record<string, HistoryEntry[]>
-  threadHistory: Record<string, HistoryEntry[]>
+  agendaHistory: Record<string, HistoryEntry[]>
   historySeq: number
 }
 
@@ -101,7 +97,7 @@ const fresh = (): MockDb => ({
   nextTestNo: {},
   taskHistory: structuredClone(taskHistory),
   testHistory: structuredClone(testHistory),
-  threadHistory: structuredClone(threadHistory),
+  agendaHistory: structuredClone(agendaHistory),
   historySeq: 0,
 })
 
@@ -139,13 +135,11 @@ export function resetMockAuth() {
 
 export const mockDb = () => db
 
-/** 목업의 안건 · 이력 · 작업 — 목업 갈래에서는 이것들을 데이터 스토어가 들고 고친다 */
+/** 목업의 안건 · 작업 — 목업 갈래에서는 이것들을 데이터 스토어가 들고 고친다 */
 export interface MockWorld {
-  threads: Thread[]
-  decisionItems: DecisionItem[]
-  entries: Entry[]
+  agendas: Agenda[]
   tasks: Task[]
-  taskThreads: TaskThreadLink[]
+  taskAgendas: TaskAgendaLink[]
 }
 
 let worldOf: (() => MockWorld) | null = null
@@ -157,7 +151,7 @@ export function provideMockWorld(fn: (() => MockWorld) | null) {
 }
 
 export const mockWorld = (): MockWorld =>
-  worldOf?.() ?? { threads, decisionItems, entries, tasks, taskThreads: taskThreadLinks }
+  worldOf?.() ?? { agendas, tasks, taskAgendas: taskAgendaLinks }
 
 export const accountOf = (memberId: string) => db.accounts.find((a) => a.memberId === memberId)
 export const memberOf = (memberId: string) => db.members.find((m) => m.id === memberId)

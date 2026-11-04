@@ -56,13 +56,9 @@ export const useMinutesStore = defineStore('minutes', () => {
   /** 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자 — 댓글과 같은 경계 */
   const canRemove = (m: MinutesItem) => canDeleteComment(auth.me, m, m.projectId)
 
-  /** 이 회의록에서 나온 안건 · 이력 · 작업 — 지금 들고 있는 스냅샷에서 */
+  /** 이 회의록에서 나온 안건 · 작업 — 지금 들고 있는 스냅샷에서 */
   const outcomeOf = (minutesId: string): MinutesOutcome =>
-    minutesOutcome(minutesId, {
-      threads: data.allThreads,
-      entries: data.allEntries,
-      tasks: data.allTasks,
-    })
+    minutesOutcome(minutesId, { agendas: data.allAgendas, tasks: data.allTasks })
 
   /** 고른 프로젝트의 목록을 받는다. 늦게 온 옛 응답은 버린다 */
   async function load() {
@@ -137,7 +133,7 @@ export const useMinutesStore = defineStore('minutes', () => {
   }
 
   /**
-   * 지운다. 거기서 나온 안건 · 이력 · 작업은 남고 출처만 비운다 — 서버도 그렇게 하고(SET NULL),
+   * 지운다. 거기서 나온 안건 · 작업은 남고 출처만 비운다 — 서버도 그렇게 하고(SET NULL),
    * 들고 있는 스냅샷도 같은 길로 맞춘다(목업 · 서버 같다)
    */
   async function remove(minutesId: string): Promise<boolean> {
@@ -149,7 +145,7 @@ export const useMinutesStore = defineStore('minutes', () => {
     }
     rows.value = rows.value.filter((m) => m.id !== minutesId)
     delete byId.value[minutesId]
-    for (const records of [data.allThreads, data.allEntries, data.allTasks])
+    for (const records of [data.allAgendas, data.allTasks])
       for (const row of records) if (row.minutesId === minutesId) row.minutesId = null
     return true
   }

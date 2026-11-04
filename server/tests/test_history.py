@@ -18,11 +18,10 @@ from sqlalchemy import create_engine, delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import test as test_route
-from app.models import Member, Task, TaskHistory, TestHistory, ThreadHistory
+from app.models import AgendaHistory, Member, Task, TaskHistory, TestHistory
 from app.time import now
 from tests.conftest import ADMIN, AsMember
-from tests.test_minutes import body as entry_body
-from tests.test_minutes import minutes, new_thread, old_entry, task
+from tests.test_minutes import minutes, new_agenda, task, update_row
 
 CREATED = [{"field": "created", "from": None, "to": None, "subject": ""}]
 
@@ -88,9 +87,9 @@ async def test_seed_demo_lines(client: httpx.AsyncClient) -> None:
 # --- 작업 ---------------------------------------------------------------------------------
 
 
-async def test_create_is_one_created_line_even_with_threads(client: httpx.AsyncClient) -> None:
+async def test_create_is_one_created_line_even_with_agendas(client: httpx.AsyncClient) -> None:
     res = await client.post(
-        "/api/projects/p1/tasks", json={"title": "새 작업", "threadIds": ["t1", "t2"]}
+        "/api/projects/p1/tasks", json={"title": "새 작업", "agendaIds": ["t1", "t2"]}
     )
     out = res.json()
     (row,) = await history(client, f"tasks/{out['id']}")
@@ -387,16 +386,16 @@ async def test_line_done_only_when_it_changes(client: httpx.AsyncClient) -> None
     assert rows[-1]["changes"] == [ch("lineDone", True, False, "서버 신청서 제출")]
 
 
-async def test_thread_link_only_when_new_or_existing(client: httpx.AsyncClient) -> None:
+async def test_agenda_link_only_when_new_or_existing(client: httpx.AsyncClient) -> None:
     before = len(await history(client, "tasks/k1"))
     for _ in range(2):
-        assert (await client.put("/api/tasks/k1/threads/t1")).status_code == 200
+        assert (await client.put("/api/tasks/k1/agendas/t1")).status_code == 200
     for _ in range(2):
-        assert (await client.delete("/api/tasks/k1/threads/t1")).status_code == 204
+        assert (await client.delete("/api/tasks/k1/agendas/t1")).status_code == 204
     rows = await history(client, "tasks/k1")
     assert [row["changes"] for row in rows[before:]] == [
-        [ch("thread", None, "t1")],
-        [ch("thread", "t1", None)],
+        [ch("agenda", None, "t1")],
+        [ch("agenda", "t1", None)],
     ]
     # 안건 쪽에는 남지 않는다 — 작업 이력이다
     assert all(row["changedBy"] == ADMIN for row in rows[before:])
@@ -415,7 +414,7 @@ async def test_changed_by_is_the_requester(client: httpx.AsyncClient, as_member:
     u2 = await as_member("u2")
     assert (await u2.patch("/api/tasks/k3", json={"priority": "high"})).status_code == 200
     assert (await u2.patch("/api/tasks/k4/lines/l3", json={"done": True})).status_code == 200
-    assert (await u2.put("/api/tasks/k3/threads/t1")).status_code == 200
+    assert (await u2.put("/api/tasks/k3/agendas/t1")).status_code == 200
     assert (await history(client, "tasks/k3"))[-1]["changedBy"] == "u2"
     assert (await history(client, "tasks/k3"))[-2]["changedBy"] == "u2"
     assert (await history(client, "tasks/k4"))[-1]["changedBy"] == "u2"
@@ -527,7 +526,7 @@ async def test_rejected_status_leaves_no_line(client: httpx.AsyncClient) -> None
 
 
 @pytest.mark.parametrize(
-    ("kind", "target", "field"), [("task", "k1", "taskRef"), ("thread", "t5", "threadRef")]
+    ("kind", "target", "field"), [("task", "k1", "taskRef"), ("agenda", "t5", "agendaRef")]
 )
 async def test_refs_only_when_new_or_existing(
     client: httpx.AsyncClient, kind: str, target: str, field: str
@@ -690,9 +689,9 @@ def test_migration_backfills_a_created_line() -> None:
 # --- 안건 (docs/api/history.md '칸 — 안건') ---------------------------------------------------
 
 
-async def test_seed_has_a_created_line_per_thread(client: httpx.AsyncClient) -> None:
-    (t1,) = await history(client, "threads/t1")
-    assert t1 == {
+async def test_seed_has_a_created_line_per_agenda(client: httpx.AsyncClient) -> None:
+    t1 = await history(client, "agendas/t1")
+    assert t1[0] == {
         "id": "hh-t1-1",
         "changedAt": "2026-09-08T00:30:00Z",
         # 시드의 등록한 사람은 담당자다 — t1 은 u3
@@ -700,135 +699,115 @@ async def test_seed_has_a_created_line_per_thread(client: httpx.AsyncClient) -> 
         "backfilled": False,
         "changes": CREATED,
     }
-    # 담당이 없던 t4 는 등록한 사람도 비어 있다
-    (t4,) = await history(client, "threads/t4")
+    # 결정내용이 있는 안건은 이행이 채운 '결정내용' 줄이 뒤에 하나 — 결정 줄을 남긴 사람 · 시각
+    assert t1[1] == {
+        "id": "hh-t1-2",
+        "changedAt": "2026-09-09T02:00:00Z",
+        "changedBy": "u3",
+        "backfilled": True,
+        "changes": [ch("decision", "", "우분투 최신 버전으로 한다")],
+    }
+    # 담당이 없던 t4 는 등록한 사람도 비어 있고, 결정이 없어 한 줄뿐이다
+    (t4,) = await history(client, "agendas/t4")
     assert t4["id"] == "hh-t4-1" and t4["changedBy"] is None
+    t5 = await history(client, "agendas/t5")
+    assert [row["id"] for row in t5] == ["hh-t5-1", "hh-t5-2"]
+    assert t5[1]["changedAt"] == "2026-09-10T07:00:00Z" and t5[1]["changedBy"] == "u4"
 
 
-async def test_thread_create_and_minutes_apply_write_created(client: httpx.AsyncClient) -> None:
-    created = (await client.post("/api/projects/p1/threads", json={"title": "새 안건"})).json()
-    (row,) = await history(client, f"threads/{created['id']}")
+async def test_agenda_create_and_minutes_apply_write_created(client: httpx.AsyncClient) -> None:
+    created = (await client.post("/api/projects/p1/agendas", json={"title": "새 안건"})).json()
+    (row,) = await history(client, f"agendas/{created['id']}")
     assert row["changes"] == CREATED and row["changedBy"] == ADMIN
 
     payload = minutes(
-        threads=[new_thread("n1", "회의 안건", entry=entry_body("defer", "미룸"))],
-        entries=[old_entry("o1", "t4", "decide", "정함")],
+        agendas=[new_agenda("n1", "회의 안건", decision="정함", state="decided")],
+        updates=[update_row("t4", "주 1회", state="open")],
     )
     res = await client.post("/api/minutes/m1/apply", json=payload)
     assert res.status_code == 201, res.json()
-    (made,) = res.json()["threads"]
+    (made,) = res.json()["agendas"]
     assert made["creatorId"] == ADMIN
-    # 회의록으로 남긴 줄도 반영한 사람이 남긴 것이다
-    assert [entry["creatorId"] for entry in res.json()["entries"]] == [ADMIN, ADMIN]
-    (row,) = await history(client, f"threads/{made['id']}")
+    # 등록은 '등록' 한 줄 — 결정내용 · 상태를 같이 적어도 칸으로 나누지 않는다
+    (row,) = await history(client, f"agendas/{made['id']}")
     assert row["changes"] == CREATED and row["changedBy"] == ADMIN
+    # 기존 안건은 PATCH 와 같은 줄
+    assert await last_changes(client, "agendas/t4") == [
+        ch("decision", "", "주 1회"),
+        ch("state", "queued", "open"),
+    ]
 
 
-async def test_thread_patch_writes_changed_fields_in_table_order(
+async def test_agenda_patch_writes_changed_fields_in_table_order(
     client: httpx.AsyncClient,
 ) -> None:
     res = await client.patch(
-        "/api/threads/t1",
+        "/api/agendas/t1",
         json={
-            "ccIds": ["u1", "u2"],
             "dueDate": None,
             "partId": None,
             "ownerId": "u2",
-            "options": ["우분투", "록키"],
+            "state": "open",
+            "decision": "록키로 한다",
             "description": "배경을 고침",
             "title": "서버 OS 결정 (고침)",
         },
     )
     assert res.status_code == 200, res.json()
-    assert await last_changes(client, "threads/t1") == [
+    rows = await history(client, "agendas/t1")
+    assert rows[-1]["changedBy"] == ADMIN and not rows[-1]["backfilled"]
+    assert rows[-1]["changes"] == [
         ch("title", "서버 OS 결정", "서버 OS 결정 (고침)"),
         ch(
             "description",
             "개발 환경 설정 작업에서 서버 OS가 정해지지 않아 서버 구성을 시작하지 못하고 있다.",
             "배경을 고침",
         ),
-        ch("options", "우분투\n록키\nCentOS", "우분투\n록키"),
+        ch("decision", "우분투 최신 버전으로 한다", "록키로 한다"),
+        ch("state", "decided", "open"),
         ch("ownerId", "u3", "u2"),
         ch("partId", "pt1", None),
         ch("dueDate", "2026-09-12", None),
-        ch("ccIds", ["u1"], ["u1", "u2"]),
     ]
 
 
-async def test_thread_patch_options_empty_is_null(client: httpx.AsyncClient) -> None:
-    assert (await client.patch("/api/threads/t1", json={"options": []})).status_code == 200
-    assert await last_changes(client, "threads/t1") == [ch("options", "우분투\n록키\nCentOS", None)]
-
-
-async def test_thread_patch_without_a_change_writes_nothing(client: httpx.AsyncClient) -> None:
+async def test_agenda_patch_without_a_change_writes_nothing(client: httpx.AsyncClient) -> None:
     for body in (
         {},
         {"title": "서버 OS 결정"},
-        {"ccIds": ["u1"]},
-        {"options": ["우분투", "록키", "CentOS"]},
+        {"state": "decided"},
+        {"decision": "우분투 최신 버전으로 한다"},
+        {"ownerId": "u3", "dueDate": "2026-09-12"},
     ):
-        assert (await client.patch("/api/threads/t1", json=body)).status_code == 200
-    assert len(await history(client, "threads/t1")) == 1
+        assert (await client.patch("/api/agendas/t1", json=body)).status_code == 200
+    assert len(await history(client, "agendas/t1")) == 2
 
 
-async def test_adding_an_entry_writes_no_thread_history(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/threads/t4/entries", json={"kind": "defer", "text": "미룸"})
-    assert res.status_code == 201
-    assert len(await history(client, "threads/t4")) == 1
-
-
-async def test_entry_patch_and_delete_lines(client: httpx.AsyncClient, as_member: AsMember) -> None:
-    u3 = await as_member("u3")
-    res = await u3.patch(
-        "/api/threads/t1/entries/e1", json={"text": "우분투 24.04 로 한다", "note": ""}
-    )
-    assert res.status_code == 200
-    rows = await history(client, "threads/t1")
-    assert rows[-1]["changedBy"] == "u3"
-    assert rows[-1]["changes"] == [
-        ch("entryText", "우분투 최신 버전으로 한다", "우분투 24.04 로 한다", "decide"),
-        ch(
-            "entryNote",
-            "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.",
-            None,
-            "decide",
-        ),
-    ]
-    # 같은 글로 다시 고치면 줄이 없다
-    await u3.patch("/api/threads/t1/entries/e1", json={"text": "우분투 24.04 로 한다"})
-    assert len(await history(client, "threads/t1")) == len(rows)
-
-    assert (await u3.delete("/api/threads/t1/entries/e1")).status_code == 200
-    assert await last_changes(client, "threads/t1") == [
-        ch("entryDeleted", "우분투 24.04 로 한다", None, "decide")
-    ]
-
-
-async def test_thread_delete_line_stays_in_the_db(
+async def test_agenda_delete_line_stays_in_the_db(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
-    assert (await client.delete("/api/threads/t4")).status_code == 204
+    assert (await client.delete("/api/agendas/t4")).status_code == 204
     # 지운 안건의 이력은 404 다 — DB 에는 끝에 '삭제' 줄이 남는다
-    res = await client.get("/api/threads/t4/history")
-    assert res.status_code == 404 and res.json()["code"] == "THREAD_NOT_FOUND"
+    res = await client.get("/api/agendas/t4/history")
+    assert res.status_code == 404 and res.json()["code"] == "AGENDA_NOT_FOUND"
     rows = (
         await session.scalars(
-            select(ThreadHistory).where(ThreadHistory.thread_id == "t4").order_by(ThreadHistory.seq)
+            select(AgendaHistory).where(AgendaHistory.agenda_id == "t4").order_by(AgendaHistory.seq)
         )
     ).all()
     assert [row.changes for row in rows] == [CREATED, [ch("deleted", None, None)]]
     assert rows[-1].changed_by == ADMIN
 
 
-async def test_thread_history_missing_and_ungranted(
+async def test_agenda_history_missing_and_ungranted(
     client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
 ) -> None:
-    res = await client.get("/api/threads/nope/history")
-    assert res.status_code == 404 and res.json()["code"] == "THREAD_NOT_FOUND"
+    res = await client.get("/api/agendas/nope/history")
+    assert res.status_code == 404 and res.json()["code"] == "AGENDA_NOT_FOUND"
     session.add(Member(id="u9", name="외부인", email="u9@inno-ax.com"))
     await session.commit()
     u9 = await as_member("u9")
-    assert (await u9.get("/api/threads/t1/history")).json()["code"] == "THREAD_NOT_FOUND"
+    assert (await u9.get("/api/agendas/t1/history")).json()["code"] == "AGENDA_NOT_FOUND"
 
 
 def test_migration_0029_backfills_a_created_line_per_thread() -> None:

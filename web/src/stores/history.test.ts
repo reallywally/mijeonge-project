@@ -58,14 +58,14 @@ describe('목업 작업 쓰기의 이력', () => {
   })
   it('안건 링크는 새로 걸 때 · 있던 것을 뗄 때만', async () => {
     const tasks = useTaskStore()
-    tasks.linkThread('k4', 't1')
-    tasks.linkThread('k3', 't1')
-    tasks.unlinkThread('k3', 't1')
-    tasks.unlinkThread('k3', 't1')
+    tasks.linkAgenda('k4', 't1')
+    tasks.linkAgenda('k3', 't1')
+    tasks.unlinkAgenda('k3', 't1')
+    tasks.unlinkAgenda('k3', 't1')
     expect(await lines('k4')).toEqual([])
     expect((await lines('k3')).map((e) => e.changes)).toEqual([
-      [change('thread', null, 't1')],
-      [change('thread', 't1', null)],
+      [change('agenda', null, 't1')],
+      [change('agenda', 't1', null)],
     ])
   })
 
@@ -79,7 +79,7 @@ describe('목업 작업 쓰기의 이력', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: ['t1'],
+      agendaIds: ['t1'],
       partId: null,
     })
     expect((await fetchTaskHistory(id!)).map((e) => e.changes)).toEqual([
@@ -108,7 +108,7 @@ describe('목업 본문 이력 합치기 (Q65)', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: [],
+      agendaIds: [],
       partId: null,
     })
     add(id!, '작업1')

@@ -1,5 +1,5 @@
 import type { Grade } from '@/lib/access'
-import type { Part, Task, TaskThreadLink, Thread } from '@/types/domain'
+import type { Part, Task, TaskAgendaLink, Agenda } from '@/types/domain'
 
 /*
  * 파트 — 보기 범위지 권한이 아니다 (docs/api/part.md). 서버는 프로젝트 전부를 싣고 화면이 거른다.
@@ -12,8 +12,8 @@ export type PartScope = 'mine' | 'all'
 
 export interface PartScopeInput {
   tasks: Pick<Task, 'id' | 'parentId' | 'partId' | 'ownerId'>[]
-  threads: Pick<Thread, 'id' | 'partId' | 'ownerId'>[]
-  links: TaskThreadLink[]
+  agendas: Pick<Agenda, 'id' | 'partId' | 'ownerId'>[]
+  links: TaskAgendaLink[]
   /** 로그인한 사람 — 담당 규칙에 쓴다 */
   memberId: string | null
   /** 내가 속한 파트(보관한 파트도 넣는다 — 그 파트의 옛 작업은 계속 보인다) */
@@ -24,7 +24,7 @@ export interface PartScopeResult {
   taskIds: Set<string>
   /** 스스로는 안 맞지만 보이는 작업의 조상이라 선 작업 — 경로 · 간트 트리가 끊기지 않게. 흐리게 그린다 */
   contextTaskIds: Set<string>
-  threadIds: Set<string>
+  agendaIds: Set<string>
 }
 
 /**
@@ -65,13 +65,13 @@ export function visibleInMyParts(input: PartScopeInput): PartScopeResult {
   const linked = new Set(
     input.links
       .filter((l) => taskIds.has(l.taskId) && !contextTaskIds.has(l.taskId))
-      .map((l) => l.threadId),
+      .map((l) => l.agendaId),
   )
-  const threadIds = new Set(
-    input.threads.filter((t) => ownsOrShares(t) || linked.has(t.id)).map((t) => t.id),
+  const agendaIds = new Set(
+    input.agendas.filter((t) => ownsOrShares(t) || linked.has(t.id)).map((t) => t.id),
   )
 
-  return { taskIds, contextTaskIds, threadIds }
+  return { taskIds, contextTaskIds, agendaIds }
 }
 
 /** 처음 들어왔을 때의 보기 — 일반 사용자는 내 파트, 프로젝트 관리자 · 시스템 관리자는 전체 */

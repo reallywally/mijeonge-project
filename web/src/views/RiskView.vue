@@ -10,7 +10,7 @@ import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import RiskSettingsDialog from '@/components/app/RiskSettingsDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
-import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/table'
 import { canManageProject } from '@/lib/access'
 import { monthDay } from '@/lib/date'
-import { riskSettingsLine, TASK_SIGNAL_LABEL, THREAD_SIGNAL_LABEL } from '@/lib/risk'
+import { riskSettingsLine, TASK_SIGNAL_LABEL, AGENDA_SIGNAL_LABEL } from '@/lib/risk'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { useRiskStore } from '@/stores/risk'
@@ -48,11 +48,11 @@ const summaryLine = computed(() => {
   const s = risk.summary
   if (s && risk.summaryChanged) return '목록이 바뀌었습니다 —'
   if (s?.status === 'streaming')
-    return `보이는 안건 ${s.threadIds.length} · 작업 ${s.taskIds.length}건을 정리하는 중…`
-  if (s) return `${s.asOf} 기준 · 보이는 ${s.threadIds.length + s.taskIds.length}건`
+    return `보이는 안건 ${s.agendaIds.length} · 작업 ${s.taskIds.length}건을 정리하는 중…`
+  if (s) return `${s.asOf} 기준 · 보이는 ${s.agendaIds.length + s.taskIds.length}건`
   if (risk.tooManyToSummarize) return '보이는 줄이 너무 많습니다 — 내 파트로 좁혀 주세요.'
   if (risk.visibleCount === 0) return '보이는 리스크가 없어 정리할 것이 없습니다.'
-  return `보이는 안건 ${risk.visibleIds.threadIds.length} · 작업 ${risk.visibleIds.taskIds.length}건을 정리합니다`
+  return `보이는 안건 ${risk.visibleIds.agendaIds.length} · 작업 ${risk.visibleIds.taskIds.length}건을 정리합니다`
 })
 
 const canEditSettings = computed(
@@ -66,18 +66,18 @@ const LEVEL_TONE: Record<RiskLevel, StatusTone> = {
 }
 
 const dayLabel = (day: string | null) => (day ? monthDay(day) : '—')
-const threadTitle = (threadId: string) =>
-  data.allThreads.find((t) => t.id === threadId)?.title ?? threadId
+const agendaTitle = (agendaId: string) =>
+  data.allAgendas.find((t) => t.id === agendaId)?.title ?? agendaId
 
 const settingsOpen = ref(false)
 
 /* 줄을 누르면 기존 상세 팝업. 리스크 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 */
-const threadDetailId = ref<string | null>(null)
+const agendaDetailId = ref<string | null>(null)
 const taskDetailId = ref<string | null>(null)
-const threadOpen = computed({
-  get: () => threadDetailId.value !== null,
+const agendaOpen = computed({
+  get: () => agendaDetailId.value !== null,
   set: (open: boolean) => {
-    if (!open) threadDetailId.value = null
+    if (!open) agendaDetailId.value = null
   },
 })
 const taskOpen = computed({
@@ -87,12 +87,12 @@ const taskOpen = computed({
   },
 })
 
-function openThread(id: string) {
+function openAgenda(id: string) {
   taskDetailId.value = null
-  threadDetailId.value = id
+  agendaDetailId.value = id
 }
 function openTask(id: string) {
-  threadDetailId.value = null
+  agendaDetailId.value = null
   taskDetailId.value = id
 }
 </script>
@@ -200,7 +200,7 @@ function openTask(id: string) {
               v-if="risk.summary.text"
               :text="risk.summary.text"
               data-summary-text
-              @open-thread="openThread"
+              @open-agenda="openAgenda"
               @open-task="openTask"
             />
             <p
@@ -237,7 +237,7 @@ function openTask(id: string) {
           <section class="flex flex-col gap-2.5" aria-label="안건 리스크">
             <div class="flex items-baseline gap-2">
               <h2 class="text-base font-semibold">안건 리스크</h2>
-              <span class="text-xs text-muted-foreground">{{ risk.threads.length }}건</span>
+              <span class="text-xs text-muted-foreground">{{ risk.agendas.length }}건</span>
             </div>
             <div
               class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
@@ -269,13 +269,13 @@ function openTask(id: string) {
                 </TableHeader>
                 <TableBody>
                   <TableRow
-                    v-for="row in risk.threads"
-                    :key="row.threadId"
+                    v-for="row in risk.agendas"
+                    :key="row.agendaId"
                     class="cursor-pointer"
-                    data-risk-thread
-                    @click="openThread(row.threadId)"
+                    data-risk-agenda
+                    @click="openAgenda(row.agendaId)"
                   >
-                    <TableCell><IdCell :id="row.threadId" /></TableCell>
+                    <TableCell><IdCell :id="row.agendaId" /></TableCell>
                     <TableCell class="min-w-0 py-2.5">
                       <div class="flex min-w-0 items-center gap-2.5">
                         <button
@@ -295,7 +295,7 @@ function openTask(id: string) {
                           :class="
                             s === 'overdue' || s === 'blocking' ? 'border-destructive/40' : ''
                           "
-                          >{{ THREAD_SIGNAL_LABEL[s] }}</Badge
+                          >{{ AGENDA_SIGNAL_LABEL[s] }}</Badge
                         >
                       </div>
                     </TableCell>
@@ -324,7 +324,7 @@ function openTask(id: string) {
                       >{{ data.memberName(row.ownerId) ?? '미정' }}</TableCell
                     >
                   </TableRow>
-                  <TableRow v-if="risk.threads.length === 0" class="hover:bg-transparent">
+                  <TableRow v-if="risk.agendas.length === 0" class="hover:bg-transparent">
                     <TableCell colspan="6" class="h-20 text-center text-sm text-muted-foreground">
                       눈에 띄는 안건 리스크가 없습니다.
                     </TableCell>
@@ -387,10 +387,10 @@ function openTask(id: string) {
                         <PartChip :part-id="row.partId" />
                       </div>
                       <div
-                        v-if="row.threadIds.length > 0"
+                        v-if="row.agendaIds.length > 0"
                         class="mt-1 truncate text-xs text-muted-foreground"
                       >
-                        걸린 안건 · {{ row.threadIds.map(threadTitle).join(' · ') }}
+                        걸린 안건 · {{ row.agendaIds.map(agendaTitle).join(' · ') }}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -469,15 +469,15 @@ function openTask(id: string) {
                           : '담당자 없음'
                       }}</TableCell
                     >
-                    <TableCell class="text-right text-sm">{{ row.openThreads }}</TableCell>
+                    <TableCell class="text-right text-sm">{{ row.openAgendas }}</TableCell>
                     <TableCell
                       class="text-right text-sm"
                       :class="
-                        row.overdueThreads > 0
+                        row.overdueAgendas > 0
                           ? 'font-medium text-destructive'
                           : 'text-muted-foreground'
                       "
-                      >{{ row.overdueThreads }}</TableCell
+                      >{{ row.overdueAgendas }}</TableCell
                     >
                     <TableCell
                       class="text-right text-sm"
@@ -511,16 +511,12 @@ function openTask(id: string) {
       </div>
     </div>
 
-    <ThreadDetailDialog
-      v-model:open="threadOpen"
-      :thread-id="threadDetailId"
-      @open-thread="openThread"
-    />
+    <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
     <TaskDetailDialog
       v-model:open="taskOpen"
       :task-id="taskDetailId"
       @open-task="openTask"
-      @open-thread="openThread"
+      @open-agenda="openAgenda"
     />
     <RiskSettingsDialog v-model:open="settingsOpen" />
   </AppShell>

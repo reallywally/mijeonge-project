@@ -8,7 +8,7 @@ import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { CHECK_BADGE_INTERVAL_MS, useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import type { CheckRequest } from '@/types/domain'
 
 /* 확인 요청 — 프로젝트의 요청 전부를 받아 받은 것 · 보낸 것 · 안건별로 거르고 줄 세운다 */
@@ -47,9 +47,9 @@ describe('거르기 · 정렬', () => {
 
     expect(ids(checks.received)).toEqual(['c4'])
     expect(ids(checks.receivedPending)).toEqual(['c4'])
-    expect(checks.sent.map((b) => [b.threadId, b.entryId, ids(b.rows), b.confirmed])).toEqual([
-      ['t2', 'e3', ['c1', 'c2', 'c3'], 1],
-    ])
+    expect(
+      checks.sent.map((b) => [b.agendaId, b.decisionRev, b.decision, ids(b.rows), b.confirmed]),
+    ).toEqual([['t2', 1, 'mysql 을 쓴다', ['c1', 'c2', 'c3'], 1]])
     expect(checks.canConfirm(checks.received[0])).toBe(true)
     /* 남이 받은 대기는 [확인] 할 수 없다 */
     expect(checks.canConfirm(checks.sent[0].rows[0])).toBe(false)
@@ -67,7 +67,7 @@ describe('거르기 · 정렬', () => {
     const theirs = useCheckStore()
     await theirs.load()
     expect(ids(theirs.received)).toEqual(['c1'])
-    expect(theirs.sent.map((b) => [b.entryId, ids(b.rows)])).toEqual([['e1', ['c4']]])
+    expect(theirs.sent.map((b) => [b.key, ids(b.rows)])).toEqual([['t1#1', ['c4']]])
   })
 
   it('다른 프로젝트로 옮기면 옛 목록을 그리지 않는다', async () => {
@@ -80,13 +80,17 @@ describe('거르기 · 정렬', () => {
   })
 })
 
+/* t6 은 결정됐지만 연결 작업이 없다 — 박지훈(u2) 담당 작업 k3 을 걸어 받을 사람을 만든다 */
+const linkT6 = () => useDataStore().taskAgendas.push({ taskId: 'k3', agendaId: 't6' })
+
 describe('안건 상세의 [확인 요청]', () => {
-  it('t6 — 결정됨 · 안 보냄 · 받을 사람(참조 u2) 있음이라 누를 수 있다', async () => {
+  it('t6 — 결정됨 · 안 보냄 · 받을 사람(연결 작업 담당 u2) 있음이라 누를 수 있다', async () => {
     await signedIn('u1@inno-ax.com')
+    linkT6()
     const checks = useCheckStore()
     await checks.load()
-    expect(checks.forThread('t6')).toMatchObject({
-      decision: { id: 'e6' },
+    expect(checks.forAgenda('t6')).toMatchObject({
+      decision: expect.stringContaining('테스트 기간만 2주 줄인다'),
       recipientIds: ['u2'],
       block: null,
       current: null,
@@ -96,70 +100,79 @@ describe('안건 상세의 [확인 요청]', () => {
 
   it('목록을 받기 전에는 보냈는지 몰라 누를 수 없다', async () => {
     await signedIn('u1@inno-ax.com')
-    expect(useCheckStore().forThread('t6')?.block).toBe('sent')
+    linkT6()
+    expect(useCheckStore().forAgenda('t6')?.block).toBe('sent')
   })
 
   it('결정 전 · 이미 보냄 · 받을 사람 없음', async () => {
     await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
-    expect(checks.forThread('t3')?.block).toBe('not-decided')
+    expect(checks.forAgenda('t3')).toMatchObject({ decision: null, block: 'not-decided' })
 
-    const t2 = checks.forThread('t2')!
+    const t2 = checks.forAgenda('t2')!
     expect(t2.block).toBe('sent')
     expect([t2.current?.confirmed, t2.current?.rows.length]).toEqual([1, 3])
 
-    /* 참조를 비우면 t6 은 받을 사람이 없다 */
-    expect(useThreadStore().updateThread('t6', { ccIds: [] })).toBe(true)
-    expect(checks.forThread('t6')).toMatchObject({ recipientIds: [], block: 'no-recipients' })
+    /* 연결 작업이 없으면 받을 사람이 없다 — 참조는 없어졌다 */
+    expect(checks.forAgenda('t6')).toMatchObject({ recipientIds: [], block: 'no-recipients' })
   })
 
   it('누른 사람은 받는 사람에서 빠진다 — u2 에게 t6 은 받을 사람이 없다', async () => {
     await signedIn('u2@inno-ax.com')
+    linkT6()
     const checks = useCheckStore()
     await checks.load()
-    expect(checks.forThread('t6')?.block).toBe('no-recipients')
+    expect(checks.forAgenda('t6')?.block).toBe('no-recipients')
   })
 
-  it('결정을 바꾸면 다시 누를 수 있고, 앞 결정 묶음은 접힌 쪽으로 간다', async () => {
+  it('결정내용을 바꾸면(판이 오르면) 다시 누를 수 있고, 앞 판 묶음은 접힌 쪽으로 간다', async () => {
     await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
-    expect(
-      await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null, 'di2'),
-    ).toBe(true)
+    expect(useAgendaStore().updateAgenda('t2', { decision: 'PostgreSQL 로 바꾼다' })).toBe(true)
 
-    const next = checks.forThread('t2')!
+    const next = checks.forAgenda('t2')!
+    expect(next.decision).toBe('PostgreSQL 로 바꾼다')
     expect(next.block).toBeNull()
     expect(next.current).toBeNull()
-    expect(next.older.map((b) => b.entryId)).toEqual(['e3'])
-    expect(next.recipientIds).toEqual(['u3', 'u2', 'u4'])
+    expect(next.older.map((b) => b.decisionRev)).toEqual([1])
+    expect(next.recipientIds).toEqual(['u3'])
 
-    expect(await checks.send('t2')).toBe(3)
-    const sent = checks.forThread('t2')!
+    expect(await checks.send('t2')).toBe(1)
+    const sent = checks.forAgenda('t2')!
     expect(sent.block).toBe('sent')
-    expect(sent.current?.entryId).toBe(next.decision!.id)
-    expect(sent.current?.rows.map((c) => c.recipientId)).toEqual(['u3', 'u2', 'u4'])
+    expect(sent.current).toMatchObject({ decisionRev: 2, decision: 'PostgreSQL 로 바꾼다' })
+    expect(sent.current?.rows.map((c) => c.recipientId)).toEqual(['u3'])
+  })
+
+  it('결정에서 벗어나면 결정 전이다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const checks = useCheckStore()
+    await checks.load()
+    useAgendaStore().updateAgenda('t2', { state: 'open' })
+    expect(checks.forAgenda('t2')).toMatchObject({ decision: null, block: 'not-decided' })
   })
 })
 
 describe('보내기', () => {
   it('보낸 묶음이 보낸 것 맨 위에 선다 — 받은 사람 쪽에는 대기로 보인다', async () => {
     await signedIn('u1@inno-ax.com')
+    linkT6()
     const checks = useCheckStore()
     await checks.load()
 
     expect(await checks.send('t6')).toBe(1)
-    expect(checks.sent.map((b) => [b.threadId, b.rows.map((c) => c.recipientId)])).toEqual([
+    expect(checks.sent.map((b) => [b.agendaId, b.rows.map((c) => c.recipientId)])).toEqual([
       ['t6', ['u2']],
       ['t2', ['u3', 'u2', 'u4']],
     ])
-    expect(checks.forThread('t6')?.block).toBe('sent')
+    expect(checks.forAgenda('t6')?.block).toBe('sent')
 
     await switchTo('u2@inno-ax.com')
     const theirs = useCheckStore()
     await theirs.load()
-    expect(theirs.receivedPending.map((c) => [c.threadId, c.entryId])).toEqual([['t6', 'e6']])
+    expect(theirs.receivedPending.map((c) => [c.agendaId, c.decisionRev])).toEqual([['t6', 1]])
   })
 
   it('서버가 거절하면 알리고 null — 목록은 그대로다', async () => {
@@ -169,70 +182,6 @@ describe('보내기', () => {
     expect(await checks.send('t2')).toBeNull()
     expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'CHECK_ALREADY_SENT' })
     expect(checks.rows).toHaveLength(4)
-  })
-})
-
-describe('참조', () => {
-  it('통째로 바꾸고, 겹치면 하나로', async () => {
-    await signedIn('u1@inno-ax.com')
-    const thread = () => useDataStore().allThreads.find((t) => t.id === 't6')!
-    expect(useThreadStore().updateThread('t6', { ccIds: ['u3', 'u4', 'u3'] })).toBe(true)
-    expect(thread().ccIds).toEqual(['u3', 'u4'])
-  })
-
-  it('목업도 서버처럼 거른다 — 비부여 · 비활성은 MEMBER_NOT_IN_PROJECT, 21명은 422', async () => {
-    await signedIn('u1@inno-ax.com')
-    const threads = useThreadStore()
-    /* u0 은 p1 에 부여되지 않았고 u5 는 비활성이다 */
-    expect(threads.updateThread('t6', { ccIds: ['u3', 'u0', 'u5'] })).toBe(false)
-    expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({
-      code: 'MEMBER_NOT_IN_PROJECT',
-      detail: { 'ccIds.1': expect.any(String), 'ccIds.2': expect.any(String) },
-    })
-    expect(threads.updateThread('t6', { ccIds: Array.from({ length: 21 }, () => 'u3') })).toBe(
-      false,
-    )
-    expect(vi.mocked(toastError).mock.calls[1][0]).toMatchObject({ code: 'VALIDATION_ERROR' })
-    expect(useDataStore().allThreads.find((t) => t.id === 't6')!.ccIds).toEqual(['u2'])
-  })
-
-  it('검사는 새로 넣은 사람만 — 그사이 빠진 참조를 그대로 둔 수정은 통과, 걸린 자리는 겹친 곳까지', async () => {
-    await signedIn('u1@inno-ax.com')
-    const data = useDataStore()
-    const threads = useThreadStore()
-    const u2 = data.allMembers.find((m) => m.id === 'u2')!
-    data.upsertMember({ ...u2, active: false })
-
-    expect(threads.updateThread('t6', { ccIds: ['u2', 'u3'] })).toBe(true)
-    expect(data.allThreads.find((t) => t.id === 't6')!.ccIds).toEqual(['u2', 'u3'])
-    /* 보낼 때는 조용히 빠진다 */
-    const checks = useCheckStore()
-    await checks.load()
-    expect(checks.forThread('t6')?.recipientIds).toEqual(['u3'])
-
-    expect(threads.updateThread('t6', { ccIds: ['u3', 'u0', 'u4', 'u0'] })).toBe(false)
-    expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({
-      code: 'MEMBER_NOT_IN_PROJECT',
-      detail: { 'ccIds.1': expect.any(String), 'ccIds.3': expect.any(String) },
-    })
-  })
-
-  it('새 안건은 참조를 받아 두고, 안 주면 [] — 결정하면 그 참조에게 보낼 수 있다', async () => {
-    await signedIn('u1@inno-ax.com')
-    const threads = useThreadStore()
-    const plain = await threads.addThread({ title: '참조 없는 안건' })
-    const made = await threads.addThread({ title: '참조 있는 안건', ccIds: ['u4', 'u4'] })
-    const data = useDataStore()
-    expect(data.allThreads.find((t) => t.id === plain)!.ccIds).toEqual([])
-    expect(data.allThreads.find((t) => t.id === made)!.ccIds).toEqual(['u4'])
-
-    const checks = useCheckStore()
-    await checks.load()
-    expect(checks.forThread(made!)?.block).toBe('not-decided')
-    const item = await threads.addItem(made!, '새 안건')
-    await threads.addEntry(made!, 'decide', '정했다', '', null, item)
-    expect(checks.forThread(made!)?.block).toBeNull()
-    expect(await checks.send(made!)).toBe(1)
   })
 })
 
@@ -269,15 +218,20 @@ describe('배지', () => {
   it('지금 프로젝트의 수와 다른 프로젝트의 수를 가른다', async () => {
     await signedIn('u1@inno-ax.com')
     const data = useDataStore()
-    /* u3 에게 p1 에 하나(시드 c1 에 더해), p2 에 하나 — 참조로 붙이고 보낸다 */
-    const threads = useThreadStore()
-    threads.updateThread('t6', { ccIds: ['u3'] })
+    /* u3 에게 p1 에 하나(시드 c1 에 더해), p2 에 하나 — u3 담당 작업을 걸고 보낸다 */
+    data.taskAgendas.push({ taskId: 'k4', agendaId: 't6' })
     expect(await useCheckStore().send('t6')).toBe(1)
     data.setProject('p2')
-    /* u1 은 p2 에서 일반 사용자라 t10 을 못 고친다 — 참조는 데이터로 붙인다 */
-    data.allThreads.find((t) => t.id === 't10')!.ccIds = ['u3']
-    const item = await threads.addItem('t10', '이관 범위')
-    await threads.addEntry('t10', 'decide', '여기도 정했다', '', null, item)
+    /* u1 은 p2 에서 일반 사용자라 t10 을 못 고친다 — 결정 · 연결은 데이터로 붙인다 */
+    Object.assign(
+      data.allAgendas.find((t) => t.id === 't10')!,
+      {
+        state: 'decided',
+        decision: '여기도 정했다',
+        decisionRev: 1,
+      },
+    )
+    data.taskAgendas.push({ taskId: 'k4', agendaId: 't10' })
     expect(await useCheckStore().send('t10')).toBe(1)
     await switchTo('u3@inno-ax.com')
 
