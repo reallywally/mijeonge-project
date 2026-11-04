@@ -328,7 +328,7 @@ function onCreated(id: string) {
                   >ID</TableHead
                 >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
-                <TableHead class="h-10 w-[124px] text-xs font-medium text-muted-foreground"
+                <TableHead class="h-10 w-[148px] text-xs font-medium text-muted-foreground"
                   >상태</TableHead
                 >
                 <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
@@ -373,7 +373,17 @@ function onCreated(id: string) {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <ThreadStateBadge :state="row.thread.state" :defer-count="row.deferCount" />
+                  <div class="flex items-center gap-1.5">
+                    <ThreadStateBadge :state="row.thread.state" :defer-count="row.deferCount" />
+                    <!-- 따로 정할 항목이 여럿이면 몇 개 정했는지 -->
+                    <span
+                      v-if="row.itemCount >= 2"
+                      class="text-xs text-muted-foreground tabular-nums"
+                      :title="`결정 항목 ${row.itemCount}개 중 ${row.settledItemCount}개 정함`"
+                      data-item-progress
+                      >{{ row.settledItemCount }}/{{ row.itemCount }}</span
+                    >
+                  </div>
                 </TableCell>
                 <TableCell class="text-sm" :class="row.ownerName ? '' : 'text-muted-foreground'">
                   {{ row.ownerName ?? '미정' }}

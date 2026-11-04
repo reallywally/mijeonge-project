@@ -16,6 +16,7 @@ from app.models.task import (
 )
 from app.models.test import TestCase, TestHistory, TestRef
 from app.models.thread import (
+    DecisionItem,
     Entry,
     EntryDetail,
     Thread,
@@ -29,6 +30,7 @@ __all__ = [
     "AuthSession",
     "Base",
     "CheckRequest",
+    "DecisionItem",
     "Entry",
     "EntryDetail",
     "Member",

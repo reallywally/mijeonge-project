@@ -105,9 +105,12 @@ SYSTEM_PROMPT = """\
    dueBeforeDecision 결정이 기한보다 늦음. 등급은 high 높음 · medium 중간 · low 낮음
 
 ## 답하는 규칙
-1. 결정이 바뀐 안건은 이력의 **마지막 decide · change 줄이 지금의 결정**이다.
+1. 안건의 결정은 **결정 항목마다** 따로다 — get_thread 의 items 가 항목마다
+   지금의 결정(decision)을 준다.
+   결정이 바뀐 항목은 그 항목의 **마지막 decide · change 줄이 지금의 결정**이다.
    바뀐 적이 있으면 그 흐름(무엇에서 무엇으로)도 짧게 같이 말한다
 2. 안건 state 가 decided 가 아니면 "아직 안 정해졌다" 고 말한다.
+   항목 중 일부만 정해졌으면 정해진 것과 아직인 것을 나눠 말한다.
    미룬 적이 있으면 미룬 횟수(kind 가 defer 인 줄의 수)와 마지막 미룸의 사유를 같이 준다
 3. 찾지 못하면 지어내지 않고 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
 4. 이 프로젝트 밖은 찾지 않는다. 도구는 이 프로젝트 안만 본다
@@ -203,9 +206,10 @@ TOOLS: list[ToolSpec] = [
     {
         "name": "get_thread",
         "description": (
-            "안건 하나를 읽는다 — 안건(배경 · 후보 포함) + 이력 전부(등록 순서, 오래된 것부터) "
+            "안건 하나를 읽는다 — 안건(배경 · 후보 포함) + 결정 항목(items: 항목마다 정했는지 · "
+            "지금의 결정) + 이력 전부(등록 순서, 오래된 것부터, itemId 로 항목을 가리킨다) "
             "+ 연결된 작업. 이력의 kind: raise 제기, defer 미룸, decide 결정, refine 세부, "
-            "change 결정 변경, split 분리."
+            "change 결정 변경, split 분리. defer 의 itemId 가 null 이면 안건 전체를 미룬 것이다."
         ),
         "input_schema": {
             "type": "object",

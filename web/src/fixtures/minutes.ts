@@ -86,6 +86,8 @@ export const mockMinutesDraft: MinutesDraft = {
       dueDate: null,
       entry: {
         kind: 'defer',
+        /* 항목 없이 안건 전체를 미룬 것 */
+        itemTitle: '',
         text: '기간계팀 마스킹 기준 문서를 받은 뒤 다시 본다',
         detail: [],
         note: '기간계팀 기준 문서가 아직 없다. 박지훈이 기간계팀에 요청해 두었다.',
@@ -100,6 +102,7 @@ export const mockMinutesDraft: MinutesDraft = {
       tempId: 'e1',
       threadId: 't3',
       kind: 'defer',
+      itemTitle: '',
       text: '정보보안팀 회신이 없어 이번에도 정하지 못했다',
       detail: [],
       note: '다음 주 수요일 보안 검토 회의 결과를 보고 다시 논의한다.',

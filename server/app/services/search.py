@@ -21,6 +21,7 @@ from sqlalchemy.orm import InstrumentedAttribute, aliased
 
 from app.errors import ApiError, not_found
 from app.models import (
+    DecisionItem,
     Entry,
     EntryDetail,
     Member,
@@ -31,6 +32,7 @@ from app.models import (
     ThreadOption,
 )
 from app.schemas.search import (
+    ItemDoc,
     LinkedTask,
     LinkedThread,
     SearchResult,
@@ -300,11 +302,30 @@ async def get_thread(session: AsyncSession, project_id: str, thread_id: str) -> 
     if thread is None:
         raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
 
-    entries = await session.execute(
-        select(Entry)
-        .where(Entry.thread_id == thread.id, Entry.is_deleted.is_(False))
-        .order_by(Entry.seq)
+    entries = (
+        (
+            await session.execute(
+                select(Entry)
+                .where(Entry.thread_id == thread.id, Entry.is_deleted.is_(False))
+                .order_by(Entry.seq)
+            )
+        )
+        .scalars()
+        .all()
     )
+    items = (
+        await session.scalars(
+            select(DecisionItem)
+            .where(DecisionItem.thread_id == thread.id, DecisionItem.is_deleted.is_(False))
+            .order_by(DecisionItem.sort_order, DecisionItem.seq)
+        )
+    ).all()
+    # seq 오름차순으로 덮어쓰면 항목마다 마지막 decide · change 줄이 남는다
+    decision_of = {
+        row.item_id: row.text
+        for row in entries
+        if row.item_id is not None and row.kind in DECIDING_KINDS
+    }
     tasks = await session.execute(
         select(Task.id, Task.key, Task.title, Task.status)
         .join(TaskThreadLink, TaskThreadLink.task_id == Task.id)
@@ -317,7 +338,16 @@ async def get_thread(session: AsyncSession, project_id: str, thread_id: str) -> 
     )
     return ThreadDoc(
         thread=to_thread(thread),
-        entries=[to_entry(row) for row in entries.scalars().all()],
+        items=[
+            ItemDoc(
+                id=item.id,
+                title=item.title,
+                decided=item.id in decision_of,
+                decision=decision_of.get(item.id, ""),
+            )
+            for item in items
+        ],
+        entries=[to_entry(row) for row in entries],
         tasks=[
             LinkedTask(id=id_, key=key, title=title, status=status)
             for id_, key, title, status in tasks.all()

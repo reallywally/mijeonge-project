@@ -15,7 +15,7 @@ from app.models import CheckRequest, Entry, Member, Task, Thread, ThreadCc
 from app.services import check as check_service
 from app.services.check import Load, recipient_loads
 from app.time import at, today_kst
-from tests.conftest import AsMember
+from tests.conftest import AsMember, decide
 
 
 async def send(c: httpx.AsyncClient, thread: str) -> httpx.Response:
@@ -24,9 +24,7 @@ async def send(c: httpx.AsyncClient, thread: str) -> httpx.Response:
 
 async def change(c: httpx.AsyncClient, thread: str) -> str:
     """결정을 바꾼다 — 새 change 이력의 id."""
-    res = await c.post(
-        f"/api/threads/{thread}/entries", json={"kind": "change", "text": "다시 정했다"}
-    )
+    res = await decide(c, thread, "다시 정했다", kind="change")
     assert res.status_code == 201
     entry_id: str = res.json()["entry"]["id"]
     return entry_id
@@ -421,7 +419,7 @@ async def test_pending_count_per_project(client: httpx.AsyncClient, as_member: A
     }
     # p2 의 t10 을 정하고 u1 을 참조로 — u2 가 보낸다
     await set_cc(client, "t10", ["u1"])
-    decided = await client.post("/api/threads/t10/entries", json={"kind": "decide", "text": "x"})
+    decided = await decide(client, "t10", "x")
     assert decided.status_code == 201
     u2 = await as_member("u2")
     sent = await send(u2, "t10")

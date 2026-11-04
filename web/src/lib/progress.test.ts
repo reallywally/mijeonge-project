@@ -243,6 +243,7 @@ describe('진척 · 결정 · 사람 · previous', () => {
           {
             id: 'e1',
             threadId: 't1',
+            itemId: 'i1',
             kind: 'decide',
             text: '',
             detail: [],
@@ -255,6 +256,7 @@ describe('진척 · 결정 · 사람 · previous', () => {
           {
             id: 'e2',
             threadId: 't2',
+            itemId: null,
             kind: 'defer',
             text: '',
             detail: [],
@@ -267,6 +269,7 @@ describe('진척 · 결정 · 사람 · previous', () => {
           {
             id: 'e3',
             threadId: 't2',
+            itemId: 'i2',
             kind: 'change',
             text: '',
             detail: [],

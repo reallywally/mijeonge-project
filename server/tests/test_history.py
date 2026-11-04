@@ -772,7 +772,7 @@ async def test_thread_patch_without_a_change_writes_nothing(client: httpx.AsyncC
 
 
 async def test_adding_an_entry_writes_no_thread_history(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/threads/t4/entries", json={"kind": "refine", "text": "다듬음"})
+    res = await client.post("/api/threads/t4/entries", json={"kind": "defer", "text": "미룸"})
     assert res.status_code == 201
     assert len(await history(client, "threads/t4")) == 1
 

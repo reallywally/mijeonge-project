@@ -328,6 +328,13 @@ async function removeTarget() {
                 <div class="flex min-w-0 grow flex-col gap-2 pb-[22px]">
                   <div class="flex flex-wrap items-center gap-2">
                     <EntryKindBadge :kind="e.entry.kind" />
+                    <span
+                      v-if="e.itemTitle"
+                      class="max-w-[240px] truncate rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground"
+                      :title="e.itemTitle"
+                      data-entry-item
+                      >{{ e.itemTitle }}</span
+                    >
                     <PersonChip v-if="e.ownerName" :name="e.ownerName" />
                     <span v-if="e.superseded" class="text-xs text-muted-foreground"
                       >뒤의 결정으로 바뀜</span

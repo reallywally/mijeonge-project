@@ -2,6 +2,7 @@ import { mockError } from '@/api/client'
 import {
   accounts,
   checkRequests,
+  decisionItems,
   entries,
   members,
   minutesRows,
@@ -21,6 +22,7 @@ import type { MockAccount, MockProjectGrant, MockTestCase } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
 import type {
   CheckRequest,
+  DecisionItem,
   Entry,
   HistoryEntry,
   Me,
@@ -140,6 +142,7 @@ export const mockDb = () => db
 /** 목업의 안건 · 이력 · 작업 — 목업 갈래에서는 이것들을 데이터 스토어가 들고 고친다 */
 export interface MockWorld {
   threads: Thread[]
+  decisionItems: DecisionItem[]
   entries: Entry[]
   tasks: Task[]
   taskThreads: TaskThreadLink[]
@@ -154,7 +157,7 @@ export function provideMockWorld(fn: (() => MockWorld) | null) {
 }
 
 export const mockWorld = (): MockWorld =>
-  worldOf?.() ?? { threads, entries, tasks, taskThreads: taskThreadLinks }
+  worldOf?.() ?? { threads, decisionItems, entries, tasks, taskThreads: taskThreadLinks }
 
 export const accountOf = (memberId: string) => db.accounts.find((a) => a.memberId === memberId)
 export const memberOf = (memberId: string) => db.members.find((m) => m.id === memberId)

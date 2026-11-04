@@ -318,3 +318,15 @@ export interface TaskBatchResult {
   '풀어도 됨'(`decidedButBlocked`)은 풀어도 된다고 말하되 바꾸지 않는다. 숫자는 도구가 준 그대로, 신호는 화면의 말로
 - 지금 도구 전체: `search_threads` · `get_thread` · `search_tasks` · `get_task` · `list_tasks` · `find_similar_tasks` ·
   `get_decision_risks` · `list_members` · `propose_tasks`
+
+## AI 챗봇 — 결정 항목 (2026-11-03)
+
+안건의 결정이 **결정 항목마다** 따로 남게 됐다(결정 로그 2026-11-03, `snapshot.md` '결정 항목').
+요청 · 응답 · `tool` 이벤트는 그대로다 — 바뀐 것은 Claude 가 읽는 도구 결과 하나다(화면 계약 변경 없음).
+
+- `get_thread` 결과(`ThreadDoc`)에 **`items`** 가 는다 — 지우지 않은 항목마다 `{ id, title, decided, decision }`(안건 안의 순서).
+  `decision` 은 그 항목의 마지막 `decide` · `change` 줄의 `text`(없으면 `''`), `decided` 는 그런 줄이 있는지. 이력 줄(`entries`)에는 `itemId` 가 실린다
+- `search_threads` 의 `decision` 은 **그대로 안건 단위**다 — 안건에서 가장 최근의 `decide` · `change` 줄(규칙 10)
+- 답하는 규칙: 결정을 말할 때 항목마다의 지금 결정을 쓴다. 항목 중 일부만 정해졌으면 정한 것과 아직인 것을 나눠 말한다.
+  `defer` 의 `itemId` 가 null 이면 안건 전체를 미룬 것이다
+- 회의록 초안(`minutes.md`)도 같은 `get_thread` 를 써서 이미 있는 항목 이름을 `itemTitle` 로 그대로 옮긴다

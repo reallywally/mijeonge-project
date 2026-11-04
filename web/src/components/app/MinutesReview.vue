@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
 import { taskPriorityLabel } from '@/lib/task'
+import { ITEM_TITLE_MAX } from '@/lib/thread'
 import { useDataStore } from '@/stores/data'
 import { useMinutesDraftStore } from '@/stores/minutesDraft'
 import { useThreadStore } from '@/stores/thread'
@@ -38,6 +39,11 @@ const KIND_OPTIONS: { value: ProposedEntryBody['kind']; label: string }[] = [
   { value: 'refine', label: '세부 추가' },
 ]
 const noteLabel = (kind: ProposedEntryBody['kind']) => (kind === 'defer' ? '사유' : '상세 설명')
+/* 항목 이름 — 같은 이름의 항목이 있으면 거기, 없으면 새 항목. 비우면 결정 · 세부는 안건 제목, 미룸은 안건 전체 */
+const itemPlaceholder = (kind: ProposedEntryBody['kind']) =>
+  kind === 'defer' ? '비우면 안건 전체를 미룸' : '비우면 안건 제목으로'
+/* 기존 안건의 항목 이름을 고를 수 있게 — 글자를 그대로 맞춰야 같은 항목으로 들어간다 */
+const itemTitlesOf = (threadId: string) => threadStore.itemsOfThread(threadId).map((i) => i.title)
 
 const existing = (threadId: string) => threadStore.rows.find((r) => r.thread.id === threadId)
 const newTitle = (tempId: string) =>
@@ -152,6 +158,16 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
                   aria-label="이력 내용"
                 />
               </div>
+              <div class="flex items-center gap-2">
+                <span class="w-28 shrink-0 text-xs text-muted-foreground">결정 항목</span>
+                <Input
+                  v-model="t.entry.itemTitle"
+                  class="h-8 bg-background text-sm"
+                  aria-label="결정 항목"
+                  :maxlength="ITEM_TITLE_MAX"
+                  :placeholder="itemPlaceholder(t.entry.kind)"
+                />
+              </div>
               <p v-if="t.entry.note" class="text-xs whitespace-pre-line text-muted-foreground">
                 {{ noteLabel(t.entry.kind) }} · {{ t.entry.note }}
               </p>
@@ -227,6 +243,20 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
                 </SelectContent>
               </Select>
               <Input v-model="e.text" class="h-8 text-sm" aria-label="이력 내용" />
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-28 shrink-0 text-xs text-muted-foreground">결정 항목</span>
+              <Input
+                v-model="e.itemTitle"
+                class="h-8 text-sm"
+                aria-label="결정 항목"
+                :maxlength="ITEM_TITLE_MAX"
+                :placeholder="itemPlaceholder(e.kind)"
+                :list="`minutes-items-${e.tempId}`"
+              />
+              <datalist :id="`minutes-items-${e.tempId}`">
+                <option v-for="title in itemTitlesOf(e.threadId)" :key="title" :value="title" />
+              </datalist>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <OwnerSelect v-model="e.ownerId" label="처리한 사람" :hint="e.ownerHint" />

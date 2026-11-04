@@ -22,7 +22,7 @@ from app.models import TestCase as Case
 from app.schemas.risk import RiskSettings
 from app.services import test as service
 from scripts.seed import SEED_TESTS
-from tests.conftest import AsMember
+from tests.conftest import AsMember, item_of
 
 TODAY = date(2026, 10, 15)
 LIST = "/api/projects/p1/tests"
@@ -66,9 +66,10 @@ async def create(c: httpx.AsyncClient, body: dict[str, Any], project: str = "p1"
 
 
 async def add_entry(c: httpx.AsyncClient, thread: str, kind: str) -> str:
-    res = await c.post(
-        f"/api/threads/{thread}/entries", json={"kind": kind, "text": "다시 정했다", "note": "왜"}
-    )
+    body = {"kind": kind, "text": "다시 정했다", "note": "왜"}
+    if kind in ("decide", "change", "refine"):
+        body["itemId"] = await item_of(c, thread)
+    res = await c.post(f"/api/threads/{thread}/entries", json=body)
     assert res.status_code == 201, res.json()
     entry_id: str = res.json()["entry"]["id"]
     return entry_id

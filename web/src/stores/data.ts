@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
 import {
+  decisionItems,
   entries,
   members,
   partMembers as partMemberFixtures,
@@ -21,6 +22,7 @@ import { makeTaskKeyPrefix, orderProjects } from '@/lib/project'
 import { recall, remember } from '@/lib/storage'
 import { useAuthStore } from '@/stores/auth'
 import type {
+  DecisionItem,
   Entry,
   Member,
   Part,
@@ -60,6 +62,8 @@ export const useDataStore = defineStore('data', () => {
   const allProjects = ref<Project[]>(mock ? structuredClone(projects) : [])
   const allMembers = ref<Member[]>(mock ? structuredClone(members) : [])
   const allThreads = ref<Thread[]>(mock ? structuredClone(threads) : [])
+  /** 결정 항목 — 지운 것은 없다(스냅샷이 싣지 않는다). 배열 순서가 안건 안의 순서다 */
+  const allDecisionItems = ref<DecisionItem[]>(mock ? structuredClone(decisionItems) : [])
   const allEntries = ref<Entry[]>(mock ? structuredClone(entries) : [])
   const allTasks = ref<Task[]>(mock ? structuredClone(tasks) : [])
   const taskThreads = ref<TaskThreadLink[]>(mock ? structuredClone(taskThreadLinks) : [])
@@ -67,6 +71,7 @@ export const useDataStore = defineStore('data', () => {
   if (mock)
     api.provideMockWorld(() => ({
       threads: allThreads.value,
+      decisionItems: allDecisionItems.value,
       entries: allEntries.value,
       tasks: allTasks.value,
       taskThreads: taskThreads.value,
@@ -107,6 +112,7 @@ export const useDataStore = defineStore('data', () => {
     if (at >= 0) allProjects.value[at] = records.project
     else allProjects.value.push(records.project)
     allThreads.value = records.allThreads
+    allDecisionItems.value = records.allDecisionItems
     allEntries.value = records.allEntries
     allTasks.value = records.allTasks
     taskThreads.value = records.taskThreads
@@ -143,6 +149,7 @@ export const useDataStore = defineStore('data', () => {
   async function bootMock() {
     allProjects.value = await api.fetchProjects()
     allThreads.value = structuredClone(threads)
+    allDecisionItems.value = structuredClone(decisionItems)
     allEntries.value = structuredClone(entries)
     allTasks.value = structuredClone(tasks)
     taskThreads.value = structuredClone(taskThreadLinks)
@@ -495,6 +502,7 @@ export const useDataStore = defineStore('data', () => {
     allProjects.value = []
     allMembers.value = []
     allThreads.value = []
+    allDecisionItems.value = []
     allEntries.value = []
     allTasks.value = []
     taskThreads.value = []
@@ -521,6 +529,7 @@ export const useDataStore = defineStore('data', () => {
     allProjects,
     allMembers,
     allThreads,
+    allDecisionItems,
     allEntries,
     allTasks,
     taskThreads,

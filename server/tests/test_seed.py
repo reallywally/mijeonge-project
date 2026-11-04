@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import CheckRequest, Entry, Minutes, Task, TaskLine, Thread, ThreadCc
+from app.models import CheckRequest, DecisionItem, Entry, Minutes, Task, TaskLine, Thread, ThreadCc
 from app.services.check import recipients_of
 from scripts.seed import MINUTES_EXAMPLE, seed
 
@@ -18,7 +18,8 @@ async def test_seed_puts_fixtures_in(session: AsyncSession) -> None:
         return (await session.execute(select(func.count()).select_from(model))).scalar_one()
 
     assert await count(Thread) == 10
-    assert await count(Entry) == 6
+    assert await count(Entry) == 8
+    assert await count(DecisionItem) == 6
     assert await count(Task) == 24
     assert await count(TaskLine) == 7
     assert await count(CheckRequest) == 4
@@ -41,8 +42,19 @@ async def test_scenario_records_stand(session: AsyncSession) -> None:
     outside = (await session.execute(select(Entry).where(Entry.id == "e1"))).scalar_one()
     assert outside.kind == "decide"
 
-    defers = (await session.execute(select(Entry).where(Entry.thread_id == "t5"))).scalars().all()
-    assert [e.kind for e in defers] == ["defer", "defer"]
+    t5 = (
+        (await session.execute(select(Entry).where(Entry.thread_id == "t5").order_by(Entry.seq)))
+        .scalars()
+        .all()
+    )
+    # 두 번 미뤘고(안건 전체), 그 사이에 항목 하나(in)만 정했다 — 그래서 아직 논의중이다
+    assert [(e.kind, e.item_id) for e in t5] == [
+        ("defer", None),
+        ("decide", "di5"),
+        ("defer", None),
+    ]
+    t5_thread = (await session.execute(select(Thread).where(Thread.id == "t5"))).scalar_one()
+    assert t5_thread.state == "open"
 
     blocked = (await session.execute(select(Task).where(Task.id == "k18"))).scalar_one()
     assert blocked.status == "blocked"

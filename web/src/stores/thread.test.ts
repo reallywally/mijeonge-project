@@ -24,7 +24,7 @@ describe('안건 이력', () => {
     const thread = useThreadStore()
     const detail = thread.threadDetail('t5')!
 
-    expect(detail.events.map((e) => e.at)).toEqual(['2026-09-14', '2026-09-07'])
+    expect(detail.events.map((e) => e.at)).toEqual(['2026-09-14', '2026-09-10', '2026-09-07'])
     expect(detail.events[0].entry.text).toBe('여전히 업무 정의가 없어 또 미룬다')
   })
 
@@ -35,6 +35,7 @@ describe('안건 이력', () => {
     data.allEntries.push({
       id: 'x1',
       threadId: 't4',
+      itemId: null,
       kind: 'refine',
       text: '야간 배치와 겹치지 않게',
       detail: [],
@@ -47,13 +48,19 @@ describe('안건 이력', () => {
     expect(thread.threadDetail('t4')!.events[0].at).toBe('2026-09-21')
   })
 
-  it('두 번 미뤄진 안건은 미룸 수가 둘이고 아직 못 정한 상태다', () => {
+  it('두 번 미뤄진 안건은 미룸 수가 둘이고, 항목 둘 중 하나만 정해 아직 못 정한 상태다', () => {
     const thread = useThreadStore()
     const detail = thread.threadDetail('t5')!
 
     expect(detail.deferCount).toBe(2)
+    /* 두 번 다 안건 전체를 미뤘다 */
+    expect(detail.threadDeferCount).toBe(2)
     expect(detail.settled).toBe(false)
-    expect(detail.current).toBe('')
+    expect(detail.settledCount).toBe(1)
+    expect(detail.items.map((v) => [v.item.title, v.settled, v.current])).toEqual([
+      ['요청(in) 항목', true, '계약번호 · 상품코드 · 가입일 셋을 넘긴다'],
+      ['응답(out) 항목', false, ''],
+    ])
   })
 
   it('담당자 확인만으로 정한 줄도 결정으로 서고, 근거와 날짜가 따라온다', () => {
@@ -61,26 +68,29 @@ describe('안건 이력', () => {
     const detail = thread.threadDetail('t1')!
 
     expect(detail.settled).toBe(true)
-    expect(detail.current).toBe('우분투 최신 버전으로 한다')
-    expect(detail.settledNote).toBe('PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.')
-    expect(detail.settledLabel).toBe('9월 9일에 정해짐')
-    expect(detail.settledOwnerName).toBe('이도현')
+    const [item] = detail.items
+    expect(item.item.title).toBe('서버 OS 결정')
+    expect(item.current).toBe('우분투 최신 버전으로 한다')
+    expect(item.settledNote).toBe('PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.')
+    expect(item.settledLabel).toBe('9월 9일에 정해짐')
+    expect(item.settledOwnerName).toBe('이도현')
   })
 
   it('결정에 함께 적은 조건별 상세가 따라온다', () => {
     const thread = useThreadStore()
     const detail = thread.threadDetail('t2')!
 
-    expect(detail.detail).toEqual([
+    expect(detail.items[0].detail).toEqual([
       'postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다',
       'supabase 는 비용 때문에 뺀다',
     ])
   })
 
-  it('같은 날 한 안건에 남긴 줄은 배열 순서로 갈린다', () => {
+  it('같은 날 한 안건에 남긴 줄은 배열 순서로 갈린다', async () => {
     const thread = useThreadStore()
-    thread.addEntry('t3', 'decide', '사내망에서만 부른다', '', 'u1')
-    thread.addEntry('t3', 'refine', '예외는 보안팀 승인 건만', '', 'u1')
+    const item = (await thread.addItem('t3', '호출 범위'))!
+    await thread.addEntry('t3', 'decide', '사내망에서만 부른다', '', 'u1', item)
+    await thread.addEntry('t3', 'refine', '예외는 보안팀 승인 건만', '', 'u1', item)
 
     const detail = thread.threadDetail('t3')!
     /* 나중에 적은 줄이 위로 온다 — 배열 순서가 계약이다 (API.md Q4) */
@@ -88,8 +98,8 @@ describe('안건 이력', () => {
       '예외는 보안팀 승인 건만',
       '사내망에서만 부른다',
     ])
-    expect(detail.current).toBe('사내망에서만 부른다')
-    expect(detail.detail).toEqual(['예외는 보안팀 승인 건만'])
+    expect(detail.items[0].current).toBe('사내망에서만 부른다')
+    expect(detail.items[0].detail).toEqual(['예외는 보안팀 승인 건만'])
   })
 
   it('이력의 날짜는 시각을 달지 않는다', () => {
@@ -102,13 +112,13 @@ describe('안건 이력', () => {
     expect(event.entry.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
   })
 
-  it('나중 결정이 앞의 결정을 대체하고, 앞의 결정은 이력에 남는다', () => {
+  it('나중 결정이 앞의 결정을 대체하고, 앞의 결정은 이력에 남는다', async () => {
     const thread = useThreadStore()
-    thread.addEntry('t2', 'decide', 'mariadb 로 바꾼다', '라이선스 때문에', 'u3')
+    await thread.addEntry('t2', 'decide', 'mariadb 로 바꾼다', '라이선스 때문에', 'u3', 'di2')
 
     const detail = thread.threadDetail('t2')!
-    expect(detail.current).toBe('mariadb 로 바꾼다')
-    expect(detail.settledNote).toBe('라이선스 때문에')
+    expect(detail.items[0].current).toBe('mariadb 로 바꾼다')
+    expect(detail.items[0].settledNote).toBe('라이선스 때문에')
     expect(detail.events.filter((e) => e.superseded).map((e) => e.entry.text)).toEqual([
       'mysql 을 쓴다',
     ])
@@ -123,35 +133,161 @@ describe('안건 이력', () => {
 })
 
 describe('이력 남기기', () => {
-  it('결정으로 남기면 결정됨이 되고, 처리한 사람이 담당자가 된다', () => {
+  it('항목을 정하면 결정됨이 되고, 처리한 사람이 담당자가 된다', async () => {
     const thread = useThreadStore()
-    thread.addEntry('t3', 'decide', '비식별 데이터만 허용', '보안팀 확인', 'u2')
+    const item = (await thread.addItem('t3', '호출 범위'))!
+    await thread.addEntry('t3', 'decide', '비식별 데이터만 허용', '보안팀 확인', 'u2', item)
 
     const t = thread.threads.find((x) => x.id === 't3')!
     expect(t.state).toBe('decided')
     expect(t.ownerId).toBe('u2')
   })
 
-  it('처리한 사람 없이 결정하면 담당자는 그대로다', () => {
+  it('처리한 사람 없이 결정하면 담당자는 그대로다', async () => {
     const thread = useThreadStore()
-    thread.addEntry('t3', 'decide', '비식별 데이터만 허용', '', null)
+    const item = (await thread.addItem('t3', '호출 범위'))!
+    await thread.addEntry('t3', 'decide', '비식별 데이터만 허용', '', null, item)
     expect(thread.threads.find((x) => x.id === 't3')!.ownerId).toBe('u1')
   })
 
-  it('대기 중인 안건에 미룸 · 세부 추가를 남기면 논의중이 된다', () => {
+  it('결정 · 세부 추가는 항목 없이 남기지 않는다 — 422 ENTRY_ITEM_REQUIRED · 다른 안건 항목은 404', async () => {
     const thread = useThreadStore()
-    thread.addEntry('t4', 'defer', '기간계 백업 주기를 먼저 알아본다', '', null)
-    thread.addEntry('t7', 'refine', 'tool02 를 먼저', '', null)
+    expect(await thread.addEntry('t3', 'decide', '정했다', '', null)).toBe(false)
+    expect(vi.mocked(toastError).mock.calls.at(-1)?.[0]).toMatchObject({
+      code: 'ENTRY_ITEM_REQUIRED',
+    })
+    expect(await thread.addEntry('t3', 'refine', '세부', '', null, 'di1')).toBe(false)
+    expect(vi.mocked(toastError).mock.calls.at(-1)?.[0]).toMatchObject({ code: 'ITEM_NOT_FOUND' })
+    expect(thread.entriesOfThread('t3')).toHaveLength(1)
+  })
+
+  it('대기 중인 안건에 미룸 · 세부 추가를 남기면 논의중이 된다', async () => {
+    const thread = useThreadStore()
+    await thread.addEntry('t4', 'defer', '기간계 백업 주기를 먼저 알아본다', '', null)
+    const item = (await thread.addItem('t7', '첫 tool'))!
+    await thread.addEntry('t7', 'refine', 'tool02 를 먼저', '', null, item)
 
     expect(thread.threads.find((x) => x.id === 't4')!.state).toBe('open')
     expect(thread.threads.find((x) => x.id === 't7')!.state).toBe('open')
     expect(thread.rows.find((r) => r.thread.id === 't4')!.deferCount).toBe(1)
   })
 
-  it('결정된 안건에 세부 추가를 남겨도 결정됨 그대로다', () => {
+  it('결정된 안건에 세부 추가를 남겨도 결정됨 그대로다', async () => {
     const thread = useThreadStore()
-    thread.addEntry('t2', 'refine', '버전은 8.4', '', null)
+    await thread.addEntry('t2', 'refine', '버전은 8.4', '', null, 'di2')
     expect(thread.threads.find((x) => x.id === 't2')!.state).toBe('decided')
+  })
+})
+
+describe('결정 항목', () => {
+  const state = (id: string) => useThreadStore().threads.find((t) => t.id === id)!.state
+
+  it('대체는 항목 안에서만 — 한 항목을 바꿔도 다른 항목의 결정은 살아 있다', async () => {
+    const thread = useThreadStore()
+    await thread.addEntry('t6', 'decide', '테스트 기간은 1주만 줄인다', '', null, 'di4')
+
+    const detail = thread.threadDetail('t6')!
+    expect(detail.items.map((v) => [v.item.title, v.current])).toEqual([
+      ['테스트 기간', '테스트 기간은 1주만 줄인다'],
+      ['전체 일정', '전체 일정은 미루지 않는다'],
+    ])
+    expect(detail.events.filter((e) => e.superseded).map((e) => e.entry.id)).toEqual(['e6'])
+    expect(detail.settled).toBe(true)
+  })
+
+  it('세부 추가는 그 항목의 지금 결정 뒤에 붙을 때만 상세로 올라간다', async () => {
+    const thread = useThreadStore()
+    await thread.addEntry('t6', 'refine', '오픈 일자는 그대로', '', null, 'di7')
+
+    const [testPeriod, schedule] = thread.threadDetail('t6')!.items
+    expect(schedule.detail).toEqual(['오픈 일자는 그대로'])
+    expect(schedule.settledLabel).toMatch(/^9월 15일에 정해지고 .+에 세부가 붙음$/)
+    expect(testPeriod.detail).toEqual([
+      '늘어난 개발 기간은 그대로 둔다',
+      '통합 테스트를 3주에서 1주로 줄인다',
+    ])
+  })
+
+  it('항목 미룸은 그 항목만 세고, 안건 전체 미룸은 따로 센다', async () => {
+    const thread = useThreadStore()
+    await thread.addEntry('t5', 'defer', '응답 포맷은 기간계 회신 뒤에', '', null, 'di6')
+
+    const detail = thread.threadDetail('t5')!
+    expect(detail.items.map((v) => v.deferCount)).toEqual([0, 1])
+    expect(detail.threadDeferCount).toBe(2)
+    expect(detail.deferCount).toBe(3)
+    expect(detail.events[0].itemTitle).toBe('응답(out) 항목')
+    expect(detail.events.find((e) => e.entry.id === 'e5')!.itemTitle).toBeNull()
+  })
+
+  it('남은 항목을 정하면 결정됨, 정해진 안건에 항목을 더하면 논의중으로 돌아간다', async () => {
+    const thread = useThreadStore()
+    expect(state('t5')).toBe('open')
+    await thread.addEntry('t5', 'decide', '처리 결과 코드 · 보험료 둘을 받는다', '', null, 'di6')
+    expect(state('t5')).toBe('decided')
+
+    const added = await thread.addItem('t5', '  오류 코드 체계 ')
+    expect(thread.itemsOfThread('t5').at(-1)).toMatchObject({
+      id: added,
+      title: '오류 코드 체계',
+      creatorId: 'u1',
+    })
+    expect(state('t5')).toBe('open')
+    expect(thread.threadDetail('t5')!.settledCount).toBe(2)
+  })
+
+  it('빈 이름 · 200자 넘는 이름은 받지 않는다', async () => {
+    const thread = useThreadStore()
+    expect(await thread.addItem('t3', '   ')).toBeNull()
+    expect(await thread.addItem('t3', '가'.repeat(201))).toBeNull()
+    expect(thread.itemsOfThread('t3')).toEqual([])
+  })
+
+  it('이름 바꾸기 — 앞뒤 공백을 떼고, 상태는 그대로다', () => {
+    const thread = useThreadStore()
+    expect(thread.renameItem('di4', ' 통합 테스트 기간 ')).toBe(true)
+    expect(thread.itemsOfThread('t6').map((i) => i.title)).toEqual([
+      '통합 테스트 기간',
+      '전체 일정',
+    ])
+    expect(thread.renameItem('di4', '  ')).toBe(false)
+    expect(state('t6')).toBe('decided')
+  })
+
+  it('항목을 지우면 줄은 이력에 남고 상태를 다시 잰다 — 남은 항목이 다 정해졌으면 결정됨', async () => {
+    const thread = useThreadStore()
+    await thread.deleteItem('di6')
+    expect(thread.itemsOfThread('t5').map((i) => i.id)).toEqual(['di5'])
+    expect(state('t5')).toBe('decided')
+    /* 정해 둔 항목을 지우면 남은 항목이 없어 논의중 — 줄은 그대로 남는다 */
+    await thread.deleteItem('di5')
+    expect(state('t5')).toBe('open')
+    const e8 = thread.threadDetail('t5')!.events.find((e) => e.entry.id === 'e8')!
+    expect(e8.itemTitle).toBe('지운 항목')
+  })
+
+  it('목록 행은 항목 수 · 정한 수를 센다', () => {
+    const row = (id: string) => useThreadStore().rows.find((r) => r.thread.id === id)!
+    expect([row('t5').itemCount, row('t5').settledItemCount]).toEqual([2, 1])
+    expect([row('t6').itemCount, row('t6').settledItemCount]).toEqual([2, 2])
+    expect([row('t3').itemCount, row('t3').settledItemCount]).toEqual([0, 0])
+  })
+
+  it('이름 바꾸기 · 지우기는 등록한 사람 · 안건을 고칠 수 있는 사람만 — 아니면 403', async () => {
+    /* di5 — 등록 정하늘(u4) · t5 담당 · 작성 정하늘. 박지훈(u2)은 p1 일반 사용자 */
+    await signInAs('u2@inno-ax.com')
+    const thread = useThreadStore()
+    const di5 = thread.itemsOfThread('t5')[0]
+    expect(thread.canEditItem(di5)).toBe(false)
+    expect(thread.renameItem('di5', '바꿔 봄')).toBe(false)
+    forbiddenToast()
+    const err = await thread.deleteItem('di5').catch((e: unknown) => e)
+    expect((err as ApiError).code).toBe('FORBIDDEN')
+    expect(thread.itemsOfThread('t5')).toHaveLength(2)
+
+    /* 자기가 더한 항목은 고친다 */
+    const mine = (await thread.addItem('t5', '내 항목'))!
+    expect(thread.renameItem(mine, '내 항목 2')).toBe(true)
   })
 })
 
@@ -401,7 +537,7 @@ describe('작성자 · 권한 (목업)', () => {
   it('결정 · 미루기는 누구나 남기고, 자기가 남긴 줄은 고칠 수 있다', async () => {
     await signInAs('u2@inno-ax.com')
     const thread = useThreadStore()
-    expect(await thread.addEntry('t1', 'refine', '24.04 LTS', '', null)).toBe(true)
+    expect(await thread.addEntry('t1', 'refine', '24.04 LTS', '', null, 'di1')).toBe(true)
     const mine = thread.entriesOfThread('t1').find((e) => e.text === '24.04 LTS')!
     expect(thread.canEditEntry(mine)).toBe(true)
     expect(thread.updateEntry(mine.id, { text: '24.04.1 LTS' })).toBe(true)
@@ -466,13 +602,21 @@ describe('이력 줄 지우기', () => {
     expect(thread.threads.find((t) => t.id === 't1')!.ownerId).toBe('u3')
   })
 
-  it('미룸만 남으면 논의중, 결정 · 변경이 남으면 결정됨', async () => {
+  it('미룸만 남으면 논의중, 항목이 다 정해진 채면 결정됨', async () => {
     const thread = useThreadStore()
     await thread.deleteEntry('e2')
     expect(state('t5')).toBe('open')
-    await thread.addEntry('t3', 'decide', '사내 모델만', '', null)
+    const item = (await thread.addItem('t3', '호출 범위'))!
+    await thread.addEntry('t3', 'decide', '사내 모델만', '', null, item)
     await thread.deleteEntry('e4')
     expect(state('t3')).toBe('decided')
+  })
+
+  it('한 항목의 결정을 지우면 그 항목이 아직이 되어 논의중', async () => {
+    const thread = useThreadStore()
+    await thread.deleteEntry('e7')
+    expect(state('t6')).toBe('open')
+    expect(thread.threadDetail('t6')!.items.map((v) => v.settled)).toEqual([true, false])
   })
 
   it('남긴 사람이 아니고 안건도 못 고치면 403', async () => {

@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Entry, Minutes, Project, Task, Thread, ThreadOption, new_id
+from app.models import DecisionItem, Entry, Minutes, Project, Task, Thread, ThreadOption, new_id
 from app.schemas.minutes import (
     MINUTES_ENTRIES_MAX,
     MINUTES_TASKS_MAX,
@@ -28,7 +28,7 @@ from app.schemas.minutes import (
     ProposedThread,
 )
 from app.schemas.task import TaskCreate, TaskThreadLinkOut
-from app.schemas.thread import EntryCreate, EntryOut
+from app.schemas.thread import ITEM_TITLE_MAX, EntryCreate, EntryOut
 from app.services import access
 from app.services import history as history_service
 from app.services import project as project_service
@@ -39,6 +39,7 @@ from app.time import now
 
 OWNER_MISSING = "담당자를 찾을 수 없습니다."
 THREAD_MISSING = "안건을 찾을 수 없습니다."
+ITEM_TITLE_TOO_LONG = f"결정 항목 이름은 {ITEM_TITLE_MAX}자까지입니다."
 
 Rows = tuple[list[ProposedThread], list[ProposedEntry], list[ProposedMinutesTask]]
 
@@ -127,6 +128,7 @@ def _body[B: ProposedEntryBody](entry: B) -> B:
     # 담당자를 정했으면 회의록에서 부른 말은 필요 없다 — ownerHint 는 ownerId 가 null 일 때만
     return entry.model_copy(
         update={
+            "item_title": entry.item_title.strip(),
             "text": entry.text.strip(),
             "detail": _lines(entry.detail),
             "owner_hint": "" if entry.owner_id is not None else entry.owner_hint.strip(),
@@ -200,17 +202,23 @@ def shape_problems(
             problems[f"{at}.title"] = "제목을 입력해 주세요."
         if thread.entry is not None and not thread.entry.text:
             problems[f"{at}.entry.text"] = "내용을 입력해 주세요."
+        if thread.entry is not None and len(thread.entry.item_title) > ITEM_TITLE_MAX:
+            problems[f"{at}.entry.itemTitle"] = ITEM_TITLE_TOO_LONG
     new_threads = {thread.temp_id for thread in threads}
 
-    seen_threads: set[str] = set()
+    seen_items: set[tuple[str, str]] = set()
     for index, entry in enumerate(entries):
         at = f"entries.{index}"
         check_temp_id(at, entry.temp_id)
         if not entry.text:
             problems[f"{at}.text"] = "내용을 입력해 주세요."
-        if entry.thread_id in seen_threads:
-            problems[f"{at}.threadId"] = "한 안건에 이력은 하나까지입니다."
-        seen_threads.add(entry.thread_id)
+        if len(entry.item_title) > ITEM_TITLE_MAX:
+            problems[f"{at}.itemTitle"] = ITEM_TITLE_TOO_LONG
+        # 한 항목에 이력은 하나까지 — 이름 '' 은 결정 · 세부면 안건 제목, 미룸이면 안건 전체다
+        key = (entry.thread_id, entry.item_title or ("\0전체" if entry.kind == "defer" else ""))
+        if key in seen_items:
+            problems[f"{at}.itemTitle"] = "한 결정 항목에 이력은 하나까지입니다."
+        seen_items.add(key)
 
     # 작업 줄의 규칙은 일괄 등록 그대로다 — 개수만 회의록의 상한(30)을 따른다
     problems.update(task_service.task_problems(tasks, taken=taken))
@@ -314,9 +322,34 @@ async def minutes_problems(
     return found
 
 
-def _entry_create(entry: ProposedEntryBody) -> EntryCreate:
+async def _entry_item(
+    session: AsyncSession,
+    thread: Thread,
+    entry: ProposedEntryBody,
+    actor_id: str,
+    made: list[DecisionItem],
+) -> str | None:
+    """제안 이력의 itemTitle → 항목 id. 같은 이름의 지우지 않은 항목이 있으면 거기, 없으면 새로.
+
+    이름이 '' 이면 decide · refine 은 안건 제목을 이름으로 쓰고, defer 는 안건 전체(null)다.
+    새로 만든 항목은 `made` 에 쌓는다 — 응답의 `decisionItems` 다 (Q66).
+    """
+    title = entry.item_title
+    if not title:
+        if entry.kind == "defer":
+            return None
+        title = thread.title.strip()
+    found = await thread_service.find_item_by_title(session, thread, title)
+    if found is None:
+        found = await thread_service.insert_item(session, thread, title, actor_id, now())
+        made.append(found)
+    return found.id
+
+
+def _entry_create(entry: ProposedEntryBody, item_id: str | None) -> EntryCreate:
     return EntryCreate(
         kind=entry.kind,
+        item_id=item_id,
         text=entry.text,
         detail=entry.detail,
         note=entry.note,
@@ -396,26 +429,35 @@ async def _insert(
         )
 
     added: list[EntryOut] = []
+    made_items: list[DecisionItem] = []
     # 상태를 바꾸는 규칙은 POST /api/threads/{id}/entries 와 같은 함수다
     for item, thread in zip(threads, created_threads, strict=True):
         if item.entry is None:
             continue
-        entry = thread_service.build_entry(_entry_create(item.entry), thread.id, now(), actor_id)
+        item_id = await _entry_item(session, thread, item.entry, actor_id, made_items)
+        entry = thread_service.build_entry(
+            _entry_create(item.entry, item_id), thread.id, now(), actor_id
+        )
         entry.minutes_id = minutes_id
         session.add(entry)
-        thread_service.apply_entry_to_thread(thread, item.entry.kind, item.entry.owner_id)
-        await session.flush()
+        await thread_service.apply_entry_to_thread(
+            session, thread, item.entry.kind, item.entry.owner_id
+        )
         added.append(thread_service.to_entry(entry))
 
     updated: dict[str, Thread] = {}
     for proposed in entries:
         thread = await thread_service.load_thread(session, proposed.thread_id)
         before = (thread.state, thread.owner_id)
-        entry = thread_service.build_entry(_entry_create(proposed), thread.id, now(), actor_id)
+        item_id = await _entry_item(session, thread, proposed, actor_id, made_items)
+        entry = thread_service.build_entry(
+            _entry_create(proposed, item_id), thread.id, now(), actor_id
+        )
         entry.minutes_id = minutes_id
         session.add(entry)
-        thread_service.apply_entry_to_thread(thread, proposed.kind, proposed.owner_id)
-        await session.flush()
+        await thread_service.apply_entry_to_thread(
+            session, thread, proposed.kind, proposed.owner_id
+        )
         added.append(thread_service.to_entry(entry))
         if (thread.state, thread.owner_id) != before:
             updated[thread.id] = thread
@@ -453,6 +495,7 @@ async def _insert(
     return MinutesApplyResult(
         threads=[thread_service.to_thread(thread) for thread in created_threads],
         entries=added,
+        decision_items=[thread_service.to_item(item) for item in made_items],
         updated_threads=[thread_service.to_thread(thread) for thread in updated.values()],
         tasks=[
             task_service.to_task(task, 0, task_service.StatusSince(task.created_at, False))

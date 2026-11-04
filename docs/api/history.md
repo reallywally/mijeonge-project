@@ -138,11 +138,14 @@ export interface HistoryEntry {
 | `ccIds` | `PATCH` | 참조 id 배열(순서째, 빈 배열은 `[]`) — `HistoryValue` 의 `string[]` |
 | `entryText` · `entryNote` | 이력 줄 `PATCH` | 전 · 후 글(메모는 비면 `null`). `subject` = 그 줄의 `kind`(`decide` · `defer` …) |
 | `entryDeleted` | 이력 줄 `DELETE` | `from` = 그 줄의 `text`, `to` = `null`, `subject` = 그 줄의 `kind` |
+| `itemCreated` | 결정 항목 더하기(`POST .../items`) · 회의록 `apply` 가 항목을 새로 만들 때 (2026-11-03) | `null` → 항목 이름, `subject` = `''` |
+| `itemTitle` | 결정 항목 이름 바꾸기(`PATCH .../items/{itemId}`). 같은 이름이면 안 남긴다 | 전 · 후 이름, `subject` = `''` |
+| `itemDeleted` | 결정 항목 지우기(`DELETE .../items/{itemId}`) | `from` = 그 항목의 이름, `to` = `null`, `subject` = `''`. 상태가 다시 세어져도 `state` 칸은 없다 |
 
 - 한 줄 안의 칸 순서는 위 표의 순서다. 값이 같으면 안 남기고, 남길 칸이 없으면 줄 없음(`ccIds` · `options` 를 같은 배열로 다시 보내도 줄 없음)
 - 이력 줄 **남기기**(`POST .../entries`)는 안 남긴다 — 그 줄 자체가 기록이다. 상태 · 담당자가 줄 때문에 바뀌어도 마찬가지다
 - 이력 줄 지우기로 안건 상태가 다시 세어져도 `state` 칸은 없다 — `entryDeleted` 한 칸이 그 일이다
-- 화면 칸 이름: 제목 · 배경 · 후보 · 담당자 · 파트 · 기한 · 참조 · '결정/미룸… 줄 고침'(`entryText`) · '… 줄 메모'(`entryNote`) · '… 줄 지움'(`entryDeleted`). kind 라벨은 `EntryKindBadge` 와 같은 말
+- 화면 칸 이름: 제목 · 배경 · 후보 · 담당자 · 파트 · 기한 · 참조 · '결정/미룸… 줄 고침'(`entryText`) · '… 줄 메모'(`entryNote`) · '… 줄 지움'(`entryDeleted`). kind 라벨은 `EntryKindBadge` 와 같은 말 · '결정 항목 추가'(`itemCreated`) · '결정 항목 이름'(`itemTitle`) · '결정 항목 지움'(`itemDeleted`) (2026-11-03)
 
 ## 엔드포인트
 

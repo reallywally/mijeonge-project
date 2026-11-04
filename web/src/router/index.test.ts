@@ -35,6 +35,7 @@ const user: Me = {
 const snapshot = (projectId: string): ProjectSnapshot => ({
   project: projects.find((p) => p.id === projectId)!,
   threads: [],
+  decisionItems: [],
   entries: [],
   tasks: [],
   taskThreadLinks: [],

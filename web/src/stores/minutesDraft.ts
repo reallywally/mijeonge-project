@@ -2,7 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
 import { ApiError, messageOf } from '@/api'
-import { minutesErrorsByTempId, minutesErrorText, toMinutesApplyInput } from '@/lib/minutes'
+import {
+  entryItemKey,
+  minutesErrorsByTempId,
+  minutesErrorText,
+  toMinutesApplyInput,
+} from '@/lib/minutes'
+import { ITEM_TITLE_MAX } from '@/lib/thread'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import { useMinutesStore } from '@/stores/minutes'
@@ -80,9 +86,20 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
       if (!picked.value[t.tempId]) continue
       if (!t.title.trim()) out[t.tempId] = '제목을 적어 주세요.'
       else if (t.entry && !t.entry.text.trim()) out[t.tempId] = '이력 내용을 적어 주세요.'
+      else if (t.entry && t.entry.itemTitle.trim().length > ITEM_TITLE_MAX)
+        out[t.tempId] = `항목 이름은 ${ITEM_TITLE_MAX}자까지입니다.`
     }
-    for (const e of form.value.entries)
-      if (picked.value[e.tempId] && !e.text.trim()) out[e.tempId] = '내용을 적어 주세요.'
+    /* 한 항목에 이력은 하나까지 — 앞에 켠 줄이 자리를 잡는다 */
+    const itemOnce = new Set<string>()
+    for (const e of form.value.entries) {
+      if (!picked.value[e.tempId]) continue
+      const key = `${e.threadId}\n${entryItemKey(e)}`
+      if (!e.text.trim()) out[e.tempId] = '내용을 적어 주세요.'
+      else if (e.itemTitle.trim().length > ITEM_TITLE_MAX)
+        out[e.tempId] = `항목 이름은 ${ITEM_TITLE_MAX}자까지입니다.`
+      else if (itemOnce.has(key)) out[e.tempId] = '같은 항목에 남기는 이력이 이미 있습니다.'
+      itemOnce.add(key)
+    }
     for (const t of form.value.tasks) {
       if (!picked.value[t.tempId]) continue
       if (!t.title.trim()) out[t.tempId] = '제목을 적어 주세요.'
@@ -188,6 +205,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
       /* 그사이 프로젝트를 바꿨으면 지금 레코드에 섞지 않는다 — 돌아가면 스냅샷에 있다 */
       if (data.holdsRecordsOf(projectId)) {
         data.allThreads.unshift(...made.threads)
+        data.allDecisionItems.push(...made.decisionItems)
         data.allEntries.push(...made.entries)
         for (const next of made.updatedThreads) {
           const at = data.allThreads.findIndex((t) => t.id === next.id)

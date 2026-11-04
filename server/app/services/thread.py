@@ -1,18 +1,24 @@
-"""안건 쓰기 — 등록 · 부분 수정 · 삭제 · 이력 한 줄 · 이력 글 고치기 · 이력 줄 지우기.
+"""안건 쓰기 — 등록 · 부분 수정 · 삭제 · 결정 항목 · 이력 한 줄 · 이력 글 고치기 · 이력 줄 지우기.
 
-**Entry 를 붙이면 안건 상태가 따라 바뀐다.** 그 규칙은 `apply_entry_to_thread` 하나뿐이다.
-줄을 지우면 남은 줄로 다시 센다(`_recount_state`). 부분 수정(PATCH)은 상태를 건드리지 않는다.
-고치기 · 지우기 권한은 `access.can_edit_thread` · `can_edit_entry` 하나로 본다.
+**안건 상태는 이력과 결정 항목에서 센다** — 그 규칙은 `recount_state` 하나뿐이다. 줄을 남기거나
+(`apply_entry_to_thread`) 지우거나, 항목을 더하거나 지우면 다시 센다. 부분 수정(PATCH)은 상태를
+건드리지 않는다. 고치기 · 지우기 권한은 `access.can_edit_thread` · `can_edit_entry` ·
+`can_edit_item` 으로 본다.
 """
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Entry, EntryDetail, Thread, ThreadCc, ThreadOption, new_id
+from app.models import DecisionItem, Entry, EntryDetail, Thread, ThreadCc, ThreadOption, new_id
 from app.schemas.thread import (
+    DecisionItemAdded,
+    DecisionItemCreate,
+    DecisionItemOut,
+    DecisionItemPatch,
+    DecisionItemRemoved,
     EntryAdded,
     EntryCreate,
     EntryOut,
@@ -31,6 +37,12 @@ from app.time import now
 
 # 이 둘은 '정해졌다'로 친다. 그 밖의 kind 는 다뤘다는 뜻일 뿐이다
 DECIDING_KINDS = ("decide", "change")
+# 결정 항목에 꼭 달리는 kind · 늘 안건 전체에 다는 kind. defer 는 둘 다 된다
+ITEM_REQUIRED_KINDS = ("decide", "change", "refine")
+ITEM_FORBIDDEN_KINDS = ("raise", "split")
+
+ITEM_MISSING = "결정 항목을 찾을 수 없습니다."
+ITEM_REQUIRED = "결정 · 변경 · 세부 이력은 결정 항목을 골라 남겨야 합니다."
 
 
 def to_thread(row: Thread) -> ThreadOut:
@@ -53,10 +65,21 @@ def to_thread(row: Thread) -> ThreadOut:
     )
 
 
+def to_item(row: DecisionItem) -> DecisionItemOut:
+    return DecisionItemOut(
+        id=row.id,
+        thread_id=row.thread_id,
+        title=row.title,
+        created_at=row.created_at,
+        creator_id=row.creator_id,
+    )
+
+
 def to_entry(row: Entry) -> EntryOut:
     return EntryOut(
         id=row.id,
         thread_id=row.thread_id,
+        item_id=row.item_id,
         kind=row.kind,
         text=row.text,
         # entry_detail 행을 문자열 배열로 편다
@@ -122,19 +145,54 @@ async def _cc_rows(
     ]
 
 
-def apply_entry_to_thread(thread: Thread, kind: str, owner_id: str | None) -> None:
-    """줄 하나가 안건에 남기는 흔적.
+async def recount_state(session: AsyncSession, thread: Thread) -> None:
+    """이력과 결정 항목으로 상태를 센다 — 부르기 전에 flush 해 둔다.
 
-    - decide · change → decided, ownerId 가 있으면 안건 담당자도 그 사람으로
-    - 그 밖의 kind → queued 였으면 open, 이미 decided 면 그대로(한 번 정해진 것은
-      미룸 한 줄로 되돌아가지 않는다)
+    - 지우지 않은 항목이 하나 이상이고 전부 정해졌으면(그 항목에 지우지 않은 decide · change
+      줄이 있으면) decided
+    - 아니면 셀 줄이 있으면 open, 없으면 queued
+
+    지운 줄 · 지운 항목에 달린 줄은 세지 않는다. 담당자는 건드리지 않는다
+    (누가 맡았는지는 줄이 아니라 안건의 기록이다).
     """
-    if kind in DECIDING_KINDS:
+    live_items = set(
+        (
+            await session.scalars(
+                select(DecisionItem.id).where(
+                    DecisionItem.thread_id == thread.id, DecisionItem.is_deleted.is_(False)
+                )
+            )
+        ).all()
+    )
+    rows = (
+        await session.execute(
+            select(Entry.kind, Entry.item_id).where(
+                Entry.thread_id == thread.id, Entry.is_deleted.is_(False)
+            )
+        )
+    ).all()
+    counted = [(kind, item) for kind, item in rows if item is None or item in live_items]
+    decided_items = {item_id for kind, item_id in counted if kind in DECIDING_KINDS}
+    if live_items and live_items <= decided_items:
         thread.state = "decided"
-        if owner_id:
-            thread.owner_id = owner_id
-    elif thread.state == "queued":
+    elif counted:
         thread.state = "open"
+    else:
+        thread.state = "queued"
+
+
+async def apply_entry_to_thread(
+    session: AsyncSession, thread: Thread, kind: str, owner_id: str | None
+) -> None:
+    """줄 하나가 안건에 남기는 흔적 — 줄을 세션에 넣은 뒤에 부른다.
+
+    - decide · change 에 ownerId 가 있으면 안건 담당자도 그 사람으로
+    - 상태는 다시 센다(`recount_state`) — 항목이 다 정해져야 decided 다
+    """
+    if kind in DECIDING_KINDS and owner_id:
+        thread.owner_id = owner_id
+    await session.flush()
+    await recount_state(session, thread)
 
 
 async def create_thread(
@@ -277,6 +335,7 @@ def build_entry(
     return Entry(
         id=new_id(),
         thread_id=thread_id,
+        item_id=payload.item_id,
         kind=payload.kind,
         text=payload.text,
         note=payload.note,
@@ -300,9 +359,10 @@ async def add_entry(
     # 안건 담당자를 그대로 적는 줄은 새로 지정하는 것이 아니다
     if payload.owner_id != thread.owner_id:
         await _guard_owner(session, thread.project_id, payload.owner_id, "ENTRY_OWNER_NOT_FOUND")
+    await guard_entry_item(session, thread, payload.kind, payload.item_id)
     entry = build_entry(payload, thread_id, now(), actor_id)
     session.add(entry)
-    apply_entry_to_thread(thread, payload.kind, payload.owner_id)
+    await apply_entry_to_thread(session, thread, payload.kind, payload.owner_id)
     await session.commit()
     return EntryAdded(entry=to_entry(entry), thread=to_thread(thread))
 
@@ -347,24 +407,6 @@ async def patch_entry(
     return to_entry(entry)
 
 
-async def _recount_state(session: AsyncSession, thread: Thread) -> None:
-    """남은 줄로 상태를 다시 센다 — decide · change 가 있으면 decided, 줄이 있으면 open,
-    없으면 queued. 담당자는 되돌리지 않는다(누가 맡았는지는 줄이 아니라 안건의 기록이다)."""
-    kinds = set(
-        (
-            await session.scalars(
-                select(Entry.kind).where(Entry.thread_id == thread.id, Entry.is_deleted.is_(False))
-            )
-        ).all()
-    )
-    if kinds & set(DECIDING_KINDS):
-        thread.state = "decided"
-    elif kinds:
-        thread.state = "open"
-    else:
-        thread.state = "queued"
-
-
 async def delete_entry(
     session: AsyncSession, thread_id: str, entry_id: str, scope: Scope
 ) -> EntryRemoved:
@@ -378,7 +420,7 @@ async def delete_entry(
     entry.deleted_at = at
     entry.deleted_by = scope.actor.id
     await session.flush()
-    await _recount_state(session, thread)
+    await recount_state(session, thread)
     history_service.record_thread(
         session,
         thread,
@@ -388,3 +430,137 @@ async def delete_entry(
     )
     await session.commit()
     return EntryRemoved(thread=to_thread(thread))
+
+
+def _item_required() -> ApiError:
+    return ApiError(422, "ENTRY_ITEM_REQUIRED", ITEM_REQUIRED, {"itemId": ITEM_REQUIRED})
+
+
+async def guard_entry_item(
+    session: AsyncSession, thread: Thread, kind: str, item_id: str | None
+) -> None:
+    """kind 와 항목의 짝 — decide · change · refine 은 항목 필수, raise · split 은 항목 없이,
+    defer 는 둘 다. 단 항목은 이 안건의 지우지 않은 것이어야 한다."""
+    if kind in ITEM_REQUIRED_KINDS and item_id is None:
+        raise _item_required()
+    if kind in ITEM_FORBIDDEN_KINDS and item_id is not None:
+        reason = "제기 · 분리 이력은 결정 항목에 달지 않습니다."
+        raise ApiError(422, "VALIDATION_ERROR", "요청 값이 올바르지 않습니다.", {"itemId": reason})
+    if item_id is not None:
+        await load_item(session, thread, item_id)
+
+
+async def load_item(session: AsyncSession, thread: Thread, item_id: str) -> DecisionItem:
+    """지운 항목 · 다른 안건의 항목은 없는 것과 같다."""
+    item = await session.scalar(
+        select(DecisionItem).where(
+            DecisionItem.id == item_id,
+            DecisionItem.thread_id == thread.id,
+            DecisionItem.is_deleted.is_(False),
+        )
+    )
+    if item is None:
+        raise not_found("ITEM_NOT_FOUND", ITEM_MISSING)
+    return item
+
+
+async def insert_item(
+    session: AsyncSession, thread: Thread, title: str, actor_id: str | None, at: datetime
+) -> DecisionItem:
+    """항목 하나를 안건 끝에 붙이고 이력에 남긴다. 상태는 부른 쪽이 다시 센다. 커밋하지 않는다."""
+    last = await session.scalar(
+        select(func.max(DecisionItem.sort_order)).where(DecisionItem.thread_id == thread.id)
+    )
+    item = DecisionItem(
+        id=new_id(),
+        project_id=thread.project_id,
+        thread_id=thread.id,
+        title=title,
+        creator_id=actor_id,
+        created_at=at,
+        # 지운 항목 자리도 센다 — 순서는 등록 순이고 빈자리는 뜻이 없다
+        sort_order=0 if last is None else last + 1,
+    )
+    session.add(item)
+    history_service.record_thread(
+        session, thread, [history_service.change("itemCreated", None, title)], actor_id, at
+    )
+    await session.flush()
+    return item
+
+
+async def find_item_by_title(
+    session: AsyncSession, thread: Thread, title: str
+) -> DecisionItem | None:
+    """이름(앞뒤 공백을 뗀)이 같은 지우지 않은 항목 — 여럿이면 먼저 만든 것."""
+    found: DecisionItem | None = await session.scalar(
+        select(DecisionItem)
+        .where(
+            DecisionItem.thread_id == thread.id,
+            DecisionItem.is_deleted.is_(False),
+            or_(DecisionItem.title == title, func.trim(DecisionItem.title) == title),
+        )
+        .order_by(DecisionItem.sort_order, DecisionItem.seq)
+        .limit(1)
+    )
+    return found
+
+
+async def add_item(
+    session: AsyncSession, thread_id: str, payload: DecisionItemCreate, actor_id: str
+) -> DecisionItemAdded:
+    """프로젝트 멤버 누구나 — 줄 남기기와 같다. 정해진 안건에 붙으면 open 으로 돌아간다."""
+    thread = await load_thread(session, thread_id)
+    item = await insert_item(session, thread, payload.title, actor_id, now())
+    await recount_state(session, thread)
+    await session.commit()
+    return DecisionItemAdded(item=to_item(item), thread=to_thread(thread))
+
+
+def _guard_item_edit(scope: Scope, thread: Thread, item: DecisionItem) -> None:
+    if not access.can_edit_item(scope, thread, item):
+        raise access.forbidden()
+
+
+async def patch_item(
+    session: AsyncSession, thread_id: str, item_id: str, payload: DecisionItemPatch, scope: Scope
+) -> DecisionItemOut:
+    """이름만 바꾼다 — 상태는 그대로다."""
+    thread = await load_thread(session, thread_id)
+    item = await load_item(session, thread, item_id)
+    _guard_item_edit(scope, thread, item)
+    if payload.title != item.title:
+        history_service.record_thread(
+            session,
+            thread,
+            [history_service.change("itemTitle", item.title, payload.title)],
+            scope.actor.id,
+            now(),
+        )
+        item.title = payload.title
+    await session.commit()
+    return to_item(item)
+
+
+async def delete_item(
+    session: AsyncSession, thread_id: str, item_id: str, scope: Scope
+) -> DecisionItemRemoved:
+    """논리 삭제 — 그 항목의 줄은 이력에 남고 상태 계산에서만 빠진다. 상태를 다시 센다."""
+    thread = await load_thread(session, thread_id)
+    item = await load_item(session, thread, item_id)
+    _guard_item_edit(scope, thread, item)
+    at = now()
+    item.is_deleted = True
+    item.deleted_at = at
+    item.deleted_by = scope.actor.id
+    await session.flush()
+    await recount_state(session, thread)
+    history_service.record_thread(
+        session,
+        thread,
+        [history_service.change("itemDeleted", item.title, None)],
+        scope.actor.id,
+        at,
+    )
+    await session.commit()
+    return DecisionItemRemoved(thread=to_thread(thread))

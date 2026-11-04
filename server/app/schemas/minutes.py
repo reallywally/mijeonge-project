@@ -6,7 +6,7 @@ from pydantic_core import PydanticCustomError
 
 from app.schemas.base import Schema, Utc
 from app.schemas.task import ProposedTask, TaskOut, TaskThreadLinkOut
-from app.schemas.thread import EntryOut, ThreadOut
+from app.schemas.thread import DecisionItemOut, EntryOut, ThreadOut
 
 # docs/api/minutes.md — 60,000자면 대략 1시간 반 회의다
 MINUTES_TEXT_MAX = 60000
@@ -79,6 +79,9 @@ class MinutesPatch(Schema):
 
 class ProposedEntryBody(Schema):
     kind: MinutesEntryKind
+    # 결정 항목의 이름. 등록할 때 그 안건에 같은 이름이 있으면 거기, 없으면 새로 만든다.
+    # '' 이면 decide · refine 은 안건 제목, defer 는 안건 전체 (services/minutes.py 의 _entry_item)
+    item_title: str = ""
     text: str
     detail: list[str] = []
     note: str = ""
@@ -148,6 +151,8 @@ class MinutesApplyResult(Schema):
     threads: list[ThreadOut]
     # 새 안건의 이력 먼저, 그다음 기존 안건의 이력 — 각각 요청 순서
     entries: list[EntryOut]
+    # 등록하면서 새로 만든 결정 항목 — 만든 순서 (Q66)
+    decision_items: list[DecisionItemOut]
     # 이력 때문에 바뀐 기존 안건
     updated_threads: list[ThreadOut]
     tasks: list[TaskOut]

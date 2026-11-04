@@ -32,6 +32,15 @@ const popupText = () => document.body.textContent ?? ''
 const popupButton = (text: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
 
+const progress = () =>
+  document.body.querySelector('[data-decision-progress]')?.textContent?.trim() ?? ''
+const itemRow = (id: string) =>
+  document.body.querySelector<HTMLElement>(`[data-decision-item="${id}"]`)!
+const buttonIn = (root: Element, text: string) =>
+  [...root.querySelectorAll('button')].find(
+    (b) => b.textContent?.trim() === text || b.getAttribute('aria-label') === text,
+  )
+
 const choice = (label: string) =>
   [...document.body.querySelectorAll('[role="radio"]')].find((b) =>
     b.textContent?.trim().startsWith(label),
@@ -106,11 +115,14 @@ describe('안건 상세', () => {
     await type('#decision-note', '정보보안팀 회신')
     await click(popupButton('결정으로 남기기'))
 
+    /* 항목이 없던 안건 — 안건 제목의 항목을 만들고 거기에 결정을 단다 */
     const detail = store.threadDetail('t3')!
     expect(detail.thread.state).toBe('decided')
-    expect(detail.current).toBe('비식별 데이터만 허용')
-    expect(detail.settledNote).toBe('정보보안팀 회신')
-    expect(popupText()).toContain('결정 바꾸기')
+    expect(detail.items.map((v) => [v.item.title, v.current, v.settledNote])).toEqual([
+      ['사내망에서 외부 모델 호출 허용 범위', '비식별 데이터만 허용', '정보보안팀 회신'],
+    ])
+    expect(popupButton('바꾸기')).toBeTruthy()
+    expect(progress()).toBe('1/1 정함')
   })
 
   it('결정의 상세 설명은 여러 줄 칸 — Enter 는 줄바꿈이고 ⌘/Ctrl+Enter 로 남긴다', async () => {
@@ -132,7 +144,7 @@ describe('안건 상세', () => {
     note.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true }))
     await flushPromises()
     expect(store.threadDetail('t3')!.thread.state).toBe('decided')
-    expect(store.threadDetail('t3')!.settledNote).toBe('정보보안팀 회신\n개인정보는 제외')
+    expect(store.threadDetail('t3')!.items[0].settledNote).toBe('정보보안팀 회신\n개인정보는 제외')
   })
 
   it('미루기는 사유를 받아 미룸 줄을 남긴다', async () => {
@@ -168,12 +180,12 @@ describe('안건 상세', () => {
     await mountView('/threads/t2')
     const store = useThreadStore()
 
-    await click(popupButton('결정 바꾸기'))
+    await click(popupButton('바꾸기'))
     await type('#decision-text', 'PostgreSQL 로 바꾼다')
     await click(popupButton('결정으로 남기기'))
 
     const detail = store.threadDetail('t2')!
-    expect(detail.current).toBe('PostgreSQL 로 바꾼다')
+    expect(detail.items[0].current).toBe('PostgreSQL 로 바꾼다')
     expect(detail.events.find((e) => e.superseded)?.entry.text).toBe('mysql 을 쓴다')
     expect(popupText()).toContain('뒤의 결정으로 바뀜')
   })
@@ -348,5 +360,139 @@ describe('안건 추가', () => {
     expect(made.options).toEqual(['운영팀', '개발팀'])
     expect(made.state).toBe('queued')
     expect(router.currentRoute.value.path).toBe(`/threads/${made.id}`)
+  })
+})
+
+describe('결정 항목', () => {
+  it('목록 행에 항목이 둘 이상이면 정한 수 / 전체가 선다', async () => {
+    const { w } = await mountView()
+    const progressOf = (title: string) =>
+      w
+        .findAll('tr')
+        .find((tr) => tr.text().includes(title))
+        ?.find('[data-item-progress]')
+    expect(progressOf('보험료 산출')!.text()).toBe('1/2')
+    expect(progressOf('일정 조율')!.text()).toBe('2/2')
+    /* 항목 하나 · 없음은 세지 않는다 */
+    expect(progressOf('서버 OS 결정')?.exists() ?? false).toBe(false)
+  })
+
+  it('머리에 n/m 정함, 정한 항목은 결정 글 · 아직인 항목은 결정 · 미루기', async () => {
+    await mountView('/threads/t5')
+    expect(progress()).toBe('1/2 정함')
+
+    const done = itemRow('di5')
+    expect(done.querySelector('[aria-label="정함"]')).toBeTruthy()
+    expect(done.textContent).toContain('계약번호 · 상품코드 · 가입일 셋을 넘긴다')
+    expect(buttonIn(done, '바꾸기')).toBeTruthy()
+    expect(buttonIn(done, '결정')).toBeFalsy()
+
+    const open = itemRow('di6')
+    expect(open.querySelector('[aria-label="아직"]')).toBeTruthy()
+    expect(buttonIn(open, '결정')).toBeTruthy()
+    expect(buttonIn(open, '미루기')).toBeTruthy()
+  })
+
+  it('아직인 항목을 정하면 그 항목만 정해지고, 다 정하면 안건이 결정됨이 된다', async () => {
+    await mountView('/threads/t5')
+    const store = useThreadStore()
+
+    await click(buttonIn(itemRow('di6'), '결정'))
+    /* 항목이 이미 있으니 이름 칸은 없다 */
+    expect(document.body.querySelector('#decision-item-title')).toBeNull()
+    await type('#decision-text', '처리 결과 코드 · 보험료')
+    await click(popupButton('결정으로 남기기'))
+
+    const detail = store.threadDetail('t5')!
+    expect(detail.items.map((v) => v.current)).toEqual([
+      '계약번호 · 상품코드 · 가입일 셋을 넘긴다',
+      '처리 결과 코드 · 보험료',
+    ])
+    expect(detail.thread.state).toBe('decided')
+    expect(progress()).toBe('2/2 정함')
+    expect(document.body.querySelector('#decision-text')).toBeNull()
+  })
+
+  it('항목 미루기는 그 항목에만 — 다시 볼 날은 안건 전체를 미룰 때만 묻는다', async () => {
+    await mountView('/threads/t5')
+    const store = useThreadStore()
+
+    await click(buttonIn(itemRow('di6'), '미루기'))
+    expect(document.body.querySelector('#decision-next-due')).toBeNull()
+    await type('#decision-text', '기간계 회신 뒤에')
+    await click(popupButton('미루기로 남기기'))
+    expect(store.threadDetail('t5')!.items[1].deferCount).toBe(1)
+    expect(itemRow('di6').textContent).toContain('미룸 1회')
+    expect(store.entriesOfThread('t5')[0].itemId).toBe('di6')
+
+    await click(popupButton('안건 전체 미루기'))
+    expect(document.body.querySelector('#decision-next-due')).toBeTruthy()
+    await type('#decision-text', '기간계 담당자 부재')
+    await click(popupButton('미루기로 남기기'))
+    const detail = store.threadDetail('t5')!
+    expect(detail.threadDeferCount).toBe(3)
+    expect(detail.events[0].entry.itemId).toBeNull()
+    expect(popupText()).toContain('안건 전체 미룸 3회')
+  })
+
+  it('[결정 항목 추가] — 이름 한 줄로 더하면 정해진 안건이 논의중으로 돌아간다', async () => {
+    await mountView('/threads/t6')
+    const store = useThreadStore()
+
+    await click(popupButton('결정 항목 추가'))
+    await type('#decision-item-new', '  리허설 일정 ')
+    await click(popupButton('추가'))
+
+    expect(store.itemsOfThread('t6').map((i) => i.title)).toEqual([
+      '테스트 기간',
+      '전체 일정',
+      '리허설 일정',
+    ])
+    expect(store.threadDetail('t6')!.thread.state).toBe('open')
+    expect(progress()).toBe('2/3 정함')
+    expect(document.body.querySelector('#decision-item-new')).toBeNull()
+  })
+
+  it('항목 이름 바꾸기 · 지우기(확인) — 지우면 상태를 다시 잰다', async () => {
+    await mountView('/threads/t5')
+    const store = useThreadStore()
+
+    await click(buttonIn(itemRow('di6'), '항목 이름 바꾸기'))
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="항목 이름"]')!
+    input.value = '응답 포맷'
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+    expect(store.itemsOfThread('t5')[1].title).toBe('응답 포맷')
+
+    await click(buttonIn(itemRow('di6'), '항목 지우기'))
+    expect(popupText()).toContain("'응답 포맷' 항목을 지울까요?")
+    await click(document.body.querySelector('[data-item-delete-confirm]')!)
+    expect(store.itemsOfThread('t5').map((i) => i.id)).toEqual(['di5'])
+    expect(store.threadDetail('t5')!.thread.state).toBe('decided')
+  })
+
+  it('항목 없는 안건의 결정 — 이름 칸이 안건 제목으로 미리 서고, 고친 이름으로 항목을 만든다', async () => {
+    await mountView('/threads/t3')
+    const store = useThreadStore()
+
+    await click(choice('결정'))
+    const title = document.body.querySelector<HTMLInputElement>('#decision-item-title')!
+    expect(title.value).toBe('사내망에서 외부 모델 호출 허용 범위')
+    await type('#decision-item-title', '외부 호출 범위')
+    await type('#decision-text', '사내 모델만 사용')
+    await click(popupButton('결정으로 남기기'))
+
+    expect(store.itemsOfThread('t3').map((i) => i.title)).toEqual(['외부 호출 범위'])
+    expect(store.threadDetail('t3')!.items[0].current).toBe('사내 모델만 사용')
+  })
+
+  it('이력에서 항목에 달린 줄은 항목 이름이 작은 태그로 선다', async () => {
+    await mountView('/threads/t6')
+    const tags = [...document.body.querySelectorAll('[data-entry-item]')].map((e) =>
+      e.textContent?.trim(),
+    )
+    expect(tags).toEqual(['테스트 기간', '전체 일정'])
   })
 })

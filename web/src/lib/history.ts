@@ -74,6 +74,9 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'entryText',
     'entryNote',
     'entryDeleted',
+    'itemCreated',
+    'itemTitle',
+    'itemDeleted',
   ],
 }
 
@@ -399,6 +402,13 @@ export function changeView(
       }
     case 'entryDeleted':
       return { ...entryChange(c, '줄 지움'), value: str(c.from), long: false }
+    /* 결정 항목 (2026-11-03) — 값은 항목 이름 */
+    case 'itemCreated':
+      return { ...base, label: '결정 항목 추가', value: str(c.to) }
+    case 'itemTitle':
+      return { ...base, label: '결정 항목 이름', from: str(c.from), to: str(c.to) }
+    case 'itemDeleted':
+      return { ...base, label: '결정 항목 삭제', value: str(c.from) }
   }
   const link = LINK[c.field]
   if (link) {

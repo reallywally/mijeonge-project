@@ -49,10 +49,23 @@ class LinkedThread(Schema):
 # HTTP 로는 열지 않는다 — JSON 으로 Claude 에 넘긴다
 
 
+class ItemDoc(Schema):
+    """결정 항목 하나와 그 항목의 지금 결정. 이력 줄은 `itemId` 로 이 항목을 가리킨다."""
+
+    id: str
+    title: str
+    # 지우지 않은 decide · change 줄이 있으면 정해진 것이다
+    decided: bool
+    # 마지막 decide · change 줄의 text — 결정이 바뀐 항목은 이것이 지금의 결정이다. 없으면 ''
+    decision: str
+
+
 class ThreadDoc(Schema):
     """안건 하나를 읽을 때 필요한 것 전부 — 후보는 `thread.options`, 이력은 등록 순서(seq)다."""
 
     thread: ThreadOut
+    # 지우지 않은 결정 항목 — 안건 안의 순서. 전부 정해져야 안건이 decided 다
+    items: list[ItemDoc]
     entries: list[EntryOut]
     tasks: list[LinkedTask]
 

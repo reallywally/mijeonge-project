@@ -58,6 +58,7 @@ def new_thread(temp_id: str, title: str, **extra: Any) -> dict[str, Any]:
 def body(kind: str, text: str, **extra: Any) -> dict[str, Any]:
     return {
         "kind": kind,
+        "itemTitle": "",
         "text": text,
         "detail": [],
         "note": "",
@@ -168,6 +169,15 @@ async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncS
     assert entries[1]["detail"] == ["일요일 새벽"]
     assert entries[2]["ownerId"] == "u2"
     assert all(e["createdAt"].endswith("Z") and len(e["createdAt"]) == 20 for e in entries)
+
+    # 새로 만든 결정 항목 — 만든 순서(Q66). n1 의 미룸('')은 안건 전체라 항목이 없고,
+    # t4 · t7 은 항목이 없던 안건이라 안건 제목으로 하나씩 생긴다
+    made = out["decisionItems"]
+    assert [(i["threadId"], i["title"], i["creatorId"]) for i in made] == [
+        ("t4", "개발 서버 백업 주기", "admin"),
+        ("t7", "가상비서 tool 만드는 순서", "admin"),
+    ]
+    assert [e["itemId"] for e in entries] == [None, made[0]["id"], made[1]["id"]]
 
     # 이력 때문에 바뀐 기존 안건 — t4 는 queued → open, t7 은 decided 에 담당자가 그 사람으로
     updated = {t["id"]: t for t in out["updatedThreads"]}
@@ -294,11 +304,12 @@ async def test_limits_are_inclusive(client: httpx.AsyncClient) -> None:
         (
             minutes(
                 entries=[
-                    old_entry("e1", "t4", "refine", "가"),
+                    old_entry("e1", "t4", "defer", "가"),
                     old_entry("e2", "t4", "defer", "나"),
                 ]
             ),
-            "entries.1.threadId",
+            # 한 결정 항목에 이력은 하나까지 — 둘 다 안건 전체 미룸이다
+            "entries.1.itemTitle",
         ),
         # tempId 는 세 묶음 전체에서 서로 다르다
         (
@@ -553,7 +564,7 @@ def test_shape_problems_points_every_place() -> None:
         "threads.0.title": "제목을 입력해 주세요.",
         "threads.1.tempId": "초안의 다른 줄과 tempId 가 겹칩니다.",
         "entries.0.text": "내용을 입력해 주세요.",
-        "entries.1.threadId": "한 안건에 이력은 하나까지입니다.",
+        "entries.1.itemTitle": "한 결정 항목에 이력은 하나까지입니다.",
         "tasks.0.threadTempIds.1": "이 초안에 없는 새 안건입니다.",
     }
     assert minutes_service.shape_problems(*rows(FULL)) == {}

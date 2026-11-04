@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError
 from app.models import CheckRequest, Entry, Member, TaskThreadLink, TestRef, Thread
 from app.services import search as search_service
-from tests.conftest import AsMember
+from tests.conftest import AsMember, item_of
 from tests.test_read_api import ENTRY_KEYS, THREAD_KEYS
 
 
@@ -51,6 +51,7 @@ async def test_entry_answers_with_entry_and_thread(client: httpx.AsyncClient) ->
         "/api/threads/t4/entries",
         json={
             "kind": "decide",
+            "itemId": await item_of(client, "t4"),
             "text": "기간계와 같은 주기로 맞춘다",
             "detail": ["일 1회 전체 백업", "보관은 30일"],
             "note": "기간계 담당자에게 확인받았다",
@@ -70,7 +71,12 @@ async def test_decide_settles_the_thread_and_moves_the_owner(client: httpx.Async
     body = (
         await client.post(
             "/api/threads/t4/entries",
-            json={"kind": "decide", "text": "기간계와 맞춘다", "ownerId": "u2"},
+            json={
+                "kind": "decide",
+                "itemId": await item_of(client, "t4"),
+                "text": "기간계와 맞춘다",
+                "ownerId": "u2",
+            },
         )
     ).json()
 
@@ -105,7 +111,13 @@ async def test_change_settles_too(client: httpx.AsyncClient) -> None:
     body = (
         await client.post(
             "/api/threads/t5/entries",
-            json={"kind": "change", "text": "앞의 결정을 바꾼다", "ownerId": "u1"},
+            json={
+                # t5 는 in(di5)만 정해져 있다 — 남은 out(di6)을 정하면 안건이 정해진다
+                "kind": "change",
+                "itemId": await item_of(client, "t5", "응답(out) 항목"),
+                "text": "앞의 결정을 바꾼다",
+                "ownerId": "u1",
+            },
         )
     ).json()
 
@@ -115,8 +127,10 @@ async def test_change_settles_too(client: httpx.AsyncClient) -> None:
 
 async def test_server_takes_every_kind(client: httpx.AsyncClient) -> None:
     """화면은 decide · refine · defer 셋만 보내지만 모델의 kind 는 여섯이다."""
+    item = await item_of(client, "t4")
     for kind in ("raise", "refine", "split"):
-        res = await client.post("/api/threads/t4/entries", json={"kind": kind, "text": kind})
+        body = {"kind": kind, "text": kind} | ({"itemId": item} if kind == "refine" else {})
+        res = await client.post("/api/threads/t4/entries", json=body)
         assert res.status_code == 201
 
     bad = await client.post("/api/threads/t4/entries", json={"kind": "미룸", "text": "x"})
@@ -134,13 +148,18 @@ async def test_written_entry_shows_up_at_the_end_of_the_snapshot(
     """등록 순서(seq)가 제대로 채워졌는지 — 안건 이력이 배열 인덱스로 같은 날을 가른다."""
     body = (
         await client.post(
-            "/api/threads/t4/entries", json={"kind": "decide", "text": "기간계와 맞춘다"}
+            "/api/threads/t4/entries",
+            json={
+                "kind": "decide",
+                "itemId": await item_of(client, "t4"),
+                "text": "기간계와 맞춘다",
+            },
         )
     ).json()
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
     assert snap["entries"][-1]["id"] == body["entry"]["id"]
-    assert len(snap["entries"]) == 7
+    assert len(snap["entries"]) == 9
     assert next(t for t in snap["threads"] if t["id"] == "t4")["state"] == "decided"
 
 
@@ -440,7 +459,12 @@ async def test_creator_is_the_requester_and_cannot_be_sent(as_member: AsMember) 
     thread_id = made.json()["id"]
     added = await u2.post(
         f"/api/threads/{thread_id}/entries",
-        json={"kind": "refine", "text": "다듬음", "creatorId": "u3"},
+        json={
+            "kind": "refine",
+            "itemId": await item_of(u2, thread_id),
+            "text": "다듬음",
+            "creatorId": "u3",
+        },
     )
     assert added.status_code == 201 and added.json()["entry"]["creatorId"] == "u2"
     patched = await u2.patch(f"/api/threads/{thread_id}", json={"creatorId": "u3", "title": "새2"})
@@ -565,10 +589,12 @@ async def test_delete_entry_recounts_the_state(client: httpx.AsyncClient) -> Non
     """남은 줄에 decide · change 가 있으면 decided, 줄이 있으면 open, 없으면 queued."""
     made = (await client.post("/api/projects/p1/threads", json={"title": "셈"})).json()
     tid = made["id"]
+    item = await item_of(client, tid)
     ids = []
     for kind, owner in (("defer", None), ("decide", "u2"), ("change", None)):
         res = await client.post(
-            f"/api/threads/{tid}/entries", json={"kind": kind, "text": kind, "ownerId": owner}
+            f"/api/threads/{tid}/entries",
+            json={"kind": kind, "itemId": item, "text": kind, "ownerId": owner},
         )
         ids.append(res.json()["entry"]["id"])
     defer_id, decide_id, change_id = ids
@@ -602,7 +628,7 @@ async def test_deleted_entry_drops_out_of_decisions_and_risk(
 ) -> None:
     """지운 결정은 '지금의 결정' 이 아니다 — 앞의 결정이 다시 지금의 결정이 된다."""
     res = await client.post(
-        "/api/threads/t1/entries", json={"kind": "change", "text": "록키로 바꿈"}
+        "/api/threads/t1/entries", json={"kind": "change", "itemId": "di1", "text": "록키로 바꿈"}
     )
     change_id = res.json()["entry"]["id"]
     assert (await client.delete(f"/api/threads/t1/entries/{change_id}")).status_code == 200
