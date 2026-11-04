@@ -6,9 +6,9 @@ import AppShell from '@/components/app/AppShell.vue'
 import IdCell from '@/components/app/IdCell.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
-import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
-import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
-import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
+import AgendaCreateDialog from '@/components/app/AgendaCreateDialog.vue'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
+import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -29,11 +29,11 @@ import {
 import { partFilterOf } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
-import { useThreadStore } from '@/stores/thread'
-import type { ThreadRow } from '@/types/domain'
+import { useAgendaStore } from '@/stores/agenda'
+import type { AgendaRow } from '@/types/domain'
 
 const data = useDataStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
@@ -42,19 +42,18 @@ const router = useRouter()
    파트 거르기는 [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다 */
 const titleDraft = ref('')
 const query = ref('')
-const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'stuck' | 'overdue'>('all')
+const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'overdue'>('all')
 const ownerFilter = ref<string>('all')
 const partFilter = ref<string>('all')
 const page = ref(1)
 const perPage = 10
 
 const counts = computed(() => ({
-  all: threadStore.visibleRows.length,
-  queued: threadStore.visibleRows.filter((r) => r.thread.state === 'queued').length,
-  open: threadStore.visibleRows.filter((r) => r.thread.state === 'open').length,
-  decided: threadStore.visibleRows.filter((r) => r.thread.state === 'decided').length,
-  stuck: threadStore.visibleRows.filter((r) => r.deferCount >= 3).length,
-  overdue: threadStore.overdueCount,
+  all: agendaStore.visibleRows.length,
+  queued: agendaStore.visibleRows.filter((r) => r.agenda.state === 'queued').length,
+  open: agendaStore.visibleRows.filter((r) => r.agenda.state === 'open').length,
+  decided: agendaStore.visibleRows.filter((r) => r.agenda.state === 'decided').length,
+  overdue: agendaStore.overdueCount,
 }))
 
 const stateChips = computed(() => [
@@ -62,33 +61,31 @@ const stateChips = computed(() => [
   { key: 'queued' as const, label: '대기', n: counts.value.queued },
   { key: 'open' as const, label: '논의중', n: counts.value.open },
   { key: 'decided' as const, label: '결정됨', n: counts.value.decided },
-  { key: 'stuck' as const, label: '3번 이상 미뤄짐', n: counts.value.stuck },
   { key: 'overdue' as const, label: '기한 지남', n: counts.value.overdue },
 ])
 
-function matchesState(row: ThreadRow) {
+function matchesState(row: AgendaRow) {
   if (stateFilter.value === 'all') return true
-  if (stateFilter.value === 'stuck') return row.deferCount >= 3
   if (stateFilter.value === 'overdue') return row.overdue
-  return row.thread.state === stateFilter.value
+  return row.agenda.state === stateFilter.value
 }
 
-function matchesOwner(row: ThreadRow) {
+function matchesOwner(row: AgendaRow) {
   if (ownerFilter.value === 'all') return true
-  if (ownerFilter.value === 'none') return row.thread.ownerId === null
-  return row.thread.ownerId === ownerFilter.value
+  if (ownerFilter.value === 'none') return row.agenda.ownerId === null
+  return row.agenda.ownerId === ownerFilter.value
 }
 
-function matchesPart(row: ThreadRow) {
+function matchesPart(row: AgendaRow) {
   if (partFilter.value === 'all') return true
-  if (partFilter.value === 'common') return row.thread.partId === null
-  return row.thread.partId === partFilter.value
+  if (partFilter.value === 'common') return row.agenda.partId === null
+  return row.agenda.partId === partFilter.value
 }
 
 const filtered = computed(() =>
-  threadStore.visibleRows.filter(
+  agendaStore.visibleRows.filter(
     (r) =>
-      r.thread.title.includes(query.value) && matchesState(r) && matchesOwner(r) && matchesPart(r),
+      r.agenda.title.includes(query.value) && matchesState(r) && matchesOwner(r) && matchesPart(r),
   ),
 )
 
@@ -137,35 +134,35 @@ function pickState(key: typeof stateFilter.value) {
 }
 
 /* 안건 상세 — 목록을 그대로 두고 그 위에 띄우되, 주소를 갖는다.
-   /threads/:id 로 들어오면 그 안건이 열린 채로 시작한다 (새로고침 · 뒤로가기가 산다) */
+   /agendas/:id 로 들어오면 그 안건이 열린 채로 시작한다 (새로고침 · 뒤로가기가 산다) */
 const detailId = computed(() => (route.params.id as string | undefined) ?? null)
 const detailOpen = computed({
   get: () => detailId.value !== null,
   set: (open: boolean) => {
-    if (!open) router.push('/threads')
+    if (!open) router.push('/agendas')
   },
 })
 
-function openThread(id: string) {
-  router.push(`/threads/${id}`)
+function openAgenda(id: string) {
+  router.push(`/agendas/${id}`)
 }
 
-/* 안건 추가 — 상세와 같은 모양의 팝업. /threads/new 로 주소를 갖는다 (작업 추가와 같은 방식) */
+/* 안건 추가 — 상세와 같은 모양의 팝업. /agendas/new 로 주소를 갖는다 (작업 추가와 같은 방식) */
 const createOpen = computed({
-  get: () => route.path === '/threads/new',
+  get: () => route.path === '/agendas/new',
   set: (open: boolean) => {
-    if (!open) router.push('/threads')
+    if (!open) router.push('/agendas')
   },
 })
 
 function openCreate() {
-  router.push('/threads/new')
+  router.push('/agendas/new')
 }
 
 /* 새 안건이 조회 조건에 걸려 안 보이는 일이 없게 조건을 풀고, 그 안건의 상세로 간다 */
 function onCreated(id: string) {
   resetAll()
-  openThread(id)
+  openAgenda(id)
 }
 </script>
 
@@ -183,26 +180,12 @@ function onCreated(id: string) {
         <div class="text-xs font-medium text-muted-foreground">눈여겨볼 것</div>
         <div class="flex flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
           <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
-            아직 아무 기록이 없는 안건이 {{ counts.queued }}건 있습니다.
+            아직 대기 중인 안건이 {{ counts.queued }}건 있습니다.
           </p>
           <button
             type="button"
             class="min-h-6 text-left text-[12.5px] font-semibold underline-offset-4 hover:underline"
             @click="pickState('queued')"
-          >
-            그 안건만 보기
-          </button>
-        </div>
-        <div
-          class="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/[0.04] px-3 py-2.5"
-        >
-          <p class="text-[12.5px] leading-relaxed text-muted-foreground text-pretty">
-            3번 이상 미뤄진 안건이 {{ counts.stuck }}건 있습니다.
-          </p>
-          <button
-            type="button"
-            class="min-h-6 text-left text-[12.5px] font-semibold text-destructive underline-offset-4 hover:underline"
-            @click="pickState('stuck')"
           >
             그 안건만 보기
           </button>
@@ -237,8 +220,8 @@ function onCreated(id: string) {
           <div class="flex min-w-0 grow flex-col gap-2.5">
             <h1 class="text-[22px] font-bold tracking-[-0.025em]">안건</h1>
             <p class="text-[13px] leading-relaxed text-muted-foreground text-pretty">
-              정해야 할 것을 안건으로 먼저 등록해 두고, 정해지면 무엇을 왜 그렇게 정했는지 남깁니다.
-              못 정하면 사유를 달아 미룹니다 — 몇 번 미뤄졌는지가 그대로 보입니다.
+              정해야 할 것을 안건으로 먼저 등록해 두고, 정해지면 결정내용을 적고 상태를 결정으로
+              바꿉니다. 결정이 언제 어떻게 바뀌었는지는 변경 이력에 남습니다.
             </p>
           </div>
           <Button class="shrink-0" @click="openCreate">
@@ -328,81 +311,71 @@ function onCreated(id: string) {
                   >ID</TableHead
                 >
                 <TableHead class="h-10 text-xs font-medium text-muted-foreground">안건</TableHead>
-                <TableHead class="h-10 w-[148px] text-xs font-medium text-muted-foreground"
+                <TableHead class="h-10 w-[96px] text-xs font-medium text-muted-foreground"
                   >상태</TableHead
                 >
                 <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
                   >담당자</TableHead
                 >
                 <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
-                  >마지막 기록</TableHead
-                >
-                <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
                   >결정 기한</TableHead
-                >
-                <TableHead class="h-10 w-10 text-right text-xs font-medium text-muted-foreground"
-                  >이력</TableHead
                 >
               </TableRow>
             </TableHeader>
             <TableBody>
               <TableRow
                 v-for="row in pageRows"
-                :key="row.thread.id"
-                class="h-12 cursor-pointer"
-                @click="openThread(row.thread.id)"
+                :key="row.agenda.id"
+                class="h-14 cursor-pointer"
+                @click="openAgenda(row.agenda.id)"
               >
-                <TableCell><IdCell :id="row.thread.id" /></TableCell>
+                <TableCell><IdCell :id="row.agenda.id" /></TableCell>
                 <TableCell class="min-w-0">
                   <div class="flex items-center gap-2.5">
                     <span
                       class="h-[22px] w-1 shrink-0 rounded-full"
                       :class="{
-                        'bg-border': row.thread.state === 'queued',
-                        'bg-primary': row.thread.state === 'open',
-                        'bg-muted-foreground/40': row.thread.state === 'decided',
+                        'bg-border': row.agenda.state === 'queued',
+                        'bg-primary': row.agenda.state === 'open',
+                        'bg-muted-foreground/40': row.agenda.state === 'decided',
                       }"
                     />
-                    <button
-                      type="button"
-                      class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
-                    >
-                      {{ row.thread.title }}
-                    </button>
-                    <PartChip :part-id="row.thread.partId" />
+                    <div class="flex min-w-0 flex-col gap-0.5">
+                      <div class="flex min-w-0 items-center gap-2.5">
+                        <button
+                          type="button"
+                          class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
+                        >
+                          {{ row.agenda.title }}
+                        </button>
+                        <PartChip :part-id="row.agenda.partId" />
+                      </div>
+                      <!-- 결정내용 첫 줄 — 목록에서 무엇으로 정했는지 바로 보이게 -->
+                      <span
+                        v-if="row.decisionLine"
+                        class="truncate text-xs text-muted-foreground"
+                        :title="row.agenda.decision"
+                        data-decision-line
+                        >{{ row.decisionLine }}</span
+                      >
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div class="flex items-center gap-1.5">
-                    <ThreadStateBadge :state="row.thread.state" :defer-count="row.deferCount" />
-                    <!-- 따로 정할 항목이 여럿이면 몇 개 정했는지 -->
-                    <span
-                      v-if="row.itemCount >= 2"
-                      class="text-xs text-muted-foreground tabular-nums"
-                      :title="`결정 항목 ${row.itemCount}개 중 ${row.settledItemCount}개 정함`"
-                      data-item-progress
-                      >{{ row.settledItemCount }}/{{ row.itemCount }}</span
-                    >
-                  </div>
+                  <AgendaStateBadge :state="row.agenda.state" />
                 </TableCell>
                 <TableCell class="text-sm" :class="row.ownerName ? '' : 'text-muted-foreground'">
                   {{ row.ownerName ?? '미정' }}
                 </TableCell>
-                <TableCell class="text-sm text-muted-foreground">{{
-                  row.lastEntryLabel
-                }}</TableCell>
                 <TableCell
                   class="text-sm"
                   :class="row.overdue ? 'font-medium text-destructive' : 'text-muted-foreground'"
                   :title="row.overdue ? '기한 지남' : undefined"
                   >{{ row.dueLabel }}</TableCell
                 >
-                <TableCell class="text-right text-sm text-muted-foreground">{{
-                  row.entryCount
-                }}</TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
-                <TableCell colspan="7" class="h-[110px] text-center text-sm text-muted-foreground">
+                <TableCell colspan="5" class="h-[110px] text-center text-sm text-muted-foreground">
                   조회 조건에 맞는 안건이 없습니다.
                 </TableCell>
               </TableRow>
@@ -443,8 +416,8 @@ function onCreated(id: string) {
       </div>
     </div>
 
-    <ThreadDetailDialog v-model:open="detailOpen" :thread-id="detailId" @open-thread="openThread" />
+    <AgendaDetailDialog v-model:open="detailOpen" :agenda-id="detailId" />
 
-    <ThreadCreateDialog v-model:open="createOpen" @created="onCreated" />
+    <AgendaCreateDialog v-model:open="createOpen" @created="onCreated" />
   </AppShell>
 </template>

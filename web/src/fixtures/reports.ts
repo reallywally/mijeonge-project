@@ -63,13 +63,11 @@ export function mockReportBody(facts: ProgressFacts, ctx: ReportBodyContext): st
   )
 
   const decisionLines: string[] = []
-  if (decisions.decidedThreadIds.length > 0)
-    decisionLines.push(`- 이번 기간에 정해진 안건 ${decisions.decidedThreadIds.length}건`)
-  if (decisions.deferredThreadIds.length > 0)
-    decisionLines.push(`- 이번 기간에 미뤄진 안건 ${decisions.deferredThreadIds.length}건`)
-  if (decisions.riskyThreadIds.includes('t3'))
+  if (decisions.decidedAgendaIds.length > 0)
+    decisionLines.push(`- 이번 기간에 정해진 안건 ${decisions.decidedAgendaIds.length}건`)
+  if (decisions.riskyAgendaIds.includes('t3'))
     decisionLines.push(
-      '- 아직 큰 병목 [[thread:t3]] — 결정 기한이 지났고 이력이 오래 멈춰 있습니다. 정보보안팀 확인을 받아 다음 회의에 올려 보세요.',
+      '- 아직 큰 병목 [[agenda:t3]] — 결정 기한이 지났고 오래 멈춰 있습니다. 정보보안팀 확인을 받아 다음 회의에 올려 보세요.',
     )
   if (decisionLines.length > 0) out.push('', '결정', ...decisionLines)
 

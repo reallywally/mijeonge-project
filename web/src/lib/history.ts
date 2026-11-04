@@ -1,24 +1,23 @@
 import { slashDay } from '@/lib/date'
 import { taskPriorityLabel, taskStatusLabel } from '@/lib/task'
 import { testStatusLabel } from '@/lib/testcase'
+import { AGENDA_STATE_LABEL } from '@/lib/agenda'
 import type {
-  Entry,
-  EntryKind,
-  EntryPatch,
+  AgendaState,
   HistoryChange,
   HistoryEntry,
   TaskLine,
   TaskPriority,
   TaskStatus,
   TestStatus,
-  Thread,
-  ThreadPatch,
+  Agenda,
+  AgendaPatch,
 } from '@/types/domain'
 
 /* 변경 이력 (docs/api/history.md). 서버는 값을 id 그대로 남기고 이름은 화면이 지금의 것으로 찾는다.
    목업 갈래가 서버처럼 줄을 남길 때 쓰는 비교도 여기 둔다 — 화면 말로 바꾸는 것과 같은 칸 표를 본다 */
 
-export type HistoryKind = 'task' | 'test' | 'thread'
+export type HistoryKind = 'task' | 'test' | 'agenda'
 
 /** 한 줄 안의 칸 순서 — 계약의 '칸' 표 순서 그대로 */
 export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
@@ -36,7 +35,7 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'due',
     'body',
     'lineDone',
-    'thread',
+    'agenda',
     /* 선행 작업은 2026-10-28 걷었다(Q63) — 지난 이력 줄에만 있어 읽기는 둔다 */
     'dependsOn',
   ],
@@ -58,36 +57,21 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'failedStep',
     'resultNote',
     'taskRef',
-    'threadRef',
+    'agendaRef',
     'basis',
   ],
-  thread: [
+  /* 2026-11-04 전 줄의 칸(options · ccIds · entry… · item…)은 화면이 모른다 — 그리지 않고 건너뛴다 (docs/api/agenda.md) */
+  agenda: [
     'created',
     'deleted',
     'title',
     'description',
-    'options',
+    'decision',
+    'state',
     'ownerId',
     'partId',
     'dueDate',
-    'ccIds',
-    'entryText',
-    'entryNote',
-    'entryDeleted',
-    'itemCreated',
-    'itemTitle',
-    'itemDeleted',
   ],
-}
-
-/** 이력 줄(entry)의 종류 이름 — 안건 이력 배지(EntryKindBadge)와 변경 이력이 같은 말을 쓴다 */
-export const ENTRY_KIND_LABEL: Record<EntryKind, string> = {
-  decide: '결정',
-  change: '변경',
-  refine: '세부 추가',
-  split: '하위 안건으로 분리',
-  defer: '미룸',
-  raise: '제기',
 }
 
 type Value = HistoryChange['from']
@@ -130,29 +114,9 @@ export function diffChanges(
   return orderChanges(out, kind)
 }
 
-/**
- * 안건 PATCH 한 번이 바꾼 칸 — 목업이 서버처럼 남긴다. 후보는 줄바꿈으로 이은 글(비면 null),
- * 참조는 id 배열로 견준다. 값은 이미 다듬은(trim) 것을 받는다
- */
-export function threadPatchChanges(before: Thread, patch: ThreadPatch): HistoryChange[] {
-  const { options, ccIds, ...plain } = patch
-  const out = diffChanges(before, plain, 'thread')
-  const joined = (list: string[]) => (list.length ? list.join('\n') : null)
-  if (options !== undefined && joined(options) !== joined(before.options))
-    out.push(change('options', joined(before.options), joined(options)))
-  if (ccIds !== undefined && ccIds.join(',') !== before.ccIds.join(','))
-    out.push(change('ccIds', [...before.ccIds], [...ccIds]))
-  return orderChanges(out, 'thread')
-}
-
-/** 이력 줄 PATCH 한 번이 바꾼 칸 — subject 는 그 줄의 종류. 메모는 비면 null */
-export function entryPatchChanges(before: Entry, patch: EntryPatch): HistoryChange[] {
-  const out: HistoryChange[] = []
-  if (patch.text !== undefined && patch.text !== before.text)
-    out.push(change('entryText', before.text, patch.text, before.kind))
-  if (patch.note !== undefined && patch.note !== before.note)
-    out.push(change('entryNote', before.note || null, patch.note || null, before.kind))
-  return out
+/** 안건 PATCH 한 번이 바꾼 칸 — 목업이 서버처럼 남긴다. 값은 이미 다듬은(trim) 것을 받는다 */
+export function agendaPatchChanges(before: Agenda, patch: AgendaPatch): HistoryChange[] {
+  return diffChanges(before, patch, 'agenda')
 }
 
 /** 본문이 바뀌었나 — 줄 글 · 종류 · 체크 · 들여쓰기 · 순서. 줄 id 는 안 본다(서버가 다시 붙인다) */
@@ -204,7 +168,7 @@ export interface HistoryNames {
   /** 작업 키(HW-4) */
   task: (id: string) => string | null
   /** 안건 제목 */
-  thread: (id: string) => string | null
+  agenda: (id: string) => string | null
   /** 테스트 키(HW-T3) */
   test: (id: string) => string | null
 }
@@ -263,14 +227,14 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
     failedStep: '실패한 단계',
     resultNote: '결과 메모',
   },
-  thread: {
+  agenda: {
     title: '제목',
-    description: '배경',
-    options: '후보',
+    description: '설명',
+    decision: '결정내용',
+    state: '상태',
     ownerId: '담당자',
     partId: '파트',
     dueDate: '기한',
-    ccIds: '참조',
   },
 }
 
@@ -281,8 +245,6 @@ const LONG_FIELDS = new Set([
   'testData',
   'resultNote',
   'description',
-  'entryText',
-  'entryNote',
 ])
 
 const str = (v: Value) => (v === null ? '' : Array.isArray(v) ? v.join(', ') : String(v))
@@ -291,6 +253,8 @@ const str = (v: Value) => (v === null ? '' : Array.isArray(v) ? v.join(', ') : S
 function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNames): string {
   const name = (found: string | null) => found ?? MISSING
   switch (field) {
+    case 'state':
+      return v === null ? '없음' : (AGENDA_STATE_LABEL[v as AgendaState] ?? str(v))
     case 'status':
       if (v === null) return '없음'
       return (
@@ -315,33 +279,22 @@ function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNam
       return v === null ? '미정' : slashDay(str(v))
     case 'dueDate':
       return v === null ? '없음' : slashDay(str(v))
-    case 'ccIds': {
-      const ids = Array.isArray(v) ? v : []
-      return ids.length === 0 ? '없음' : ids.map((id) => name(names.member(id))).join(', ')
-    }
     case 'failedStep':
       return v === null ? '없음' : `${v}단계`
     case 'resultNote':
-    case 'entryNote':
       return v === null ? '없음' : str(v)
     default:
       return str(v) === '' ? '(비움)' : str(v)
   }
 }
 
-/** 이력 줄의 칸 — subject 가 그 줄의 kind 다. '결정 줄 고침' 처럼 앞에 종류를 붙인다 */
-function entryChange(c: HistoryChange, what: string) {
-  const kindLabel = ENTRY_KIND_LABEL[c.subject as EntryKind] ?? '이력'
-  return { field: c.field, label: `${kindLabel} ${what}`, long: false }
-}
-
 /** 걸기 · 떼기 칸 — 걸기는 null → id, 떼기는 id → null */
 const LINK: Record<string, { noun: string; find: keyof HistoryNames }> = {
-  thread: { noun: '안건', find: 'thread' },
+  agenda: { noun: '안건', find: 'agenda' },
   /* 선행 작업은 2026-10-28 걷었다(Q63) — 지난 이력 줄에만 */
   dependsOn: { noun: '선행 작업', find: 'task' },
   taskRef: { noun: '작업 태그', find: 'task' },
-  threadRef: { noun: '안건 태그', find: 'thread' },
+  agendaRef: { noun: '안건 태그', find: 'agenda' },
 }
 
 export function changeView(
@@ -381,34 +334,17 @@ export function changeView(
       return { ...base, label: '기준 그대로 맞다 확인' }
     case 'deleted':
       return { ...base, label: '삭제' }
-    case 'options':
-      /* 후보는 줄마다 하나 — 본문처럼 줄을 살려 전 · 후를 위아래에 놓는다 */
+    case 'decision':
+      /* 결정내용은 여러 줄 글 — 본문처럼 줄을 살려 전 · 후를 위아래에 놓는다 */
+      if (kind !== 'agenda') break
       return {
         ...base,
-        label: '후보',
-        from: c.from === null ? '없음' : str(c.from),
-        to: c.to === null ? '없음' : str(c.to),
+        label: '결정내용',
+        from: str(c.from) === '' ? '(비움)' : str(c.from),
+        to: str(c.to) === '' ? '(비움)' : str(c.to),
         long: true,
         block: true,
       }
-    case 'entryText':
-      return { ...entryChange(c, '줄 고침'), from: str(c.from), to: str(c.to), long: true }
-    case 'entryNote':
-      return {
-        ...entryChange(c, '줄 메모'),
-        from: valueText(kind, c.field, c.from, names),
-        to: valueText(kind, c.field, c.to, names),
-        long: true,
-      }
-    case 'entryDeleted':
-      return { ...entryChange(c, '줄 지움'), value: str(c.from), long: false }
-    /* 결정 항목 (2026-11-03) — 값은 항목 이름 */
-    case 'itemCreated':
-      return { ...base, label: '결정 항목 추가', value: str(c.to) }
-    case 'itemTitle':
-      return { ...base, label: '결정 항목 이름', from: str(c.from), to: str(c.to) }
-    case 'itemDeleted':
-      return { ...base, label: '결정 항목 삭제', value: str(c.from) }
   }
   const link = LINK[c.field]
   if (link) {
@@ -427,22 +363,31 @@ export function changeView(
   return { ...base, label, from, to, long: LONG_FIELDS.has(c.field) }
 }
 
-/** 이력 전체를 화면 말로 — 최근 것부터 */
+/** 안건은 모르는 칸(지난 모델의 칸)을 건너뛴다 — 작업 · 테스트는 지난 칸도 읽는다 */
+const shows = (kind: HistoryKind, c: HistoryChange) =>
+  kind !== 'agenda' || HISTORY_FIELDS.agenda.includes(c.field)
+
+/** 이력 전체를 화면 말로 — 최근 것부터. 그릴 칸이 하나도 없는 줄은 뺀다 */
 export function historyView(
   kind: HistoryKind,
   entries: HistoryEntry[],
   names: HistoryNames,
 ): HistoryEntryView[] {
-  return [...entries].reverse().map((e) => ({
-    id: e.id,
-    changedAt: e.changedAt,
-    who: e.backfilled
-      ? null
-      : e.changedBy === null
-        ? '알 수 없음'
-        : (names.member(e.changedBy) ?? MISSING),
-    changes: e.changes.map((c) => changeView(kind, c, names, e.backfilled)),
-  }))
+  return [...entries]
+    .reverse()
+    .map((e) => ({
+      id: e.id,
+      changedAt: e.changedAt,
+      who: e.backfilled
+        ? null
+        : e.changedBy === null
+          ? '알 수 없음'
+          : (names.member(e.changedBy) ?? MISSING),
+      changes: e.changes
+        .filter((c) => shows(kind, c))
+        .map((c) => changeView(kind, c, names, e.backfilled)),
+    }))
+    .filter((e) => e.changes.length > 0)
 }
 
 /** 긴 글을 줄인다 — 줄바꿈은 한 칸으로 펴고 HISTORY_CLIP 자에서 자른다 */

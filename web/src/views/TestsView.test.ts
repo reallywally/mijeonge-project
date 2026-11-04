@@ -10,7 +10,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useTestStore } from '@/stores/test'
 import TasksView from './TasksView.vue'
 import TestsView from './TestsView.vue'
-import ThreadListView from './ThreadListView.vue'
+import AgendaListView from './AgendaListView.vue'
 
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
@@ -68,7 +68,7 @@ async function mountAt(path: string, email = 'u1@inno-ax.com') {
       { path: '/tests/:id', component: TestsView },
       { path: '/tasks', component: TasksView },
       { path: '/tasks/:id', component: TasksView },
-      { path: '/threads/:id', component: ThreadListView },
+      { path: '/agendas/:id', component: AgendaListView },
       { path: '/:rest(.*)', component: TestsView },
     ],
   })
@@ -333,7 +333,7 @@ describe('작업 상세의 태그한 테스트', () => {
   })
 
   it('안건 상세에는 태그한 테스트 칸이 없다', async () => {
-    await mountAt('/threads/t2')
+    await mountAt('/agendas/t2')
     expect($('[role="dialog"]')).not.toBeNull()
     expect($('[data-tagged-tests]')).toBeNull()
   })

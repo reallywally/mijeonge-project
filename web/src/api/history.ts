@@ -15,12 +15,12 @@ const book = (kind: HistoryKind) =>
     ? mockDb().taskHistory
     : kind === 'test'
       ? mockDb().testHistory
-      : mockDb().threadHistory
+      : mockDb().agendaHistory
 
 const NOT_FOUND: Record<HistoryKind, [string, string]> = {
   task: ['TASK_NOT_FOUND', '작업을 찾을 수 없습니다.'],
   test: ['TEST_NOT_FOUND', '테스트를 찾을 수 없습니다.'],
-  thread: ['THREAD_NOT_FOUND', '안건을 찾을 수 없습니다.'],
+  agenda: ['AGENDA_NOT_FOUND', '안건을 찾을 수 없습니다.'],
 }
 
 /**
@@ -69,7 +69,7 @@ function mockList(kind: HistoryKind, targetId: string): HistoryEntry[] {
       ? mockWorld().tasks.find((t) => t.id === targetId)?.projectId
       : kind === 'test'
         ? mockDb().tests.find((t) => t.id === targetId)?.projectId
-        : mockWorld().threads.find((t) => t.id === targetId)?.projectId
+        : mockWorld().agendas.find((t) => t.id === targetId)?.projectId
   if (!projectId || !canSeeProject(me, projectId)) throw mockError(404, ...NOT_FOUND[kind])
   return structuredClone(book(kind)[targetId] ?? [])
 }
@@ -80,11 +80,11 @@ export const fetchTaskHistory = (taskId: string) =>
     ? later(() => mockList('task', taskId))
     : request<HistoryEntry[]>('GET', `/tasks/${id(taskId)}/history`)
 
-/** 안건의 변경 이력 — 오래된 것부터(seq 순). 이력 줄(entry) 고치기 · 지우기도 여기 남는다 */
-export const fetchThreadHistory = (threadId: string) =>
+/** 안건의 변경 이력 — 오래된 것부터(seq 순). 결정내용 · 상태가 바뀐 기록도 여기에만 남는다 */
+export const fetchAgendaHistory = (agendaId: string) =>
   isMockMode()
-    ? later(() => mockList('thread', threadId))
-    : request<HistoryEntry[]>('GET', `/threads/${id(threadId)}/history`)
+    ? later(() => mockList('agenda', agendaId))
+    : request<HistoryEntry[]>('GET', `/agendas/${id(agendaId)}/history`)
 
 /** 테스트의 변경 이력 — 오래된 것부터(seq 순) */
 export const fetchTestHistory = (testId: string) =>

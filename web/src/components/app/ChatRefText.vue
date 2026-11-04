@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { h } from 'vue'
 import type { VNodeChild } from 'vue'
-import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
+import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import { splitRefs } from '@/lib/chat'
 import { parseMarkdown } from '@/lib/markdown'
 import type { Block, Inline, ListItem } from '@/lib/markdown'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import type { ChatRef } from '@/types/domain'
 
 /* AI 가 낸 답 본문. v-html 로 그리지 않는다 — 근거 표시는 칩으로 바꾼다.
@@ -14,29 +14,29 @@ import type { ChatRef } from '@/types/domain'
    아니면(리포트 · 리스크 요약 — 프롬프트가 마크다운을 쓰지 말라고 한다) 줄바꿈만 살린다.
    스냅샷(지금 프로젝트)에 없는 id 는 그리지 않는다 — 지어낸 id 를 보이지 않는다 (docs/api/chat.md) */
 const props = defineProps<{ text: string; markdown?: boolean }>()
-const emit = defineEmits<{ 'open-thread': [id: string]; 'open-task': [id: string] }>()
+const emit = defineEmits<{ 'open-agenda': [id: string]; 'open-task': [id: string] }>()
 
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 const taskStore = useTaskStore()
 
 const CHIP =
   'mx-0.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 align-middle text-xs hover:bg-accent'
 
 function chip(ref: ChatRef): VNodeChild {
-  if (ref.kind === 'thread') {
-    const row = threadStore.rows.find((r) => r.thread.id === ref.id)
+  if (ref.kind === 'agenda') {
+    const row = agendaStore.rows.find((r) => r.agenda.id === ref.id)
     if (!row) return null
     return h(
       'button',
       {
         type: 'button',
         class: CHIP,
-        'data-ref-thread': row.thread.id,
-        onClick: () => emit('open-thread', row.thread.id),
+        'data-ref-agenda': row.agenda.id,
+        onClick: () => emit('open-agenda', row.agenda.id),
       },
       [
-        h('span', { class: 'truncate' }, row.thread.title),
-        h(ThreadStateBadge, { state: row.thread.state, deferCount: row.deferCount }),
+        h('span', { class: 'truncate' }, row.agenda.title),
+        h(AgendaStateBadge, { state: row.agenda.state }),
       ],
     )
   }

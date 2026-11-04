@@ -19,8 +19,8 @@ const ask = [{ role: 'user' as const, text: '서버 OS 뭐로 하기로 했지?'
 /** 서버(server/app/api/chat.py 의 _sse)가 쓰는 모양 그대로 — event 줄, type 을 같이 실은 한 줄 JSON data, 빈 줄 */
 const sse = (event: ChatEvent) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`
 
-const TOOL: ChatEvent = { type: 'tool', name: 'search_threads', label: '"OS" 안건 찾는 중' }
-const DONE: ChatEvent = { type: 'done', refs: [{ kind: 'thread', id: 't1' }] }
+const TOOL: ChatEvent = { type: 'tool', name: 'search_agendas', label: '"OS" 안건 찾는 중' }
+const DONE: ChatEvent = { type: 'done', refs: [{ kind: 'agenda', id: 't1' }] }
 const deltas = (...texts: string[]) => texts.map((text) => sse({ type: 'delta', text }))
 
 /** 조각마다 한 번씩 pull 에 응한다. open 이면 다 내고도 닫지 않고 기다린다 — 멈추기를 보려고 */
@@ -207,7 +207,7 @@ describe('서버 스트림', () => {
   it('POST 로 대화를 싣고, tool → delta → done 을 그대로 낸다', async () => {
     const { stream } = body([
       sse(TOOL),
-      ...deltas('우분투로 ', '정했습니다. [[thread:t1]]'),
+      ...deltas('우분투로 ', '정했습니다. [[agenda:t1]]'),
       sse(DONE),
     ])
     const fake = serve(streamOk(stream))
@@ -225,7 +225,7 @@ describe('서버 스트림', () => {
     expect(events).toEqual([
       TOOL,
       { type: 'delta', text: '우분투로 ' },
-      { type: 'delta', text: '정했습니다. [[thread:t1]]' },
+      { type: 'delta', text: '정했습니다. [[agenda:t1]]' },
       DONE,
     ])
   })

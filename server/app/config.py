@@ -44,7 +44,6 @@ class Settings(BaseSettings):
     # 결정 병목 리스크 기준의 기본값 — 프로젝트가 한 번도 안 바꿨을 때 쓴다.
     # 기본값은 여기 한 곳에만 둔다 (docs/api/risk.md '기준 설정')
     risk_due_soon_days: int = 3
-    risk_defer_count: int = 2
     risk_stale_days: int = 7
     risk_high_score: int = 6
     risk_medium_score: int = 3

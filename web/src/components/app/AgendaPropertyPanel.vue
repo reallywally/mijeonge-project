@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import CcField from '@/components/app/CcField.vue'
+import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { useDataStore } from '@/stores/data'
+import type { AgendaState } from '@/types/domain'
 
-/* 안건의 속성 — 안건 상세와 안건 추가의 오른쪽 칸. 값은 부모가 들고, 여기는 보여 주고 고친 값을 올린다.
-   상세는 올라온 값을 바로 저장하고, 추가는 만들 때 한꺼번에 넣는다.
-   결정 기한은 'YYYY-MM-DD' 또는 빈 문자열이다. 위 슬롯에는 상태를, 아래 슬롯에는 읽기 전용 정보를 넣는다.
+/* 안건의 속성 — 안건 상세의 오른쪽 칸: 상태 · 결정 기한 · 담당자 · 파트. 값은 부모가 들고, 여기는 보여 주고
+   고친 값을 올린다 — 상세가 바로 저장한다. 결정 기한은 'YYYY-MM-DD' 또는 빈 문자열이다.
+   위 슬롯에는 상태 아래 덧붙일 말을, 아래 슬롯에는 읽기 전용 정보를 넣는다.
    readonly 면 칸을 모두 잠근다 — 고칠 권한이 없는 안건(작성자 · 담당자 · 관리자만 고친다) */
 const props = defineProps<{ overdue?: boolean; readonly?: boolean }>()
+const state = defineModel<AgendaState>('state', { required: true })
 const dueDate = defineModel<string>('dueDate', { required: true })
 const ownerId = defineModel<string | null>('ownerId', { required: true })
 const partId = defineModel<string | null>('partId', { required: true })
-/* 참조 — 담당자 곁에 둔다. 확인 요청을 받는 사람이 담당 작업 말고 여기서도 나온다 */
-const ccIds = defineModel<string[]>('ccIds', { required: true })
 
 const data = useDataStore()
 const NONE = 'none'
@@ -37,9 +37,15 @@ const ghost = computed(() =>
   <aside
     class="flex w-[300px] shrink-0 flex-col gap-4 border-l border-border bg-muted/50 px-4 pt-4 pb-6"
   >
-    <slot name="top" />
-
     <dl class="flex flex-col gap-0.5">
+      <div class="flex min-h-9 items-center gap-2">
+        <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">상태</dt>
+        <dd class="min-w-0 grow">
+          <AgendaStateSelect v-model="state" :trigger-class="ghost" :disabled="readonly" />
+        </dd>
+      </div>
+      <slot name="top" />
+
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">결정 기한</dt>
         <dd class="min-w-0 grow">
@@ -94,8 +100,6 @@ const ghost = computed(() =>
           </Select>
         </dd>
       </div>
-
-      <CcField v-model="ccIds" :disabled="readonly" />
 
       <PartField v-model="partId" :trigger-class="ghost" :disabled="readonly" />
     </dl>

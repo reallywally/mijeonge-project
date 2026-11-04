@@ -4,6 +4,12 @@
 
 ## 응답 스키마 — `ProjectSnapshot`
 
+> **2026-11-04 고침 (안건 간소화, `agenda.md`)** — 스냅샷은
+> `{ project, agendas: Agenda[], tasks: Task[], taskAgendaLinks: TaskAgendaLink[] ({ taskId, agendaId }), parts, partMembers }` 다.
+> **`decisionItems` · `entries` 는 빠졌다.** `Agenda` 의 모양은 `agenda.md` '모양'(제목 · 설명 · 결정내용 · 상태 · 담당자 · 등록한 사람 · 기한 · 파트 · 등록 시각 · `decidedAt` · `decisionRev` · `minutesId`).
+> `options` · `ccIds` · `parentThreadId` 는 없어졌다. 정렬(`seq` 오름차순) · 거르기(지운 안건 · 지운 작업 빠짐)는 그대로다.
+> `null` 이 나갈 수 있는 `Agenda` 의 칸은 `ownerId` · `creatorId` · `dueDate` · `partId` · `decidedAt` · `minutesId`. 아래 옛 절의 `Thread` · `Entry` · `DecisionItem` 설명은 이 고침이 대신한다.
+
 `GET /api/projects/{projectId}/snapshot`.
 **원본만 준다.** `ThreadRow` · `ThreadDetail` · `TaskRow` ·
 `TaskDetail` · `TaskThreadRow` 같은 계산된 타입은 담지 않는다 — 지금대로 프론트 스토어가 만든다.

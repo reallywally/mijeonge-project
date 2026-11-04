@@ -44,7 +44,7 @@ export const useHistoryStore = defineStore('history', () => {
         ? api.fetchTaskHistory(id)
         : kind === 'test'
           ? api.fetchTestHistory(id)
-          : api.fetchThreadHistory(id))
+          : api.fetchAgendaHistory(id))
       if (latest.get(key) !== mine) return
       entries.value[key] = rows
       status.value[key] = 'ready'

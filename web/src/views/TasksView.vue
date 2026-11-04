@@ -409,7 +409,7 @@ function bulkOwner(value: string) {
       v-if="view === 'board'"
       @open-task="openTask"
       @add-task="(status) => openCreate(null, status)"
-      @open-thread="(id) => router.push(`/threads/${id}`)"
+      @open-agenda="(id) => router.push(`/agendas/${id}`)"
     />
 
     <div v-if="view === 'list'" class="flex min-h-0 grow overflow-y-auto px-6 pt-6">
@@ -624,7 +624,7 @@ function bulkOwner(value: string) {
                   {{ row.undated ? '기간 미정' : row.periodLabel }}
                 </TableCell>
                 <TableCell class="text-right text-sm text-muted-foreground">
-                  {{ row.threadCount === 0 ? '—' : row.threadCount }}
+                  {{ row.agendaCount === 0 ? '—' : row.agendaCount }}
                 </TableCell>
               </TableRow>
               <TableRow v-if="pageRows.length === 0" class="hover:bg-transparent">
@@ -708,7 +708,7 @@ function bulkOwner(value: string) {
       v-model:open="detailOpen"
       :task-id="detailId"
       @open-task="openTask"
-      @open-thread="(id) => router.push(`/threads/${id}`)"
+      @open-agenda="(id) => router.push(`/agendas/${id}`)"
     />
 
     <TaskCreateDialog

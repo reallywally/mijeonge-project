@@ -76,16 +76,10 @@ describe('작업 상세', () => {
     const detail = task.taskDetail('k4')!
 
     expect(detail.task.title).toBe('개발 환경 설정')
-    expect(detail.threads.map((t) => t.thread.title)).toEqual(['서버 OS 결정', 'DB 결정'])
-    expect(detail.threads[0].line).toBe('우분투 최신 버전으로 한다')
-    expect(detail.threads[0].where).toBe('9월 9일에 정해짐')
-    expect(detail.threads[1].line).toBe('mysql 을 쓴다')
-  })
-
-  it('걸린 안건이 몇 번 미뤄졌는지도 함께 온다 — 안건 목록과 같은 배지를 쓴다', () => {
-    const task = useTaskStore()
-    const detail = task.taskDetail('k18')!
-    expect(detail.threads.map((t) => t.deferCount)).toEqual([2])
+    expect(detail.agendas.map((t) => t.agenda.title)).toEqual(['서버 OS 결정', 'DB 결정'])
+    expect(detail.agendas[0].line).toBe('우분투 최신 버전으로 한다')
+    expect(detail.agendas[0].where).toBe('9월 9일에 정해짐')
+    expect(detail.agendas[1].line).toBe('mysql 을 쓴다')
   })
 
   it('하위 작업과 끝난 수를 센다', () => {
@@ -95,36 +89,35 @@ describe('작업 상세', () => {
     expect(detail.doneChildCount).toBe(1)
   })
 
-  it('아직 못 정한 안건은 마지막 기록과 그 날짜를 보여준다', () => {
+  it('아직 못 정한 안건은 적어 둔 결정내용 첫 줄과 등록한 날을 보여준다', () => {
     const task = useTaskStore()
-    const row = task.taskDetail('k18')!.threads[0]
-    expect(row.line).toBe('여전히 업무 정의가 없어 또 미룬다')
-    /* 항목이 둘 이상이면 몇 개 정했는지도 */
-    expect(row.where).toBe('마지막 기록 · 9월 14일 · 결정 1/2 정함')
+    const row = task.taskDetail('k18')!.agendas[0]
+    expect(row.line).toBe('요청(in) 항목: 계약번호 · 상품코드 · 가입일 셋을 넘긴다')
+    expect(row.where).toBe('9월 7일에 등록')
   })
 
-  it('기록이 하나도 없는 안건은 그렇다고 적는다', () => {
+  it('결정내용이 없는 안건은 그렇다고 적는다', () => {
     const task = useTaskStore()
-    const row = task.taskDetail('k13')!.threads[0]
-    expect(row.line).toBe('아직 아무 기록이 없습니다.')
-    expect(row.where).toBe('기록 없음')
+    const row = task.taskDetail('k13')!.agendas[0]
+    expect(row.line).toBe('아직 결정내용이 없습니다.')
+    expect(row.where).toBe('9월 12일에 등록')
   })
 })
 
 describe('맵핑', () => {
   it('안건을 걸고 뗀다. 같은 것을 두 번 걸어도 하나다', () => {
     const task = useTaskStore()
-    task.linkThread('k4', 't4')
-    task.linkThread('k4', 't4')
-    expect(task.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', 't4'])
+    task.linkAgenda('k4', 't4')
+    task.linkAgenda('k4', 't4')
+    expect(task.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', 't4'])
 
-    task.unlinkThread('k4', 't4')
-    expect(task.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
+    task.unlinkAgenda('k4', 't4')
+    expect(task.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
   })
 
   it('안건 쪽에서는 어느 작업에 걸렸는지 읽을 수 있다', () => {
     const task = useTaskStore()
-    expect(task.tasksOfThread('t5').map((r) => r.task.key)).toEqual(['HW-18'])
+    expect(task.tasksOfAgenda('t5').map((r) => r.task.key)).toEqual(['HW-18'])
   })
 })
 
@@ -138,7 +131,7 @@ describe('작업 추가', () => {
     start: null,
     due: null,
     priority: 'normal' as const,
-    threadIds: [],
+    agendaIds: [],
   })
 
   it('키는 그 프로젝트의 접두사로 선다 — 다른 프로젝트에 HW 가 붙지 않는다', async () => {
@@ -250,7 +243,7 @@ describe('상태 기록', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: [],
+      agendaIds: [],
     })
     const made = useDataStore().allTasks.find((t) => t.id === id)!
     expect(made.statusChangedAt).toBe(made.createdAt)
@@ -311,7 +304,7 @@ describe('4단 제한 (Q64)', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: [],
+      agendaIds: [],
     })
     expect(id).toBeNull()
     expect(data.allTasks).toHaveLength(before)
@@ -372,7 +365,7 @@ describe('고치기 · 지우기 권한', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: [],
+      agendaIds: [],
     })
     expect(useDataStore().allTasks.find((t) => t.id === id)!.creatorId).toBe('u1')
   })
@@ -383,10 +376,10 @@ describe('고치기 · 지우기 권한', () => {
     const k18 = useDataStore().allTasks.find((t) => t.id === 'k18')!
     task.setTitle('k18', '바꾼 제목')
     task.setPeriod('k18', '2026-10-01', '2026-10-02')
-    task.linkThread('k18', 't1')
+    task.linkAgenda('k18', 't1')
     expect(k18.title).toBe('보험료 산출 기간계 API 개발')
     expect(k18.start).toBeNull()
-    expect(task.threadsOfTask('k18').map((t) => t.id)).toEqual(['t5'])
+    expect(task.agendasOfTask('k18').map((t) => t.id)).toEqual(['t5'])
     expect(vi.mocked(toastError)).toHaveBeenCalledWith(
       expect.objectContaining({ status: 403, code: 'FORBIDDEN' }),
     )
@@ -402,7 +395,7 @@ describe('고치기 · 지우기 권한', () => {
 
     await task.deleteTask('k22')
     expect(data.allTasks.some((t) => t.id === 'k22')).toBe(false)
-    expect(data.taskThreads.some((l) => l.taskId === 'k22')).toBe(false)
+    expect(data.taskAgendas.some((l) => l.taskId === 'k22')).toBe(false)
     expect(task.taskDetail('k4')!.children.map((c) => c.task.key)).not.toContain('HW-22')
   })
 })
@@ -508,7 +501,7 @@ describe('줄 끌어 옮기기', () => {
       start: null,
       due: null,
       priority: 'normal',
-      threadIds: [],
+      agendaIds: [],
     })
     expect(useDataStore().allTasks.find((t) => t.id === id)!.order).toBe(4)
   })

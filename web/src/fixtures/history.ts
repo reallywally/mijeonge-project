@@ -1,6 +1,6 @@
 import { tasks } from '@/fixtures/tasks'
 import { testCases } from '@/fixtures/tests'
-import { threads } from '@/fixtures/threads'
+import { agendas } from '@/fixtures/agendas'
 import type { HistoryEntry } from '@/types/domain'
 
 /**
@@ -43,6 +43,27 @@ testHistory.tc7.push({
   ],
 })
 
-export const threadHistory: Record<string, HistoryEntry[]> = Object.fromEntries(
-  threads.map((t) => [t.id, [created('hh', t.id, t.createdAt, t.creatorId)]]),
+export const agendaHistory: Record<string, HistoryEntry[]> = Object.fromEntries(
+  agendas.map((t) => [t.id, [created('hh', t.id, t.createdAt, t.creatorId)]]),
 )
+
+/*
+ * 이행 때 옛 결정에서 만든 결정내용 — 결정 줄을 남긴 사람 · 시각으로 '결정내용' 한 줄을 채워 둔다(backfilled).
+ * 이력 줄이 없어져 결정이 바뀐 기록은 이 이력뿐이라, 테스트 '기준 바뀜' 이 이 줄을 센다
+ */
+const backfilledDecision: [agendaId: string, at: string, by: string][] = [
+  ['t1', '2026-09-09T02:00:00Z', 'u3'],
+  ['t2', '2026-09-10T06:05:00Z', 'u3'],
+  ['t5', '2026-09-10T07:00:00Z', 'u4'],
+  ['t6', '2026-09-15T07:00:00Z', 'u1'],
+]
+for (const [agendaId, at, by] of backfilledDecision) {
+  const decision = agendas.find((t) => t.id === agendaId)!.decision
+  agendaHistory[agendaId].push({
+    id: `hh-${agendaId}-2`,
+    changedAt: at,
+    changedBy: by,
+    backfilled: true,
+    changes: [{ field: 'decision', from: '', to: decision, subject: '' }],
+  })
+}

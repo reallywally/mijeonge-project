@@ -87,8 +87,8 @@ function send(text = draft.value) {
 }
 
 /* 근거 칩은 주소로 간다 — 그 화면이 기존 상세 팝업을 띄운다. 창은 닫지 않는다(대화가 이어진다) */
-function openThread(id: string) {
-  void router.push({ name: 'thread', params: { id } })
+function openAgenda(id: string) {
+  void router.push({ name: 'agenda', params: { id } })
 }
 function openTask(id: string) {
   void router.push({ name: 'task', params: { id } })
@@ -225,7 +225,7 @@ watch(
                 :text="line.text"
                 class="max-w-[85%] rounded-lg bg-muted px-3 py-2"
                 data-answer-text
-                @open-thread="openThread"
+                @open-agenda="openAgenda"
                 @open-task="openTask"
               />
               <ChatProposalCard

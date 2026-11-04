@@ -2,52 +2,35 @@
 import { computed } from 'vue'
 import { CalendarDays, CornerDownRight, ListTree, Sparkles, TriangleAlert } from 'lucide-vue-next'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
-import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
+import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
+import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { monthDay } from '@/lib/date'
 import { taskPriorityLabel } from '@/lib/task'
-import { ITEM_TITLE_MAX } from '@/lib/thread'
+import { updateKey } from '@/lib/minutes'
 import { useDataStore } from '@/stores/data'
 import { useMinutesDraftStore } from '@/stores/minutesDraft'
-import { useThreadStore } from '@/stores/thread'
-import type { ProposedEntryBody } from '@/types/domain'
+import { useAgendaStore } from '@/stores/agenda'
 
-/* 회의록 초안 검토 — 요약과 세 묶음(새 안건 · 기존 안건에 붙일 이력 · 작업). 줄마다 체크(기본 켬) · 고칠 칸 · 근거.
+/* 회의록 초안 검토 — 요약과 세 묶음(새 안건 · 기존 안건 결정내용 바꾸기 · 작업). 줄마다 체크(기본 켬) · 고칠 칸 · 근거.
    근거(quote)는 AI 가 회의록에서 옮긴 글이라 v-html 없이 흐리게 둔다. 고친 값은 스토어의 사본(form)에 바로 들어간다.
    요약은 [등록] 때 회의록에 저장되므로 고칠 수 있게 둔다 */
-const emit = defineEmits<{ 'open-thread': [id: string] }>()
+const emit = defineEmits<{ 'open-agenda': [id: string] }>()
 
 const minutes = useMinutesDraftStore()
 const data = useDataStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 
 const form = computed(() => minutes.form!)
 
-const KIND_OPTIONS: { value: ProposedEntryBody['kind']; label: string }[] = [
-  { value: 'decide', label: '결정' },
-  { value: 'defer', label: '미룸' },
-  { value: 'refine', label: '세부 추가' },
-]
-const noteLabel = (kind: ProposedEntryBody['kind']) => (kind === 'defer' ? '사유' : '상세 설명')
-/* 항목 이름 — 같은 이름의 항목이 있으면 거기, 없으면 새 항목. 비우면 결정 · 세부는 안건 제목, 미룸은 안건 전체 */
-const itemPlaceholder = (kind: ProposedEntryBody['kind']) =>
-  kind === 'defer' ? '비우면 안건 전체를 미룸' : '비우면 안건 제목으로'
-/* 기존 안건의 항목 이름을 고를 수 있게 — 글자를 그대로 맞춰야 같은 항목으로 들어간다 */
-const itemTitlesOf = (threadId: string) => threadStore.itemsOfThread(threadId).map((i) => i.title)
-
-const existing = (threadId: string) => threadStore.rows.find((r) => r.thread.id === threadId)
+const existing = (agendaId: string) => agendaStore.rows.find((r) => r.agenda.id === agendaId)
+/* 상태 고르기 칸 — 검토 줄은 작게 */
+const STATE_TRIGGER = 'h-8 w-full bg-background px-2 text-xs'
 const newTitle = (tempId: string) =>
-  form.value.threads.find((t) => t.tempId === tempId)?.title || '제목 없는 새 안건'
+  form.value.agendas.find((t) => t.tempId === tempId)?.title || '제목 없는 새 안건'
 const parentLabel = (parentTempId: string | null, parentId: string | null) => {
   if (parentTempId) return form.value.tasks.find((t) => t.tempId === parentTempId)?.title ?? ''
   const parent = parentId ? data.allTasks.find((t) => t.id === parentId) : null
@@ -96,14 +79,14 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
     </section>
 
     <!-- 새 안건 -->
-    <section v-if="form.threads.length > 0" class="flex flex-col gap-2" aria-label="새 안건">
+    <section v-if="form.agendas.length > 0" class="flex flex-col gap-2" aria-label="새 안건">
       <h2 class="flex items-baseline gap-2 text-sm font-medium">
         새 안건
-        <span class="text-xs font-normal text-muted-foreground">{{ form.threads.length }}</span>
+        <span class="text-xs font-normal text-muted-foreground">{{ form.agendas.length }}</span>
       </h2>
       <ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         <li
-          v-for="t in form.threads"
+          v-for="t in form.agendas"
           :key="t.tempId"
           class="flex gap-3 px-4 py-3"
           :class="rowClass(t.tempId)"
@@ -117,7 +100,7 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
           />
           <div class="flex min-w-0 grow flex-col gap-2" data-row-body :class="bodyClass(t.tempId)">
             <Input v-model="t.title" class="h-8 text-sm font-medium" aria-label="안건 제목" />
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-3 gap-2">
               <OwnerSelect v-model="t.ownerId" label="담당자" :hint="t.ownerHint" />
               <Input
                 :model-value="t.dueDate ?? ''"
@@ -126,52 +109,19 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
                 aria-label="결정 기한"
                 @change="(e: Event) => (t.dueDate = picked(e))"
               />
+              <AgendaStateSelect v-model="t.state" :trigger-class="STATE_TRIGGER" />
             </div>
             <p v-if="t.description" class="text-xs leading-relaxed text-muted-foreground">
               {{ t.description }}
             </p>
-            <p v-if="t.options.length > 0" class="text-xs text-muted-foreground">
-              후보 · {{ t.options.join(' · ') }}
-            </p>
-            <div
-              v-if="t.entry"
-              class="flex flex-col gap-2 rounded-md bg-muted/50 p-2"
-              data-minutes-thread-entry
-            >
-              <div class="flex gap-2">
-                <Select v-model="t.entry.kind">
-                  <SelectTrigger
-                    class="h-8 w-28 shrink-0 bg-background text-xs"
-                    aria-label="이력 종류"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="k in KIND_OPTIONS" :key="k.value" :value="k.value">
-                      {{ k.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  v-model="t.entry.text"
-                  class="h-8 bg-background text-sm"
-                  aria-label="이력 내용"
-                />
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="w-28 shrink-0 text-xs text-muted-foreground">결정 항목</span>
-                <Input
-                  v-model="t.entry.itemTitle"
-                  class="h-8 bg-background text-sm"
-                  aria-label="결정 항목"
-                  :maxlength="ITEM_TITLE_MAX"
-                  :placeholder="itemPlaceholder(t.entry.kind)"
-                />
-              </div>
-              <p v-if="t.entry.note" class="text-xs whitespace-pre-line text-muted-foreground">
-                {{ noteLabel(t.entry.kind) }} · {{ t.entry.note }}
-              </p>
-            </div>
+            <Textarea
+              v-model="t.decision"
+              rows="2"
+              class="resize-y bg-background text-sm leading-relaxed"
+              aria-label="결정내용"
+              placeholder="이 회의에서 정한 것 (없으면 비워 둡니다)"
+              data-minutes-agenda-decision
+            />
             <blockquote
               class="border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted-foreground opacity-80"
               data-minutes-quote
@@ -186,95 +136,82 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
       </ul>
     </section>
 
-    <!-- 기존 안건에 붙일 이력 -->
+    <!-- 기존 안건 결정내용 바꾸기 — 지금 결정내용을 통째로 갈아끼운다 -->
     <section
-      v-if="form.entries.length > 0"
+      v-if="form.updates.length > 0"
       class="flex flex-col gap-2"
-      aria-label="기존 안건에 붙일 이력"
+      aria-label="기존 안건 결정내용 바꾸기"
     >
       <h2 class="flex items-baseline gap-2 text-sm font-medium">
-        기존 안건에 붙일 이력
-        <span class="text-xs font-normal text-muted-foreground">{{ form.entries.length }}</span>
+        기존 안건 결정내용 바꾸기
+        <span class="text-xs font-normal text-muted-foreground">{{ form.updates.length }}</span>
+        <span class="text-xs font-normal text-muted-foreground"
+          >등록하면 지금 결정내용이 아래 글로 바뀝니다</span
+        >
       </h2>
       <ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         <li
-          v-for="e in form.entries"
-          :key="e.tempId"
+          v-for="u in form.updates"
+          :key="u.agendaId"
           class="flex gap-3 px-4 py-3"
-          :class="rowClass(e.tempId)"
-          :data-minutes-row="e.tempId"
+          :class="rowClass(updateKey(u.agendaId))"
+          :data-minutes-row="updateKey(u.agendaId)"
         >
           <Checkbox
             class="mt-1"
-            :model-value="minutes.picked[e.tempId]"
-            :aria-label="`'${existing(e.threadId)?.thread.title ?? e.threadId}' 이력 등록`"
-            @update:model-value="(v) => minutes.setPicked(e.tempId, v === true)"
+            :model-value="minutes.picked[updateKey(u.agendaId)]"
+            :aria-label="`'${existing(u.agendaId)?.agenda.title ?? u.agendaId}' 결정내용 바꾸기`"
+            @update:model-value="(v) => minutes.setPicked(updateKey(u.agendaId), v === true)"
           />
-          <div class="flex min-w-0 grow flex-col gap-2" data-row-body :class="bodyClass(e.tempId)">
+          <div
+            class="flex min-w-0 grow flex-col gap-2"
+            data-row-body
+            :class="bodyClass(updateKey(u.agendaId))"
+          >
             <div class="flex min-w-0">
               <button
-                v-if="existing(e.threadId)"
+                v-if="existing(u.agendaId)"
                 type="button"
                 class="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
-                :data-minutes-thread="e.threadId"
-                @click="emit('open-thread', e.threadId)"
+                :data-minutes-agenda="u.agendaId"
+                @click="emit('open-agenda', u.agendaId)"
               >
                 <ListTree class="size-3 shrink-0 text-muted-foreground" />
-                <span class="truncate">{{ existing(e.threadId)!.thread.title }}</span>
-                <ThreadStateBadge
-                  :state="existing(e.threadId)!.thread.state"
-                  :defer-count="existing(e.threadId)!.deferCount"
-                />
+                <span class="truncate">{{ existing(u.agendaId)!.agenda.title }}</span>
+                <AgendaStateBadge :state="existing(u.agendaId)!.agenda.state" />
               </button>
               <span v-else class="text-xs text-muted-foreground">찾을 수 없는 안건</span>
             </div>
-            <div class="flex gap-2">
-              <Select v-model="e.kind">
-                <SelectTrigger
-                  class="h-8 w-28 shrink-0 bg-background text-xs"
-                  aria-label="이력 종류"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="k in KIND_OPTIONS" :key="k.value" :value="k.value">
-                    {{ k.label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Input v-model="e.text" class="h-8 text-sm" aria-label="이력 내용" />
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="w-28 shrink-0 text-xs text-muted-foreground">결정 항목</span>
-              <Input
-                v-model="e.itemTitle"
-                class="h-8 text-sm"
-                aria-label="결정 항목"
-                :maxlength="ITEM_TITLE_MAX"
-                :placeholder="itemPlaceholder(e.kind)"
-                :list="`minutes-items-${e.tempId}`"
-              />
-              <datalist :id="`minutes-items-${e.tempId}`">
-                <option v-for="title in itemTitlesOf(e.threadId)" :key="title" :value="title" />
-              </datalist>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-              <OwnerSelect v-model="e.ownerId" label="처리한 사람" :hint="e.ownerHint" />
-            </div>
-            <ul v-if="e.detail.length > 0" class="list-disc pl-5 text-xs text-muted-foreground">
-              <li v-for="(d, i) in e.detail" :key="i">{{ d }}</li>
-            </ul>
-            <p v-if="e.note" class="text-xs whitespace-pre-line text-muted-foreground">
-              {{ noteLabel(e.kind) }} · {{ e.note }}
+            <p
+              v-if="existing(u.agendaId)?.agenda.decision"
+              class="text-xs whitespace-pre-line text-muted-foreground line-through"
+              data-minutes-current-decision
+            >
+              {{ existing(u.agendaId)!.agenda.decision }}
             </p>
+            <Textarea
+              v-model="u.decision"
+              rows="3"
+              class="resize-y bg-background text-sm leading-relaxed"
+              aria-label="새 결정내용"
+              data-minutes-update-decision
+            />
+            <div class="grid grid-cols-3 gap-2">
+              <AgendaStateSelect v-model="u.state" :trigger-class="STATE_TRIGGER" />
+            </div>
             <blockquote
+              v-if="u.quote"
               class="border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted-foreground opacity-80"
               data-minutes-quote
             >
-              {{ e.quote }}
+              {{ u.quote }}
             </blockquote>
-            <p v-if="problemOf(e.tempId)" class="text-xs text-destructive" role="alert">
-              {{ problemOf(e.tempId) }}
+            <p
+              v-if="problemOf(updateKey(u.agendaId))"
+              class="text-xs text-destructive"
+              role="alert"
+            >
+              {{ problemOf(updateKey(u.agendaId)) }}
             </p>
           </div>
         </li>
@@ -322,8 +259,8 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
             </div>
             <div
               v-if="
-                t.threadTempIds.length > 0 ||
-                t.threadIds.length > 0 ||
+                t.agendaTempIds.length > 0 ||
+                t.agendaIds.length > 0 ||
                 t.parentTempId ||
                 t.parentId ||
                 t.priority !== 'normal'
@@ -339,7 +276,7 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
                 {{ parentLabel(t.parentTempId, t.parentId) }} 밑
               </span>
               <span
-                v-for="tempId in t.threadTempIds"
+                v-for="tempId in t.agendaTempIds"
                 :key="tempId"
                 class="inline-flex max-w-full items-center gap-1 rounded-md border border-dashed border-border px-1.5 py-0.5"
                 :class="minutes.picked[tempId] ? '' : 'line-through'"
@@ -350,25 +287,25 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
                 <span class="shrink-0">· 새 안건</span>
               </span>
               <span
-                v-for="threadId in t.threadIds"
-                :key="threadId"
+                v-for="agendaId in t.agendaIds"
+                :key="agendaId"
                 class="inline-flex max-w-full items-center gap-1 rounded-md border border-border px-1.5 py-0.5"
-                :data-minutes-link="threadId"
+                :data-minutes-link="agendaId"
               >
                 <ListTree class="size-3 shrink-0" />
-                <span class="truncate">{{ existing(threadId)?.thread.title ?? threadId }}</span>
+                <span class="truncate">{{ existing(agendaId)?.agenda.title ?? agendaId }}</span>
               </span>
               <Badge v-if="t.priority !== 'normal'" variant="outline">
                 우선순위 {{ taskPriorityLabel(t.priority) }}
               </Badge>
             </div>
             <p
-              v-if="minutes.picked[t.tempId] && minutes.droppedThreads(t.tempId).length > 0"
+              v-if="minutes.picked[t.tempId] && minutes.droppedAgendas(t.tempId).length > 0"
               class="flex items-center gap-1.5 text-xs text-destructive"
               data-minutes-dropped
             >
               <TriangleAlert class="size-3.5 shrink-0" />
-              안건 연결이 빠집니다 — {{ minutes.droppedThreads(t.tempId).join(', ') }}
+              안건 연결이 빠집니다 — {{ minutes.droppedAgendas(t.tempId).join(', ') }}
             </p>
             <p
               v-if="minutes.picked[t.tempId] && minutes.losesParent(t.tempId)"

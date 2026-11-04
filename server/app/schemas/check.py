@@ -6,9 +6,10 @@ class CheckRequestOut(Schema):
 
     id: str
     project_id: str
-    thread_id: str
-    # 이 요청이 알린 결정 — 그 안건의 decide · change 이력
-    entry_id: str
+    agenda_id: str
+    # 이 요청이 알린 결정 판(`Agenda.decisionRev`)과 보낼 때 찍어 둔 결정내용
+    decision_rev: int
+    decision: str
     sender_id: str
     recipient_id: str
     created_at: Utc

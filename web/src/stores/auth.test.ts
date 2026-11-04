@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 
 /* 목업 모드의 부팅 · 로그아웃 · 프로젝트 멤버 — 서버처럼 내가 볼 수 있는 것만 받는지 본다 */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
@@ -129,28 +129,29 @@ describe('담당자 거르기 (목업 갈래 · API.md Q30)', () => {
 
   it('프로젝트의 활성 멤버가 아니면 서버와 같은 코드로 거절한다', async () => {
     await signedIn('u2@inno-ax.com')
-    const threads = useThreadStore()
+    const agendas = useAgendaStore()
     const tasks = useTaskStore()
 
-    expect(await threads.addThread({ title: '새 안건', ownerId: 'u5' })).toBeNull()
-    expect(codeOfLastToast()).toMatchObject({ code: 'THREAD_OWNER_NOT_FOUND', status: 400 })
+    expect(await agendas.addAgenda({ title: '새 안건', ownerId: 'u5' })).toBeNull()
+    expect(codeOfLastToast()).toMatchObject({ code: 'AGENDA_OWNER_NOT_FOUND', status: 400 })
 
-    expect(await threads.addEntry('t3', 'decide', '정했다', '', 'u0')).toBe(false)
-    expect(codeOfLastToast()).toMatchObject({ code: 'ENTRY_OWNER_NOT_FOUND' })
+    /* t9 — 박지훈(u2) 담당이라 고칠 수 있다. u0 은 p1 에 부여되지 않았다 */
+    expect(agendas.updateAgenda('t9', { ownerId: 'u0' })).toBe(false)
+    expect(codeOfLastToast()).toMatchObject({ code: 'AGENDA_OWNER_NOT_FOUND' })
 
     tasks.setOwner('k4', 'u0')
     expect(codeOfLastToast()).toMatchObject({ code: 'TASK_OWNER_NOT_FOUND' })
     expect(useDataStore().allTasks.find((t) => t.id === 'k4')!.ownerId).not.toBe('u0')
 
-    expect(await threads.addThread({ title: '새 안건', ownerId: 'u3' })).not.toBeNull()
+    expect(await agendas.addAgenda({ title: '새 안건', ownerId: 'u3' })).not.toBeNull()
   })
 
   it('이미 걸려 있던 담당자를 그대로 두는 것은 막지 않는다', async () => {
     const data = await signedIn('u1@inno-ax.com')
-    const thread = data.allThreads.find((t) => t.projectId === 'p1' && t.ownerId === 'u3')!
+    const agenda = data.allAgendas.find((t) => t.projectId === 'p1' && t.ownerId === 'u3')!
     await data.revokeMember('p1', 'u3')
     vi.mocked(toastError).mockClear()
-    expect(useThreadStore().updateThread(thread.id, { ownerId: 'u3', title: '제목만 고침' })).toBe(
+    expect(useAgendaStore().updateAgenda(agenda.id, { ownerId: 'u3', title: '제목만 고침' })).toBe(
       true,
     )
     expect(toastError).not.toHaveBeenCalled()

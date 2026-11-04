@@ -18,7 +18,7 @@ const base: SignalInput = {
   statusDays: 0,
   start: null,
   due: null,
-  changedEntryIds: [],
+  changedAgendaIds: [],
   isGroup: false,
 }
 
@@ -49,13 +49,17 @@ describe('신호 — 서버와 같은 셈(목업이 쓴다)', () => {
     ])
     expect(
       testSignals(
-        { ...base, status: 'fail', statusDays: 8, due: '2026-10-01', changedEntryIds: ['e3'] },
+        { ...base, status: 'fail', statusDays: 8, due: '2026-10-01', changedAgendaIds: ['t2'] },
         TODAY,
         7,
       ),
     ).toEqual(['overdue', 'failedIdle', 'basisChanged'])
     expect(
-      testSignals({ ...base, isGroup: true, due: '2026-10-01', changedEntryIds: ['e3'] }, TODAY, 7),
+      testSignals(
+        { ...base, isGroup: true, due: '2026-10-01', changedAgendaIds: ['t2'] },
+        TODAY,
+        7,
+      ),
     ).toEqual([])
   })
 

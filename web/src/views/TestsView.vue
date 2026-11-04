@@ -143,7 +143,7 @@ const createParentId = computed(() => (route.query.parent as string | undefined)
 const createRefs = computed<TestRef[]>(() => {
   const refs: TestRef[] = []
   if (typeof route.query.task === 'string') refs.push({ kind: 'task', id: route.query.task })
-  if (typeof route.query.thread === 'string') refs.push({ kind: 'thread', id: route.query.thread })
+  if (typeof route.query.agenda === 'string') refs.push({ kind: 'agenda', id: route.query.agenda })
   return refs
 })
 const createOpen = computed({
@@ -707,7 +707,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
       :test-id="detailId"
       @open-test="openTest"
       @open-task="(id) => router.push(`/tasks/${id}`)"
-      @open-thread="(id) => router.push(`/threads/${id}`)"
+      @open-agenda="(id) => router.push(`/agendas/${id}`)"
     />
 
     <TestDetailDialog
@@ -717,7 +717,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
       :initial-refs="createRefs"
       @open-test="openTest"
       @open-task="(id) => router.push(`/tasks/${id}`)"
-      @open-thread="(id) => router.push(`/threads/${id}`)"
+      @open-agenda="(id) => router.push(`/agendas/${id}`)"
       @created="openTest"
     />
   </AppShell>

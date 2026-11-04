@@ -62,23 +62,20 @@ Pick = Callable[[dict[str, Any]], list[dict[str, Any]]]
 # 스냅샷의 어느 자리가 domain.ts 의 어느 타입인가
 CASES: list[tuple[str, Pick]] = [
     ("Project", lambda body: [body["project"]]),
-    ("Thread", lambda body: body["threads"]),
-    ("DecisionItem", lambda body: body["decisionItems"]),
-    ("Entry", lambda body: body["entries"]),
+    ("Agenda", lambda body: body["agendas"]),
     ("Task", lambda body: body["tasks"]),
     ("TaskLine", lambda body: [line for task in body["tasks"] for line in task["body"]]),
-    ("TaskThreadLink", lambda body: body["taskThreadLinks"]),
+    ("TaskAgendaLink", lambda body: body["taskAgendaLinks"]),
 ]
 
 
 # 파트가 늘린 필드 — docs/api/part.md '모양'. 프론트가 domain.ts 에 더하는 중이라 아직 없을 수 있다.
 # 어긋나면 계약 쪽이 기준이다. 둘 다 null 을 낸다(null = 프로젝트 공통)
-PART_ADDED: dict[str, set[str]] = {"Task": {"partId"}, "Thread": {"partId"}}
+PART_ADDED: dict[str, set[str]] = {"Task": {"partId"}, "Agenda": {"partId"}}
 # 회의록이 늘린 출처 — docs/api/minutes.md '게시판'(2026-10-20 고침).
 # 셋 다 null 을 낸다(손으로 만든 것)
 MINUTES_ADDED: dict[str, set[str]] = {
-    "Thread": {"minutesId"},
-    "Entry": {"minutesId"},
+    "Agenda": {"minutesId"},
     "Task": {"minutesId"},
 }
 
@@ -213,14 +210,12 @@ def test_part_rows_match_contract(name: str, key: str, snapshot: dict[str, Any])
 
 
 async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
-    """ThreadRow · TaskDetail 같은 계산된 타입은 서버가 주지 않는다."""
+    """AgendaRow · TaskDetail 같은 계산된 타입은 서버가 주지 않는다."""
     assert set(snapshot) == {
         "project",
-        "threads",
-        "decisionItems",
-        "entries",
+        "agendas",
         "tasks",
-        "taskThreadLinks",
+        "taskAgendaLinks",
         "parts",
         "partMembers",
     }
@@ -229,18 +224,17 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
 # 결정 병목 리스크 — docs/api/risk.md '응답' · '기준 설정'. 집계를 서버가 하는 첫 예외라(Q35)
 # 계산된 타입이 응답으로 나간다. 어긋나면 계약 쪽이 기준이다
 RISK_SHAPES: dict[str, set[str]] = {
-    "RiskSettings": {"dueSoonDays", "deferCount", "staleDays", "highScore", "mediumScore"},
-    "DecisionRiskReport": {"asOf", "settings", "threads", "tasks", "owners"},
-    "ThreadRisk": {
-        "threadId",
+    # 미룸 문턱(deferCount)은 걷었다 — docs/api/agenda.md '따라 바뀌는 기능'
+    "RiskSettings": {"dueSoonDays", "staleDays", "highScore", "mediumScore"},
+    "DecisionRiskReport": {"asOf", "settings", "agendas", "tasks", "owners"},
+    "AgendaRisk": {
+        "agendaId",
         "title",
         "state",
         "ownerId",
         "partId",
         "dueDate",
         "overdueDays",
-        "deferCount",
-        "lastDeferNote",
         "idleDays",
         "blockedTaskIds",
         "waitingTaskIds",
@@ -258,13 +252,13 @@ RISK_SHAPES: dict[str, set[str]] = {
         "ownerId",
         "partId",
         "due",
-        "threadIds",
+        "agendaIds",
         "signal",
     },
     "OwnerLoad": {
         "memberId",
-        "openThreads",
-        "overdueThreads",
+        "openAgendas",
+        "overdueAgendas",
         "blockedTasks",
         "blockingImpact",
     },
@@ -282,7 +276,7 @@ async def test_risk_report_matches_contract(client: AsyncClient) -> None:
     body = (await client.get("/api/projects/p1/risks")).json()
     assert set(body) == RISK_SHAPES["DecisionRiskReport"]
     assert set(body["settings"]) == RISK_SHAPES["RiskSettings"]
-    for key, name in (("threads", "ThreadRisk"), ("tasks", "TaskRisk"), ("owners", "OwnerLoad")):
+    for key, name in (("agendas", "AgendaRisk"), ("tasks", "TaskRisk"), ("owners", "OwnerLoad")):
         assert body[key], f"{name} 을 볼 수 있는 줄이 시드에 없다"
         for row in body[key]:
             assert set(row) == RISK_SHAPES[name]
@@ -292,14 +286,15 @@ async def test_risk_report_matches_contract(client: AsyncClient) -> None:
                     assert FIELDS[name][field], f"{name}.{field} 가 null 로 나갔다"
 
 
-# 확인 요청 — docs/api/check.md '모양'(2026-10-19 고침). 어긋나면 계약 쪽이 기준이다.
+# 확인 요청 — docs/api/check.md '모양'(2026-11-04 고침 — 결정 판). 어긋나면 계약 쪽이 기준이다.
 # null 이 나갈 수 있는 자리는 `CheckRequest.confirmedAt` 하나다
 CHECK_SHAPES: dict[str, set[str]] = {
     "CheckRequest": {
         "id",
         "projectId",
-        "threadId",
-        "entryId",
+        "agendaId",
+        "decisionRev",
+        "decision",
         "senderId",
         "recipientId",
         "createdAt",
@@ -324,9 +319,12 @@ def test_check_input_is_gone_from_domain_ts() -> None:
     assert "CheckRequestInput" not in FIELDS
 
 
-def test_thread_cc_ids_in_domain_ts() -> None:
-    """참조는 `string[]` 다 — null 이 아니라 [] 로 비운다 (Q17)."""
-    assert FIELDS["Thread"].get("ccIds") is False
+def test_removed_agenda_types_are_gone_from_domain_ts() -> None:
+    """안건 간소화(docs/api/agenda.md) — 걷은 타입 · 칸이 남으면 화면이 옛 모양을 기다린다."""
+    for name in ("Entry", "DecisionItem", "EntryInput", "EntryPatch", "Thread"):
+        assert name not in FIELDS, f"domain.ts 에 걷은 {name} 이 남았다"
+    assert not {"options", "ccIds", "parentAgendaId"} & set(FIELDS["Agenda"])
+    assert not {"entries", "decisionItems"} & set(FIELDS["ProjectSnapshot"])
 
 
 async def test_check_responses_match_contract(client: AsyncClient) -> None:
@@ -355,36 +353,34 @@ _PROPOSED_TASK = {
     "due",
     "priority",
 }
-_ENTRY_BODY = {"kind", "itemTitle", "text", "detail", "note", "ownerId", "ownerHint"}
 _MINUTES_ITEM = {"id", "projectId", "title", "meetingDate", "authorId", "createdAt", "updatedAt"}
 MINUTES_SHAPES: dict[str, set[str]] = {
     "MinutesItem": _MINUTES_ITEM,
     "Minutes": _MINUTES_ITEM | {"body", "summary"},
     "MinutesInput": {"title", "meetingDate", "body"},
-    "MinutesDraft": {"meetingDate", "summary", "threads", "entries", "tasks"},
-    "ProposedThread": {
+    "MinutesDraft": {"meetingDate", "summary", "agendas", "updates", "tasks"},
+    "ProposedAgenda": {
         "tempId",
         "title",
         "description",
-        "options",
+        "decision",
+        "state",
         "ownerId",
         "ownerHint",
         "dueDate",
-        "entry",
+        "partId",
         "quote",
     },
-    "ProposedEntryBody": _ENTRY_BODY,
-    "ProposedEntry": _ENTRY_BODY | {"tempId", "threadId", "quote"},
-    "ProposedMinutesTask": _PROPOSED_TASK | {"ownerHint", "threadTempIds", "threadIds", "quote"},
-    "MinutesApplyInput": {"summary", "threads", "entries", "tasks"},
+    # 기존 안건의 결정내용 · 상태 갈아끼우기 — quote 는 초안에 늘 싣고 등록에서는 버린다
+    "ProposedUpdate": {"agendaId", "decision", "state", "quote"},
+    "ProposedMinutesTask": _PROPOSED_TASK | {"ownerHint", "agendaTempIds", "agendaIds", "quote"},
+    "MinutesApplyInput": {"summary", "agendas", "updates", "tasks"},
     "MinutesApplyResult": {
-        "threads",
-        "entries",
-        "decisionItems",
-        "updatedThreads",
+        "agendas",
+        "updatedAgendas",
         "tasks",
         "links",
-        "threadIdByTempId",
+        "agendaIdByTempId",
         "taskIdByTempId",
     },
 }
@@ -393,9 +389,7 @@ MINUTES_NULLABLE: dict[str, set[str]] = {
     "Minutes": {"meetingDate"},
     "MinutesInput": {"meetingDate"},
     "MinutesDraft": {"meetingDate"},
-    "ProposedThread": {"ownerId", "dueDate", "entry"},
-    "ProposedEntryBody": {"ownerId"},
-    "ProposedEntry": {"ownerId"},
+    "ProposedAgenda": {"ownerId", "dueDate", "partId"},
     "ProposedMinutesTask": {"parentTempId", "parentId", "ownerId", "start", "due"},
 }
 
@@ -508,8 +502,9 @@ REPORT_INLINE: dict[str, set[str]] = {
         "createdTaskIds",
     },
     "previous": {"reportId", "periodEnd", "doneRate", "blocked"},
-    "decisions": {"decidedThreadIds", "deferredThreadIds", "riskyThreadIds"},
-    "weight": {"openChildren", "openLines", "totalLines", "threadCount", "priority"},
+    # 미뤄진 것(deferredAgendaIds)은 걷었다 — 지난 리포트의 facts 에만 남는다
+    "decisions": {"decidedAgendaIds", "riskyAgendaIds"},
+    "weight": {"openChildren", "openLines", "totalLines", "agendaCount", "priority"},
 }
 
 
@@ -561,7 +556,7 @@ async def test_report_responses_match_contract(client: AsyncClient) -> None:
                     assert field in REPORT_NULLABLE[name], f"{name}.{field} 가 null"
 
 
-# 테스트 — docs/api/test.md '모양' · '요청'(1단계). 집계(statusDays · signals · changedEntryIds)를
+# 테스트 — docs/api/test.md '모양' · '요청'(1단계). 집계(statusDays · signals · changedAgendaIds)를
 # 서버가 하는 예외라 계산된 값이 응답에 실린다. 어긋나면 계약 쪽이 기준이다.
 # null 이 나가는 자리는 TestCase 의 일곱뿐이다. 레벨은 걷었다(2026-10-27 고침).
 # 목적 · 사전조건 · 단계 · 실패한 단계는 테스트 내용(`content`)으로 합쳤다(Q60)
@@ -596,7 +591,7 @@ TEST_SHAPES: dict[str, set[str]] = {
         "ownerId",
         "partId",
         "signals",
-        "changedEntryIds",
+        "changedAgendaIds",
         "createdBy",
         "createdAt",
     },
@@ -669,7 +664,7 @@ async def test_history_responses_match_contract(client: AsyncClient) -> None:
         *(await client.get("/api/tasks/k20/history")).json(),
         *(await client.get("/api/tests/tc7/history")).json(),
         # 안건 — 담당이 없던 t4 는 등록한 사람도 null
-        *(await client.get("/api/threads/t4/history")).json(),
+        *(await client.get("/api/agendas/t4/history")).json(),
     ]
     nulls: dict[str, set[str]] = {"HistoryEntry": set(), "HistoryChange": set()}
     for row in rows:

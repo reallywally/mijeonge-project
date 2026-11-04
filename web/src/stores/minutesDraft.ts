@@ -3,12 +3,11 @@ import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
 import { ApiError, messageOf } from '@/api'
 import {
-  entryItemKey,
   minutesErrorsByTempId,
   minutesErrorText,
   toMinutesApplyInput,
+  updateKey,
 } from '@/lib/minutes'
-import { ITEM_TITLE_MAX } from '@/lib/thread'
 import { toastError } from '@/lib/notify'
 import { useDataStore } from '@/stores/data'
 import { useMinutesStore } from '@/stores/minutes'
@@ -37,7 +36,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
   const draft = ref<MinutesDraft | null>(null)
   /** 화면에서 고치는 사본 */
   const form = ref<MinutesDraft | null>(null)
-  /** tempId → 고름. 기본은 다 켬 */
+  /** 줄의 열쇠(tempId · 기존 안건은 updateKey) → 고름. 기본은 다 켬 */
   const picked = ref<Record<string, boolean>>({})
   const applying = ref(false)
   /** apply 가 짚은 자리 — tempId → 한 줄 */
@@ -50,12 +49,14 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
   /** 지금 떠나면 잃는 것이 있나 — 받는 중 · 등록 전 초안 */
   const dirty = computed(() => phase.value !== 'idle')
 
+  const keysOf = (d: MinutesDraft) => [
+    ...d.agendas.map((t) => t.tempId),
+    ...d.updates.map((u) => updateKey(u.agendaId)),
+    ...d.tasks.map((t) => t.tempId),
+  ]
+
   const pickedCount = computed(() =>
-    form.value
-      ? [...form.value.threads, ...form.value.entries, ...form.value.tasks].filter(
-          (r) => picked.value[r.tempId],
-        ).length
-      : 0,
+    form.value ? keysOf(form.value).filter((k) => picked.value[k]).length : 0,
   )
 
   /** 보낼 모양 — 고른 줄만, 빠진 새 안건 연결은 지운다. 요약은 고친 그대로 회의록에 저장된다 */
@@ -64,12 +65,12 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
   )
 
   /** 이 작업에서 빠질 새 안건의 제목들 — 끈 새 안건에 걸려 있던 것 */
-  function droppedThreads(taskTempId: string): string[] {
+  function droppedAgendas(taskTempId: string): string[] {
     const task = form.value?.tasks.find((t) => t.tempId === taskTempId)
     if (!task || !form.value) return []
-    return task.threadTempIds
+    return task.agendaTempIds
       .filter((tempId) => !picked.value[tempId])
-      .map((tempId) => form.value!.threads.find((t) => t.tempId === tempId)?.title ?? tempId)
+      .map((tempId) => form.value!.agendas.find((t) => t.tempId === tempId)?.title ?? tempId)
   }
 
   /** 상위 작업(초안 안의 것)이 꺼져서 최상위로 들어가나 */
@@ -82,23 +83,9 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
   const problems = computed<Record<string, string>>(() => {
     const out: Record<string, string> = {}
     if (!form.value) return out
-    for (const t of form.value.threads) {
+    for (const t of form.value.agendas) {
       if (!picked.value[t.tempId]) continue
       if (!t.title.trim()) out[t.tempId] = '제목을 적어 주세요.'
-      else if (t.entry && !t.entry.text.trim()) out[t.tempId] = '이력 내용을 적어 주세요.'
-      else if (t.entry && t.entry.itemTitle.trim().length > ITEM_TITLE_MAX)
-        out[t.tempId] = `항목 이름은 ${ITEM_TITLE_MAX}자까지입니다.`
-    }
-    /* 한 항목에 이력은 하나까지 — 앞에 켠 줄이 자리를 잡는다 */
-    const itemOnce = new Set<string>()
-    for (const e of form.value.entries) {
-      if (!picked.value[e.tempId]) continue
-      const key = `${e.threadId}\n${entryItemKey(e)}`
-      if (!e.text.trim()) out[e.tempId] = '내용을 적어 주세요.'
-      else if (e.itemTitle.trim().length > ITEM_TITLE_MAX)
-        out[e.tempId] = `항목 이름은 ${ITEM_TITLE_MAX}자까지입니다.`
-      else if (itemOnce.has(key)) out[e.tempId] = '같은 항목에 남기는 이력이 이미 있습니다.'
-      itemOnce.add(key)
     }
     for (const t of form.value.tasks) {
       if (!picked.value[t.tempId]) continue
@@ -145,12 +132,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
         else if (event.type === 'done' && received) {
           draft.value = received
           form.value = structuredClone(received)
-          picked.value = Object.fromEntries(
-            [...received.threads, ...received.entries, ...received.tasks].map((r) => [
-              r.tempId,
-              true,
-            ]),
-          )
+          picked.value = Object.fromEntries(keysOf(received).map((k) => [k, true]))
           phase.value = 'review'
         }
       }
@@ -204,19 +186,17 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
       const made = { ...res, tasks }
       /* 그사이 프로젝트를 바꿨으면 지금 레코드에 섞지 않는다 — 돌아가면 스냅샷에 있다 */
       if (data.holdsRecordsOf(projectId)) {
-        data.allThreads.unshift(...made.threads)
-        data.allDecisionItems.push(...made.decisionItems)
-        data.allEntries.push(...made.entries)
-        for (const next of made.updatedThreads) {
-          const at = data.allThreads.findIndex((t) => t.id === next.id)
-          if (at >= 0) data.allThreads[at] = next
+        data.allAgendas.unshift(...made.agendas)
+        for (const next of made.updatedAgendas) {
+          const at = data.allAgendas.findIndex((t) => t.id === next.id)
+          if (at >= 0) data.allAgendas[at] = next
         }
         data.allTasks.push(...made.tasks)
         for (const link of made.links)
           if (
-            !data.taskThreads.some((l) => l.taskId === link.taskId && l.threadId === link.threadId)
+            !data.taskAgendas.some((l) => l.taskId === link.taskId && l.agendaId === link.agendaId)
           )
-            data.taskThreads.push(link)
+            data.taskAgendas.push(link)
       }
       board.afterApply(id, input.summary)
       if (minutesId.value !== id) return true
@@ -270,7 +250,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     applyInput,
     problems,
     canApply,
-    droppedThreads,
+    droppedAgendas,
     losesParent,
     run,
     stop,

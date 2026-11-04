@@ -17,12 +17,12 @@ from sqlalchemy import create_engine, delete, event, func, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import test as route
-from app.models import Member, Task, TestRef, Thread
+from app.models import Agenda, Member, Task, TestRef
 from app.models import TestCase as Case
 from app.schemas.risk import RiskSettings
 from app.services import test as service
 from scripts.seed import SEED_TESTS
-from tests.conftest import AsMember, item_of
+from tests.conftest import AsMember, decide
 
 TODAY = date(2026, 10, 15)
 LIST = "/api/projects/p1/tests"
@@ -65,14 +65,11 @@ async def create(c: httpx.AsyncClient, body: dict[str, Any], project: str = "p1"
     return created
 
 
-async def add_entry(c: httpx.AsyncClient, thread: str, kind: str) -> str:
-    body = {"kind": kind, "text": "다시 정했다", "note": "왜"}
-    if kind in ("decide", "change", "refine"):
-        body["itemId"] = await item_of(c, thread)
-    res = await c.post(f"/api/threads/{thread}/entries", json=body)
-    assert res.status_code == 201, res.json()
-    entry_id: str = res.json()["entry"]["id"]
-    return entry_id
+async def change(c: httpx.AsyncClient, agenda: str, text: str = "다시 정했다") -> str:
+    """결정을 바꾼다 — 변경 이력에 '결정내용' 줄이 남는다. 그 안건 id."""
+    res = await decide(c, agenda, text)
+    assert res.status_code == 200, res.json()
+    return agenda
 
 
 def error(res: httpx.Response, status: int, code: str) -> dict[str, Any]:
@@ -114,10 +111,10 @@ async def test_seed_status_days_and_details(client: httpx.AsyncClient) -> None:
     assert rows["HW-T6"]["resultNote"]
     assert rows["HW-T2"]["resultNote"] == ""
     assert rows["HW-T2"]["refs"] == [{"kind": "task", "id": "k4"}]
-    assert rows["HW-T3"]["refs"] == [{"kind": "thread", "id": "t3"}]
+    assert rows["HW-T3"]["refs"] == [{"kind": "agenda", "id": "t3"}]
     assert rows["HW-T6"]["refs"] == [{"kind": "task", "id": "k21"}]
-    assert rows["HW-T4"]["changedEntryIds"] == ["e3"]
-    assert all(rows[k]["changedEntryIds"] == [] for k in rows if k != "HW-T4")
+    assert rows["HW-T4"]["changedAgendaIds"] == ["t2"]
+    assert all(rows[k]["changedAgendaIds"] == [] for k in rows if k != "HW-T4")
     assert rows["HW-T3"]["statusChangedAt"] == "2026-10-03T03:00:00Z"
     # 지난 목적 · 사전조건 · 단계를 0020 의 모양으로 합친 글 (목업과 같다)
     assert rows["HW-T2"]["content"] == (
@@ -165,7 +162,7 @@ async def test_list_runs_a_fixed_number_of_queries(
                     "title": f"더 {n}",
                     "parentId": "tc5",
                     "content": "한다",
-                    "refs": [{"kind": "task", "id": "k4"}, {"kind": "thread", "id": f"t{n + 1}"}],
+                    "refs": [{"kind": "task", "id": "k4"}, {"kind": "agenda", "id": f"t{n + 1}"}],
                 },
             )
         statements.clear()
@@ -185,7 +182,7 @@ async def test_create_minimal(client: httpx.AsyncClient) -> None:
     assert body["status"] == "draft"
     assert body["statusChangedBy"] == "admin" and body["createdBy"] == "admin"
     assert body["statusDays"] == 0
-    assert (body["refs"], body["signals"], body["changedEntryIds"]) == ([], [], [])
+    assert (body["refs"], body["signals"], body["changedAgendaIds"]) == ([], [], [])
     assert body["content"] == body["testData"] == body["resultNote"] == ""
     for key in ("parentId", "start", "due", "ownerId", "partId"):
         assert body[key] is None
@@ -219,7 +216,7 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
             "purpose": "잠긴 계정을 관리자가 푼다",
             "steps": [{"action": "관리 화면을 연다"}],
             "refs": [
-                {"kind": "thread", "id": "t3"},
+                {"kind": "agenda", "id": "t3"},
                 {"kind": "task", "id": "k21"},
                 {"kind": "task", "id": "k4"},
                 {"kind": "task", "id": "k4"},
@@ -240,7 +237,7 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
     assert body["refs"] == [
         {"kind": "task", "id": "k4"},
         {"kind": "task", "id": "k21"},
-        {"kind": "thread", "id": "t3"},
+        {"kind": "agenda", "id": "t3"},
     ]
     assert "level" not in body
     assert (body["start"], body["due"], body["ownerId"]) == (
@@ -249,7 +246,7 @@ async def test_create_full(client: httpx.AsyncClient) -> None:
         "u3",
     )
     # 만들 때 기준을 찍는다 — 지금의 결정은 바뀐 것이 아니다
-    assert body["changedEntryIds"] == [] and body["signals"] == []
+    assert body["changedAgendaIds"] == [] and body["signals"] == []
 
 
 async def test_part_null_means_common_even_under_a_parent(client: httpx.AsyncClient) -> None:
@@ -268,7 +265,7 @@ async def test_patch_changes_only_what_was_sent(client: httpx.AsyncClient) -> No
     assert "level" not in body
     assert (body["start"], body["due"]) == ("2026-10-06", "2026-10-09")
     # 상태 · 태그는 PATCH 로 안 바뀐다
-    assert body["status"] == "testing" and body["refs"] == [{"kind": "thread", "id": "t3"}]
+    assert body["status"] == "testing" and body["refs"] == [{"kind": "agenda", "id": "t3"}]
     assert body["ownerId"] == "u2" and body["content"].startswith("목적\n")
 
 
@@ -388,8 +385,8 @@ async def test_refs_must_be_in_the_same_project(client: httpx.AsyncClient) -> No
     for kind, target, code in (
         ("task", "x1", "TASK_NOT_FOUND"),
         ("task", "nope", "TASK_NOT_FOUND"),
-        ("thread", "t10", "THREAD_NOT_FOUND"),
-        ("thread", "nope", "THREAD_NOT_FOUND"),
+        ("agenda", "t10", "AGENDA_NOT_FOUND"),
+        ("agenda", "nope", "AGENDA_NOT_FOUND"),
     ):
         res = await client.post(LIST, json={"title": "t", "refs": [{"kind": kind, "id": target}]})
         error(res, 404, code)
@@ -411,14 +408,14 @@ async def test_ref_put_and_delete_are_idempotent(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
     for _ in range(2):
-        res = await client.put("/api/tests/tc7/refs/thread/t1")
+        res = await client.put("/api/tests/tc7/refs/agenda/t1")
         assert res.status_code == 200
-        assert res.json()["refs"] == [{"kind": "thread", "id": "t1"}]
+        assert res.json()["refs"] == [{"kind": "agenda", "id": "t1"}]
     res = await client.put("/api/tests/tc7/refs/task/k22")
-    assert res.json()["refs"] == [{"kind": "task", "id": "k22"}, {"kind": "thread", "id": "t1"}]
+    assert res.json()["refs"] == [{"kind": "task", "id": "k22"}, {"kind": "agenda", "id": "t1"}]
     for _ in range(2):
-        assert (await client.delete("/api/tests/tc7/refs/thread/t1")).status_code == 204
-    assert (await client.delete("/api/tests/tc7/refs/thread/t10")).status_code == 204
+        assert (await client.delete("/api/tests/tc7/refs/agenda/t1")).status_code == 204
+    assert (await client.delete("/api/tests/tc7/refs/agenda/t10")).status_code == 204
     assert (await one(client, "tc7"))["refs"] == [{"kind": "task", "id": "k22"}]
     rows = await session.scalar(
         select(func.count()).select_from(TestRef).where(TestRef.test_id == "tc7")
@@ -525,7 +522,7 @@ async def test_members_write_but_only_the_author_deletes(
     # 시드 tc2 는 u2 가 만들었다 — u3 도 고치고 상태를 바꾸고 태그를 건다
     assert (await u3.patch("/api/tests/tc2", json={"title": "고침"})).status_code == 200
     assert (await status(u3, "tc2", status="testing")).status_code == 200
-    assert (await u3.put("/api/tests/tc2/refs/thread/t1")).status_code == 200
+    assert (await u3.put("/api/tests/tc2/refs/agenda/t1")).status_code == 200
     assert (await u3.post("/api/tests/tc2/basis")).status_code == 200
     error(await u3.delete("/api/tests/tc2"), 403, "FORBIDDEN")
     # 시스템 관리자는 지운다
@@ -657,89 +654,97 @@ async def test_group_never_has_signals(client: httpx.AsyncClient) -> None:
 
 
 async def test_basis_confirm_clears_the_change(client: httpx.AsyncClient) -> None:
-    assert (await one(client, "tc4"))["changedEntryIds"] == ["e3"]
+    assert (await one(client, "tc4"))["changedAgendaIds"] == ["t2"]
     res = await client.post("/api/tests/tc4/basis")
     assert res.status_code == 200
     body = res.json()
-    assert body["changedEntryIds"] == [] and body["signals"] == ["notStarted"]
+    assert body["changedAgendaIds"] == [] and body["signals"] == ["notStarted"]
 
 
 async def test_new_decision_reaches_through_a_tagged_task(client: httpx.AsyncClient) -> None:
     """t2 는 HW-T4 가 직접, HW-T2 가 작업 k4 를 거쳐 닿는다."""
-    changed = await add_entry(client, "t2", "change")
+    await change(client, "t2")
     rows = await rows_by_key(client)
-    assert rows["HW-T4"]["changedEntryIds"] == ["e3", changed]
-    assert rows["HW-T2"]["changedEntryIds"] == [changed]
+    assert rows["HW-T4"]["changedAgendaIds"] == ["t2"]
+    assert rows["HW-T2"]["changedAgendaIds"] == ["t2"]
     assert rows["HW-T2"]["signals"] == ["basisChanged"]
     # 닿지 않는 테스트는 그대로
-    assert rows["HW-T3"]["changedEntryIds"] == [] and rows["HW-T6"]["changedEntryIds"] == []
-    # 오래된 것부터
-    again = await add_entry(client, "t1", "change")
-    assert (await one(client, "tc2"))["changedEntryIds"] == [changed, again]
+    assert rows["HW-T3"]["changedAgendaIds"] == [] and rows["HW-T6"]["changedAgendaIds"] == []
+    # 처음 바뀐 순 — 다시 바뀌어도 자리는 그대로다
+    await change(client, "t1")
+    await change(client, "t2", "또 바꿨다")
+    assert (await one(client, "tc2"))["changedAgendaIds"] == ["t2", "t1"]
 
 
 async def test_patch_restamps_the_basis(client: httpx.AsyncClient) -> None:
-    changed = await add_entry(client, "t2", "change")
-    assert (await one(client, "tc4"))["changedEntryIds"] == ["e3", changed]
+    await change(client, "t2")
+    assert (await one(client, "tc4"))["changedAgendaIds"] == ["t2"]
     res = await client.patch("/api/tests/tc4", json={"content": "다시 봤다"})
-    assert res.json()["changedEntryIds"] == []
+    assert res.json()["changedAgendaIds"] == []
     assert res.json()["signals"] == ["notStarted"]
     # 빈 PATCH 는 아무것도 안 바꾼 것이다 — 기준도 그대로
-    again = await add_entry(client, "t2", "decide")
+    await change(client, "t2", "또 바꿨다")
     res = await client.patch("/api/tests/tc4", json={})
-    assert res.json()["changedEntryIds"] == [again]
+    assert res.json()["changedAgendaIds"] == ["t2"]
 
 
-async def test_defer_and_refine_are_not_changes(client: httpx.AsyncClient) -> None:
-    await add_entry(client, "t3", "defer")
-    await add_entry(client, "t3", "refine")
-    assert (await one(client, "tc3"))["changedEntryIds"] == []
+async def test_other_edits_are_not_changes(client: httpx.AsyncClient) -> None:
+    """결정내용 칸이 있거나 decided 로 바뀐 줄만 센다 — 제목 · 설명 · 담당자 · 논의중은 아니다."""
+    res = await client.patch(
+        "/api/agendas/t3", json={"title": "고친 제목", "description": "고침", "ownerId": "u2"}
+    )
+    assert res.status_code == 200
+    assert (await client.patch("/api/agendas/t3", json={"state": "queued"})).status_code == 200
+    assert (await one(client, "tc3"))["changedAgendaIds"] == []
+    # 결정내용 없이 decided 로 바꿔도 결정이 바뀐 것이다
+    assert (await client.patch("/api/agendas/t3", json={"state": "decided"})).status_code == 200
+    assert (await one(client, "tc3"))["changedAgendaIds"] == ["t3"]
 
 
 async def test_tagging_restamps_the_basis(client: httpx.AsyncClient) -> None:
     # 결정이 있는 안건을 새로 걸어도 그 결정은 '바뀐 것' 이 아니다 — 거는 때가 기준이다
-    res = await client.put("/api/tests/tc7/refs/thread/t1")
-    assert res.json()["changedEntryIds"] == [] and res.json()["signals"] == ["failedIdle"]
-    changed = await add_entry(client, "t1", "change")
-    assert (await one(client, "tc7"))["changedEntryIds"] == [changed]
+    res = await client.put("/api/tests/tc7/refs/agenda/t1")
+    assert res.json()["changedAgendaIds"] == [] and res.json()["signals"] == ["failedIdle"]
+    await change(client, "t1")
+    assert (await one(client, "tc7"))["changedAgendaIds"] == ["t1"]
     # 다른 태그를 걸면 다시 찍는다
-    res = await client.put("/api/tests/tc7/refs/thread/t3")
-    assert res.json()["changedEntryIds"] == []
+    res = await client.put("/api/tests/tc7/refs/agenda/t3")
+    assert res.json()["changedAgendaIds"] == []
 
 
 async def test_untagging_restamps_the_basis(client: httpx.AsyncClient) -> None:
-    assert (await client.put("/api/tests/tc4/refs/thread/t1")).status_code == 200
-    changed = await add_entry(client, "t1", "change")
-    assert (await one(client, "tc4"))["changedEntryIds"] == [changed]
-    assert (await client.delete("/api/tests/tc4/refs/thread/t2")).status_code == 204
-    assert (await one(client, "tc4"))["changedEntryIds"] == []
+    assert (await client.put("/api/tests/tc4/refs/agenda/t1")).status_code == 200
+    await change(client, "t1")
+    assert (await one(client, "tc4"))["changedAgendaIds"] == ["t1"]
+    assert (await client.delete("/api/tests/tc4/refs/agenda/t2")).status_code == 204
+    assert (await one(client, "tc4"))["changedAgendaIds"] == []
 
 
-async def test_a_thread_newly_linked_to_a_tagged_task_shows_old_decisions(
+async def test_a_agenda_newly_linked_to_a_tagged_task_shows_old_decisions(
     client: httpx.AsyncClient,
 ) -> None:
-    """계약의 '알고 두는 것' — HW-T6 의 작업 k21 에 t1 이 새로 걸리면 그 옛 결정 e1 이 뜬다."""
-    assert (await one(client, "tc6"))["changedEntryIds"] == []
-    assert (await client.put("/api/tasks/k21/threads/t1")).status_code == 200
+    """계약의 '알고 두는 것' — HW-T6 의 작업 k21 에 t1 이 새로 걸리면 그 옛 결정이 뜬다."""
+    assert (await one(client, "tc6"))["changedAgendaIds"] == []
+    assert (await client.put("/api/tasks/k21/agendas/t1")).status_code == 200
     body = await one(client, "tc6")
-    assert body["changedEntryIds"] == ["e1"]
+    assert body["changedAgendaIds"] == ["t1"]
     assert body["signals"] == ["longBlocked", "basisChanged"]
-    assert (await client.post("/api/tests/tc6/basis")).json()["changedEntryIds"] == []
+    assert (await client.post("/api/tests/tc6/basis")).json()["changedAgendaIds"] == []
 
 
 async def test_status_change_keeps_the_basis(client: httpx.AsyncClient) -> None:
     body = (await status(client, "tc4", status="testing")).json()
-    assert body["changedEntryIds"] == ["e3"]
+    assert body["changedAgendaIds"] == ["t2"]
 
 
 # --- 지운 작업 · 안건 ---
 
 
-async def test_deleting_a_task_or_thread_drops_only_the_tag(
+async def test_deleting_a_task_or_agenda_drops_only_the_tag(
     client: httpx.AsyncClient, session: AsyncSession
 ) -> None:
     await session.execute(delete(Task).where(Task.id == "k21"))
-    await session.execute(delete(Thread).where(Thread.id == "t3"))
+    await session.execute(delete(Agenda).where(Agenda.id == "t3"))
     await session.commit()
     rows = await rows_by_key(client)
     assert rows["HW-T6"]["refs"] == [] and rows["HW-T6"]["status"] == "blocked"

@@ -15,7 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Base, Task, TaskThreadLink, Thread
+from app.models import Agenda, Base, Task, TaskAgendaLink
 from scripts.seed import seed
 
 
@@ -46,7 +46,7 @@ async def test_link_cannot_cross_projects(session: AsyncSession) -> None:
     """링크는 양쪽이 같은 프로젝트일 때만 선다 — 서비스만이 아니라 DB 가 막는다 (API.md Q13)."""
     await seed(session)
 
-    session.add(TaskThreadLink(task_id="k4", thread_id="t10", project_id="p1"))
+    session.add(TaskAgendaLink(task_id="k4", agenda_id="t10", project_id="p1"))
     with pytest.raises(IntegrityError):
         await session.flush()
     await session.rollback()
@@ -64,9 +64,9 @@ async def test_parent_cannot_live_in_another_project(session: AsyncSession) -> N
     await session.rollback()
 
 
-@pytest.mark.parametrize(("model", "row_id"), [(Task, "x1"), (Thread, "t10")])
+@pytest.mark.parametrize(("model", "row_id"), [(Task, "x1"), (Agenda, "t10")])
 async def test_part_cannot_live_in_another_project(
-    session: AsyncSession, model: type[Task] | type[Thread], row_id: str
+    session: AsyncSession, model: type[Task] | type[Agenda], row_id: str
 ) -> None:
     """파트도 같은 프로젝트의 것만 단다 — 부모 · 링크와 같은 복합 FK (docs/api/part.md)."""
     await seed(session)

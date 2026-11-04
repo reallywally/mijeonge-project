@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import ProjectScope
 from app.db import get_session
 from app.schemas.task import (
+    TaskAgendaLinkOut,
     TaskBatchInput,
     TaskBatchResult,
     TaskCreate,
@@ -13,7 +14,6 @@ from app.schemas.task import (
     TaskMoveIn,
     TaskOut,
     TaskPatch,
-    TaskThreadLinkOut,
 )
 from app.services import task as task_service
 
@@ -66,15 +66,15 @@ async def patch_task_line(
     return await task_service.set_line_done(session, task_id, line_id, payload.done, scope)
 
 
-@router.put("/tasks/{task_id}/threads/{thread_id}")
-async def link_thread(
-    task_id: str, thread_id: str, scope: ProjectScope, session: Session
-) -> TaskThreadLinkOut:
-    return await task_service.link_thread(session, task_id, thread_id, scope)
+@router.put("/tasks/{task_id}/agendas/{agenda_id}")
+async def link_agenda(
+    task_id: str, agenda_id: str, scope: ProjectScope, session: Session
+) -> TaskAgendaLinkOut:
+    return await task_service.link_agenda(session, task_id, agenda_id, scope)
 
 
-@router.delete("/tasks/{task_id}/threads/{thread_id}", status_code=204)
-async def unlink_thread(
-    task_id: str, thread_id: str, scope: ProjectScope, session: Session
+@router.delete("/tasks/{task_id}/agendas/{agenda_id}", status_code=204)
+async def unlink_agenda(
+    task_id: str, agenda_id: str, scope: ProjectScope, session: Session
 ) -> None:
-    await task_service.unlink_thread(session, task_id, thread_id, scope)
+    await task_service.unlink_agenda(session, task_id, agenda_id, scope)

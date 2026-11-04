@@ -1,9 +1,9 @@
-import { THREAD_SIGNAL_LABEL } from '@/lib/risk'
+import { AGENDA_SIGNAL_LABEL } from '@/lib/risk'
 import type { DecisionRiskReport } from '@/types/domain'
 
 /*
  * 결정 병목 리스크 보고서 — 서버가 계산해 줄 값을 굳혀 둔 것이다(계산은 서버 몫, docs/api/risk.md).
- * threads.ts · tasks.ts 의 안건 · 작업 id 를 써서 줄을 누르면 상세가 열린다. 숫자는 서버 시드 보고서
+ * agendas.ts · tasks.ts 의 안건 · 작업 id 를 써서 줄을 누르면 상세가 열린다. 숫자는 서버 시드 보고서
  * (server/tests/test_risk.py 의 test_seed_report_as_of_2026_10_15)와 같다. 기준을 바꾸면 목업 갈래가 settings 와 level 만 맞춘다.
  */
 
@@ -11,37 +11,34 @@ export type MockRiskReport = Omit<DecisionRiskReport, 'settings'>
 
 const p1: MockRiskReport = {
   asOf: '2026-10-15',
-  threads: [
+  agendas: [
     {
-      threadId: 't5',
+      agendaId: 't5',
       title: '보험료 산출 기간계 API 호출 in · out 정의',
       state: 'open',
       ownerId: 'u4',
       partId: 'pt3',
       dueDate: '2026-10-19',
       overdueDays: 0,
-      deferCount: 2,
-      lastDeferNote: '두 번째 미룸이다. 다음에는 기간계 담당자를 회의에 부르기로 했다.',
-      idleDays: 31,
+      /* 마지막으로 손댄 날 — 이행이 채운 '결정내용' 이력 줄(9월 10일) */
+      idleDays: 35,
       blockedTaskIds: ['k18'],
       waitingTaskIds: [],
       impactTaskCount: 1,
       nearestTaskDue: null,
-      signals: ['deferredRepeatedly', 'stale', 'blocking'],
-      score: 7,
-      level: 'high',
+      signals: ['stale', 'blocking'],
+      score: 5,
+      level: 'medium',
     },
     {
-      threadId: 't3',
+      agendaId: 't3',
       title: '사내망에서 외부 모델 호출 허용 범위',
       state: 'open',
       ownerId: 'u1',
       partId: 'pt2',
       dueDate: '2026-09-30',
       overdueDays: 15,
-      deferCount: 1,
-      lastDeferNote: '정보보안팀 확인이 먼저다. 다음 회의 후보로 올려 둔다.',
-      idleDays: 35,
+      idleDays: 36,
       blockedTaskIds: [],
       waitingTaskIds: [],
       impactTaskCount: 0,
@@ -51,15 +48,13 @@ const p1: MockRiskReport = {
       level: 'medium',
     },
     {
-      threadId: 't8',
+      agendaId: 't8',
       title: 'AI 심사 학습 데이터 범위',
       state: 'queued',
       ownerId: 'u1',
       partId: 'pt2',
       dueDate: null,
       overdueDays: 0,
-      deferCount: 0,
-      lastDeferNote: '',
       idleDays: 33,
       blockedTaskIds: [],
       waitingTaskIds: ['k13'],
@@ -70,15 +65,13 @@ const p1: MockRiskReport = {
       level: 'medium',
     },
     {
-      threadId: 't9',
+      agendaId: 't9',
       title: '공통 코드 체계 확정',
       state: 'queued',
       ownerId: 'u2',
       partId: null,
       dueDate: null,
       overdueDays: 0,
-      deferCount: 0,
-      lastDeferNote: '',
       idleDays: 30,
       blockedTaskIds: [],
       waitingTaskIds: ['k3'],
@@ -89,15 +82,13 @@ const p1: MockRiskReport = {
       level: 'medium',
     },
     {
-      threadId: 't4',
+      agendaId: 't4',
       title: '개발 서버 백업 주기',
       state: 'queued',
       ownerId: null,
       partId: 'pt1',
       dueDate: null,
       overdueDays: 0,
-      deferCount: 0,
-      lastDeferNote: '',
       idleDays: 35,
       blockedTaskIds: [],
       waitingTaskIds: [],
@@ -108,15 +99,13 @@ const p1: MockRiskReport = {
       level: 'low',
     },
     {
-      threadId: 't7',
+      agendaId: 't7',
       title: '가상비서 tool 만드는 순서',
       state: 'queued',
       ownerId: 'u4',
       partId: 'pt2',
       dueDate: null,
       overdueDays: 0,
-      deferCount: 0,
-      lastDeferNote: '',
       idleDays: 33,
       blockedTaskIds: [],
       waitingTaskIds: [],
@@ -136,7 +125,7 @@ const p1: MockRiskReport = {
       ownerId: 'u3',
       partId: 'pt1',
       due: '2026-10-20',
-      threadIds: ['t2'],
+      agendaIds: ['t2'],
       signal: 'decidedButBlocked',
     },
     {
@@ -147,7 +136,7 @@ const p1: MockRiskReport = {
       ownerId: 'u2',
       partId: null,
       due: '2026-09-22',
-      threadIds: ['t9'],
+      agendaIds: ['t9'],
       signal: 'dueBeforeDecision',
     },
     {
@@ -158,32 +147,30 @@ const p1: MockRiskReport = {
       ownerId: 'u1',
       partId: 'pt2',
       due: '2026-09-30',
-      threadIds: ['t8'],
+      agendaIds: ['t8'],
       signal: 'dueBeforeDecision',
     },
   ],
   owners: [
-    { memberId: 'u4', openThreads: 2, overdueThreads: 0, blockedTasks: 1, blockingImpact: 1 },
-    { memberId: 'u1', openThreads: 2, overdueThreads: 1, blockedTasks: 0, blockingImpact: 0 },
-    { memberId: 'u2', openThreads: 1, overdueThreads: 0, blockedTasks: 0, blockingImpact: 0 },
-    { memberId: 'u3', openThreads: 0, overdueThreads: 0, blockedTasks: 1, blockingImpact: 0 },
-    { memberId: null, openThreads: 1, overdueThreads: 0, blockedTasks: 0, blockingImpact: 0 },
+    { memberId: 'u4', openAgendas: 2, overdueAgendas: 0, blockedTasks: 1, blockingImpact: 1 },
+    { memberId: 'u1', openAgendas: 2, overdueAgendas: 1, blockedTasks: 0, blockingImpact: 0 },
+    { memberId: 'u2', openAgendas: 1, overdueAgendas: 0, blockedTasks: 0, blockingImpact: 0 },
+    { memberId: 'u3', openAgendas: 0, overdueAgendas: 0, blockedTasks: 1, blockingImpact: 0 },
+    { memberId: null, openAgendas: 1, overdueAgendas: 0, blockedTasks: 0, blockingImpact: 0 },
   ],
 }
 
 const p2: MockRiskReport = {
   asOf: '2026-10-15',
-  threads: [
+  agendas: [
     {
-      threadId: 't10',
+      agendaId: 't10',
       title: '이관 범위 확정',
       state: 'queued',
       ownerId: 'u2',
       partId: null,
       dueDate: null,
       overdueDays: 0,
-      deferCount: 0,
-      lastDeferNote: '',
       idleDays: 29,
       blockedTaskIds: [],
       waitingTaskIds: [],
@@ -196,7 +183,7 @@ const p2: MockRiskReport = {
   ],
   tasks: [],
   owners: [
-    { memberId: 'u2', openThreads: 1, overdueThreads: 0, blockedTasks: 0, blockingImpact: 0 },
+    { memberId: 'u2', openAgendas: 1, overdueAgendas: 0, blockedTasks: 0, blockingImpact: 0 },
   ],
 }
 
@@ -216,31 +203,29 @@ export function mockRiskSummary(
   report: Omit<DecisionRiskReport, 'owners'>,
   nameOf: (memberId: string | null) => string,
 ): string {
-  const { threads, tasks, settings } = report
-  if (threads.length === 0 && tasks.length === 0) return RISK_SUMMARY_EMPTY
+  const { agendas, tasks, settings } = report
+  if (agendas.length === 0 && tasks.length === 0) return RISK_SUMMARY_EMPTY
 
   const out: string[] = []
-  const top = threads[0]
+  const top = agendas[0]
   out.push(
     top
-      ? `한 줄 총평 — 지금 가장 큰 병목은 [[thread:${top.threadId}]] 입니다(${top.score}점 · ${top.level}).`
+      ? `한 줄 총평 — 지금 가장 큰 병목은 [[agenda:${top.agendaId}]] 입니다(${top.score}점 · ${top.level}).`
       : `한 줄 총평 — 안 정해진 안건 리스크는 없고, 안건과 어긋난 작업 ${tasks.length}건이 있습니다.`,
   )
 
-  if (threads.length > 0) {
+  if (agendas.length > 0) {
     out.push('', '먼저 정할 것')
-    threads.slice(0, 3).forEach((t, i) => {
-      const why = t.signals.map((s) => THREAD_SIGNAL_LABEL[s]).join(' · ')
+    agendas.slice(0, 3).forEach((t, i) => {
+      const why = t.signals.map((s) => AGENDA_SIGNAL_LABEL[s]).join(' · ')
       const waiting = [...t.blockedTaskIds, ...t.waitingTaskIds]
       const blocks =
         waiting.length > 0
           ? `작업 ${waiting.length}건(${waiting.map((id) => `[[task:${id}]]`).join(' ')})이 기다립니다`
           : '막힌 작업은 아직 없습니다'
-      const next = t.lastDeferNote
-        ? `마지막 미룸 사유 "${t.lastDeferNote}" 를 풀어 다음 회의에 올린다`
-        : '후보를 좁혀 다음 회의에 올린다'
+      const next = '다음 회의에 올려 결정내용을 적는다'
       out.push(
-        `${i + 1}. [[thread:${t.threadId}]] — ${why} · ${blocks} · ${next} · ${nameOf(t.ownerId)}`,
+        `${i + 1}. [[agenda:${t.agendaId}]] — ${why} · ${blocks} · ${next} · ${nameOf(t.ownerId)}`,
       )
     })
   }
@@ -256,12 +241,12 @@ export function mockRiskSummary(
       )
   }
 
-  const stale = threads.filter((t) => t.signals.includes('stale')).length
-  if (threads.length > 1 && stale * 2 > threads.length) {
+  const stale = agendas.filter((t) => t.signals.includes('stale')).length
+  if (agendas.length > 1 && stale * 2 > agendas.length) {
     out.push(
       '',
       '눈에 띄는 점',
-      `- 안건 ${threads.length}건 중 ${stale}건이 '오래 멈춤' 입니다 — 기준(멈춤 ${settings.staleDays}일)이 회의 주기보다 짧을 수 있습니다.`,
+      `- 안건 ${agendas.length}건 중 ${stale}건이 '오래 멈춤' 입니다 — 기준(멈춤 ${settings.staleDays}일)이 회의 주기보다 짧을 수 있습니다.`,
     )
   }
   return out.join('\n')

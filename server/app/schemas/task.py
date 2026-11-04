@@ -77,7 +77,7 @@ class TaskCreate(Schema):
     start: date | None = None
     due: date | None = None
     priority: TaskPriorityIn = "normal"
-    thread_ids: list[str] = []
+    agenda_ids: list[str] = []
     # **키를 안 보내면 상위 작업의 파트를 따른다**(최상위면 null). null 을 보내면 공통 —
     # 둘을 가르려고 서비스가 `model_fields_set` 으로 읽는다 (docs/api/part.md)
     part_id: str | None = None
@@ -153,9 +153,9 @@ class TaskLinePatch(Schema):
     done: bool
 
 
-class TaskThreadLinkOut(Schema):
+class TaskAgendaLinkOut(Schema):
     task_id: str
-    thread_id: str
+    agenda_id: str
 
 
 # 앞뒤 공백을 떼고 비면 422 다(string_too_short)

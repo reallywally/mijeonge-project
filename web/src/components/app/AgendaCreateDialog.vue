@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ChevronRight, FolderClosed } from 'lucide-vue-next'
-import ThreadFields from '@/components/app/ThreadFields.vue'
-import ThreadPropertyPanel from '@/components/app/ThreadPropertyPanel.vue'
-import ThreadStateBadge from '@/components/app/ThreadStateBadge.vue'
+import AgendaFields from '@/components/app/AgendaFields.vue'
+import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
 import { useDataStore } from '@/stores/data'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
+import type { AgendaState } from '@/types/domain'
 
-/* 안건 추가 — 안건 상세와 같은 모양의 팝업이다. 상세는 고치는 즉시 들어가지만 여기는 아직 안건이 없으니
-   골라 두었다가 '만들기'로 한꺼번에 넣는다. 만들면 바로 그 안건의 상세로 넘어간다 — 거기서 결정을 남긴다.
+/* 안건 추가 — 제목 · 설명 · 결정내용 · 상태 넷. 담당자 · 기한 · 파트는 만든 뒤 상세의 속성 패널에서 고른다.
+   상세는 고치는 즉시 들어가지만 여기는 아직 안건이 없으니 적어 두었다가 '만들기'로 한꺼번에 넣는다.
+   만들면 바로 그 안건의 상세로 넘어간다.
    작업 상세 · 추가에서도 띄운다 — 찾던 제목을 채워 열고(initialTitle), 만들면 그 작업에 건다(부모 몫).
    그때는 linkNote 로 어디에 걸리는지 알리고, 한 건만 만들므로 '계속 추가' 를 숨긴다. */
 const props = defineProps<{ initialTitle?: string; linkNote?: string }>()
@@ -19,30 +20,23 @@ const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ (e: 'created', id: string): void }>()
 
 const data = useDataStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 
 const title = ref('')
 const description = ref('')
-/* 후보는 한 줄에 하나 — 줄로 나누는 건 만들 때 한다 */
-const options = ref('')
-const dueDate = ref('')
-const ownerId = ref<string | null>(null)
-const partId = ref<string | null>(null)
-const ccIds = ref<string[]>([])
+const decision = ref('')
+const state = ref<AgendaState>('queued')
 const keepOpen = ref(false)
 const saving = ref(false)
 
-const fields = ref<InstanceType<typeof ThreadFields> | null>(null)
+const fields = ref<InstanceType<typeof AgendaFields> | null>(null)
 const focusTitle = () => fields.value?.focusTitle()
 
 function resetForm() {
   title.value = props.initialTitle ?? ''
   description.value = ''
-  options.value = ''
-  dueDate.value = ''
-  ownerId.value = null
-  partId.value = null
-  ccIds.value = []
+  decision.value = ''
+  state.value = 'queued'
 }
 
 watch(
@@ -60,14 +54,11 @@ async function submit() {
     return
   }
   saving.value = true
-  const id = await threadStore.addThread({
+  const id = await agendaStore.addAgenda({
     title: title.value,
     description: description.value,
-    options: options.value.split('\n'),
-    dueDate: dueDate.value || null,
-    ownerId: ownerId.value,
-    partId: partId.value,
-    ccIds: ccIds.value,
+    decision: decision.value,
+    state: state.value,
   })
   saving.value = false
   /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
@@ -94,7 +85,7 @@ function onKeydown(e: KeyboardEvent) {
 <template>
   <Dialog v-model:open="open">
     <DialogScrollContent
-      class="max-w-[1100px] gap-0 p-0"
+      class="max-w-[760px] gap-0 p-0"
       @open-auto-focus.prevent="focusTitle"
       @keydown="onKeydown"
     >
@@ -107,38 +98,30 @@ function onKeydown(e: KeyboardEvent) {
         <DialogTitle class="text-xs font-normal">안건 추가</DialogTitle>
       </div>
 
-      <div class="flex items-stretch">
-        <div class="flex min-w-0 grow flex-col px-[22px] pt-4 pb-6">
-          <ThreadFields
-            ref="fields"
-            v-model:title="title"
-            v-model:description="description"
-            v-model:options="options"
-          >
-            <template #under-title>
-              <DialogDescription class="text-xs text-muted-foreground">
-                제목만 있어도 됩니다. 나머지는 아는 만큼만 적고, 상세에서 언제든 고칩니다.
-              </DialogDescription>
-              <p v-if="linkNote" class="text-xs font-medium text-primary" data-thread-link-note>
-                {{ linkNote }}
-              </p>
-            </template>
-          </ThreadFields>
-        </div>
-
-        <ThreadPropertyPanel
-          v-model:due-date="dueDate"
-          v-model:owner-id="ownerId"
-          v-model:part-id="partId"
-          v-model:cc-ids="ccIds"
+      <div class="flex flex-col px-[22px] pt-4 pb-6">
+        <AgendaFields
+          ref="fields"
+          v-model:title="title"
+          v-model:description="description"
+          v-model:decision="decision"
         >
-          <template #top>
-            <div class="flex items-center gap-2">
-              <ThreadStateBadge state="queued" />
-              <span class="text-xs text-muted-foreground">만들면 대기로 들어갑니다</span>
-            </div>
+          <template #under-title>
+            <DialogDescription class="text-xs text-muted-foreground">
+              제목만 있어도 됩니다. 나머지는 아는 만큼만 적고, 상세에서 언제든 고칩니다.
+            </DialogDescription>
+            <p v-if="linkNote" class="text-xs font-medium text-primary" data-agenda-link-note>
+              {{ linkNote }}
+            </p>
           </template>
-        </ThreadPropertyPanel>
+
+          <section class="flex items-center gap-2">
+            <span class="w-[72px] shrink-0 text-xs font-medium">상태</span>
+            <AgendaStateSelect v-model="state" trigger-class="h-8 w-[160px] px-2 text-xs" />
+            <span class="text-xs text-muted-foreground"
+              >담당자 · 기한 · 파트는 만든 뒤 상세에서 고릅니다</span
+            >
+          </section>
+        </AgendaFields>
       </div>
 
       <div class="flex items-center gap-2.5 border-t border-border bg-muted/50 px-5 py-3">

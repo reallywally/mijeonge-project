@@ -4,7 +4,7 @@ import { ApiError } from '@/api/client'
 import {
   fetchTaskHistory,
   fetchTestHistory,
-  fetchThreadHistory,
+  fetchAgendaHistory,
   recordMockHistory,
 } from '@/api/history'
 import { mockDb, resetMockAuth } from '@/api/mockAuth'
@@ -87,15 +87,15 @@ describe('목업 갈래 — 시드', () => {
     expect((await fetchTestHistory('tc1')).map(fields)).toEqual([['created']])
   })
 
-  it('없거나 못 보는 프로젝트의 것은 404 TASK_NOT_FOUND · TEST_NOT_FOUND · THREAD_NOT_FOUND', async () => {
+  it('없거나 못 보는 프로젝트의 것은 404 TASK_NOT_FOUND · TEST_NOT_FOUND · AGENDA_NOT_FOUND', async () => {
     expect((await failure(fetchTaskHistory('nope'))).code).toBe('TASK_NOT_FOUND')
     expect((await failure(fetchTestHistory('nope'))).code).toBe('TEST_NOT_FOUND')
-    expect((await failure(fetchThreadHistory('nope'))).code).toBe('THREAD_NOT_FOUND')
+    expect((await failure(fetchAgendaHistory('nope'))).code).toBe('AGENDA_NOT_FOUND')
     /* 부여를 거두면 그 프로젝트의 것은 없는 것처럼 */
     mockDb().grants = mockDb().grants.filter((g) => !(g.memberId === 'u2' && g.projectId === 'p1'))
     expect((await failure(fetchTaskHistory('k4'))).code).toBe('TASK_NOT_FOUND')
     expect((await failure(fetchTestHistory('tc1'))).code).toBe('TEST_NOT_FOUND')
-    expect((await failure(fetchThreadHistory('t1'))).code).toBe('THREAD_NOT_FOUND')
+    expect((await failure(fetchAgendaHistory('t1'))).code).toBe('AGENDA_NOT_FOUND')
   })
 
   it('받은 것을 고쳐도 목업 저장소는 그대로다', async () => {
@@ -188,7 +188,7 @@ describe('목업 갈래 — 테스트 쓰기의 칸 규칙', () => {
     await putTestRef('tc1', { kind: 'task', id: 'k4' })
     expect((await last('tc1')).changes).toEqual([change('taskRef', null, 'k4')])
     await putTestRef('tc1', { kind: 'task', id: 'k4' })
-    await deleteTestRef('tc1', { kind: 'thread', id: 't1' })
+    await deleteTestRef('tc1', { kind: 'agenda', id: 't1' })
     expect(await fetchTestHistory('tc1')).toHaveLength(2)
 
     await deleteTestRef('tc1', { kind: 'task', id: 'k4' })

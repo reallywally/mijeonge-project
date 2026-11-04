@@ -1,22 +1,12 @@
 /**
- * 안건 × 이력 모델
- *
- * 안건에 남긴 한 줄이 Entry 하나다. 결정이 미뤄지는 것을 막고 무엇이 왜 정해졌는지 남기는 것이
- * 이 앱의 목적이라, 상태는 손으로 바꾸지 않고 Entry 를 남겨서만 바뀐다.
+ * 안건 — 제목 · 설명 · 결정내용 · 상태 (docs/api/agenda.md).
+ * 상태는 사람이 직접 고른다. 결정이 언제 어떻게 바뀌었는지는 변경 이력이 남긴다.
  */
 
-export type ThreadState =
-  | 'queued' // 등록만 됨 · 아직 아무 기록이 없음
-  | 'open' // 기록이 있지만 아직 못 정함
-  | 'decided'
-
-export type EntryKind =
-  | 'raise' // 제기
-  | 'defer' // 미룸
-  | 'decide' // 결정
-  | 'refine' // 세부 추가
-  | 'change' // 변경 (이전 결정을 대체)
-  | 'split' // 하위 안건으로 분리
+export type AgendaState =
+  | 'queued' // 대기
+  | 'open' // 논의중
+  | 'decided' // 결정
 
 export interface Member {
   id: string
@@ -145,193 +135,66 @@ export interface Project {
 /** 화면 이름 준비 · 진행 · 종료. 새 프로젝트는 active */
 export type ProjectStatus = 'planned' | 'active' | 'closed'
 
-export interface Thread {
+export interface Agenda {
   id: string
   projectId: string
   title: string
-  /** 배경 — 왜 지금 정해야 하나. 없으면 '' */
+  /** 배경 — 왜 정해야 하나. 빈 값은 '' */
   description: string
-  /** 후보 선택지. 순서가 있다. 정답이 열려 있는 안건이면 [] */
-  options: string[]
-  /** 결정 기한 YYYY-MM-DD (Task.start · due 와 같은 형식) */
-  dueDate: string | null
-  state: ThreadState
+  /** 결정내용 — 여러 줄 글. 빈 값은 '' */
+  decision: string
+  state: AgendaState
   ownerId: string | null
-  /** 다른 안건에서 떼어낸 것이면 그 안건 */
-  parentThreadId: string | null
-  /** 속한 파트. null 은 프로젝트 공통 */
-  partId: string | null
-  /** 참조 — 결정을 같이 알아야 할 사람. 순서가 있다. 없으면 [] (docs/api/check.md) */
-  ccIds: string[]
-  createdAt: string
-  /** 출처 — 회의록 [AI 정리] 로 등록했으면 그 회의록. 손으로 만들었거나 회의록을 지웠으면 null */
-  minutesId: string | null
   /** 등록한 사람 — 서버가 요청한 사람으로 찍는다. 기록이 없는 옛 안건은 null */
   creatorId: string | null
-}
-
-/**
- * 결정 항목 — 안건 하나 안에서 따로 정하는 것 하나 (예: '로그인 방식' 안건의 'SSO 여부' · '세션 길이').
- * 항목의 상태는 따로 두지 않고 이력에서 센다 — 그 항목에 지우지 않은 decide · change 줄이 있으면 정해진 것이다.
- * 항목이 하나라도 있는 안건은 **모든 항목이 정해져야** decided 다. 배열 순서가 화면 순서다.
- */
-export interface DecisionItem {
-  id: string
-  threadId: string
-  /** 무엇을 정하나 — 한 줄 · 1 ~ 200자 */
-  title: string
+  /** 결정 기한 YYYY-MM-DD (Task.start · due 와 같은 형식) */
+  dueDate: string | null
+  /** 속한 파트. null 은 프로젝트 공통 */
+  partId: string | null
   createdAt: string
-  /** 등록한 사람 — 서버가 요청한 사람으로 찍는다 */
-  creatorId: string | null
-}
-
-/** POST /api/threads/{id}/items — 항목은 안건 끝에 붙는다 */
-export interface DecisionItemInput {
-  title: string
-}
-
-/** 항목 더하기의 응답 — POST /api/threads/{id}/items. 정해진 안건에 항목이 붙으면 open 으로 돌아가므로 안건도 준다 */
-export interface DecisionItemCreateResult {
-  item: DecisionItem
-  thread: Thread
-}
-
-/** PATCH /api/threads/{id}/items/{itemId} — 이름 바꾸기 */
-export interface DecisionItemPatch {
-  title: string
-}
-
-/**
- * 항목 지우기의 응답 — DELETE /api/threads/{id}/items/{itemId}. 그 항목의 줄은 이력에 남지만
- * 상태 계산에서 빠지므로(지운 항목이 '정해지지 않음' 으로 안건을 붙잡지 않는다) 바뀐 안건을 받아 갈아끼운다
- */
-export interface DecisionItemDeleteResult {
-  thread: Thread
-}
-
-export interface Entry {
-  id: string
-  threadId: string
-  /**
-   * 이 줄이 다루는 결정 항목. decide · change · refine 은 항목에 달린다(항목 없이 남기지 않는다).
-   * defer 는 항목에 달면 그 항목만, null 이면 안건 전체를 미룬 것이다. raise · split 은 늘 null
-   */
-  itemId: string | null
-  kind: EntryKind
-  /** 한 줄 요약 */
-  text: string
-  /** 조건별 상세 — 이 결정 안에 함께 적힌 줄들 */
-  detail: string[]
-  /** 배경 메모 — 왜 그렇게 됐는지 */
-  note: string
-  ownerId: string | null
-  createdAt: string
-  /** 출처 회의록. 없으면 null */
+  /** state 가 decided 로 바뀐 시각(ISO UTC Z). decided 가 아니면 null */
+  decidedAt: string | null
+  /** 결정 판 번호 — 결정내용이 바뀌거나 decided 가 될 때 서버가 1 올린다. 확인 요청이 가리키는 자리 */
+  decisionRev: number
+  /** 출처 — 회의록 [AI 정리] 로 등록했으면 그 회의록. 손으로 만들었거나 회의록을 지웠으면 null */
   minutesId: string | null
-  /** 이 줄을 남긴 사람 — 서버가 요청한 사람으로 찍는다. 기록이 없는 옛 줄은 null */
-  creatorId: string | null
 }
 
 /** 목록 한 행에 필요한, 계산해서 얻는 값들 */
-export interface ThreadRow {
-  thread: Thread
+export interface AgendaRow {
+  agenda: Agenda
   ownerName: string | null
-  deferCount: number
-  entryCount: number
-  /** 마지막 Entry 를 남긴 날(KST) — 9월 14일 또는 '—' (기록 없음) */
-  lastEntryLabel: string
+  /** 결정내용의 첫 줄 — 비었으면 '' */
+  decisionLine: string
   /** 9월 12일 또는 '—' (기한 없음) */
   dueLabel: string
   /** 결정 기한이 지났는데 아직 못 정함 */
   overdue: boolean
-  /** 결정 항목 수 · 그중 정한 수 — 항목이 둘 이상이면 목록에 '2/3' 으로 선다 */
-  itemCount: number
-  settledItemCount: number
 }
 
-/** 안건을 먼저 등록할 때 화면이 넘기는 것. 제목 말고는 다 비워도 된다 */
-export interface ThreadInput {
+/** POST /api/projects/{id}/agendas — 제목 말고는 다 비워도 된다 */
+export interface AgendaInput {
   title: string
   description?: string
-  options?: string[]
-  dueDate?: string | null
+  decision?: string
+  /** 안 보내면 queued */
+  state?: AgendaState
   ownerId?: string | null
+  dueDate?: string | null
   /** 안 보내면 공통(null) */
   partId?: string | null
-  /** 참조 0 ~ 20명. 안 보내면 [] */
-  ccIds?: string[]
 }
 
-/**
- * 안건을 고칠 때 화면이 넘기는 것 — PATCH /api/threads/{id}. 보낸 필드만 바뀐다.
- * ownerId · dueDate 는 null 로 비우고, options 는 통째로 바뀐다. state 는 여기서 못 바꾼다(이력으로만).
- */
-export interface ThreadPatch {
+/** PATCH /api/agendas/{id} — 보낸 필드만 바뀐다. ownerId · dueDate · partId 는 null 로 비운다 */
+export interface AgendaPatch {
   title?: string
-  ownerId?: string | null
   description?: string
-  options?: string[]
+  decision?: string
+  state?: AgendaState
+  ownerId?: string | null
   dueDate?: string | null
   /** null 로 공통. 보관 파트는 새로 달 수 없다(이미 달린 것을 두는 것은 된다) */
   partId?: string | null
-  /** 참조를 통째로 바꾼다 */
-  ccIds?: string[]
-}
-
-/** 안건 이력 한 줄 — Entry 에 화면에서 필요한 것만 붙였다 */
-export interface ThreadEvent {
-  entry: Entry
-  /** 이 줄이 놓이는 날짜 — createdAt 의 KST 날짜 */
-  at: string
-  ownerName: string | null
-  /** 같은 항목의 뒤에 온 결정에 밀려난 줄 — 취소선으로 남는다 */
-  superseded: boolean
-  /** 이 줄이 달린 결정 항목의 이름. 안건 전체의 줄이면 null, 지운 항목이면 '지운 항목' */
-  itemTitle: string | null
-}
-
-/** 이 안건에서 떼어낸 하위 안건 */
-export interface SubThreadRow {
-  thread: Thread
-  splitAtLabel: string
-}
-
-/** 결정 항목 하나 — 지금 결정 · 상세를 그 항목 안에서만 센다 */
-export interface DecisionItemView {
-  item: DecisionItem
-  /** 그 항목에 결정 · 변경 줄이 있는가 */
-  settled: boolean
-  /** 그 항목의 마지막 결정 · 변경의 한 줄 요약 */
-  current: string
-  /** 그 결정의 조건별 상세 + 그 뒤에 그 항목에 붙은 세부 추가 */
-  detail: string[]
-  /** 언제 정해졌는지 */
-  settledLabel: string
-  /** 그 결정에 적힌 상세 설명 */
-  settledNote: string
-  settledOwnerName: string | null
-  /** 이 항목만 미룬 횟수 */
-  deferCount: number
-}
-
-/** 안건 상세 한 화면 — 항목별 지금 결정 + 이력 */
-export interface ThreadDetail {
-  thread: Thread
-  ownerName: string | null
-  events: ThreadEvent[]
-  /** 미룬 횟수 전부 — 항목을 미룬 것 · 안건 전체를 미룬 것 */
-  deferCount: number
-  /** 항목 없이 안건 전체를 미룬 횟수 */
-  threadDeferCount: number
-  /** 결정 기한이 지났는데 아직 못 정함 */
-  overdue: boolean
-  /** 결정 항목 — 등록 순 */
-  items: DecisionItemView[]
-  /** 정한 항목 수 */
-  settledCount: number
-  /** 항목이 하나 이상이고 전부 정해졌는가 */
-  settled: boolean
-  subThreads: SubThreadRow[]
 }
 
 /**
@@ -444,9 +307,9 @@ export interface TaskCommentPatch {
  * memo 의 "안건 상세에서는 맵핑 불가"는 화면의 규칙이지 모델의 제약이 아니다 —
  * 링크는 양쪽에서 읽고, 안건 화면에서만 읽기 전용으로 보여준다.
  */
-export interface TaskThreadLink {
+export interface TaskAgendaLink {
   taskId: string
-  threadId: string
+  agendaId: string
 }
 
 /** 작업 목록 한 행 — 계층을 펼치지 않는 대신 경로를 글로 적는다 */
@@ -467,7 +330,7 @@ export interface TaskRow {
   periodLabel: string
   /** 기간이 안 잡혔는가 — 간트에 막대가 없는 작업 */
   undated: boolean
-  threadCount: number
+  agendaCount: number
   childCount: number
 }
 
@@ -480,18 +343,16 @@ export interface TaskDetail {
   parent: Task | null
   children: TaskRow[]
   /** 이 작업을 하다가 정해야 했던 것들 */
-  threads: TaskThreadRow[]
+  agendas: TaskAgendaRow[]
   doneChildCount: number
 }
 
 /** 작업 상세에 붙는 안건 한 줄 — 지금 어디까지 정해졌는지까지 같이 본다 */
-export interface TaskThreadRow {
-  thread: Thread
-  /** 몇 번 미뤄졌는지 — 안건 목록과 같은 배지를 쓴다 */
-  deferCount: number
-  /** 결정됐으면 그 한 줄, 아니면 왜 아직인지 */
+export interface TaskAgendaRow {
+  agenda: Agenda
+  /** 결정됐으면 결정내용 첫 줄, 아니면 왜 아직인지 */
   line: string
-  /** 언제 정해졌는지 — '9월 10일에 정해짐' 또는 '마지막 기록 · 9월 14일' */
+  /** '9월 10일에 정해짐' 또는 '9월 8일에 등록' */
   where: string
 }
 
@@ -505,7 +366,7 @@ export interface TaskInput {
   start: string | null
   due: string | null
   priority: TaskPriority
-  threadIds: string[]
+  agendaIds: string[]
   /** **안 보내면 상위 작업의 파트를 따른다**(최상위면 공통). null 을 보내면 공통이다 */
   partId?: string | null
 }
@@ -553,43 +414,12 @@ export interface ProjectInput {
   endDate?: string | null
 }
 
-/** 안건 이력 한 줄을 남길 때 넘기는 것 — POST /api/threads/{id}/entries */
-export interface EntryInput {
-  kind: EntryKind
-  /** decide · change · refine 은 필수(없으면 422 ENTRY_ITEM_REQUIRED), defer 는 선택, raise · split 은 보내지 않는다 */
-  itemId?: string | null
-  text: string
-  detail?: string[]
-  note?: string
-  ownerId?: string | null
-}
-
-/**
- * 이력 한 줄의 글 고치기 — PATCH /api/threads/{id}/entries/{entryId}. 보낸 필드만 바뀐다.
- * kind · 처리한 사람은 못 바꾼다(줄이 이미 안건 상태를 바꿨다). 빈 text 는 받지 않는다.
- */
-export interface EntryPatch {
-  text?: string
-  note?: string
-}
-
-/**
- * 이력 한 줄 지우기의 응답 — DELETE /api/threads/{id}/entries/{entryId}.
- * 남은 줄로 안건 상태를 다시 계산하므로 바뀐 안건을 받아 갈아끼운다(담당자는 그대로)
- */
-export interface EntryDeleteResult {
-  thread: Thread
-}
-
 /** GET /api/projects/{id}/snapshot — 그 프로젝트의 원본 전부. 키 이름은 픽스처 export 이름이다 */
 export interface ProjectSnapshot {
   project: Project
-  threads: Thread[]
-  /** 안건 등록 순 → 안건 안의 항목 순. 지운 항목은 싣지 않는다 */
-  decisionItems: DecisionItem[]
-  entries: Entry[]
+  agendas: Agenda[]
   tasks: Task[]
-  taskThreadLinks: TaskThreadLink[]
+  taskAgendaLinks: TaskAgendaLink[]
   /** 이름 순 · 보관 포함 */
   parts: Part[]
   /** (partId, memberId) 순 */
@@ -615,7 +445,7 @@ export interface ChatInput {
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
-  /** 화면에 보인 글 그대로. 근거 표시(`[[thread:ID]]`)도 지우지 않고 돌려보낸다 */
+  /** 화면에 보인 글 그대로. 근거 표시(`[[agenda:ID]]`)도 지우지 않고 돌려보낸다 */
   text: string
   /** assistant 에만. 그 답이 낸 초안과 화면에서의 결과 — 서버가 대화를 안 남겨 화면이 돌려보낸다 */
   proposal?: ChatProposal
@@ -671,8 +501,8 @@ export type ChatEvent =
   | {
       type: 'tool'
       name:
-        | 'search_threads'
-        | 'get_thread'
+        | 'search_agendas'
+        | 'get_agenda'
         | 'search_tasks'
         | 'get_task'
         | 'list_tasks'
@@ -690,7 +520,7 @@ export type ChatEvent =
   | { type: 'error'; code: string; message: string }
 
 export interface ChatRef {
-  kind: 'thread' | 'task'
+  kind: 'agenda' | 'task'
   id: string
 }
 
@@ -711,12 +541,10 @@ export interface ChatLine {
 
 /* 결정 병목 리스크 — 계산은 서버가 하고 화면은 받아 그린다 (docs/api/risk.md · Q35) */
 
-/** 리스크를 가르는 문턱값 다섯 — 프로젝트마다 둔다. PUT 은 다섯 값을 통째로 보낸다 */
+/** 리스크를 가르는 문턱값 넷 — 프로젝트마다 둔다. PUT 은 네 값을 통째로 보낸다 */
 export interface RiskSettings {
   /** 결정 기한이 이 날 수 안이면 '기한 임박'. 1 ~ 30, 기본 3 */
   dueSoonDays: number
-  /** defer 줄이 이 횟수 이상이면 '여러 번 미룸'. 1 ~ 10, 기본 2 */
-  deferCount: number
   /** 마지막 이력 뒤 이 날 수를 넘기면 '오래 멈춤'. 1 ~ 90, 기본 7 */
   staleDays: number
   /** 점수가 이 값 이상이면 high. 2 ~ 30, 기본 6. mediumScore 보다 커야 한다 */
@@ -731,7 +559,7 @@ export interface DecisionRiskReport {
   /** 이 계산에 쓴 기준 */
   settings: RiskSettings
   /** 안 정해진 안건 중 신호가 하나라도 있는 것. score 내림차순 */
-  threads: ThreadRisk[]
+  agendas: AgendaRisk[]
   /** 안건과 어긋난 작업 */
   tasks: TaskRisk[]
   /** 사람별로 몰린 정도. 담당자 없음은 memberId null 한 줄 */
@@ -740,26 +568,19 @@ export interface DecisionRiskReport {
 
 /** AI 요약에 보내는 것 — 화면에 지금 보이는 줄의 id. 각 0 ~ 100개 (docs/api/risk.md 'AI 요약') */
 export interface RiskSummaryInput {
-  /** 화면에 보이는 안건 리스크 줄 — ThreadRisk.threadId */
-  threadIds: string[]
+  /** 화면에 보이는 안건 리스크 줄 — AgendaRisk.agendaId */
+  agendaIds: string[]
   /** 화면에 보이는 어긋난 작업 줄 — TaskRisk.taskId */
   taskIds: string[]
 }
 
-export type ThreadRiskSignal =
-  | 'overdue'
-  | 'dueSoon'
-  | 'deferredRepeatedly'
-  | 'stale'
-  | 'blocking'
-  | 'decisionAfterTaskDue'
-  | 'noOwner'
-  | 'noDueDate'
+export type AgendaRiskSignal =
+  'overdue' | 'dueSoon' | 'stale' | 'blocking' | 'decisionAfterTaskDue' | 'noOwner' | 'noDueDate'
 
 export type RiskLevel = 'high' | 'medium' | 'low'
 
-export interface ThreadRisk {
-  threadId: string
+export interface AgendaRisk {
+  agendaId: string
   title: string
   state: 'queued' | 'open'
   ownerId: string | null
@@ -767,9 +588,6 @@ export interface ThreadRisk {
   dueDate: string | null
   /** 기한을 넘긴 날 수. 기한이 없거나 안 넘었으면 0 */
   overdueDays: number
-  deferCount: number
-  /** 마지막 defer 줄의 note. 없으면 '' */
-  lastDeferNote: string
   /** 마지막 이력(없으면 등록) 뒤 지난 날 수 */
   idleDays: number
   blockedTaskIds: string[]
@@ -779,12 +597,12 @@ export interface ThreadRisk {
   impactTaskCount: number
   /** 연결된 작업(완료 제외) 중 가장 이른 기한 */
   nearestTaskDue: string | null
-  signals: ThreadRiskSignal[]
+  signals: AgendaRiskSignal[]
   score: number
   level: RiskLevel
 }
 
-export type TaskRiskSignal = 'decidedButBlocked' | 'blockedWithoutThread' | 'dueBeforeDecision'
+export type TaskRiskSignal = 'decidedButBlocked' | 'blockedWithoutAgenda' | 'dueBeforeDecision'
 
 export interface TaskRisk {
   taskId: string
@@ -794,16 +612,16 @@ export interface TaskRisk {
   ownerId: string | null
   partId: string | null
   due: string | null
-  /** 이 신호의 근거가 된 안건들. blockedWithoutThread 면 [] */
-  threadIds: string[]
+  /** 이 신호의 근거가 된 안건들. blockedWithoutAgenda 면 [] */
+  agendaIds: string[]
   signal: TaskRiskSignal
 }
 
 export interface OwnerLoad {
   /** null 은 '담당자 없음' */
   memberId: string | null
-  openThreads: number
-  overdueThreads: number
+  openAgendas: number
+  overdueAgendas: number
   blockedTasks: number
   /** 이 사람이 정하면 풀리는 일의 양 (impactTaskCount 의 합, 중복 없이) */
   blockingImpact: number
@@ -811,13 +629,15 @@ export interface OwnerLoad {
 
 /* 확인 요청 — 결정된 안건의 '이 결정 확인해 주세요' 버튼 하나. 쪽지가 아니다 (docs/api/check.md) */
 
-/** 받는 사람 한 명당 한 줄. 한 번에 보낸 줄은 같은 entryId · createdAt 을 갖는다 */
+/** 받는 사람 한 명당 한 줄. 한 번에 보낸 줄은 같은 decisionRev · createdAt 을 갖는다 */
 export interface CheckRequest {
   id: string
   projectId: string
-  threadId: string
-  /** 이 요청이 알린 결정 — 그 안건의 decide · change 이력 */
-  entryId: string
+  agendaId: string
+  /** 이 요청이 알린 결정 판 — 보낼 때의 Agenda.decisionRev */
+  decisionRev: number
+  /** 보낼 때 찍어 둔 결정내용 */
+  decision: string
   senderId: string
   recipientId: string
   /** ISO 8601 UTC, Z */
@@ -868,64 +688,49 @@ export interface MinutesDraft {
   meetingDate: string | null
   /** 회의 요약 서너 줄. 검토 화면 맨 위에 보이고, [등록] 때 회의록 요약으로 저장된다 */
   summary: string
-  threads: ProposedThread[]
-  entries: ProposedEntry[]
+  agendas: ProposedAgenda[]
+  updates: ProposedUpdate[]
   tasks: ProposedMinutesTask[]
 }
 
 /** 새 안건 */
-export interface ProposedThread {
+export interface ProposedAgenda {
   /** 이 초안 안에서만 쓰는 이름 — 'n1', 'n2' … */
   tempId: string
   title: string
   /** 배경. 없으면 '' */
   description: string
-  /** 후보 선택지. 없으면 [] */
-  options: string[]
+  /** 결정내용 — 이 회의에서 정해진 것. 없으면 '' */
+  decision: string
+  state: AgendaState
   ownerId: string | null
   /** 회의록에서 담당을 부른 말("김 책임"). ownerId 를 못 정했을 때만, 없으면 '' */
   ownerHint: string
   /** 결정 기한 YYYY-MM-DD */
   dueDate: string | null
-  /** 이 회의에서 정해졌거나 미뤄졌으면 그 이력. 등록만 된 안건이면 null */
-  entry: ProposedEntryBody | null
+  /** null 이면 프로젝트 공통 */
+  partId: string | null
   /** 근거 원문 — 회의록에서 그대로 옮긴 한두 문장 */
   quote: string
 }
 
-/** 이미 있는 안건에 붙일 이력 */
-export interface ProposedEntry extends ProposedEntryBody {
-  /** 'e1', 'e2' … */
-  tempId: string
-  /** 그 프로젝트의 안건 */
-  threadId: string
-  quote: string
-}
-
-export interface ProposedEntryBody {
-  kind: 'decide' | 'defer' | 'refine'
-  /**
-   * 결정 항목의 이름. 등록할 때 그 안건에 같은 이름의(앞뒤 공백을 뗀) 지우지 않은 항목이 있으면 거기,
-   * 없으면 새 항목을 만들어 단다. decide · refine 인데 '' 이면 안건 제목을 이름으로 쓴다.
-   * defer 인데 '' 이면 안건 전체를 미룬 것이다
-   */
-  itemTitle: string
-  /** 한 줄 — 결정이면 무엇으로, 미룸이면 무엇을 */
-  text: string
-  /** 조건별 상세. 없으면 [] */
-  detail: string[]
-  /** 왜 — 미룸이면 사유. 없으면 '' */
-  note: string
-  ownerId: string | null
-  ownerHint: string
+/**
+ * 이미 있는 안건의 결정내용 · 상태를 통째로 갈아끼운다 — AI 가 지금 결정내용을 읽고 합친 글을 낸다.
+ * 한 안건에 하나다. quote 는 계약에 없어 서버가 안 보내면 비운다 (API.md 열린 질문)
+ */
+export interface ProposedUpdate {
+  agendaId: string
+  decision: string
+  state: AgendaState
+  quote?: string
 }
 
 /** 작업 — 챗봇의 ProposedTask 에 안건 연결 · 근거가 붙었다. tempId 는 't1', 't2' … */
 export interface ProposedMinutesTask extends ProposedTask {
   ownerHint: string
   /** 걸 안건 — 이 초안의 새 안건(tempId) · 이미 있는 안건(id). 둘 다 비면 안건 없이 */
-  threadTempIds: string[]
-  threadIds: string[]
+  agendaTempIds: string[]
+  agendaIds: string[]
   quote: string
 }
 
@@ -942,24 +747,20 @@ export type MinutesEvent =
 export interface MinutesApplyInput {
   /** 회의록에 저장할 요약 — 초안의 summary 를 그대로(고쳐도 된다). 안 보내면 지금 요약 그대로 */
   summary?: string
-  threads: ProposedThread[]
-  entries: ProposedEntry[]
+  agendas: ProposedAgenda[]
+  updates: ProposedUpdate[]
   tasks: ProposedMinutesTask[]
 }
 
 /** 201 응답 — 한 트랜잭션이라 하나라도 틀리면 아무것도 안 남는다. 만든 것에는 minutesId 가 붙어 있다 */
 export interface MinutesApplyResult {
   /** 요청 순서 그대로 */
-  threads: Thread[]
-  /** 새 안건의 이력 + 기존 안건의 이력. 새 안건 것 먼저, 각각 요청 순서 */
-  entries: Entry[]
-  /** 등록하면서 새로 만든 결정 항목 — entries[].itemId 가 가리키는 것 중 화면이 아직 모르는 것. 만든 순서 (API.md Q66) */
-  decisionItems: DecisionItem[]
-  /** 이력 때문에 상태가 바뀐 기존 안건 */
-  updatedThreads: Thread[]
+  agendas: Agenda[]
+  /** updates 로 결정내용 · 상태를 갈아끼운 기존 안건 — 요청 순서 */
+  updatedAgendas: Agenda[]
   tasks: Task[]
-  links: TaskThreadLink[]
-  threadIdByTempId: Record<string, string>
+  links: TaskAgendaLink[]
+  agendaIdByTempId: Record<string, string>
   taskIdByTempId: Record<string, string>
 }
 
@@ -991,12 +792,10 @@ export interface ProgressFacts {
   previous: { reportId: string; periodEnd: string; doneRate: number; blocked: number } | null
 
   decisions: {
-    /** 기간 안에 decide · change 이력이 남은 안건 */
-    decidedThreadIds: string[]
-    /** 기간 안에 defer 이력이 남은 안건 */
-    deferredThreadIds: string[]
-    /** 지금 리스크 high · medium 안건 — DecisionRiskReport.threads 에서, 점수 순 10개까지 */
-    riskyThreadIds: string[]
+    /** decidedAt 이 기간 안인 안건 */
+    decidedAgendaIds: string[]
+    /** 지금 리스크 high · medium 안건 — DecisionRiskReport.agendas 에서, 점수 순 10개까지 */
+    riskyAgendaIds: string[]
   }
 
   /** 손쓸 작업. 한 작업에 신호가 여럿이면 다 싣는다 */
@@ -1043,7 +842,7 @@ export interface TaskAttention {
     openLines: number
     totalLines: number
     /** 걸린 안건 수 */
-    threadCount: number
+    agendaCount: number
     priority: 'low' | 'normal' | 'high'
   }
   score: number
@@ -1101,7 +900,7 @@ export type TestSignal =
 
 /** 참조 태그 */
 export interface TestRef {
-  kind: 'task' | 'thread'
+  kind: 'task' | 'agenda'
   id: string
 }
 
@@ -1132,8 +931,8 @@ export interface TestCase {
   partId: string | null
   /** 규칙이 붙인 신호. 하위가 있는 테스트(묶음)는 늘 [] */
   signals: TestSignal[]
-  /** 기준 바뀜의 근거 — basis 뒤로 닿는 안건에 생긴 decide · change Entry 의 id, 오래된 것부터. 없으면 [] */
-  changedEntryIds: string[]
+  /** 기준 바뀜의 근거 — basis 뒤로 결정이 바뀐 닿는 안건, 처음 바뀐 순. 없으면 [] */
+  changedAgendaIds: string[]
   createdBy: string | null
   createdAt: string
 }

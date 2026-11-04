@@ -6,7 +6,7 @@ from app.services import history as history_service
 
 # 작업 · 테스트 · 안건 상세의 '변경 이력' (docs/api/history.md).
 # 읽기만 — 남기는 것은 쓰기 서비스가 한다.
-# 경계는 require_scope 가 경로의 task_id · test_id · thread_id 로 본다
+# 경계는 require_scope 가 경로의 task_id · test_id · agenda_id 로 본다
 router = APIRouter(tags=["history"])
 
 
@@ -21,6 +21,6 @@ async def test_history(test_id: str, session: Session) -> list[HistoryEntry]:
     return await history_service.list_test_history(session, test_id)
 
 
-@router.get("/threads/{thread_id}/history")
-async def thread_history(thread_id: str, session: Session) -> list[HistoryEntry]:
-    return await history_service.list_thread_history(session, thread_id)
+@router.get("/agendas/{agenda_id}/history")
+async def agenda_history(agenda_id: str, session: Session) -> list[HistoryEntry]:
+    return await history_service.list_agenda_history(session, agenda_id)

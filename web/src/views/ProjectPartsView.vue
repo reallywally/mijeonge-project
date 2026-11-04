@@ -42,14 +42,14 @@ const archivedParts = computed(() => partStore.parts.filter((p) => !p.active))
 
 /** 파트마다 사람 · 작업 · 안건 수 */
 const countsOf = computed(() => {
-  const counts: Record<string, { people: number; tasks: number; threads: number }> = {}
-  for (const p of partStore.parts) counts[p.id] = { people: 0, tasks: 0, threads: 0 }
+  const counts: Record<string, { people: number; tasks: number; agendas: number }> = {}
+  for (const p of partStore.parts) counts[p.id] = { people: 0, tasks: 0, agendas: 0 }
   for (const pm of data.partMembers) if (counts[pm.partId]) counts[pm.partId].people += 1
   for (const t of data.allTasks) if (t.partId && counts[t.partId]) counts[t.partId].tasks += 1
-  for (const t of data.allThreads) if (t.partId && counts[t.partId]) counts[t.partId].threads += 1
+  for (const t of data.allAgendas) if (t.partId && counts[t.partId]) counts[t.partId].agendas += 1
   return counts
 })
-const countOf = (partId: string) => countsOf.value[partId] ?? { people: 0, tasks: 0, threads: 0 }
+const countOf = (partId: string) => countsOf.value[partId] ?? { people: 0, tasks: 0, agendas: 0 }
 
 /* 고른 파트 — 주소가 정본이다. 없거나 이 프로젝트에 없는 id 면 첫 파트로 바꿔 싣는다 */
 const queryPartId = computed(() => (typeof route.query.part === 'string' ? route.query.part : null))
@@ -197,7 +197,7 @@ async function joinPicked() {
 }
 
 /* 작업은 기본이 간트라 거른 목록으로 가려면 view=list 를 단다 */
-const listLink = (path: '/tasks' | '/threads') =>
+const listLink = (path: '/tasks' | '/agendas') =>
   selected.value
     ? { path, query: { ...(path === '/tasks' ? { view: 'list' } : {}), part: selected.value.id } }
     : path
@@ -265,7 +265,7 @@ const listLink = (path: '/tasks' | '/threads') =>
                   <span class="truncate text-sm font-medium">{{ part.name }}</span>
                   <span class="text-xs text-muted-foreground">
                     {{ countOf(part.id).people }}명 · 작업 {{ countOf(part.id).tasks }} · 안건
-                    {{ countOf(part.id).threads }}
+                    {{ countOf(part.id).agendas }}
                   </span>
                 </button>
               </li>
@@ -312,7 +312,7 @@ const listLink = (path: '/tasks' | '/threads') =>
                     <span class="truncate text-sm">{{ part.name }}</span>
                     <span class="text-xs">
                       {{ countOf(part.id).people }}명 · 작업 {{ countOf(part.id).tasks }} · 안건
-                      {{ countOf(part.id).threads }}
+                      {{ countOf(part.id).agendas }}
                     </span>
                   </button>
                 </li>
@@ -354,10 +354,10 @@ const listLink = (path: '/tasks' | '/threads') =>
                   >작업 {{ countOf(selected.id).tasks }}건 보기</RouterLink
                 >
                 <RouterLink
-                  :to="listLink('/threads')"
+                  :to="listLink('/agendas')"
                   class="underline-offset-4 hover:text-foreground hover:underline"
-                  data-link="threads"
-                  >안건 {{ countOf(selected.id).threads }}건 보기</RouterLink
+                  data-link="agendas"
+                  >안건 {{ countOf(selected.id).agendas }}건 보기</RouterLink
                 >
               </div>
             </div>

@@ -84,13 +84,13 @@ describe('정리', () => {
 
   it('다시 정리하면 앞 초안 · 고친 값을 버린다', async () => {
     const minutes = await drafted()
-    minutes.form!.threads[0].title = '고친 제목'
+    minutes.form!.agendas[0].title = '고친 제목'
     minutes.setPicked('t1', false)
     const run = minutes.run('m1')
     expect(minutes.form).toBeNull()
     await vi.runAllTimersAsync()
     await run
-    expect(minutes.form!.threads[0].title).toBe('가상비서 대화 로그 보관 기간')
+    expect(minutes.form!.agendas[0].title).toBe('가상비서 대화 로그 보관 기간')
     expect(minutes.picked.t1).toBe(true)
   })
 
@@ -105,23 +105,27 @@ describe('정리', () => {
 })
 
 describe('보낼 모양', () => {
-  it('새 안건을 끄면 걸린 작업에 빠질 안건이 잡히고, 보낼 때 threadTempIds 에서 지운다', async () => {
+  it('새 안건을 끄면 걸린 작업에 빠질 안건이 잡히고, 보낼 때 agendaTempIds 에서 지운다', async () => {
     const minutes = await drafted()
-    expect(minutes.droppedThreads('t1')).toEqual([])
+    expect(minutes.droppedAgendas('t1')).toEqual([])
     minutes.setPicked('n1', false)
-    expect(minutes.droppedThreads('t1')).toEqual(['가상비서 대화 로그 보관 기간'])
+    expect(minutes.droppedAgendas('t1')).toEqual(['가상비서 대화 로그 보관 기간'])
     expect(minutes.pickedCount).toBe(5)
     const input = minutes.applyInput!
-    expect(input.threads.map((t) => t.tempId)).toEqual(['n2'])
-    expect(input.tasks[0]).toMatchObject({ tempId: 't1', threadTempIds: [] })
+    expect(input.agendas.map((t) => t.tempId)).toEqual(['n2'])
+    expect(input.tasks[0]).toMatchObject({ tempId: 't1', agendaTempIds: [] })
     /* 초안 사본은 그대로 — 다시 켜면 연결이 돌아온다 */
     minutes.setPicked('n1', true)
-    expect(minutes.applyInput!.tasks[0].threadTempIds).toEqual(['n1'])
+    expect(minutes.applyInput!.tasks[0].agendaTempIds).toEqual(['n1'])
   })
 
   it('요약은 고친 그대로 보낸다', async () => {
     const minutes = await drafted()
     expect(minutes.applyInput!.summary).toContain('외부 모델 호출 허용 범위')
+    /* 기존 안건 갈아끼우기는 계약의 칸만 — quote 는 화면에서만 쓴다 */
+    expect(minutes.applyInput!.updates).toEqual([
+      { agendaId: 't2', decision: minutes.form!.updates[0].decision, state: 'decided' },
+    ])
     minutes.form!.summary = '고친 요약'
     expect(minutes.applyInput!.summary).toBe('고친 요약')
   })
@@ -146,9 +150,9 @@ describe('보낼 모양', () => {
 })
 
 describe('등록', () => {
-  it('결과를 데이터 스토어에 넣고 검토를 닫는다 — 안건 · 이력 · 작업 · 링크, 출처 m1', async () => {
+  it('결과를 데이터 스토어에 넣고 검토를 닫는다 — 안건 · 갈아끼운 안건 · 작업 · 링크, 출처 m1', async () => {
     const data = useDataStore()
-    const before = { tasks: data.allTasks.length, entries: data.allEntries.length }
+    const before = { tasks: data.allTasks.length }
     const minutes = await drafted()
     minutes.setPicked('n1', false)
 
@@ -157,71 +161,67 @@ describe('등록', () => {
     expect(minutes.phase).toBe('idle')
     expect(minutes.form).toBeNull()
     expect(minutes.dirty).toBe(false)
-    /* 나온 것 — 새 안건 1 · 이력 2(새 안건 것 · t3) · 작업 3 */
+    /* 나온 것 — 새 안건 1 · 작업 3. 갈아끼운 기존 안건은 출처가 안 남는다 */
     const made = useMinutesStore().outcomeOf('m1')
-    expect([made.threads.length, made.entries.length, made.tasks.length]).toEqual([1, 2, 3])
+    expect([made.agendas.length, made.tasks.length]).toEqual([1, 3])
+    expect(data.allAgendas.find((t) => t.id === 't2')).toMatchObject({
+      decision: expect.stringContaining('- 운영 DB 도 같은 버전으로 구성한다'),
+      decisionRev: 2,
+      minutesId: null,
+    })
 
-    expect(data.allThreads[0]).toMatchObject({
-      id: r.threads[0].id,
+    expect(data.allAgendas[0]).toMatchObject({
+      id: r.agendas[0].id,
       title: '기간계 테스트 데이터 마스킹 범위',
       state: 'open',
     })
-    expect(data.allEntries.length).toBe(before.entries + 2)
     expect(data.allTasks.length).toBe(before.tasks + 3)
     /* 목업에서는 키를 데이터 스토어가 센다 */
     expect(r.tasks.map((t) => t.key)).toEqual(['HW-23', 'HW-24', 'HW-25'])
     expect(data.allTasks.at(-1)!.key).toBe('HW-25')
     /* n1 을 껐으니 t1 의 연결은 빠지고, t2 만 DB 결정에 걸린다 */
-    expect(data.taskThreads.filter((l) => r.tasks.some((t) => t.id === l.taskId))).toEqual([
-      { taskId: r.taskIdByTempId.t2, threadId: 't2' },
+    expect(data.taskAgendas.filter((l) => r.tasks.some((t) => t.id === l.taskId))).toEqual([
+      { taskId: r.taskIdByTempId.t2, agendaId: 't2' },
     ])
   })
 
-  it('결정으로 바꿔 등록하면 기존 안건이 결정됨으로 바뀐다', async () => {
+  it('기존 안건의 상태 · 결정내용을 고쳐 등록하면 그대로 들어간다', async () => {
     const minutes = await drafted()
-    minutes.form!.entries[0].kind = 'decide'
+    minutes.form!.updates[0].state = 'open'
+    minutes.form!.updates[0].decision = '다시 논의한다'
     expect(await minutes.apply()).toBe(true)
-    expect(useDataStore().allThreads.find((t) => t.id === 't3')!.state).toBe('decided')
+    expect(useDataStore().allAgendas.find((t) => t.id === 't2')).toMatchObject({
+      state: 'open',
+      decision: '다시 논의한다',
+      decidedAt: null,
+    })
   })
 
-  it('항목 이름을 고쳐 등록하면 새 항목이 데이터 스토어에 들어가고 줄이 그 항목에 달린다', async () => {
-    const data = useDataStore()
+  it('기존 안건 줄을 끄면 보내지 않는다 — 열쇠는 update:안건 id', async () => {
     const minutes = await drafted()
-    minutes.form!.entries[0].kind = 'decide'
-    minutes.form!.entries[0].itemTitle = '  호출 범위 '
-    expect(minutes.applyInput!.entries[0].itemTitle).toBe('  호출 범위 ')
-    expect(await minutes.apply()).toBe(true)
-
-    const item = data.allDecisionItems.find((i) => i.threadId === 't3')!
-    expect(item.title).toBe('호출 범위')
-    expect(data.allEntries.at(-1)).toMatchObject({ threadId: 't3', itemId: item.id })
-    expect(data.allThreads.find((t) => t.id === 't3')!.state).toBe('decided')
-  })
-
-  it('한 안건의 같은 항목에 두 줄이면 등록을 막는다 — 이름은 앞뒤 공백을 떼고 견준다', async () => {
-    const minutes = await drafted()
-    const first = minutes.form!.entries[0]
-    minutes.form!.entries.push({ ...first, tempId: 'e2', itemTitle: ' ' })
-    minutes.setPicked('e2', true)
-    expect(minutes.problems).toEqual({ e2: '같은 항목에 남기는 이력이 이미 있습니다.' })
-    minutes.form!.entries[1].itemTitle = '다른 항목'
-    expect(minutes.problems).toEqual({})
+    minutes.setPicked('update:t2', false)
+    expect(minutes.pickedCount).toBe(5)
+    expect(minutes.applyInput!.updates).toEqual([])
   })
 
   it('실패하면 알리고 검토에 남는다 — 짚은 자리는 보낸 순서가 아니라 그 줄(tempId)에 붙는다', async () => {
     const data = useDataStore()
-    const threads = data.allThreads.length
+    const agendas = data.allAgendas.length
     const minutes = await drafted()
     minutes.setPicked('n1', false)
     /* 목업 api 가 데이터 스토어의 안건을 본다 — 그사이 지워진 안건 */
-    data.allThreads = data.allThreads.filter((t) => t.id !== 't3')
+    data.allAgendas = data.allAgendas.filter((t) => t.id !== 't2')
 
     expect(await minutes.apply()).toBe(false)
     expect(toastError).toHaveBeenCalledOnce()
     expect(minutes.phase).toBe('review')
-    expect(minutes.rowErrors).toEqual({ e1: '안건을 찾을 수 없습니다.' })
+    /* 갈아끼우기 줄 · 그 안건에 걸린 작업 줄(t2) 둘 다 */
+    expect(minutes.rowErrors).toEqual({
+      'update:t2': '안건을 찾을 수 없습니다.',
+      t2: '안건을 찾을 수 없습니다.',
+    })
     expect(useMinutesStore().outcomeOf('m1').tasks).toEqual([])
-    expect(data.allThreads.length).toBe(threads - 1)
+    expect(data.allAgendas.length).toBe(agendas - 1)
   })
 
   it('등록하면 회의록 요약이 초안의 요약으로 바뀐다', async () => {

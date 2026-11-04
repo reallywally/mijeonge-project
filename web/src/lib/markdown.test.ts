@@ -77,11 +77,11 @@ describe('챗봇 답 마크다운 — 인라인', () => {
   })
 
   it('근거 표시는 굵게 안에서도 칩 조각이 된다', () => {
-    expect(parseInline('**[[thread:t1]] 먼저**')).toEqual([
+    expect(parseInline('**[[agenda:t1]] 먼저**')).toEqual([
       {
         kind: 'strong',
         children: [
-          { kind: 'ref', ref: { kind: 'thread', id: 't1' } },
+          { kind: 'ref', ref: { kind: 'agenda', id: 't1' } },
           { kind: 'text', text: ' 먼저' },
         ],
       },

@@ -50,7 +50,7 @@ describe('목업 스트림', () => {
     const text = events.map((e) => (e.type === 'delta' ? e.text : '')).join('')
     expect(text).toBe(os.answer)
     /* 서버처럼 본문의 근거를 done.refs 로 모아 낸다 */
-    expect(events.at(-1)).toEqual({ type: 'done', refs: [{ kind: 'thread', id: 't1' }] })
+    expect(events.at(-1)).toEqual({ type: 'done', refs: [{ kind: 'agenda', id: 't1' }] })
   })
 
   it('모르는 질문은 못 찾았다고 답한다', async () => {

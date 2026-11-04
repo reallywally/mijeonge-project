@@ -8,7 +8,7 @@ import ChatRefText from '@/components/app/ChatRefText.vue'
 import ReportAttentionTable from '@/components/app/ReportAttentionTable.vue'
 import ReportFactsCards from '@/components/app/ReportFactsCards.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
-import ThreadDetailDialog from '@/components/app/ThreadDetailDialog.vue'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -92,12 +92,12 @@ async function remove() {
   await router.replace('/reports')
 }
 
-const threadDetailId = ref<string | null>(null)
+const agendaDetailId = ref<string | null>(null)
 const taskDetailId = ref<string | null>(null)
-const threadOpen = computed({
-  get: () => threadDetailId.value !== null,
+const agendaOpen = computed({
+  get: () => agendaDetailId.value !== null,
   set: (open: boolean) => {
-    if (!open) threadDetailId.value = null
+    if (!open) agendaDetailId.value = null
   },
 })
 const taskOpen = computed({
@@ -106,12 +106,12 @@ const taskOpen = computed({
     if (!open) taskDetailId.value = null
   },
 })
-function openThread(id: string) {
+function openAgenda(id: string) {
   taskDetailId.value = null
-  threadDetailId.value = id
+  agendaDetailId.value = id
 }
 function openTask(id: string) {
-  threadDetailId.value = null
+  agendaDetailId.value = null
   taskDetailId.value = id
 }
 </script>
@@ -190,7 +190,7 @@ function openTask(id: string) {
             <ChatRefText
               :text="r.body"
               data-report-body
-              @open-thread="openThread"
+              @open-agenda="openAgenda"
               @open-task="openTask"
             />
           </section>
@@ -307,16 +307,12 @@ function openTask(id: string) {
       </DialogContent>
     </Dialog>
 
-    <ThreadDetailDialog
-      v-model:open="threadOpen"
-      :thread-id="threadDetailId"
-      @open-thread="openThread"
-    />
+    <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
     <TaskDetailDialog
       v-model:open="taskOpen"
       :task-id="taskDetailId"
       @open-task="openTask"
-      @open-thread="openThread"
+      @open-agenda="openAgenda"
     />
   </AppShell>
 </template>

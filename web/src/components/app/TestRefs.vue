@@ -5,7 +5,7 @@ import SearchPicker from '@/components/app/SearchPicker.vue'
 import { TEST_REF_MAX } from '@/lib/testcase'
 import { useTaskStore } from '@/stores/task'
 import { useTestStore } from '@/stores/test'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import type { TestRef } from '@/types/domain'
 
 /* 태그 — 테스트에 거는 작업 · 안건 참조. 작업 번호나 안건 제목으로 찾아 걸고(상위 작업 찾기와 같은 찾기),
@@ -19,7 +19,7 @@ const emit = defineEmits<{
 
 const testStore = useTestStore()
 const taskStore = useTaskStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 
 const chips = computed(() => props.refs.map(testStore.refChip))
 const full = computed(() => props.refs.length >= TEST_REF_MAX)
@@ -39,9 +39,9 @@ const choices = computed<Choice[]>(() => {
     ...taskStore.tasks
       .filter((t) => !has('task', t.id))
       .map((t) => ({ ref: { kind: 'task' as const, id: t.id }, key: t.key, title: t.title })),
-    ...threadStore.threads
-      .filter((t) => !has('thread', t.id))
-      .map((t) => ({ ref: { kind: 'thread' as const, id: t.id }, key: '안건', title: t.title })),
+    ...agendaStore.agendas
+      .filter((t) => !has('agenda', t.id))
+      .map((t) => ({ ref: { kind: 'agenda' as const, id: t.id }, key: '안건', title: t.title })),
   ]
 })
 

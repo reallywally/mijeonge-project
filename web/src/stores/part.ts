@@ -80,15 +80,15 @@ export const usePartStore = defineStore('part', () => {
     const projectId = data.currentProjectId
     return visibleInMyParts({
       tasks: data.allTasks.filter((t) => t.projectId === projectId),
-      threads: data.allThreads.filter((t) => t.projectId === projectId),
-      links: data.taskThreads,
+      agendas: data.allAgendas.filter((t) => t.projectId === projectId),
+      links: data.taskAgendas,
       memberId: data.currentMemberId,
       myPartIds: myPartIds.value,
     })
   })
 
   const showsTask = (taskId: string) => visible.value?.taskIds.has(taskId) ?? true
-  const showsThread = (threadId: string) => visible.value?.threadIds.has(threadId) ?? true
+  const showsAgenda = (agendaId: string) => visible.value?.agendaIds.has(agendaId) ?? true
   /** 보이는 작업의 조상이라 선 것 — 흐리게 그린다 */
   const isContextTask = (taskId: string) => visible.value?.contextTaskIds.has(taskId) ?? false
 
@@ -170,7 +170,7 @@ export const usePartStore = defineStore('part', () => {
     setScope,
     visible,
     showsTask,
-    showsThread,
+    showsAgenda,
     isContextTask,
     choicesFor,
     partForChildOf,

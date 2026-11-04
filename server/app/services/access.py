@@ -12,9 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
 from app.models import (
+    Agenda,
     CheckRequest,
-    DecisionItem,
-    Entry,
     Member,
     Minutes,
     Part,
@@ -24,7 +23,6 @@ from app.models import (
     Task,
     TaskComment,
     TestCase,
-    Thread,
 )
 from app.services.auth import Actor
 
@@ -51,7 +49,7 @@ def forbidden() -> ApiError:
 SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "project_id": ("PROJECT_NOT_FOUND", "프로젝트를 찾을 수 없습니다."),
     "task_id": ("TASK_NOT_FOUND", "작업을 찾을 수 없습니다."),
-    "thread_id": ("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다."),
+    "agenda_id": ("AGENDA_NOT_FOUND", "안건을 찾을 수 없습니다."),
     "comment_id": ("COMMENT_NOT_FOUND", "댓글을 찾을 수 없습니다."),
     "part_id": ("PART_NOT_FOUND", "파트를 찾을 수 없습니다."),
     "check_id": ("CHECK_NOT_FOUND", "확인 요청을 찾을 수 없습니다."),
@@ -72,10 +70,10 @@ def live_task_ids() -> Select[tuple[str]]:
     return select(Task.id).where(Task.is_deleted.is_(False))
 
 
-def live_thread_ids() -> Select[tuple[str]]:
-    """지우지 않은 안건. 안건을 잇지 않고 `thread_id` 만 쥔 표(이력 줄 · 링크 · 확인 요청 ·
-    테스트 참조)가 `in_()` 으로 건다. 안건을 직접 읽는 자리는 `Thread.is_deleted.is_(False)`."""
-    return select(Thread.id).where(Thread.is_deleted.is_(False))
+def live_agenda_ids() -> Select[tuple[str]]:
+    """지우지 않은 안건. 안건을 잇지 않고 `agenda_id` 만 쥔 표(링크 · 확인 요청 · 테스트 참조)가
+    `in_()` 으로 건다. 안건을 직접 읽는 자리는 `Agenda.is_deleted.is_(False)`."""
+    return select(Agenda.id).where(Agenda.is_deleted.is_(False))
 
 
 async def _project_of(session: AsyncSession, param: str, value: str) -> str | None:
@@ -87,15 +85,15 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
         case "task_id":
             # 지운 작업은 없는 것과 같다 — 그 아래 경로(줄 · 링크 · 댓글 · 이력)가 전부 404 로 간다
             stmt = select(Task.project_id).where(Task.id == value, Task.is_deleted.is_(False))
-        case "thread_id":
-            # 지운 안건은 없는 것과 같다 — 그 아래 경로(이력 줄 · 확인 요청 · 변경 이력)가 전부 404
-            stmt = select(Thread.project_id).where(Thread.id == value, Thread.is_deleted.is_(False))
+        case "agenda_id":
+            # 지운 안건은 없는 것과 같다 — 그 아래 경로(확인 요청 · 변경 이력)가 전부 404
+            stmt = select(Agenda.project_id).where(Agenda.id == value, Agenda.is_deleted.is_(False))
         case "part_id":
             stmt = select(Part.project_id).where(Part.id == value)
         case "check_id":
             # 지운 안건의 확인 요청은 목록에서 빠진다 — 확인하기도 없는 것과 같다
             stmt = select(CheckRequest.project_id).where(
-                CheckRequest.id == value, CheckRequest.thread_id.in_(live_thread_ids())
+                CheckRequest.id == value, CheckRequest.agenda_id.in_(live_agenda_ids())
             )
         case "minutes_id":
             stmt = select(Minutes.project_id).where(Minutes.id == value)
@@ -197,21 +195,11 @@ def can_delete_task(scope: Scope, task: Task) -> bool:
     return scope.can_manage or task.creator_id == scope.actor.id
 
 
-def can_edit_thread(scope: Scope, thread: Thread) -> bool:
+def can_edit_agenda(scope: Scope, agenda: Agenda) -> bool:
     """안건 하나를 고치고 **지울** 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
 
     작업과 달리 담당자도 지운다(2026-11-02 사용자 결정). 담당자를 바꾸는 수정도 바꾸기 **전**
     안건으로 본다 — 부르는 쪽이 고치기 전에 부른다.
     """
     me = scope.actor.id
-    return scope.can_manage or me in (thread.creator_id, thread.owner_id)
-
-
-def can_edit_entry(scope: Scope, thread: Thread, entry: Entry) -> bool:
-    """이력 한 줄을 고치고 지울 수 있나 — 그 줄을 남긴 사람 + 안건을 고칠 수 있는 사람."""
-    return can_edit_thread(scope, thread) or entry.creator_id == scope.actor.id
-
-
-def can_edit_item(scope: Scope, thread: Thread, item: DecisionItem) -> bool:
-    """결정 항목의 이름을 바꾸고 지울 수 있나 — 줄과 같은 기준(등록한 사람 + 안건을 고칠 사람)."""
-    return can_edit_thread(scope, thread) or item.creator_id == scope.actor.id
+    return scope.can_manage or me in (agenda.creator_id, agenda.owner_id)

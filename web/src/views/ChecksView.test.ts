@@ -75,22 +75,20 @@ describe('탭', () => {
 
     await click(tab('sent'))
     expect(received()).toEqual([])
-    expect(sent()).toEqual(['e3'])
-    const row = $('[data-check-sent="e3"]')!.textContent ?? ''
+    expect(sent()).toEqual(['t2#1'])
+    const row = $('[data-check-sent="t2#1"]')!.textContent ?? ''
     expect(row).toContain('DB 결정')
     expect(row).toContain('mysql 을 쓴다')
-    expect($('[data-check-sent="e3"] [data-check-progress]')!.textContent?.trim()).toBe(
+    expect($('[data-check-sent="t2#1"] [data-check-progress]')!.textContent?.trim()).toBe(
       '확인 1 / 3',
     )
 
     /* 펼치면 사람별 대기 / 확인 */
-    expect($('[data-check-people="e3"]')).toBeNull()
-    await click($('[data-check-sent="e3"] [data-check-expand]'))
-    expect($$('[data-check-people="e3"] [data-check-row]').map((r) => r.dataset.checkRow)).toEqual([
-      'c1',
-      'c2',
-      'c3',
-    ])
+    expect($('[data-check-people="t2#1"]')).toBeNull()
+    await click($('[data-check-sent="t2#1"] [data-check-expand]'))
+    expect(
+      $$('[data-check-people="t2#1"] [data-check-row]').map((r) => r.dataset.checkRow),
+    ).toEqual(['c1', 'c2', 'c3'])
     expect($('[data-check-row="c2"] [data-check-state="confirmed"]')!.textContent).toContain(
       '10월 14일 14:00',
     )
@@ -123,12 +121,12 @@ describe('탭', () => {
 })
 
 describe('안건 칩 · 안건 상세', () => {
-  it('칩을 누르면 안건 상세 — 이 결정의 확인 현황과 참조가 선다', async () => {
+  it('칩을 누르면 안건 상세 — 이 결정의 확인 현황이 선다', async () => {
     await signedIn('u1@inno-ax.com')
     await mountChecks()
     await click(tab('sent'))
 
-    await click($('[data-check-sent="e3"] [data-check-thread="t2"]'))
+    await click($('[data-check-sent="t2#1"] [data-check-agenda="t2"]'))
     expect(dialog()?.textContent).toContain('DB 결정')
     expect($('[role="dialog"] [data-check-progress]')!.textContent).toContain('이 결정 확인 1 / 3')
     expect($$('[role="dialog"] [data-check-row]').map((r) => r.dataset.checkRow)).toEqual([
@@ -137,13 +135,14 @@ describe('안건 칩 · 안건 상세', () => {
       'c3',
     ])
     expect($('[role="dialog"] [data-check-send]')).toBeNull()
-    expect($$('[role="dialog"] [data-cc]').map((c) => c.dataset.cc)).toEqual(['u2', 'u4'])
+    /* 참조는 없어졌다 */
+    expect($$('[role="dialog"] [data-cc]')).toEqual([])
   })
 
   it('받은 것의 [확인] 은 안건 상세에서도 된다', async () => {
     await signedIn('u1@inno-ax.com')
     await mountChecks()
-    await click($('[data-check-received="c4"] [data-check-thread="t1"]'))
+    await click($('[data-check-received="c4"] [data-check-agenda="t1"]'))
     expect(dialog()?.textContent).toContain('서버 OS 결정')
     await click($('[role="dialog"] [data-check-row="c4"] [data-check-confirm]'))
     expect($('[role="dialog"] [data-check-row="c4"] [data-check-state="confirmed"]')).toBeTruthy()

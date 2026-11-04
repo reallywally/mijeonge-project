@@ -8,29 +8,29 @@ KST = timezone(timedelta(hours=9))
 
 
 class Sample(Schema):
-    thread_id: str
-    parent_thread_id: str | None
+    agenda_id: str
+    parent_agenda_id: str | None
     created_at: Utc
 
 
 def _dump(moment: datetime) -> str:
-    out = Sample(thread_id="t1", parent_thread_id=None, created_at=moment).model_dump(by_alias=True)
+    out = Sample(agenda_id="t1", parent_agenda_id=None, created_at=moment).model_dump(by_alias=True)
     return str(out["createdAt"])
 
 
 def test_keys_go_out_in_camel_case() -> None:
-    out = Sample(thread_id="t1", parent_thread_id=None, created_at=datetime.now(UTC)).model_dump(
+    out = Sample(agenda_id="t1", parent_agenda_id=None, created_at=datetime.now(UTC)).model_dump(
         by_alias=True
     )
-    assert set(out) == {"threadId", "parentThreadId", "createdAt"}
+    assert set(out) == {"agendaId", "parentAgendaId", "createdAt"}
 
 
 def test_camel_case_comes_in_too() -> None:
     """프론트가 보내는 것도 같은 이름이다."""
     sample = Sample.model_validate(
-        {"threadId": "t1", "parentThreadId": None, "createdAt": "2026-09-10T00:00:00+09:00"}
+        {"agendaId": "t1", "parentAgendaId": None, "createdAt": "2026-09-10T00:00:00+09:00"}
     )
-    assert sample.thread_id == "t1"
+    assert sample.agenda_id == "t1"
 
 
 def test_created_at_ends_with_z() -> None:
@@ -63,6 +63,6 @@ def test_naive_does_not_leak() -> None:
 def test_json_dump_is_z_too() -> None:
     """model_dump_json(= FastAPI 가 쓰는 길)도 같은 값이어야 한다."""
     body = Sample(
-        thread_id="t1", parent_thread_id=None, created_at=datetime(2026, 9, 10, 23, 59, tzinfo=KST)
+        agenda_id="t1", parent_agenda_id=None, created_at=datetime(2026, 9, 10, 23, 59, tzinfo=KST)
     ).model_dump_json(by_alias=True)
     assert '"createdAt":"2026-09-10T14:59:00Z"' in body

@@ -17,15 +17,15 @@ async def list_checks(
     return await check_service.list_checks(session, scope.project_id)
 
 
-@router.post("/threads/{thread_id}/checks", status_code=201)
+@router.post("/agendas/{agenda_id}/checks", status_code=201)
 async def send_checks(
-    thread_id: str, scope: ProjectScope, session: Session
+    agenda_id: str, scope: ProjectScope, session: Session
 ) -> list[CheckRequestOut]:
     """본문이 없다 — 실어 와도 읽지 않는다. 보낸 사람은 로그인한 사람, 받는 사람은 서버가 정한다.
 
     '오늘' 은 한국 시간이다 — 기한은 사람이 고른 날짜라서.
     """
-    return await check_service.send_checks(session, scope, thread_id, today=today_kst())
+    return await check_service.send_checks(session, scope, agenda_id, today=today_kst())
 
 
 @router.post("/checks/{check_id}/confirm")

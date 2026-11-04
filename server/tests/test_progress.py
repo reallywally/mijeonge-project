@@ -11,14 +11,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
-    Entry,
+    Agenda,
     ProjectReport,
     RiskSetting,
     Task,
+    TaskAgendaLink,
     TaskLine,
     TaskLog,
-    TaskThreadLink,
-    Thread,
 )
 from app.schemas.report import ProgressFacts, TaskAttention
 from app.services import progress
@@ -143,7 +142,6 @@ async def test_long_running_follows_project_stale_days(db: AsyncSession) -> None
         RiskSetting(
             project_id=P,
             due_soon_days=3,
-            defer_count=2,
             stale_days=3,
             high_score=6,
             medium_score=3,
@@ -205,7 +203,7 @@ async def test_not_started(db: AsyncSession, start: str | None, due: str | None,
 async def test_decided_but_blocked(db: AsyncSession) -> None:
     """막힘인데 걸린 안건이 전부 결정됨 — risk.md 의 계산을 그대로 쓴다."""
     db.add(
-        Thread(
+        Agenda(
             id="h1",
             project_id=P,
             title="정해진 안건",
@@ -216,10 +214,10 @@ async def test_decided_but_blocked(db: AsyncSession) -> None:
     )
     add_task(db, "a", "blocked", since="2026-10-19T00:00:00Z")
     await db.flush()
-    db.add(TaskThreadLink(task_id="a", thread_id="h1", project_id=P))
+    db.add(TaskAgendaLink(task_id="a", agenda_id="h1", project_id=P))
     found = await facts(db)
     assert signals(found, "a") == ["decidedButBlocked"]
-    assert attention(found)["a"].weight.thread_count == 1
+    assert attention(found)["a"].weight.agenda_count == 1
     assert attention(found)["a"].score == 3
 
 
@@ -273,7 +271,7 @@ async def test_weight(db: AsyncSession) -> None:
     found = await facts(db)
     w = attention(found)["top"].weight
     assert (w.open_children, w.open_lines, w.total_lines, w.priority) == (2, 2, 3, "high")
-    assert w.thread_count == 0
+    assert w.agenda_count == 0
 
 
 # --- 진척 · 결정 · 사람 · 앞 리포트 -------------------------------------------------------
@@ -307,31 +305,34 @@ def test_done_rate_rounds_half_up() -> None:
 
 
 async def test_decisions_in_period(db: AsyncSession) -> None:
-    for id_, state in (("h1", "decided"), ("h2", "open"), ("h3", "decided")):
+    """정해진 것 = decidedAt 의 KST 날짜가 기간(10-14 ~ 10-20) 안. 안건 등록 순."""
+    for id_, state, decided in (
+        ("h1", "decided", "2026-10-15T00:00:00Z"),
+        ("h2", "open", None),
+        ("h3", "decided", "2026-10-01T00:00:00Z"),
+        # KST 로 10-14 00:30 — 안에 든다
+        ("h4", "decided", "2026-10-13T15:30:00Z"),
+        # KST 로 10-13 23:59 — 밖이다
+        ("h5", "decided", "2026-10-13T14:59:00Z"),
+    ):
         db.add(
-            Thread(
+            Agenda(
                 id=id_,
                 project_id=P,
                 title=id_,
                 state=state,
+                decided_at=at(decided) if decided else None,
                 owner_id=None,
                 created_at=at("2026-09-01T00:00:00Z"),
             )
         )
     await db.flush()
-    rows = [
-        ("h1", "decide", "2026-10-15T00:00:00Z"),
-        ("h2", "defer", "2026-10-16T00:00:00Z"),
-        ("h3", "decide", "2026-10-01T00:00:00Z"),
-        ("h3", "change", "2026-10-19T00:00:00Z"),
-        ("h1", "defer", "2026-10-02T00:00:00Z"),
-    ]
-    for thread_id, kind, when in rows:
-        db.add(Entry(thread_id=thread_id, kind=kind, text="", note="", created_at=at(when)))
     add_task(db, "a", start="2026-11-01")
     found = await facts(db)
-    assert found.decisions.decided_thread_ids == ["h1", "h3"]
-    assert found.decisions.deferred_thread_ids == ["h2"]
+    assert found.decisions.decided_agenda_ids == ["h1", "h4"]
+    # 미뤄진 것은 걷었다 — 새 facts 에는 키째 없다
+    assert found.decisions.deferred_agenda_ids is None
+    assert "deferredAgendaIds" not in found.decisions.model_dump(by_alias=True)
 
 
 async def test_people(db: AsyncSession) -> None:
@@ -409,7 +410,7 @@ async def test_seed_hw20_is_first(db: AsyncSession) -> None:
     assert k22.status_days == 7
     # 오래 막힘은 staleDays(7) 를 '넘어야' 한다
     assert "longBlocked" not in k22.signals
-    assert found.decisions.risky_thread_ids == ["t5", "t3", "t8", "t9"]
+    assert found.decisions.risky_agenda_ids == ["t5", "t3", "t8", "t9"]
     # 다른 프로젝트의 작업은 섞이지 않는다
     assert not {"x1", "x2"} & {a.task_id for a in found.attention}
     # 새 리포트는 지난 리포트의 선행 칸을 키째 싣지 않는다

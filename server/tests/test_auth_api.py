@@ -140,7 +140,7 @@ async def test_everything_but_health_and_login_needs_a_session(anon: httpx.Async
         ("GET", "/api/auth/me"),
         ("GET", "/api/projects/p1/snapshot"),
         ("GET", "/api/tasks/k4/comments"),
-        ("PATCH", "/api/threads/t1"),
+        ("PATCH", "/api/agendas/t1"),
         ("GET", "/api/admin/members"),
         ("POST", "/api/auth/password"),
     ]:
@@ -267,12 +267,12 @@ async def test_password_length_rule(anon: httpx.AsyncClient) -> None:
 
 async def test_form_posts_are_415(client: httpx.AsyncClient) -> None:
     """폼 전송으로는 쓰기 요청을 못 만든다 — CSRF (docs/api/auth.md '쿠키')."""
-    form = await client.post("/api/projects/p1/threads", data={"title": "폼으로"})
+    form = await client.post("/api/projects/p1/agendas", data={"title": "폼으로"})
     assert form.status_code == 415
     assert form.json()["code"] == "UNSUPPORTED_MEDIA_TYPE"
 
     plain = await client.post(
-        "/api/projects/p1/threads",
+        "/api/projects/p1/agendas",
         content='{"title": "text/plain 으로"}',
         headers={"content-type": "text/plain"},
     )
@@ -285,7 +285,7 @@ async def test_form_posts_are_415(client: httpx.AsyncClient) -> None:
     assert empty_form.status_code == 415
 
     charset = await client.post(
-        "/api/projects/p1/threads",
+        "/api/projects/p1/agendas",
         content='{"title": "charset 붙은 JSON"}',
         headers={"content-type": "application/json; charset=utf-8"},
     )
@@ -294,5 +294,5 @@ async def test_form_posts_are_415(client: httpx.AsyncClient) -> None:
 
 async def test_bodyless_writes_pass(client: httpx.AsyncClient) -> None:
     """본문도 Content-Type 도 없는 PUT · DELETE 는 받는다 — 링크 걸기 · 빼기가 그렇다."""
-    assert (await client.put("/api/tasks/k1/threads/t1")).status_code == 200
-    assert (await client.delete("/api/tasks/k1/threads/t1")).status_code == 204
+    assert (await client.put("/api/tasks/k1/agendas/t1")).status_code == 200
+    assert (await client.delete("/api/tasks/k1/agendas/t1")).status_code == 204

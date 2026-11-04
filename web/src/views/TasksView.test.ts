@@ -9,7 +9,7 @@ import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import TasksView from './TasksView.vue'
 
 /* dhtmlx-gantt 는 jsdom 에서 컨테이너 높이가 0 이라 줄을 한 줄도 그리지 않는다.
@@ -135,18 +135,18 @@ const options = () =>
   )
 const createOption = () => document.body.querySelector<HTMLElement>('[data-picker-create]')
 /* 작업 팝업 위에 뜬 안건 추가 팝업의 칸 · 버튼 — 작업 팝업에도 '제목' 칸이 있어 안건 팝업 안에서 찾는다 */
-const threadDialog = () =>
-  document.body.querySelector('[data-thread-link-note]')!.closest('[role="dialog"]')!
-const threadTitleField = () =>
-  threadDialog().querySelector<HTMLTextAreaElement>('textarea[aria-label="제목"]')!
+const agendaDialog = () =>
+  document.body.querySelector('[data-agenda-link-note]')!.closest('[role="dialog"]')!
+const agendaTitleField = () =>
+  agendaDialog().querySelector<HTMLTextAreaElement>('textarea[aria-label="제목"]')!
 const text = (sel: string) => document.body.querySelector(sel)?.textContent ?? ''
 async function typeIn(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   el.value = value
   el.dispatchEvent(new Event('input'))
   await flushPromises()
 }
-const threadField = (label: string) =>
-  threadDialog().querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`)!
+const agendaField = (label: string) =>
+  agendaDialog().querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`)!
 const cancelOf = (inside: Element) =>
   [...inside.closest('[role="dialog"]')!.querySelectorAll('button')].find(
     (b) => b.textContent?.trim() === '취소',
@@ -254,73 +254,73 @@ describe('작업 상세 팝업', () => {
     await mountView('/tasks/k18')
     expect(popupText()).toContain('보험료 산출 기간계 API 개발')
     expect(popupText()).toContain('기간 미정')
-    expect(popupText()).toContain('여전히 업무 정의가 없어 또 미룬다')
+    expect(popupText()).toContain('요청(in) 항목: 계약번호 · 상품코드 · 가입일 셋을 넘긴다')
   })
 
   it('안건은 찾아서 걸면 표에 들어가고, 해제하면 빠진다', async () => {
     await mountView('/tasks/k4')
     const taskStore = useTaskStore()
-    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
+    expect(taskStore.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
 
     const search = 'input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]'
     await type(search, '백업')
     /* 적은 말이 들어간 것만 펼친다 */
     expect(options()).toEqual(['개발 서버 백업 주기대기'])
     await keydown(search, 'Enter')
-    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', 't4'])
+    expect(taskStore.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', 't4'])
     /* 고르고 나면 칸이 비고, 건 것은 다시 고를 수 없다 */
     expect(document.body.querySelector<HTMLInputElement>(search)!.value).toBe('')
     await type(search, '백업')
     expect(options()).toEqual([])
 
     await click(document.body.querySelector('button[aria-label="개발 서버 백업 주기 연결 해제"]')!)
-    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
+    expect(taskStore.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
   })
 
   it('찾는 안건이 없으면 안건 추가 팝업을 제목을 채워 열고, 상세까지 적어 만들면 건다', async () => {
     await mountView('/tasks/k4')
     const taskStore = useTaskStore()
-    const threadStore = useThreadStore()
+    const agendaStore = useAgendaStore()
     const search = 'input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]'
 
     await type(search, '로그 보관 기간')
     expect(options()).toEqual([])
     expect(createOption()!.textContent).toContain("'로그 보관 기간' 안건 새로 등록…")
     /* 맞는 것이 없으면 Enter 가 새로 등록하는 줄을 고른다 — 아직 안 만든다 */
-    const before = threadStore.threads.length
+    const before = agendaStore.agendas.length
     await keydown(search, 'Enter')
-    expect(threadStore.threads).toHaveLength(before)
+    expect(agendaStore.agendas).toHaveLength(before)
 
-    expect(text('[data-thread-link-note]')).toContain('만들면 HW-4 작업에 연결됩니다')
-    expect(threadTitleField().value).toBe('로그 보관 기간')
-    await typeIn(threadField('배경'), '감사 대응으로 1년은 남겨야 한다')
-    await typeIn(threadField('후보'), '90일\n1년')
+    expect(text('[data-agenda-link-note]')).toContain('만들면 HW-4 작업에 연결됩니다')
+    expect(agendaTitleField().value).toBe('로그 보관 기간')
+    await typeIn(agendaField('설명'), '감사 대응으로 1년은 남겨야 한다')
+    await typeIn(agendaField('결정내용'), '1년 보관한다')
     await click(popupButton('만들고 연결'))
 
-    const made = threadStore.threads.find((t) => t.title === '로그 보관 기간')!
+    const made = agendaStore.agendas.find((t) => t.title === '로그 보관 기간')!
     expect(made.state).toBe('queued')
     expect(made.description).toBe('감사 대응으로 1년은 남겨야 한다')
-    expect(made.options).toEqual(['90일', '1년'])
-    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', made.id])
+    expect(made.decision).toBe('1년 보관한다')
+    expect(taskStore.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2', made.id])
     /* 안건 팝업만 닫히고 작업 상세는 그대로다 */
-    expect(document.body.querySelector('[data-thread-link-note]')).toBeNull()
+    expect(document.body.querySelector('[data-agenda-link-note]')).toBeNull()
     expect(popupText()).toContain('연관 안건')
   })
 
   it('[새 안건] 으로 빈 팝업을 열고, 취소하면 아무것도 안 만든다', async () => {
     await mountView('/tasks/k4')
     const taskStore = useTaskStore()
-    const threadStore = useThreadStore()
-    const before = threadStore.threads.length
+    const agendaStore = useAgendaStore()
+    const before = agendaStore.agendas.length
 
-    await click(document.body.querySelector('[data-new-thread]')!)
-    expect(threadTitleField().value).toBe('')
+    await click(document.body.querySelector('[data-new-agenda]')!)
+    expect(agendaTitleField().value).toBe('')
     expect(popupButton('만들고 연결')!.hasAttribute('disabled')).toBe(true)
-    await typeIn(threadTitleField(), '배포 승인자')
-    await click(cancelOf(threadTitleField()))
+    await typeIn(agendaTitleField(), '배포 승인자')
+    await click(cancelOf(agendaTitleField()))
 
-    expect(threadStore.threads).toHaveLength(before)
-    expect(taskStore.threadsOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
+    expect(agendaStore.agendas).toHaveLength(before)
+    expect(taskStore.agendasOfTask('k4').map((t) => t.id)).toEqual(['t1', 't2'])
   })
 
   it('본문의 체크박스를 눌러서 켠다', async () => {
@@ -465,27 +465,27 @@ describe('작업 추가 팝업', () => {
 
     await click(popupButton('만들기'))
     const made = taskStore.rows.find((r) => r.task.title === '백업 스크립트')!
-    expect(taskStore.threadsOfTask(made.task.id).map((t) => t.id)).toEqual(['t4'])
+    expect(taskStore.agendasOfTask(made.task.id).map((t) => t.id)).toEqual(['t4'])
   })
 
   it('작업 추가에서도 안건 추가 팝업으로 새 안건을 만들어 골라 둔다', async () => {
     await mountView('/tasks/new')
     const taskStore = useTaskStore()
-    const threadStore = useThreadStore()
+    const agendaStore = useAgendaStore()
 
     await type('textarea[aria-label="제목"]', '로그 정리')
     await type('input[placeholder="안건 제목으로 찾기 · 없으면 새로 등록"]', '로그 보관 기간')
     /* 목록 줄은 칸의 포커스를 안 뺏으려 mousedown 으로 고른다 */
     createOption()!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     await flushPromises()
-    expect(text('[data-thread-link-note]')).toContain('만들 때 같이 연결됩니다')
+    expect(text('[data-agenda-link-note]')).toContain('만들 때 같이 연결됩니다')
     await click(popupButton('만들고 연결'))
 
-    const made = threadStore.threads.find((t) => t.title === '로그 보관 기간')!
+    const made = agendaStore.agendas.find((t) => t.title === '로그 보관 기간')!
     expect(popupText()).toContain('로그 보관 기간')
     await click(popupButton('만들기'))
     const task = taskStore.rows.find((r) => r.task.title === '로그 정리')!
-    expect(taskStore.threadsOfTask(task.task.id).map((t) => t.id)).toEqual([made.id])
+    expect(taskStore.agendasOfTask(task.task.id).map((t) => t.id)).toEqual([made.id])
   })
 
   it('하위 작업 추가로 들어오면 상위 작업이 채워져 있다', async () => {
@@ -570,7 +570,7 @@ describe('칸반보드 탭', () => {
     await w.get('[data-task-id="k18"] button[aria-label$="연관 안건"]').trigger('click')
     await flushPromises()
 
-    expect(window.location.pathname).toBe('/threads/t5')
+    expect(window.location.pathname).toBe('/agendas/t5')
     expect(popupText()).not.toContain('보험료 산출 기간계 API 개발')
   })
 

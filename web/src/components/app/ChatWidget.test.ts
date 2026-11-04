@@ -26,7 +26,7 @@ function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/threads/:id', name: 'thread', component: { template: '<div />' } },
+      { path: '/agendas/:id', name: 'agenda', component: { template: '<div />' } },
       { path: '/tasks/:id', name: 'task', component: { template: '<div />' } },
       { path: '/:any(.*)*', component: { template: '<div />' } },
     ],
@@ -247,7 +247,7 @@ describe('챗봇 창 — 근거 칩', () => {
     await textarea(w).trigger('keydown', { key: 'Enter' })
     await vi.runAllTimersAsync()
 
-    const chip = w.get('[data-ref-thread="t1"]')
+    const chip = w.get('[data-ref-agenda="t1"]')
     expect(chip.text()).toContain('서버 OS 결정')
     expect(chip.text()).toContain('결정됨')
     expect(w.get('[data-answer-text]').text()).not.toContain('[[')
@@ -263,14 +263,14 @@ describe('챗봇 창 — 근거 칩', () => {
     const w = await opened()
     useChatStore().lines.push(
       answer(
-        '## 정리\n**[[thread:t1]] 는 정해졌습니다**\n\n- 첫째 `apt`\n- 둘째\n\n<b>태그</b> | 표 |',
+        '## 정리\n**[[agenda:t1]] 는 정해졌습니다**\n\n- 첫째 `apt`\n- 둘째\n\n<b>태그</b> | 표 |',
       ),
     )
     await nextTick()
     const body = w.get('[data-answer-text]')
     expect(body.text()).not.toContain('**')
     expect(body.get('[data-md-heading]').text()).toBe('정리')
-    expect(body.get('strong [data-ref-thread="t1"]').text()).toContain('서버 OS 결정')
+    expect(body.get('strong [data-ref-agenda="t1"]').text()).toContain('서버 OS 결정')
     expect(body.findAll('ul li').map((li) => li.text())).toEqual(['첫째 apt', '둘째'])
     expect(body.get('li code').text()).toBe('apt')
     /* HTML 은 글자 그대로 — 태그로 그리지 않는다 */
@@ -278,18 +278,20 @@ describe('챗봇 창 — 근거 칩', () => {
     expect(body.text()).toContain('<b>태그</b> | 표 |')
   })
 
-  it('미룬 안건 칩에는 미룬 횟수가 같이 선다', async () => {
+  it('안건 칩에는 상태가 같이 서고, 옛 [[thread:ID]] 도 같은 안건 칩으로 읽는다', async () => {
     const w = await opened()
-    useChatStore().lines.push(answer('[[thread:t5]] 가 아직입니다.'))
+    useChatStore().lines.push(answer('[[agenda:t5]] 가 아직이고 [[thread:t2]] 는 정해졌습니다.'))
     await nextTick()
-    expect(w.get('[data-ref-thread="t5"]').text()).toContain('2번 미뤄짐')
+    expect(w.get('[data-ref-agenda="t5"]').text()).toContain('논의중')
+    expect(w.get('[data-ref-agenda="t2"]').text()).toContain('결정됨')
+    expect(w.get('[data-answer-text]').text()).not.toContain('thread')
   })
 
   it('스냅샷에 없는 id 는 칩도 글자도 그리지 않는다', async () => {
     const w = await opened()
-    useChatStore().lines.push(answer('근거: [[thread:nope]] · [[task:k999]] 끝'))
+    useChatStore().lines.push(answer('근거: [[agenda:nope]] · [[task:k999]] 끝'))
     await nextTick()
-    expect(w.find('[data-ref-thread]').exists()).toBe(false)
+    expect(w.find('[data-ref-agenda]').exists()).toBe(false)
     expect(w.find('[data-ref-task]').exists()).toBe(false)
     const text = w.get('[data-answer-text]').text()
     expect(text).not.toContain('nope')
@@ -300,12 +302,12 @@ describe('챗봇 창 — 근거 칩', () => {
   it('칩을 누르면 그 주소로 가고 창은 열린 채 대화가 남는다', async () => {
     const router = makeRouter()
     const w = await opened(router)
-    useChatStore().lines.push(answer('[[thread:t1]] · [[task:k18]]'))
+    useChatStore().lines.push(answer('[[agenda:t1]] · [[task:k18]]'))
     await nextTick()
 
-    await w.get('[data-ref-thread="t1"]').trigger('click')
+    await w.get('[data-ref-agenda="t1"]').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/threads/t1')
+    expect(router.currentRoute.value.fullPath).toBe('/agendas/t1')
 
     await w.get('[data-ref-task="k18"]').trigger('click')
     await flushPromises()
@@ -318,21 +320,21 @@ describe('챗봇 창 — 근거 칩', () => {
   it('받는 중 끝에 걸린 덜 온 표시는 닫힐 때까지 비치지 않는다', async () => {
     const w = await opened()
     const chat = useChatStore()
-    chat.lines.push(answer('정했습니다. [[thread:t', 'streaming'))
+    chat.lines.push(answer('정했습니다. [[agenda:t', 'streaming'))
     await nextTick()
     expect(w.get('[data-answer-text]').text()).toBe('정했습니다.')
-    expect(w.find('[data-ref-thread]').exists()).toBe(false)
+    expect(w.find('[data-ref-agenda]').exists()).toBe(false)
 
     chat.lines[0].text += '1]]'
     await nextTick()
-    expect(w.find('[data-ref-thread="t1"]').exists()).toBe(true)
+    expect(w.find('[data-ref-agenda="t1"]').exists()).toBe(true)
   })
 
   it('사용자가 친 글은 칩으로 바꾸지 않는다', async () => {
     const w = await opened()
-    useChatStore().lines.push({ ...answer('[[thread:t1]] 이거 뭐야'), role: 'user' })
+    useChatStore().lines.push({ ...answer('[[agenda:t1]] 이거 뭐야'), role: 'user' })
     await nextTick()
-    expect(w.find('[data-ref-thread]').exists()).toBe(false)
-    expect(w.text()).toContain('[[thread:t1]] 이거 뭐야')
+    expect(w.find('[data-ref-agenda]').exists()).toBe(false)
+    expect(w.text()).toContain('[[agenda:t1]] 이거 뭐야')
   })
 })

@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -27,10 +28,10 @@ class CheckRequest(Base):
     __table_args__ = (
         # 안건과 같은 프로젝트여야 한다 (Q13 · Q16 과 같은 방식). 안건을 지우면 같이 지운다
         ForeignKeyConstraint(
-            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+            ["agenda_id", "project_id"], ["agenda.id", "agenda.project_id"], ondelete="CASCADE"
         ),
-        # 한 결정에 한 번 — 동시에 두 번 눌러도 늦은 쪽이 여기 걸린다 (Q44)
-        UniqueConstraint("entry_id", "recipient_id"),
+        # 한 결정 판에 한 번 — 동시에 두 번 눌러도 늦은 쪽이 여기 걸린다 (Q44 · docs/api/agenda.md)
+        UniqueConstraint("agenda_id", "decision_rev", "recipient_id"),
         Index("ix_check_request_project_id_seq", "project_id", "seq"),
         Index("ix_check_request_recipient_id_confirmed_at", "recipient_id", "confirmed_at"),
     )
@@ -38,9 +39,11 @@ class CheckRequest(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("project.id", ondelete="CASCADE"))
     # FK 는 위의 복합 FK 하나뿐이다
-    thread_id: Mapped[str] = mapped_column(String(36))
-    # 보낼 때 그 안건의 최근 decide · change 이력
-    entry_id: Mapped[str] = mapped_column(ForeignKey("entry.id", ondelete="CASCADE"))
+    agenda_id: Mapped[str] = mapped_column(String(36))
+    # 보낼 때 안건의 결정 판(`agenda.decision_rev`)과 그때의 결정내용 — 뒤에 결정이 바뀌어도
+    # 받는 사람이 무엇을 확인했는지 남는다
+    decision_rev: Mapped[int] = mapped_column(Integer)
+    decision: Mapped[str] = mapped_column(Text)
     # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
     sender_id: Mapped[str] = mapped_column(ForeignKey("member.id"))
     recipient_id: Mapped[str] = mapped_column(ForeignKey("member.id"))
@@ -53,4 +56,4 @@ class CheckRequest(Base):
     load_open_tasks: Mapped[int] = mapped_column(Integer)
     load_blocked_tasks: Mapped[int] = mapped_column(Integer)
     load_due_soon_tasks: Mapped[int] = mapped_column(Integer)
-    load_open_threads: Mapped[int] = mapped_column(Integer)
+    load_open_agendas: Mapped[int] = mapped_column(Integer)

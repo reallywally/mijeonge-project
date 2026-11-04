@@ -80,32 +80,41 @@ describe('챗봇 오류 문구', () => {
 
 describe('답 본문의 근거 표시', () => {
   it('글 · 근거 조각으로 쪼갠다', () => {
-    expect(splitRefs('먼저 [[thread:t5]] 를 정하면\n[[task:k18]] 이 풀립니다')).toEqual([
+    expect(splitRefs('먼저 [[agenda:t5]] 를 정하면\n[[task:k18]] 이 풀립니다')).toEqual([
       { text: '먼저 ' },
-      { ref: { kind: 'thread', id: 't5' } },
+      { ref: { kind: 'agenda', id: 't5' } },
       { text: ' 를 정하면\n' },
       { ref: { kind: 'task', id: 'k18' } },
       { text: ' 이 풀립니다' },
     ])
   })
 
+  it('옛 리포트 · 대화의 [[thread:ID]] 도 안건 근거로 읽는다', () => {
+    expect(splitRefs('[[thread:t5]] · [[agenda:t2]]')).toEqual([
+      { ref: { kind: 'agenda', id: 't5' } },
+      { text: ' · ' },
+      { ref: { kind: 'agenda', id: 't2' } },
+    ])
+    expect(collectRefs('[[thread:t5]] [[agenda:t5]]')).toEqual([{ kind: 'agenda', id: 't5' }])
+  })
+
   it('모르는 종류 · 빈 id 는 글자 그대로 둔다', () => {
-    expect(splitRefs('[[meeting:m1]] [[thread:]]')).toEqual([
-      { text: '[[meeting:m1]] [[thread:]]' },
+    expect(splitRefs('[[meeting:m1]] [[agenda:]]')).toEqual([
+      { text: '[[meeting:m1]] [[agenda:]]' },
     ])
   })
 
   it('받는 중 끝에 걸린 덜 온 표시는 뗀다', () => {
     expect(splitRefs('병목은 [[thr')).toEqual([{ text: '병목은 ' }])
-    expect(splitRefs('병목은 [[thread:t5]')).toEqual([{ text: '병목은 ' }])
+    expect(splitRefs('병목은 [[agenda:t5]')).toEqual([{ text: '병목은 ' }])
     expect(splitRefs('병목은 [')).toEqual([{ text: '병목은 ' }])
-    expect(splitRefs('[[thread:t5]]')).toEqual([{ ref: { kind: 'thread', id: 't5' } }])
+    expect(splitRefs('[[agenda:t5]]')).toEqual([{ ref: { kind: 'agenda', id: 't5' } }])
   })
 
   it('본문의 근거를 처음 나온 순서로 겹치지 않게 모은다', () => {
-    expect(collectRefs('[[task:k18]] · [[thread:t5]] · [[task:k18]] · [[thread:t')).toEqual([
+    expect(collectRefs('[[task:k18]] · [[agenda:t5]] · [[task:k18]] · [[agenda:t')).toEqual([
       { kind: 'task', id: 'k18' },
-      { kind: 'thread', id: 't5' },
+      { kind: 'agenda', id: 't5' },
     ])
   })
 })

@@ -319,7 +319,7 @@ describe('챗봇 대화 — 서버 갈래', () => {
     const chat = useChatStore()
     const done = chat.ask('서버 OS 뭐로 하기로 했지?')
 
-    s.push(sse('tool', { name: 'search_threads', label: '"OS" 안건 찾는 중' }))
+    s.push(sse('tool', { name: 'search_agendas', label: '"OS" 안건 찾는 중' }))
     await settle()
     expect(chat.lines[1]).toMatchObject({ status: 'streaming', tool: '"OS" 안건 찾는 중' })
 

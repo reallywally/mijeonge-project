@@ -14,7 +14,7 @@ from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
-from app.models import Entry, Project, Task, TaskThreadLink, TestCase, TestRef, Thread
+from app.models import Agenda, AgendaHistory, Project, Task, TaskAgendaLink, TestCase, TestRef
 from app.models.base import new_id
 from app.schemas.risk import RiskSettings
 from app.schemas.test import (
@@ -45,7 +45,6 @@ SIGNAL_ORDER: tuple[TestSignal, ...] = (
     "failedIdle",
     "basisChanged",
 )
-DECISION_KINDS = ("decide", "change")
 NOT_STARTED = ("draft", "ready")
 WITH_NOTE = ("fail", "blocked")
 
@@ -77,18 +76,11 @@ class _Ref:
     seq: int
 
 
-@dataclass(frozen=True)
-class _Entry:
-    id: str
-    kind: str
-    seq: int
-
-
 def _live_ref() -> ColumnElement[bool]:
     """지운 작업 · 안건에 건 태그는 남아 있다 — 목록 · 기준 · 개수 어디서도 없는 것처럼 거른다."""
     return and_(
         or_(TestRef.task_id.is_(None), TestRef.task_id.in_(access.live_task_ids())),
-        or_(TestRef.thread_id.is_(None), TestRef.thread_id.in_(access.live_thread_ids())),
+        or_(TestRef.agenda_id.is_(None), TestRef.agenda_id.in_(access.live_agenda_ids())),
     )
 
 
@@ -100,20 +92,20 @@ async def _refs(session: AsyncSession, test_ids: Collection[str]) -> dict[str, l
         select(
             TestRef.test_id,
             TestRef.task_id,
-            TestRef.thread_id,
+            TestRef.agenda_id,
             Task.seq.label("task_seq"),
-            Thread.seq.label("thread_seq"),
+            Agenda.seq.label("agenda_seq"),
         )
         .outerjoin(Task, Task.id == TestRef.task_id)
-        .outerjoin(Thread, Thread.id == TestRef.thread_id)
+        .outerjoin(Agenda, Agenda.id == TestRef.agenda_id)
         .where(TestRef.test_id.in_(test_ids), _live_ref())
     )
     found: dict[str, list[_Ref]] = defaultdict(list)
-    for test_id, task_id, thread_id, task_seq, thread_seq in rows.tuples():
+    for test_id, task_id, agenda_id, task_seq, agenda_seq in rows.tuples():
         if task_id is not None:
             found[test_id].append(_Ref("task", task_id, task_seq))
-        elif thread_id is not None:
-            found[test_id].append(_Ref("thread", thread_id, thread_seq))
+        elif agenda_id is not None:
+            found[test_id].append(_Ref("agenda", agenda_id, agenda_seq))
     for refs in found.values():
         refs.sort(key=lambda ref: (ref.kind != "task", ref.seq))
     return found
@@ -124,39 +116,56 @@ async def _links(session: AsyncSession, task_ids: Collection[str]) -> dict[str, 
     if not task_ids:
         return {}
     rows = await session.execute(
-        select(TaskThreadLink.task_id, TaskThreadLink.thread_id).where(
-            TaskThreadLink.task_id.in_(task_ids),
-            TaskThreadLink.thread_id.in_(access.live_thread_ids()),
+        select(TaskAgendaLink.task_id, TaskAgendaLink.agenda_id).where(
+            TaskAgendaLink.task_id.in_(task_ids),
+            TaskAgendaLink.agenda_id.in_(access.live_agenda_ids()),
         )
     )
     found: dict[str, set[str]] = defaultdict(set)
-    for task_id, thread_id in rows.tuples():
-        found[task_id].add(thread_id)
+    for task_id, agenda_id in rows.tuples():
+        found[task_id].add(agenda_id)
     return found
 
 
 def _reached(refs: Iterable[_Ref], links: dict[str, set[str]]) -> set[str]:
     """닿는 안건 = 직접 태그한 안건 + 태그한 작업에 걸린 안건."""
-    threads: set[str] = set()
+    agendas: set[str] = set()
     for ref in refs:
-        if ref.kind == "thread":
-            threads.add(ref.target_id)
+        if ref.kind == "agenda":
+            agendas.add(ref.target_id)
         else:
-            threads |= links.get(ref.target_id, set())
-    return threads
+            agendas |= links.get(ref.target_id, set())
+    return agendas
 
 
-async def _entries(session: AsyncSession, thread_ids: Collection[str]) -> dict[str, list[_Entry]]:
-    if not thread_ids:
+def is_decision_change(changes: Iterable[dict[str, object]]) -> bool:
+    """변경 이력 한 줄이 '결정 변경' 인가 — 결정내용 칸이 있거나 상태가 decided 로 바뀐 줄
+    (docs/api/agenda.md '테스트 기준 바뀜')."""
+    return any(
+        change.get("field") == "decision"
+        or (change.get("field") == "state" and change.get("to") == "decided")
+        for change in changes
+    )
+
+
+async def _decision_changes(
+    session: AsyncSession, agenda_ids: Collection[str]
+) -> dict[str, list[int]]:
+    """안건마다 결정 변경 줄의 seq — 오름차순.
+
+    JSON 칸을 DB 마다 다르게 읽지 않으려고 파이썬에서 거른다.
+    """
+    if not agenda_ids:
         return {}
     rows = await session.execute(
-        select(Entry.id, Entry.thread_id, Entry.kind, Entry.seq)
-        .where(Entry.thread_id.in_(thread_ids), Entry.is_deleted.is_(False))
-        .order_by(Entry.seq)
+        select(AgendaHistory.agenda_id, AgendaHistory.seq, AgendaHistory.changes)
+        .where(AgendaHistory.agenda_id.in_(agenda_ids))
+        .order_by(AgendaHistory.seq)
     )
-    found: dict[str, list[_Entry]] = defaultdict(list)
-    for entry_id, thread_id, kind, seq in rows.tuples():
-        found[thread_id].append(_Entry(entry_id, kind, seq))
+    found: dict[str, list[int]] = defaultdict(list)
+    for agenda_id, seq, changes in rows.tuples():
+        if is_decision_change(changes):
+            found[agenda_id].append(seq)
     return found
 
 
@@ -175,28 +184,23 @@ async def _has_children(session: AsyncSession, test_id: str) -> bool:
 
 
 async def _current_basis(session: AsyncSession, test_id: str) -> int | None:
-    """지금 닿는 안건들의 Entry seq 최댓값. 닿는 안건 · Entry 가 없으면 null."""
+    """지금 닿는 안건들의 결정 변경 줄 seq 최댓값. 닿는 안건 · 그런 줄이 없으면 null."""
     refs = (await _refs(session, [test_id])).get(test_id, [])
     links = await _links(session, {ref.target_id for ref in refs if ref.kind == "task"})
     reached = _reached(refs, links)
-    if not reached:
-        return None
-    top: int | None = await session.scalar(
-        select(func.max(Entry.seq)).where(Entry.thread_id.in_(reached), Entry.is_deleted.is_(False))
-    )
-    return top
+    changes = await _decision_changes(session, reached)
+    return max((seq for seqs in changes.values() for seq in seqs), default=None)
 
 
-def _changed(reached: set[str], entries: dict[str, list[_Entry]], basis: int | None) -> list[str]:
-    """basis 뒤로 닿는 안건에 생긴 decide · change — 오래된 것부터."""
+def _changed(reached: set[str], changes: dict[str, list[int]], basis: int | None) -> list[str]:
+    """basis 뒤로 결정이 바뀐 닿는 안건 — 처음 바뀐 순(그 뒤의 첫 줄 seq)."""
     floor = basis or 0
-    picked = [
-        entry
-        for thread_id in reached
-        for entry in entries.get(thread_id, [])
-        if entry.kind in DECISION_KINDS and entry.seq > floor
-    ]
-    return [entry.id for entry in sorted(picked, key=lambda entry: entry.seq)]
+    first: dict[str, int] = {}
+    for agenda_id in reached:
+        after = [seq for seq in changes.get(agenda_id, []) if seq > floor]
+        if after:
+            first[agenda_id] = after[0]
+    return sorted(first, key=first.__getitem__)
 
 
 def status_days(row: TestCase, today: date) -> int:
@@ -238,13 +242,13 @@ async def _build(
         session, {ref.target_id for each in refs.values() for ref in each if ref.kind == "task"}
     )
     reached = {test_id: _reached(refs.get(test_id, []), links) for test_id in ids}
-    entries = await _entries(session, set().union(*reached.values()) if reached else set())
+    changes = await _decision_changes(session, set().union(*reached.values()) if reached else set())
     groups = await _groups(session, ids)
 
     built: list[TestCaseOut] = []
     for row in rows:
         days = status_days(row, today)
-        changed = _changed(reached[row.id], entries, row.basis_seq)
+        changed = _changed(reached[row.id], changes, row.basis_seq)
         built.append(
             TestCaseOut(
                 id=row.id,
@@ -270,7 +274,7 @@ async def _build(
                     if row.id in groups
                     else signals(row, days=days, changed=bool(changed), rule=rule, today=today)
                 ),
-                changed_entry_ids=changed,
+                changed_agenda_ids=changed,
                 created_by=row.created_by,
                 created_at=row.created_at,
             )
@@ -349,10 +353,10 @@ async def _guard_target(
             raise not_found("TASK_NOT_FOUND", "작업을 찾을 수 없습니다.")
     else:
         owner = await session.scalar(
-            select(Thread.project_id).where(Thread.id == target_id, Thread.is_deleted.is_(False))
+            select(Agenda.project_id).where(Agenda.id == target_id, Agenda.is_deleted.is_(False))
         )
         if owner != project_id:
-            raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
+            raise not_found("AGENDA_NOT_FOUND", "안건을 찾을 수 없습니다.")
 
 
 def _ref_limit() -> ApiError:
@@ -398,7 +402,7 @@ def _ref_row(test: TestCase, kind: TestRefKind, target_id: str) -> TestRef:
         test_id=test.id,
         project_id=test.project_id,
         task_id=target_id if kind == "task" else None,
-        thread_id=target_id if kind == "thread" else None,
+        agenda_id=target_id if kind == "agenda" else None,
     )
 
 
@@ -439,7 +443,7 @@ async def create_test(
     )
     session.add(test)
     await session.flush()
-    # 같이 건 태그는 '등록' 에 든 것으로 본다 — 작업의 threadIds 와 같다
+    # 같이 건 태그는 '등록' 에 든 것으로 본다 — 작업의 agendaIds 와 같다
     history_service.record_test(session, test, history_service.created(), actor_id, at)
     session.add_all([_ref_row(test, ref.kind, ref.id) for ref in refs])
     test.basis_seq = await _current_basis(session, test.id)
@@ -536,7 +540,7 @@ async def set_status(
 
 
 def _ref_field(kind: TestRefKind) -> str:
-    return "taskRef" if kind == "task" else "threadRef"
+    return "taskRef" if kind == "task" else "agendaRef"
 
 
 async def put_ref(
@@ -551,7 +555,7 @@ async def put_ref(
     """멱등 — 이미 걸려 있으면 아무것도 바꾸지 않는다(기준도 그대로)."""
     test = await load_test(session, test_id)
     await _guard_target(session, test.project_id, kind, target_id)
-    column = TestRef.task_id if kind == "task" else TestRef.thread_id
+    column = TestRef.task_id if kind == "task" else TestRef.agenda_id
     exists = await session.scalar(
         select(TestRef.id).where(TestRef.test_id == test.id, column == target_id)
     )
@@ -574,7 +578,7 @@ async def delete_ref(
 ) -> None:
     """멱등 — 없는 태그도 성공이다. 지운 작업에 건 태그도 없는 것으로 본다."""
     test = await load_test(session, test_id)
-    column = TestRef.task_id if kind == "task" else TestRef.thread_id
+    column = TestRef.task_id if kind == "task" else TestRef.agenda_id
     found = await session.scalar(
         select(TestRef).where(TestRef.test_id == test.id, column == target_id, _live_ref())
     )

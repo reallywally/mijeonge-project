@@ -4,6 +4,8 @@
 > 바탕은 `docs/api/task-flow.md`(작업 상태 기록)와 `docs/api/risk.md`(결정 병목 계산).
 > 선행 작업은 2026-10-28 걷었다(Q63) — 신호 `waitingOnPredecessor` · `lateBlocker` 와 `waitingOnTaskIds` · `blockingTaskIds` 는 그 전에 만든 리포트에만 있다('구현에서 메운 것' 의 '지난 리포트 읽기').
 > 순서는 `server/PLAN.md` 14단계 · `web/PLAN.md` 15단계.
+> **2026-11-04 고침 (안건 간소화, `agenda.md`)** — '정해진 것' 은 **`decidedAt` 이 기간 안인 안건**이다. 이력 줄이 없어져 **'미뤄진 것'(`deferredAgendaIds`)은 빠졌다** — 그 전에 만든 리포트의 facts 에만 남는다.
+> 이름은 `thread` → `agenda`(`decidedAgendaIds` · `riskyAgendaIds` · `weight.agendaCount` · 근거 칩 `[[agenda:ID]]`). 저장된 지난 리포트의 키는 이행(0032)이 바꿨고, 본문의 `[[thread:ID]]` 는 글이라 그대로다 — 화면이 같은 칩으로 읽는다.
 
 **[리포트 만들기]** 를 누르면 서버가 지난 7일의 진행을 **규칙으로 계산**하고, Claude 가 그것을 읽어 **무엇을 먼저 손써야 하는지** 근거와 함께 쓴다. 리포트는 저장되어 목록에 쌓인다.
 
@@ -48,12 +50,12 @@ export interface ProgressFacts {
   previous: { reportId: string; periodEnd: string; doneRate: number; blocked: number } | null
 
   decisions: {
-    /** 기간 안에 decide · change 이력이 남은 안건 */
-    decidedThreadIds: string[]
-    /** 기간 안에 defer 이력이 남은 안건 */
-    deferredThreadIds: string[]
-    /** 지금 리스크 high · medium 안건 — DecisionRiskReport.threads 에서, 점수 순 10개까지 */
-    riskyThreadIds: string[]
+    /** decidedAt(한국 날짜)이 기간 안인 안건 — 안건 등록 순 (2026-11-04) */
+    decidedAgendaIds: string[]
+    /** ~~기간 안에 defer 이력이 남은 안건~~ — 2026-11-04 걷음. 그 전에 만든 리포트에만 있다(키째 없을 수 있다) */
+    deferredAgendaIds?: string[]
+    /** 지금 리스크 high · medium 안건 — DecisionRiskReport.agendas 에서, 점수 순 10개까지 */
+    riskyAgendaIds: string[]
   }
 
   /** 손쓸 작업 — 아래 신호. 한 작업에 신호가 여럿이면 다 싣는다 */
@@ -96,7 +98,7 @@ export interface TaskAttention {
     /** 본문 체크리스트 중 안 끝난 줄 · 전체 줄 */
     openLines: number; totalLines: number
     /** 걸린 안건 수 */
-    threadCount: number
+    agendaCount: number
     priority: 'low' | 'normal' | 'high'
   }
   score: number
@@ -134,8 +136,8 @@ export interface PersonProgress {
 
 - **도구 없이 한 번** 부른다(리스크 AI 요약과 같은 틀). 서버가 넣는 것:
   - `ProgressFacts` — id 옆에 key · 제목 · 담당자 이름 · 파트 이름을 붙여서
-  - `attention` 위쪽 **8개**의 상세 — 본문(체크리스트 줄과 체크 여부) · 하위 작업(key · 제목 · 상태) · 걸린 안건 제목과 마지막 이력
-  - `decisions` 의 안건 — 제목 · 이번 기간의 이력(kind · text · note)
+  - `attention` 위쪽 **8개**의 상세 — 본문(체크리스트 줄과 체크 여부) · 하위 작업(key · 제목 · 상태) · 걸린 안건 제목 · 상태 · 결정내용(2026-11-04, 마지막 이력 대신)
+  - `decisions` 의 안건 — 제목 · 상태 · 결정내용 · 정한 날(`decidedOn`, 한국 날짜)(2026-11-04, 이번 기간의 이력 대신)
   - 바로 앞 리포트의 글(있으면) — '지난주 대비' 를 쓰라고
 - 답의 모양 (화면은 마크다운을 그리지 않고 줄바꿈만 살린다 — 리스크 AI 요약과 같다)
 
@@ -146,7 +148,7 @@ export interface PersonProgress {
 - 완료 N건(…) · 새로 시작 N건 · 완료율 x% (지난주 y%)
 
 결정
-- 정해진 것 [[thread:ID]] … · 미뤄진 것 [[thread:ID]] — 사유 · 아직 큰 병목 [[thread:ID]]
+- 정해진 것 [[agenda:ID]] — 무엇으로 · 아직 큰 병목 [[agenda:ID]]   (2026-11-04 '미뤄진 것' 을 걷음)
 
 먼저 손쓸 것          (최대 5개, score 순을 따르되 Claude 가 묶거나 바꿀 수 있다 — 바꾸면 왜인지)
 1. [[task:ID]] — 무엇이 문제인지(신호를 사람 말로, 숫자 그대로) · 왜 급한지(기한 · 무게 · 걸린 안건) · 할 일 · 누구에게
@@ -163,7 +165,7 @@ export interface PersonProgress {
 - 사람을 탓하는 말투를 쓰지 않는다 — '누가 못했나' 가 아니라 '어디에 일이 몰렸나 · 무엇이 막혔나'
 - 직접 아무것도 바꾸지 않는다. 할 일은 사람에게 권한다
 - 1,500자 안팎. 해당 없는 칸은 통째로 뺀다
-- 근거 칩은 챗봇과 같은 `[[task:ID]]` · `[[thread:ID]]`. **넣어 준 id 만** 칩이 된다
+- 근거 칩은 챗봇과 같은 `[[task:ID]]` · `[[agenda:ID]]`(2026-11-04 전에는 `[[thread:ID]]`). **넣어 준 id 만** 칩이 된다
 
 ## 테이블
 
@@ -270,10 +272,10 @@ export type ReportEvent =
 - **지난 리포트 읽기(Q63)** — 읽기 · 목록은 저장한 `facts` 를 스키마로 검증해 낸다. `TaskAttention.signals` 는 지난 두 이름(`waitingOnPredecessor` · `lateBlocker`)까지 받고, `waitingOnTaskIds` · `blockingTaskIds` 는 있으면 그대로 돌려주고 없으면 키째 뺀다(`null` 로 채우지 않는다). 새로 만드는 리포트는 둘을 싣지 않는다
 - **`weight.openLines` · `totalLines`** — 체크 줄만 센다(불릿 빼고). `openChildren` 은 자손 전부 중 완료 아닌 것
 - **`people`** — 담당 작업(완료 포함)이 하나라도 있는 사람 · 담당자 없음. 순서는 손쓸 작업 수 내림차순 → 멤버 id, 담당자 없음은 맨 뒤(목업과 같다). `attentionTaskIds` 는 30개로 자른 뒤의 것
-- **`decisions`** — 안건 등록 순. 같은 안건에 decide 와 defer 가 다 있으면 양쪽에 든다
+- **`decisions`** — 안건 등록 순. ~~같은 안건에 decide 와 defer 가 다 있으면 양쪽에 든다~~ → 2026-11-04 부터 `decidedAt` 의 한국 날짜가 기간 안인 안건뿐이다(지금 `decided` 가 아니면 `decidedAt` 이 `null` 이라 안 든다)
 - **`previous`** — 그 프로젝트의 마지막 리포트(`seq`). 지운 리포트는 없는 것이다
-- **넣는 근거** — Claude 는 멤버 · 파트를 **이름**으로만 본다(id 는 안 넣음). 작업마다 id · key · 제목 · 상태 · 담당 · 파트. `details` 의 하위 작업은 바로 아래 것만, 걸린 안건은 제목 · 상태 · 마지막 이력(`seq`). `decisions.risky` 는 등급 · 점수 · 신호 · 막힌 작업. 앞 리포트는 숫자와 글 전부
-- **근거 칩** — 넣어 준 작업(손쓸 작업 · 그 하위 작업 · 진척 목록 · 사람별 · 병목 안건의 막힌 작업)과 안건(정해진 · 미뤄진 · 병목 · details 의 걸린 안건)만
+- **넣는 근거** — Claude 는 멤버 · 파트를 **이름**으로만 본다(id 는 안 넣음). 작업마다 id · key · 제목 · 상태 · 담당 · 파트. `details` 의 하위 작업은 바로 아래 것만, 걸린 안건은 제목 · 상태 · 결정내용(2026-11-04, 전에는 마지막 이력). `decisions.risky` 는 등급 · 점수 · 신호 · 막힌 작업. 앞 리포트는 숫자와 글 전부
+- **근거 칩** — 넣어 준 작업(손쓸 작업 · 그 하위 작업 · 진척 목록 · 사람별 · 병목 안건의 막힌 작업)과 안건(정해진 · 병목 · details 의 걸린 안건)만 — 미뤄진 것은 2026-11-04 걷었다
 - **작업 0개** — 키 · 분당 제한을 보지 않는다(Claude 를 안 부르니까). 그 밖은 계산을 먼저 하고 키(503) · 제한(429)을 본다 — 스트림 전이라 JSON 이다
 - **잘린 글** — `max_tokens` 로 끊기면 챗봇과 같은 한 줄(`(답이 길어 여기서 끊었습니다.)`)을 `delta` 로 흘리고 본문 끝에 붙여 저장한다. 거절은 `error`(`CHAT_REFUSED`) — 저장 안 함. 저장이 실패하면 `error`(`INTERNAL_ERROR`)
 - **고치기 없음** — `PATCH /api/reports/{id}` 는 405

@@ -1,20 +1,20 @@
 from typing import Literal
 
+from app.schemas.agenda import AgendaOut
 from app.schemas.base import Schema
 from app.schemas.task import TaskOut
-from app.schemas.thread import EntryOut, ThreadOut
 
-ThreadPlace = Literal["title", "description", "option", "entry"]
+AgendaPlace = Literal["title", "description", "decision"]
 TaskPlace = Literal["title", "body"]
 
 
-class ThreadHit(Schema):
+class AgendaHit(Schema):
     id: str
     title: str
     state: str
-    matched: ThreadPlace
+    matched: AgendaPlace
     snippet: str
-    # 마지막 decide · change 줄의 text. 결정이 바뀐 안건은 이것이 지금의 결정이다
+    # 안건의 결정내용 그대로. 없으면 ''
     decision: str
 
 
@@ -28,7 +28,7 @@ class TaskHit(Schema):
 
 
 class SearchResult(Schema):
-    threads: list[ThreadHit]
+    agendas: list[AgendaHit]
     tasks: list[TaskHit]
 
 
@@ -39,34 +39,20 @@ class LinkedTask(Schema):
     status: str
 
 
-class LinkedThread(Schema):
+class LinkedAgenda(Schema):
     id: str
     title: str
     state: str
 
 
-# 아래 둘은 챗봇 도구(get_thread · get_task)의 결과다.
+# 아래 둘은 챗봇 도구(get_agenda · get_task)의 결과다.
 # HTTP 로는 열지 않는다 — JSON 으로 Claude 에 넘긴다
 
 
-class ItemDoc(Schema):
-    """결정 항목 하나와 그 항목의 지금 결정. 이력 줄은 `itemId` 로 이 항목을 가리킨다."""
+class AgendaDoc(Schema):
+    """안건 하나를 읽을 때 필요한 것 전부 — 결정내용은 `agenda.decision`, 연결 작업은 등록 순."""
 
-    id: str
-    title: str
-    # 지우지 않은 decide · change 줄이 있으면 정해진 것이다
-    decided: bool
-    # 마지막 decide · change 줄의 text — 결정이 바뀐 항목은 이것이 지금의 결정이다. 없으면 ''
-    decision: str
-
-
-class ThreadDoc(Schema):
-    """안건 하나를 읽을 때 필요한 것 전부 — 후보는 `thread.options`, 이력은 등록 순서(seq)다."""
-
-    thread: ThreadOut
-    # 지우지 않은 결정 항목 — 안건 안의 순서. 전부 정해져야 안건이 decided 다
-    items: list[ItemDoc]
-    entries: list[EntryOut]
+    agenda: AgendaOut
     tasks: list[LinkedTask]
 
 
@@ -74,7 +60,7 @@ class TaskDoc(Schema):
     """작업 하나 — 본문은 `task.body`, 걸어 둔 안건은 제목 · 상태까지."""
 
     task: TaskOut
-    threads: list[LinkedThread]
+    agendas: list[LinkedAgenda]
     # 바로 아래 하위 작업 — 챗봇이 하위 작업을 더할 때 이미 있는 것과 겹치지 않게 본다
     children: list[LinkedTask]
 

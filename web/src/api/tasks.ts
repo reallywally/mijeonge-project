@@ -23,7 +23,7 @@ import type {
   TaskInput,
   TaskMove,
   TaskPatch,
-  TaskThreadLink,
+  TaskAgendaLink,
 } from '@/types/domain'
 
 export const createTask = (projectId: string, input: TaskInput) =>
@@ -35,11 +35,11 @@ export const patchTask = (taskId: string, patch: TaskPatch) =>
 export const patchTaskLine = (taskId: string, lineId: string, done: boolean) =>
   request<Task>('PATCH', `/tasks/${id(taskId)}/lines/${id(lineId)}`, { done })
 
-export const linkTaskThread = (taskId: string, threadId: string) =>
-  request<TaskThreadLink>('PUT', `/tasks/${id(taskId)}/threads/${id(threadId)}`)
+export const linkTaskAgenda = (taskId: string, agendaId: string) =>
+  request<TaskAgendaLink>('PUT', `/tasks/${id(taskId)}/agendas/${id(agendaId)}`)
 
-export const unlinkTaskThread = (taskId: string, threadId: string) =>
-  request<void>('DELETE', `/tasks/${id(taskId)}/threads/${id(threadId)}`)
+export const unlinkTaskAgenda = (taskId: string, agendaId: string) =>
+  request<void>('DELETE', `/tasks/${id(taskId)}/agendas/${id(agendaId)}`)
 
 /* 목업 갈래 — 작업 · 안건 연결은 데이터 스토어가 들고 있어 거기서 걷는다(스토어가 응답 뒤에 뺀다).
    여기서는 서버처럼 권한 · 하위 작업을 보고, 목업 서버가 따로 든 댓글 · 테스트 태그 · 이력을 정리한다 */

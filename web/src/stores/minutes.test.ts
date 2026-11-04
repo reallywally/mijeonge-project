@@ -99,31 +99,27 @@ describe('권한 — 댓글과 같은 경계', () => {
 })
 
 describe('지우기', () => {
-  it('회의록만 지운다 — 나온 안건 · 이력 · 작업은 남고 출처만 null', async () => {
+  it('회의록만 지운다 — 나온 안건 · 작업은 남고 출처만 null', async () => {
     const data = useDataStore()
     const minutes = useMinutesStore()
     await minutes.load()
     /* m1 에서 나온 것처럼 출처를 단다 */
-    data.allThreads.find((t) => t.id === 't3')!.minutesId = 'm1'
-    data.allEntries.find((e) => e.id === 'e2')!.minutesId = 'm1'
+    data.allAgendas.find((t) => t.id === 't3')!.minutesId = 'm1'
     data.allTasks.find((t) => t.id === 'k4')!.minutesId = 'm1'
     expect(minutes.outcomeOf('m1')).toMatchObject({
-      threads: [{ id: 't3' }],
-      entries: [{ id: 'e2' }],
+      agendas: [{ id: 't3' }],
       tasks: [{ id: 'k4' }],
     })
 
-    const counts = [data.allThreads.length, data.allEntries.length, data.allTasks.length]
+    const counts = [data.allAgendas.length, data.allTasks.length]
     expect(await minutes.remove('m1')).toBe(true)
     expect(minutes.list).toEqual([])
-    expect([data.allThreads.length, data.allEntries.length, data.allTasks.length]).toEqual(counts)
+    expect([data.allAgendas.length, data.allTasks.length]).toEqual(counts)
     expect(
-      [
-        data.allThreads.find((t) => t.id === 't3'),
-        data.allEntries.find((e) => e.id === 'e2'),
-        data.allTasks.find((t) => t.id === 'k4'),
-      ].map((r) => r!.minutesId),
-    ).toEqual([null, null, null])
-    expect(minutes.outcomeOf('m1').threads).toEqual([])
+      [data.allAgendas.find((t) => t.id === 't3'), data.allTasks.find((t) => t.id === 'k4')].map(
+        (r) => r!.minutesId,
+      ),
+    ).toEqual([null, null])
+    expect(minutes.outcomeOf('m1').agendas).toEqual([])
   })
 })

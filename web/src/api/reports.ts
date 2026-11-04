@@ -68,17 +68,15 @@ const mock = {
     const risk = await fetchRisks(projectId)
     const world = mockWorld()
     const tasks = world.tasks.filter((t) => t.projectId === projectId)
-    const threads = world.threads.filter((t) => t.projectId === projectId)
-    const threadIds = new Set(threads.map((t) => t.id))
+    const agendas = world.agendas.filter((t) => t.projectId === projectId)
     const taskIds = new Set(tasks.map((t) => t.id))
     const prev = mockDb()
       .reports.filter((r) => r.projectId === projectId)
       .at(-1)
     const facts = progressFacts({
       tasks,
-      threads,
-      entries: world.entries.filter((e) => threadIds.has(e.threadId)),
-      links: world.taskThreads.filter((l) => taskIds.has(l.taskId)),
+      agendas,
+      links: world.taskAgendas.filter((l) => taskIds.has(l.taskId)),
       settings: risk.settings,
       today: kstToday(),
       previous: prev
@@ -90,13 +88,13 @@ const mock = {
           }
         : null,
       /* 굳혀 둔 보고서라 그사이 정해진 안건은 뺀다 */
-      riskyThreadIds: risk.threads
+      riskyAgendaIds: risk.agendas
         .filter(
           (t) =>
             (t.level === 'high' || t.level === 'medium') &&
-            threads.some((th) => th.id === t.threadId && th.state !== 'decided'),
+            agendas.some((th) => th.id === t.agendaId && th.state !== 'decided'),
         )
-        .map((t) => t.threadId),
+        .map((t) => t.agendaId),
     })
     return { facts, me, empty: tasks.length === 0 }
   },

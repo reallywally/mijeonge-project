@@ -21,12 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import engine, session_factory
 from app.models import (
+    Agenda,
+    AgendaHistory,
     AuthIdentity,
     AuthSession,
     CheckRequest,
-    DecisionItem,
-    Entry,
-    EntryDetail,
     Member,
     Minutes,
     Part,
@@ -36,18 +35,14 @@ from app.models import (
     ProjectReport,
     RiskSetting,
     Task,
+    TaskAgendaLink,
     TaskComment,
     TaskHistory,
     TaskLine,
     TaskLog,
-    TaskThreadLink,
     TestCase,
     TestHistory,
     TestRef,
-    Thread,
-    ThreadCc,
-    ThreadHistory,
-    ThreadOption,
 )
 from app.services.auth import PASSWORD
 from app.services.check import recipient_loads
@@ -160,9 +155,7 @@ TASK_CREATORS = {
     "k21": "u3",
     "x1": "u2",
 }
-# 참조 — docs/api/check.md '시드 · 목업' 표 그대로. 표에 없는 안건은 []
-THREAD_CC = {"t1": ["u1"], "t2": ["u2", "u4"], "t6": ["u2"]}
-THREAD_PARTS = {
+AGENDA_PARTS = {
     **dict.fromkeys(("t1", "t2", "t4"), "pt1"),
     **dict.fromkeys(("t3", "t7", "t8"), "pt2"),
     "t5": "pt3",
@@ -177,7 +170,42 @@ def part_members() -> list[PartMember]:
     return [PartMember(part_id=part_id, member_id=member_id) for part_id, member_id in PART_MEMBERS]
 
 
-def thread(
+# 결정내용 — 이행(0032, docs/api/agenda.md '이행' 2)이 지난 시드의 이력 줄 · 결정 항목에서 만든 글
+# 그대로다. 목업(`web/src/fixtures/agendas.ts`)도 같은 글이다.
+# (결정내용, 쓴 결정 줄 중 가장 늦은 시각, 결정 판, 그 줄을 남긴 사람).
+# 그 시각이 decided 안건의 decidedAt 이고, 변경 이력의 '결정내용' 줄(backfilled)의 시각 · 사람이다
+DECISIONS: dict[str, tuple[str, str, int, str]] = {
+    # 항목 하나 · 이름이 안건 제목과 같다 — 결정 글만
+    "t1": ("우분투 최신 버전으로 한다", "2026-09-09T02:00:00Z", 1, "u3"),
+    "t2": (
+        "mysql 을 쓴다\n"
+        "- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n"
+        "- supabase 는 비용 때문에 뺀다",
+        "2026-09-10T06:05:00Z",
+        1,
+        "u3",
+    ),
+    # 항목 둘 중 하나만 정했다 — 논의중이라 decidedAt 은 없다. 안 정한 '응답(out) 항목' 은 빠진다
+    "t5": (
+        "요청(in) 항목: 계약번호 · 상품코드 · 가입일 셋을 넘긴다",
+        "2026-09-10T07:00:00Z",
+        1,
+        "u4",
+    ),
+    "t6": (
+        "테스트 기간: 전체 일정은 그대로 두고 테스트 기간만 2주 줄인다\n"
+        "- 늘어난 개발 기간은 그대로 둔다\n"
+        "- 통합 테스트를 3주에서 1주로 줄인다\n"
+        "\n"
+        "전체 일정: 전체 일정은 미루지 않는다",
+        "2026-09-15T07:00:00Z",
+        1,
+        "u1",
+    ),
+}
+
+
+def agenda(
     id_: str,
     title: str,
     state: str,
@@ -185,37 +213,31 @@ def thread(
     created: str,
     project: str = "p1",
     description: str = "",
-    options: tuple[str, ...] = (),
     due: str | None = None,
-) -> Thread:
-    return Thread(
+) -> Agenda:
+    decision, written, rev, _ = DECISIONS.get(id_, ("", "", 0, ""))
+    return Agenda(
         id=id_,
         project_id=project,
         title=title,
         description=description,
+        decision=decision,
         state=state,
+        decided_at=at(written) if state == "decided" else None,
+        decision_rev=rev,
         owner_id=owner,
         # 등록한 사람은 담당자로 둔다 — 목업 픽스처와 같다 (계약 2026-11-02, 없으면 null)
         creator_id=owner,
         due_date=d(due),
-        parent_thread_id=None,
-        part_id=THREAD_PARTS.get(id_),
+        part_id=AGENDA_PARTS.get(id_),
         created_at=at(created),
-        options=[
-            ThreadOption(id=f"{id_}o{i + 1}", thread_id=id_, text=text, sort_order=i)
-            for i, text in enumerate(options)
-        ],
-        cc=[
-            ThreadCc(thread_id=id_, project_id=project, member_id=member_id, sort_order=i)
-            for i, member_id in enumerate(THREAD_CC.get(id_, []))
-        ],
     )
 
 
-def threads() -> list[Thread]:
+def agendas() -> list[Agenda]:
     return [
         # 시나리오 1 — 개발 환경 설정 작업에서 갈라져 나온 둘
-        thread(
+        agenda(
             "t1",
             "서버 OS 결정",
             "decided",
@@ -224,10 +246,9 @@ def threads() -> list[Thread]:
             description=(
                 "개발 환경 설정 작업에서 서버 OS가 정해지지 않아 서버 구성을 시작하지 못하고 있다."
             ),
-            options=("우분투", "록키", "CentOS"),
             due="2026-09-12",
         ),
-        thread(
+        agenda(
             "t2",
             "DB 결정",
             "decided",
@@ -236,10 +257,9 @@ def threads() -> list[Thread]:
             description=(
                 "개발 환경 설정 작업의 DB 선택. 기존 솔루션과의 호환성과 비용을 같이 봐야 한다."
             ),
-            options=("PostgreSQL", "MySQL", "Supabase"),
             due="2026-09-15",
         ),
-        thread(
+        agenda(
             "t3",
             "사내망에서 외부 모델 호출 허용 범위",
             "open",
@@ -249,12 +269,11 @@ def threads() -> list[Thread]:
                 "가상비서가 외부 LLM API를 불러야 하는데 "
                 "사내망 보안 정책상 어디까지 허용되는지 정해지지 않았다."
             ),
-            options=("전면 허용", "비식별 데이터만 허용", "사내 모델만 사용"),
             due="2026-09-30",
         ),
-        thread("t4", "개발 서버 백업 주기", "queued", None, "2026-09-10T06:20:00Z"),
+        agenda("t4", "개발 서버 백업 주기", "queued", None, "2026-09-10T06:20:00Z"),
         # 시나리오 2 — 두 번 미뤄진 안건
-        thread(
+        agenda(
             "t5",
             "보험료 산출 기간계 API 호출 in · out 정의",
             "open",
@@ -267,179 +286,18 @@ def threads() -> list[Thread]:
             due="2026-10-19",
         ),
         # 시나리오 3 — 회의만으로 끝난 안건
-        thread(
+        agenda(
             "t6",
             "일정 조율 — 전체 일정을 미룰지, 테스트 기간을 줄일지",
             "decided",
             "u1",
             "2026-09-14T01:00:00Z",
         ),
-        thread("t7", "가상비서 tool 만드는 순서", "queued", "u4", "2026-09-12T05:40:00Z"),
-        thread("t8", "AI 심사 학습 데이터 범위", "queued", "u1", "2026-09-12T05:45:00Z"),
-        thread("t9", "공통 코드 체계 확정", "queued", "u2", "2026-09-15T00:20:00Z"),
+        agenda("t7", "가상비서 tool 만드는 순서", "queued", "u4", "2026-09-12T05:40:00Z"),
+        agenda("t8", "AI 심사 학습 데이터 범위", "queued", "u1", "2026-09-12T05:45:00Z"),
+        agenda("t9", "공통 코드 체계 확정", "queued", "u2", "2026-09-15T00:20:00Z"),
         # 다른 프로젝트 — 프로젝트를 바꾸면 화면이 갈리는지 보려고 둔다
-        thread("t10", "이관 범위 확정", "queued", "u2", "2026-09-16T01:05:00Z", project="p2"),
-    ]
-
-
-# 결정 항목 — (id, 안건, 이름, 등록한 사람, 등록 시각). 목업(`web/src/fixtures/threads.ts`)의 값 ·
-# 배열 순서 그대로다(안건 등록 순 → 안건 안의 항목 순). t1 · t2 는 이행 규칙과 같은 모양
-# (안건 제목 · 등록한 사람 없음 · 결정 줄의 시각), t5 는 둘 중 하나만 정해졌고 t6 은 둘 다 정해졌다
-DECISION_ITEMS: list[tuple[str, str, str, str | None, str]] = [
-    ("di1", "t1", "서버 OS 결정", None, "2026-09-09T02:00:00Z"),
-    ("di2", "t2", "DB 결정", None, "2026-09-10T06:05:00Z"),
-    ("di5", "t5", "요청(in) 항목", "u4", "2026-09-10T06:30:00Z"),
-    ("di6", "t5", "응답(out) 항목", "u4", "2026-09-10T06:31:00Z"),
-    ("di4", "t6", "테스트 기간", "u1", "2026-09-15T06:40:00Z"),
-    ("di7", "t6", "전체 일정", "u1", "2026-09-15T06:41:00Z"),
-]
-# 결정 줄 → 항목. 미룸(e2 · e4 · e5)은 안건 전체다
-ENTRY_ITEMS = {"e1": "di1", "e3": "di2", "e8": "di5", "e7": "di7", "e6": "di4"}
-
-
-def decision_items() -> list[DecisionItem]:
-    rows: list[DecisionItem] = []
-    taken: dict[str, int] = {}
-    for id_, thread_id, title, creator, created in DECISION_ITEMS:
-        # 안건 안의 순서는 배열에 나온 차례다
-        order = taken.get(thread_id, 0)
-        taken[thread_id] = order + 1
-        rows.append(
-            DecisionItem(
-                id=id_,
-                project_id="p1",
-                thread_id=thread_id,
-                title=title,
-                creator_id=creator,
-                created_at=at(created),
-                sort_order=order,
-            )
-        )
-    return rows
-
-
-def entry(
-    id_: str,
-    thread_id: str,
-    kind: str,
-    text: str,
-    detail: list[str],
-    note: str,
-    owner: str | None,
-    created: str,
-) -> Entry:
-    return Entry(
-        id=id_,
-        thread_id=thread_id,
-        item_id=ENTRY_ITEMS.get(id_),
-        kind=kind,
-        text=text,
-        note=note,
-        owner_id=owner,
-        # 줄을 남긴 사람은 그 줄의 처리한 사람으로 둔다 — 목업 픽스처와 같다
-        creator_id=owner,
-        created_at=at(created),
-        details=[
-            EntryDetail(id=f"{id_}d{i}", entry_id=id_, text=t, sort_order=i)
-            for i, t in enumerate(detail)
-        ],
-    )
-
-
-def entries() -> list[Entry]:
-    # 화면은 이력 줄의 날짜를 createdAt 의 KST 날짜로 찍는다(예전에는 회의 날짜였다).
-    # 회의에 붙어 있던 e2 · e3 · e4 · e5 · e6 은 KST 로 그 회의 날짜와 이미 같아 그대로 둔다.
-    # 배열 순서가 등록 순서(seq)다 — 목업과 같은 순서로 둔다
-    return [
-        # 시나리오 2 — 첫 번째 미룸
-        entry(
-            "e2",
-            "t5",
-            "defer",
-            "이번 회의에서는 정하지 못했다",
-            [],
-            "기간계 업무 정의가 안 돼 in · out 을 정할 수 없다. 다음 주 월요일에 다시 본다.",
-            "u4",
-            "2026-09-07T07:30:00Z",
-        ),
-        # 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
-        entry(
-            "e1",
-            "t1",
-            "decide",
-            "우분투 최신 버전으로 한다",
-            [],
-            "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.",
-            "u3",
-            "2026-09-09T02:00:00Z",
-        ),
-        # 시나리오 1 — 회의에서 정한 것
-        entry(
-            "e3",
-            "t2",
-            "decide",
-            "mysql 을 쓴다",
-            [
-                "postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다",
-                "supabase 는 비용 때문에 뺀다",
-            ],
-            "",
-            "u3",
-            "2026-09-10T06:05:00Z",
-        ),
-        entry(
-            "e4",
-            "t3",
-            "defer",
-            "이번 회의에서는 정하지 못했다",
-            [],
-            "정보보안팀 확인이 먼저다. 다음 회의 후보로 올려 둔다.",
-            "u1",
-            "2026-09-10T06:08:00Z",
-        ),
-        # 항목이 둘인 안건 — in 은 정했고 out 은 아직이라 논의중이다
-        entry(
-            "e8",
-            "t5",
-            "decide",
-            "계약번호 · 상품코드 · 가입일 셋을 넘긴다",
-            [],
-            "기간계 담당자와 통화로 in 쪽만 먼저 맞췄다.",
-            "u4",
-            "2026-09-10T07:00:00Z",
-        ),
-        # 시나리오 2 — 두 번째 미룸
-        entry(
-            "e5",
-            "t5",
-            "defer",
-            "여전히 업무 정의가 없어 또 미룬다",
-            [],
-            "두 번째 미룸이다. 다음에는 기간계 담당자를 회의에 부르기로 했다.",
-            "u4",
-            "2026-09-14T07:10:00Z",
-        ),
-        # 시나리오 3 — 항목 둘을 같은 회의에서 정했다
-        entry(
-            "e7",
-            "t6",
-            "decide",
-            "전체 일정은 미루지 않는다",
-            [],
-            "",
-            "u1",
-            "2026-09-15T06:50:00Z",
-        ),
-        entry(
-            "e6",
-            "t6",
-            "decide",
-            "전체 일정은 그대로 두고 테스트 기간만 2주 줄인다",
-            ["늘어난 개발 기간은 그대로 둔다", "통합 테스트를 3주에서 1주로 줄인다"],
-            "일정을 미루면 오픈 일정이 밀린다는 데에 이견이 없었다.",
-            "u1",
-            "2026-09-15T07:00:00Z",
-        ),
+        agenda("t10", "이관 범위 확정", "queued", "u2", "2026-09-16T01:05:00Z", project="p2"),
     ]
 
 
@@ -596,7 +454,7 @@ def tasks() -> list[Task]:
 
 # 작업 ↔ 안건. 작업을 하다가 정해야 했던 것들이다
 # 픽스처의 링크는 전부 한화손보 차세대(p1) 안에서 선다
-TASK_THREAD_LINKS = [
+TASK_AGENDA_LINKS = [
     ("k4", "t1"),  # 개발 환경 설정 ↔ 서버 OS 결정
     ("k4", "t2"),  # 개발 환경 설정 ↔ DB 결정
     ("k18", "t5"),  # 기간계 API ↔ in · out 정의
@@ -670,20 +528,36 @@ CREATED_CHANGES: list[dict[str, str | int | bool | None]] = [
 ]
 
 
-def thread_histories() -> list[ThreadHistory]:
-    """안건마다 '등록' 한 줄(등록 시각 · 등록한 사람) — id 는 `hh-<안건 id>-1`."""
-    return [
-        ThreadHistory(
+def agenda_histories() -> list[AgendaHistory]:
+    """안건마다 '등록' 한 줄(등록 시각 · 등록한 사람) — id 는 `hh-<안건 id>-1`. 그 뒤에 결정내용이
+    있는 안건마다 이행이 채운 '결정내용' 줄 하나(backfilled) — id 는 `hh-<안건 id>-2`, 순서는
+    지난 이력의 마지막 결정 줄 순(t1 → t2 → t5 → t6). 테스트 '기준 바뀜' 이 이 줄을 센다.
+    """
+    rows = [
+        AgendaHistory(
             id=f"hh-{row.id}-1",
             project_id=row.project_id,
-            thread_id=row.id,
+            agenda_id=row.id,
             changed_by=row.creator_id,
             changed_at=row.created_at,
             changes=CREATED_CHANGES,
             backfilled=False,
         )
-        for row in threads()
+        for row in agendas()
     ]
+    rows += [
+        AgendaHistory(
+            id=f"hh-{agenda_id}-2",
+            project_id="p1",
+            agenda_id=agenda_id,
+            changed_by=by,
+            changed_at=at(written),
+            changes=[{"field": "decision", "from": "", "to": decision, "subject": ""}],
+            backfilled=True,
+        )
+        for agenda_id, (decision, written, _, by) in DECISIONS.items()
+    ]
+    return rows
 
 
 def task_histories() -> list[TaskHistory]:
@@ -759,27 +633,30 @@ def comments() -> list[TaskComment]:
 
 
 # 확인 요청 — docs/api/check.md '시드 · 목업' 표 그대로. 프론트 목업이 같은 id 를 쓴다.
-# (id, 안건, 결정, 보낸, 받는, createdAt, confirmedAt).
-# c1 ~ c3 은 t2 의 결정 e3 으로 한 번에 보낸 것이다
+# (id, 안건, 보낸, 받는, createdAt, confirmedAt). 결정 판은 1, 결정은 이행 규칙('이행' 4)대로
+# 그때 가리킨 결정 줄의 글(세부 없이)이다 — c1 ~ c3 은 t2 의 결정(옛 e3)을 한 번에 보낸 것,
+# c4 는 t1 의 결정(옛 e1)
+CHECK_DECISIONS = {"t1": "우분투 최신 버전으로 한다", "t2": "mysql 을 쓴다"}
 CHECKS = [
-    ("c1", "t2", "e3", "u1", "u3", "2026-10-14T01:00:00Z", None),
-    ("c2", "t2", "e3", "u1", "u2", "2026-10-14T01:00:00Z", "2026-10-14T05:00:00Z"),
-    ("c3", "t2", "e3", "u1", "u4", "2026-10-14T01:00:00Z", None),
-    ("c4", "t1", "e1", "u3", "u1", "2026-10-15T00:30:00Z", None),
+    ("c1", "t2", "u1", "u3", "2026-10-14T01:00:00Z", None),
+    ("c2", "t2", "u1", "u2", "2026-10-14T01:00:00Z", "2026-10-14T05:00:00Z"),
+    ("c3", "t2", "u1", "u4", "2026-10-14T01:00:00Z", None),
+    ("c4", "t1", "u3", "u1", "2026-10-15T00:30:00Z", None),
 ]
 
 
 async def checks(session: AsyncSession) -> list[CheckRequest]:
     """부하는 목업에 없다 — 넣는 그 시각의 작업 · 안건으로 센다. 작업 · 안건을 먼저 넣는다."""
     loads = await recipient_loads(
-        session, "p1", sorted({row[4] for row in CHECKS}), today=today_kst()
+        session, "p1", sorted({row[3] for row in CHECKS}), today=today_kst()
     )
     return [
         CheckRequest(
             id=id_,
             project_id="p1",
-            thread_id=thread_id,
-            entry_id=entry_id,
+            agenda_id=agenda_id,
+            decision_rev=1,
+            decision=CHECK_DECISIONS[agenda_id],
             sender_id=sender,
             recipient_id=recipient,
             created_at=at(created),
@@ -787,9 +664,9 @@ async def checks(session: AsyncSession) -> list[CheckRequest]:
             load_open_tasks=loads[recipient].open_tasks,
             load_blocked_tasks=loads[recipient].blocked_tasks,
             load_due_soon_tasks=loads[recipient].due_soon_tasks,
-            load_open_threads=loads[recipient].open_threads,
+            load_open_agendas=loads[recipient].open_agendas,
         )
-        for id_, thread_id, entry_id, sender, recipient, created, confirmed in CHECKS
+        for id_, agenda_id, sender, recipient, created, confirmed in CHECKS
     ]
 
 
@@ -855,8 +732,9 @@ def minutes() -> list[Minutes]:
 # 오늘을 2026-10-15 로 두면 표의 신호가 나온다.
 # 담당 = 바꾼 사람 = 만든 사람, 바뀐 시각은 그날 12:00 KST.
 # 태그 — T2 ↔ 작업 k4(t1 · t2 에 걸려 있다), T3 ↔ 안건 t3, T4 ↔ 안건 t2, T6 ↔ 작업 k21.
-# basis_seq 는 서버 규칙(닿는 안건의 Entry seq 최댓값)이다 — T4 만 결정 e3(seq 3) 앞인 2 로 둬서
-# '기준 바뀜' 이 난다. 시드에 change 줄이 없어 decide 줄로 대신한다(목업과 같다)
+# basis_seq 는 서버 규칙(닿는 안건의 '결정 변경' 이력 줄 seq 최댓값)이다. 안건 이력의 seq 는
+# '등록' 열 줄(1 ~ 10) 다음 '결정내용' 넷 — t1 11 · t2 12 · t5 13 · t6 14 (agenda_histories).
+# T4 만 t2 의 줄(12) 앞인 11 로 둬서 '기준 바뀜' 이 난다(목업과 같다)
 TEST_CREATED = "2026-09-30T01:00:00Z"
 
 
@@ -914,8 +792,8 @@ SEED_TESTS: list[SeedTest] = [
         ),
         test_data="dev01 / 발급 메일의 임시 비밀번호",
         refs=[("task", "k4")],
-        # k4 로 닿는 t1 · t2 의 최댓값 e3
-        basis=3,
+        # k4 로 닿는 t1(11) · t2(12) 의 최댓값
+        basis=12,
     ),
     SeedTest(
         "비밀번호 5회 틀림 잠금",
@@ -933,9 +811,9 @@ SEED_TESTS: list[SeedTest] = [
             "1. 틀린 비밀번호로 네 번 로그인한다 → 매번 남은 횟수가 보인다",
             "2. 다섯 번째로 틀린다 → 계정이 잠겼다는 안내가 뜬다",
         ),
-        refs=[("thread", "t3")],
-        # t3 에는 미룸 e4 뿐이다
-        basis=4,
+        refs=[("agenda", "t3")],
+        # t3 에는 결정 변경 줄이 없다 — 규칙대로 null
+        basis=None,
     ),
     SeedTest(
         "비밀번호 변경 주기",
@@ -952,9 +830,9 @@ SEED_TESTS: list[SeedTest] = [
             "단계",
             "1. 주기가 지난 계정으로 로그인한다 → 비밀번호 바꾸기 화면으로 간다",
         ),
-        refs=[("thread", "t2")],
-        # 테스트를 쓸 때 본 기준 뒤로 t2 에 결정 e3(seq 3) 이 생겼다
-        basis=2,
+        refs=[("agenda", "t2")],
+        # 테스트를 쓸 때 본 기준 뒤로 t2 의 결정(12)이 생겼다
+        basis=11,
     ),
     SeedTest(
         "계정 배포 시나리오",
@@ -1075,7 +953,7 @@ def test_refs() -> list[TestRef]:
             test_id=f"tc{no}",
             project_id="p1",
             task_id=target if kind == "task" else None,
-            thread_id=target if kind == "thread" else None,
+            agenda_id=target if kind == "agenda" else None,
         )
         for no, row in enumerate(SEED_TESTS, start=1)
         for i, (kind, target) in enumerate(row.refs)
@@ -1092,18 +970,13 @@ async def clear(session: AsyncSession) -> None:
         CheckRequest,
         RiskSetting,
         TaskComment,
-        TaskThreadLink,
+        TaskAgendaLink,
         TaskHistory,
         TaskLog,
         TaskLine,
         Task,
-        EntryDetail,
-        Entry,
-        DecisionItem,
-        ThreadOption,
-        ThreadCc,
-        ThreadHistory,
-        Thread,
+        AgendaHistory,
+        Agenda,
         Minutes,
         PartMember,
         Part,
@@ -1143,9 +1016,7 @@ async def advance_identity(session: AsyncSession) -> None:
     seqs = [
         (table, "seq")
         for table in (
-            "thread",
-            "decision_item",
-            "entry",
+            "agenda",
             "task",
             "task_comment",
             "check_request",
@@ -1154,7 +1025,7 @@ async def advance_identity(session: AsyncSession) -> None:
             "test_case",
             "task_history",
             "test_history",
-            "thread_history",
+            "agenda_history",
         )
     ]
     # 멤버 번호는 열 이름이 no 다. 따옴표로 감싼다 — NO 는 SQL 키워드다
@@ -1179,11 +1050,8 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(parts())
     await session.flush()
     session.add_all(part_members())
-    session.add_all(in_order(threads()))
+    session.add_all(in_order(agendas()))
     await session.flush()
-    session.add_all(in_order(decision_items()))
-    await session.flush()
-    session.add_all(in_order(entries()))
     session.add_all(in_order(tasks()))
     await session.flush()
     session.add_all(in_order(comments()))
@@ -1193,7 +1061,7 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(in_order(minutes()))
     await session.flush()
     session.add_all(
-        [TaskThreadLink(task_id=t, thread_id=h, project_id="p1") for t, h in TASK_THREAD_LINKS]
+        [TaskAgendaLink(task_id=t, agenda_id=h, project_id="p1") for t, h in TASK_AGENDA_LINKS]
     )
     # 상위가 먼저 들어가야 복합 FK 가 선다 — 한 줄씩 넣는다
     for row in in_order(test_cases()):
@@ -1202,7 +1070,7 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(test_refs())
     session.add_all(in_order(task_histories()))
     session.add_all(in_order(test_histories()))
-    session.add_all(in_order(thread_histories()))
+    session.add_all(in_order(agenda_histories()))
     await session.flush()
     await advance_identity(session)
     await session.commit()
@@ -1217,19 +1085,17 @@ async def run() -> None:
         "member": len(members()),
         "grant": len(grants()),
         "part": len(PARTS),
-        "thread": len(threads()),
-        "decision_item": len(DECISION_ITEMS),
-        "entry": len(entries()),
+        "agenda": len(agendas()),
         "task": len(tasks()),
         "comment": len(comments()),
-        "link": len(TASK_THREAD_LINKS),
+        "link": len(TASK_AGENDA_LINKS),
         "task_log": len(task_logs()),
         "check": len(CHECKS),
         "minutes": len(minutes()),
         "test": len(SEED_TESTS),
         "task_history": len(task_histories()),
         "test_history": len(test_histories()),
-        "thread_history": len(thread_histories()),
+        "agenda_history": len(agenda_histories()),
     }
     print("시드 완료 — " + " · ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"개발용 로그인 — {DEV_ADMIN_EMAIL} · u1~u4@inno-ax.com / 비밀번호 {DEV_PASSWORD}")

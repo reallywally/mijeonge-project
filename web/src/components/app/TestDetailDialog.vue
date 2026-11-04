@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, Clock, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
-import EntryKindBadge from '@/components/app/EntryKindBadge.vue'
+import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
@@ -42,7 +42,7 @@ const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{
   (e: 'open-test', id: string): void
   (e: 'open-task', id: string): void
-  (e: 'open-thread', id: string): void
+  (e: 'open-agenda', id: string): void
   (e: 'created', id: string): void
 }>()
 
@@ -183,7 +183,7 @@ const shownRefs = computed(() => test.value?.refs ?? refs.value)
 
 function openRef(ref: TestRef) {
   if (ref.kind === 'task') emit('open-task', ref.id)
-  else emit('open-thread', ref.id)
+  else emit('open-agenda', ref.id)
 }
 
 function setStatus(input: TestStatusInput) {
@@ -197,13 +197,12 @@ function pickStatus(value: unknown) {
   statusSection.value?.pick(value as TestStatus)
 }
 
-/* 기준 바뀜 — 태그로 닿는 안건에 테스트를 확인한 뒤 생긴 결정 줄. 안건 이력처럼 보인다 */
-const changedEntries = computed(() =>
-  (test.value?.changedEntryIds ?? []).map((id) => {
-    const entry = data.allEntries.find((e) => e.id === id) ?? null
-    const thread = entry ? (data.allThreads.find((t) => t.id === entry.threadId) ?? null) : null
-    return { id, entry, thread }
-  }),
+/* 기준 바뀜 — 태그로 닿는 안건 중 테스트를 확인한 뒤 결정이 바뀐 것. 그 안건의 지금 결정내용을 보인다 */
+const changedAgendas = computed(() =>
+  (test.value?.changedAgendaIds ?? []).map((id) => ({
+    id,
+    agenda: data.allAgendas.find((t) => t.id === id) ?? null,
+  })),
 )
 
 const parentChoices = computed(() => testStore.parentChoicesFor(props.testId))
@@ -350,7 +349,7 @@ const area =
           />
 
           <section
-            v-if="changedEntries.length"
+            v-if="changedAgendas.length"
             class="flex flex-col gap-3 rounded-lg border border-border border-l-[3px] border-l-destructive px-4 py-3"
             data-test-basis
           >
@@ -369,38 +368,29 @@ const area =
                 그대로 맞다
               </Button>
             </div>
-            <div v-for="c in changedEntries" :key="c.id" class="flex gap-4" data-test-basis-entry>
+            <div v-for="c in changedAgendas" :key="c.id" class="flex gap-4" data-test-basis-entry>
               <div class="w-[74px] shrink-0 pt-0.5 text-right text-xs font-medium">
-                {{ c.entry ? monthDay(c.entry.createdAt) : '—' }}
+                {{ c.agenda?.decidedAt ? monthDay(c.agenda.decidedAt) : '—' }}
               </div>
               <div class="w-px shrink-0 bg-border" />
               <div class="flex min-w-0 grow flex-col gap-1.5">
-                <div class="flex flex-wrap items-center gap-2">
-                  <EntryKindBadge v-if="c.entry" :kind="c.entry.kind" />
+                <div v-if="c.agenda" class="flex flex-wrap items-center gap-2">
+                  <AgendaStateBadge :state="c.agenda.state" />
                   <button
-                    v-if="c.thread"
                     type="button"
                     class="truncate text-xs text-muted-foreground underline-offset-4 hover:underline"
-                    @click="emit('open-thread', c.thread.id)"
+                    @click="emit('open-agenda', c.id)"
                   >
-                    {{ c.thread.title }}
+                    {{ c.agenda.title }}
                   </button>
                 </div>
-                <p class="text-sm leading-relaxed text-pretty">
-                  {{ c.entry?.text ?? '지금은 볼 수 없는 기록입니다.' }}
+                <p class="text-sm leading-relaxed whitespace-pre-line text-pretty">
+                  {{
+                    c.agenda
+                      ? c.agenda.decision || '결정내용이 비었습니다.'
+                      : '지금은 볼 수 없는 안건입니다.'
+                  }}
                 </p>
-                <div
-                  v-if="c.entry?.detail.length"
-                  class="flex flex-col gap-1 border-l-2 border-border pl-3"
-                >
-                  <p
-                    v-for="(line, i) in c.entry.detail"
-                    :key="i"
-                    class="text-[13px] leading-relaxed text-muted-foreground text-pretty"
-                  >
-                    {{ line }}
-                  </p>
-                </div>
               </div>
             </div>
           </section>

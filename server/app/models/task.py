@@ -121,25 +121,25 @@ class TaskLine(Base):
     task: Mapped[Task] = relationship(back_populates="lines")
 
 
-class TaskThreadLink(Base):
+class TaskAgendaLink(Base):
     """작업 ↔ 안건. 양쪽에서 읽는다 — '안건 상세에서 맵핑 불가'는 화면 규칙이다.
 
     **양쪽이 같은 프로젝트일 때만 선다** (API.md Q13). project_id 는 그것을 복합 FK 로
     못 박으려고 두는 열이고 JSON 에는 나가지 않는다.
     """
 
-    __tablename__ = "task_thread_link"
+    __tablename__ = "task_agenda_link"
     __table_args__ = (
         ForeignKeyConstraint(
             ["task_id", "project_id"], ["task.id", "task.project_id"], ondelete="CASCADE"
         ),
         ForeignKeyConstraint(
-            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+            ["agenda_id", "project_id"], ["agenda.id", "agenda.project_id"], ondelete="CASCADE"
         ),
     )
 
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    thread_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    agenda_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(36))
 
 

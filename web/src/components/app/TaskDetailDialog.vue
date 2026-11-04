@@ -8,7 +8,7 @@ import TaggedTests from '@/components/app/TaggedTests.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
 import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
-import ThreadCreateDialog from '@/components/app/ThreadCreateDialog.vue'
+import AgendaCreateDialog from '@/components/app/AgendaCreateDialog.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Button } from '@/components/ui/button'
@@ -37,7 +37,7 @@ import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
-import { useThreadStore } from '@/stores/thread'
+import { useAgendaStore } from '@/stores/agenda'
 import type { TaskLine, TaskStatus } from '@/types/domain'
 
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
@@ -48,13 +48,13 @@ const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{
   (e: 'open-task', id: string): void
-  (e: 'open-thread', id: string): void
+  (e: 'open-agenda', id: string): void
 }>()
 
 const data = useDataStore()
 const taskStore = useTaskStore()
 const partStore = usePartStore()
-const threadStore = useThreadStore()
+const agendaStore = useAgendaStore()
 
 const detail = computed(() => (props.taskId ? taskStore.taskDetail(props.taskId) : null))
 const canEdit = computed(() => (detail.value ? taskStore.canEdit(detail.value.task) : false))
@@ -147,7 +147,7 @@ async function addSubtask(e: KeyboardEvent) {
     start: null,
     due: null,
     priority: 'normal',
-    threadIds: [],
+    agendaIds: [],
     partId: partStore.partForChildOf(props.taskId),
   })
   subSaving.value = false
@@ -207,25 +207,25 @@ async function removeTask() {
 }
 
 /* 아직 안 건 안건 — 검색 칸이 이 안에서 찾는다 */
-const threadChoices = computed(() => {
-  const linked = new Set(detail.value?.threads.map((t) => t.thread.id))
-  return threadStore.threads.filter((t) => !linked.has(t.id))
+const agendaChoices = computed(() => {
+  const linked = new Set(detail.value?.agendas.map((t) => t.agenda.id))
+  return agendaStore.agendas.filter((t) => !linked.has(t.id))
 })
 
-/* 찾는 안건이 없으면 안건 추가 팝업을 이 위에 띄운다 — 적은 제목을 채워 열고, 배경 · 후보 · 담당 · 기한까지
+/* 찾는 안건이 없으면 안건 추가 팝업을 이 위에 띄운다 — 적은 제목을 채워 열고, 설명 · 결정내용 · 상태까지
    여기서 적는다(안건 화면에 다녀오지 않게). 만들면 이 작업에 건다 */
-const newThreadOpen = ref(false)
-const newThreadTitle = ref('')
+const newAgendaOpen = ref(false)
+const newAgendaTitle = ref('')
 
-function createThread(title: string) {
-  newThreadTitle.value = title
-  newThreadOpen.value = true
+function createAgenda(title: string) {
+  newAgendaTitle.value = title
+  newAgendaOpen.value = true
 }
 
-function onThreadCreated(id: string) {
-  newThreadOpen.value = false
+function onAgendaCreated(id: string) {
+  newAgendaOpen.value = false
   const taskId = detail.value?.task.id
-  if (taskId) taskStore.linkThread(taskId, id)
+  if (taskId) taskStore.linkAgenda(taskId, id)
 }
 </script>
 
@@ -390,13 +390,13 @@ function onThreadCreated(id: string) {
           </section>
 
           <TaskLinks
-            :threads="detail.threads"
-            :thread-choices="threadChoices"
+            :agendas="detail.agendas"
+            :agenda-choices="agendaChoices"
             :readonly="!canEdit"
-            @link-thread="(id) => taskStore.linkThread(detail!.task.id, id)"
-            @unlink-thread="(id) => taskStore.unlinkThread(detail!.task.id, id)"
-            @create-thread="createThread"
-            @open-thread="(id) => emit('open-thread', id)"
+            @link-agenda="(id) => taskStore.linkAgenda(detail!.task.id, id)"
+            @unlink-agenda="(id) => taskStore.unlinkAgenda(detail!.task.id, id)"
+            @create-agenda="createAgenda"
+            @open-agenda="(id) => emit('open-agenda', id)"
           />
 
           <TaggedTests kind="task" :ref-id="detail.task.id" />
@@ -432,7 +432,7 @@ function onThreadCreated(id: string) {
           <dl class="flex flex-col gap-2 px-0.5 text-xs">
             <div class="flex gap-2">
               <dt class="w-[72px] shrink-0 text-muted-foreground">연관 안건</dt>
-              <dd>{{ detail.threads.length }}건</dd>
+              <dd>{{ detail.agendas.length }}건</dd>
             </div>
             <div class="flex gap-2">
               <dt class="w-[72px] shrink-0 text-muted-foreground">작성자</dt>
@@ -491,11 +491,11 @@ function onThreadCreated(id: string) {
         </DialogContent>
       </Dialog>
 
-      <ThreadCreateDialog
-        v-model:open="newThreadOpen"
-        :initial-title="newThreadTitle"
+      <AgendaCreateDialog
+        v-model:open="newAgendaOpen"
+        :initial-title="newAgendaTitle"
         :link-note="`만들면 ${detail.task.key} 작업에 연결됩니다`"
-        @created="onThreadCreated"
+        @created="onAgendaCreated"
       />
     </DialogScrollContent>
   </Dialog>

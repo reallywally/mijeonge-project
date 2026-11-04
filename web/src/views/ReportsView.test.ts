@@ -139,7 +139,7 @@ describe('상세', () => {
     await generated()
     expect($('[data-report-body] [data-ref-task="k20"]')).toBeTruthy()
     expect($('[data-report-body] [data-ref-task="k22"]')).toBeTruthy()
-    expect($('[data-report-body] [data-ref-thread="t3"]')).toBeTruthy()
+    expect($('[data-report-body] [data-ref-agenda="t3"]')).toBeTruthy()
 
     const k20 = '[data-attention="k20"]'
     expect($$('[data-attention]')[0].getAttribute('data-attention')).toBe('k20')

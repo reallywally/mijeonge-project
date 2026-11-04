@@ -1,7 +1,7 @@
 """라우트가 같이 쓰는 의존성 — 로그인 · 프로젝트 경계 · 권한 · JSON 만 받기.
 
 프로젝트 경계는 라우터 단위로 건다(`main.py` 의 `require_scope`).
-엔드포인트마다 검사를 적지 않는다 — 경로에 `project_id` · `task_id` · `thread_id` ·
+엔드포인트마다 검사를 적지 않는다 — 경로에 `project_id` · `task_id` · `agenda_id` ·
 `comment_id` · `part_id` · `check_id` · `minutes_id` · `report_id` · `test_id` 가 있으면
 그 레코드의 프로젝트로 본다.
 """

@@ -54,27 +54,26 @@ const proposeTools: MockChatReply['tools'] = [
 
 /*
  * 목업 챗봇의 답. 서버 없이 화면을 만들려는 것이라 질문을 이해하지 않고 낱말로만 고른다.
- * 근거 표시(`[[thread:ID]]` · `[[task:ID]]`)는 서버처럼 본문에 섞는다 — 화면이 칩으로 바꾼다 (7-3).
+ * 근거 표시(`[[agenda:ID]]` · `[[task:ID]]`)는 서버처럼 본문에 섞는다 — 화면이 칩으로 바꾼다 (7-3).
  */
 export const chatReplies: MockChatReply[] = [
   {
     keywords: ['OS', 'os', '운영체제'],
     tools: [
-      { name: 'search_threads', label: '‘OS’ 안건 찾는 중' },
-      { name: 'get_thread', label: '‘서버 OS 결정’ 이력 읽는 중' },
+      { name: 'search_agendas', label: '‘OS’ 안건 찾는 중' },
+      { name: 'get_agenda', label: '‘서버 OS 결정’ 결정내용 읽는 중' },
     ],
     answer:
       '서버 OS 는 우분투 최신 버전으로 정해졌습니다.\n' +
-      '[[thread:t1]] 에 2026-09-09 결정으로 남아 있고, PM 에게 전달받아 이도현이 정리했습니다.\n' +
-      '후보였던 록키 · CentOS 는 고르지 않았습니다.',
+      '[[agenda:t1]] 의 결정내용에 남아 있고, 2026-09-09 에 정해졌습니다.',
   },
   {
     keywords: ['안 정해진', '안정해진', '미정', '아직'],
-    tools: [{ name: 'search_threads', label: '결정 전 안건 찾는 중' }],
+    tools: [{ name: 'search_agendas', label: '결정 전 안건 찾는 중' }],
     answer:
       '아직 정해지지 않은 안건은 이렇습니다.\n' +
-      '- [[thread:t3]] — 한 번 미뤘습니다. 정보보안팀 확인이 먼저입니다.\n' +
-      '- [[thread:t5]] — 두 번 미뤘습니다. 업무 정의가 아직 없습니다.\n' +
+      '- [[agenda:t3]] — 한 번 미뤘습니다. 정보보안팀 확인이 먼저입니다.\n' +
+      '- [[agenda:t5]] — 두 번 미뤘습니다. 업무 정의가 아직 없습니다.\n' +
       '- 개발 서버 백업 주기 · 가상비서 tool 만드는 순서 · AI 심사 학습 데이터 범위 · 공통 코드 체계 확정 — 등록만 되어 있습니다.',
   },
   {
@@ -82,7 +81,7 @@ export const chatReplies: MockChatReply[] = [
     tools: [{ name: 'search_tasks', label: '막힌 작업 찾는 중' }],
     answer:
       '막힌 작업은 [[task:k18]] 하나입니다.\n' +
-      '연결된 안건 [[thread:t5]] 가 아직 정해지지 않아 멈춰 있습니다.',
+      '연결된 안건 [[agenda:t5]] 가 아직 정해지지 않아 멈춰 있습니다.',
   },
   {
     keywords: ['만들어', '등록해', '추가해'],
@@ -100,7 +99,7 @@ export const chatReplies: MockChatReply[] = [
 
 export const chatFallback: MockChatReply = {
   keywords: [],
-  tools: [{ name: 'search_threads', label: '안건 찾는 중' }],
+  tools: [{ name: 'search_agendas', label: '안건 찾는 중' }],
   answer:
     '저장된 안건 · 작업에서 그 내용을 찾지 못했습니다.\n' +
     '목업 모드에서는 예시 질문에만 답합니다.',

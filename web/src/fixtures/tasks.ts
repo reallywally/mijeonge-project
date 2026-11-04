@@ -1,5 +1,5 @@
 import { taskComments } from '@/fixtures/comments'
-import type { Task, TaskLine, TaskStatus, TaskThreadLink } from '@/types/domain'
+import type { Task, TaskLine, TaskStatus, TaskAgendaLink } from '@/types/domain'
 
 /**
  * 작업. memo 의 "기본 사용법" 에 적힌 트리를 그대로 깔았다.
@@ -144,11 +144,11 @@ export const tasks: Task[] = rows.map((t, i) => ({
 }))
 
 /** 작업 ↔ 안건. 작업을 하다가 정해야 했던 것들이다 */
-export const taskThreadLinks: TaskThreadLink[] = [
-  { taskId: 'k4', threadId: 't1' }, // 개발 환경 설정 ↔ 서버 OS 결정
-  { taskId: 'k4', threadId: 't2' }, // 개발 환경 설정 ↔ DB 결정
-  { taskId: 'k18', threadId: 't5' }, // 기간계 API ↔ in · out 정의
-  { taskId: 'k13', threadId: 't8' }, // 모델링 ↔ 학습 데이터 범위
-  { taskId: 'k3', threadId: 't9' }, // 프로그램 설계 ↔ 공통 코드 체계
-  { taskId: 'k22', threadId: 't2' }, // 스테이징 DB 구성 ↔ DB 결정
+export const taskAgendaLinks: TaskAgendaLink[] = [
+  { taskId: 'k4', agendaId: 't1' }, // 개발 환경 설정 ↔ 서버 OS 결정
+  { taskId: 'k4', agendaId: 't2' }, // 개발 환경 설정 ↔ DB 결정
+  { taskId: 'k18', agendaId: 't5' }, // 기간계 API ↔ in · out 정의
+  { taskId: 'k13', agendaId: 't8' }, // 모델링 ↔ 학습 데이터 범위
+  { taskId: 'k3', agendaId: 't9' }, // 프로그램 설계 ↔ 공통 코드 체계
+  { taskId: 'k22', agendaId: 't2' }, // 스테이징 DB 구성 ↔ DB 결정
 ]

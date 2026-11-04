@@ -2,7 +2,7 @@
 
 고치기 · 지우기 권한은 `access.can_edit_task` · `can_delete_task` 하나로 본다.
 
-작업 ↔ 안건 링크(`task_thread_link`)는 멱등이다: PUT 을 두 번 눌러도 결과가 같고,
+작업 ↔ 안건 링크(`task_agenda_link`)는 멱등이다: PUT 을 두 번 눌러도 결과가 같고,
 없는 링크를 DELETE 해도 성공이다. 읽기 쪽(`services/snapshot.py`)이 쓰는 `to_task` 도
 여기 둔다 — 변환을 두 벌 갖지 않는다.
 """
@@ -16,19 +16,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
 from app.models import (
+    Agenda,
     Project,
     Task,
+    TaskAgendaLink,
     TaskComment,
     TaskLine,
     TaskLog,
-    TaskThreadLink,
-    Thread,
     new_id,
 )
 from app.schemas.task import (
     PROPOSAL_MAX,
     BatchTaskIn,
     ProposedTask,
+    TaskAgendaLinkOut,
     TaskBatchInput,
     TaskBatchResult,
     TaskCreate,
@@ -37,7 +38,6 @@ from app.schemas.task import (
     TaskMoveIn,
     TaskOut,
     TaskPatch,
-    TaskThreadLinkOut,
 )
 from app.services import access
 from app.services import history as history_service
@@ -172,15 +172,15 @@ async def load_task(session: AsyncSession, task_id: str) -> Task:
     return task
 
 
-async def _load_thread(session: AsyncSession, thread_id: str) -> Thread:
+async def _load_agenda(session: AsyncSession, agenda_id: str) -> Agenda:
     # 지운 안건은 없는 것과 같다 — 링크를 새로 걸 수 없다
     found = await session.execute(
-        select(Thread).where(Thread.id == thread_id, Thread.is_deleted.is_(False))
+        select(Agenda).where(Agenda.id == agenda_id, Agenda.is_deleted.is_(False))
     )
-    thread = found.scalar_one_or_none()
-    if thread is None:
-        raise not_found("THREAD_NOT_FOUND", "안건을 찾을 수 없습니다.")
-    return thread
+    agenda = found.scalar_one_or_none()
+    if agenda is None:
+        raise not_found("AGENDA_NOT_FOUND", "안건을 찾을 수 없습니다.")
+    return agenda
 
 
 async def _next_key(session: AsyncSession, project: Project) -> str:
@@ -329,8 +329,8 @@ async def _insert_task(
     # 같이 건 안건은 '등록' 에 든 것으로 본다 — 링크 줄을 따로 안 만든다 (docs/api/history.md)
     history_service.record_task(session, task, history_service.created(), actor_id, task.created_at)
 
-    for thread_id in dict.fromkeys(payload.thread_ids):
-        await _attach_thread(session, task, thread_id)
+    for agenda_id in dict.fromkeys(payload.agenda_ids):
+        await _attach_agenda(session, task, agenda_id)
     return task
 
 
@@ -759,58 +759,58 @@ async def set_line_done(
     return to_task(task, await comment_count(session, task.id), await status_since(session, task))
 
 
-async def _attach_thread(session: AsyncSession, task: Task, thread_id: str) -> bool:
+async def _attach_agenda(session: AsyncSession, task: Task, agenda_id: str) -> bool:
     """같은 프로젝트인지 보고 링크를 건다. 이미 있으면 아무것도 하지 않는다(멱등).
     새로 걸었으면 True — 이력은 새로 건 것만 남긴다."""
-    thread = await _load_thread(session, thread_id)
-    if thread.project_id != task.project_id:
+    agenda = await _load_agenda(session, agenda_id)
+    if agenda.project_id != task.project_id:
         raise bad_request(
-            "TASK_THREAD_LINK_OTHER_PROJECT", "작업과 안건이 서로 다른 프로젝트에 있습니다."
+            "TASK_AGENDA_LINK_OTHER_PROJECT", "작업과 안건이 서로 다른 프로젝트에 있습니다."
         )
     found = await session.execute(
-        select(TaskThreadLink).where(
-            TaskThreadLink.task_id == task.id, TaskThreadLink.thread_id == thread_id
+        select(TaskAgendaLink).where(
+            TaskAgendaLink.task_id == task.id, TaskAgendaLink.agenda_id == agenda_id
         )
     )
     if found.scalar_one_or_none() is not None:
         return False
-    session.add(TaskThreadLink(task_id=task.id, thread_id=thread_id, project_id=task.project_id))
+    session.add(TaskAgendaLink(task_id=task.id, agenda_id=agenda_id, project_id=task.project_id))
     return True
 
 
-async def link_thread(
-    session: AsyncSession, task_id: str, thread_id: str, scope: Scope
-) -> TaskThreadLinkOut:
+async def link_agenda(
+    session: AsyncSession, task_id: str, agenda_id: str, scope: Scope
+) -> TaskAgendaLinkOut:
     task = await load_task(session, task_id)
     _guard_edit(scope, task)
     actor_id = scope.actor.id
-    if await _attach_thread(session, task, thread_id):
+    if await _attach_agenda(session, task, agenda_id):
         history_service.record_task(
-            session, task, [history_service.change("thread", None, thread_id)], actor_id, now()
+            session, task, [history_service.change("agenda", None, agenda_id)], actor_id, now()
         )
     await session.commit()
-    return TaskThreadLinkOut(task_id=task_id, thread_id=thread_id)
+    return TaskAgendaLinkOut(task_id=task_id, agenda_id=agenda_id)
 
 
-async def unlink_thread(session: AsyncSession, task_id: str, thread_id: str, scope: Scope) -> None:
+async def unlink_agenda(session: AsyncSession, task_id: str, agenda_id: str, scope: Scope) -> None:
     task = await load_task(session, task_id)
     _guard_edit(scope, task)
     actor_id = scope.actor.id
     linked = await session.scalar(
-        select(TaskThreadLink.thread_id).where(
-            TaskThreadLink.task_id == task_id, TaskThreadLink.thread_id == thread_id
+        select(TaskAgendaLink.agenda_id).where(
+            TaskAgendaLink.task_id == task_id, TaskAgendaLink.agenda_id == agenda_id
         )
     )
     # 없는 링크를 떼는 것도 성공이지만 이력은 있던 것을 뗄 때만 남긴다
     if linked is None:
         return
     await session.execute(
-        delete(TaskThreadLink).where(
-            TaskThreadLink.task_id == task_id, TaskThreadLink.thread_id == thread_id
+        delete(TaskAgendaLink).where(
+            TaskAgendaLink.task_id == task_id, TaskAgendaLink.agenda_id == agenda_id
         )
     )
     history_service.record_task(
-        session, task, [history_service.change("thread", thread_id, None)], actor_id, now()
+        session, task, [history_service.change("agenda", agenda_id, None)], actor_id, now()
     )
     await session.commit()
 

@@ -22,7 +22,7 @@ import {
 import { useRiskStore } from '@/stores/risk'
 import type { RiskSettings } from '@/types/domain'
 
-/* 기준 바꾸기 — 문턱값 다섯을 한 묶음으로 보낸다(부분 수정은 없다). 신호 점수는 못 바꾼다.
+/* 기준 바꾸기 — 문턱값 넷을 한 묶음으로 보낸다(부분 수정은 없다). 신호 점수는 못 바꾼다.
    화면이 먼저 막고, 그래도 서버가 422 를 내면 detail 을 그 칸에 붙인다 */
 const open = defineModel<boolean>('open', { required: true })
 
@@ -35,7 +35,6 @@ const saving = ref(false)
 function toDraft(s: RiskSettings): Record<RiskSettingKey, string> {
   return {
     dueSoonDays: String(s.dueSoonDays),
-    deferCount: String(s.deferCount),
     staleDays: String(s.staleDays),
     highScore: String(s.highScore),
     mediumScore: String(s.mediumScore),
@@ -53,7 +52,6 @@ const parse = (raw: string) => (raw.trim() === '' ? Number.NaN : Number(raw))
 
 const parsed = computed<RiskSettings>(() => ({
   dueSoonDays: parse(draft.value.dueSoonDays),
-  deferCount: parse(draft.value.deferCount),
   staleDays: parse(draft.value.staleDays),
   highScore: parse(draft.value.highScore),
   mediumScore: parse(draft.value.mediumScore),

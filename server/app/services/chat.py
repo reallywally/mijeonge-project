@@ -28,13 +28,13 @@ from app.schemas.chat import (
     DoneEvent,
     ErrorEvent,
     FindSimilarTasksInput,
+    GetAgendaInput,
     GetDecisionRisksInput,
     GetTaskInput,
-    GetThreadInput,
     ListTasksInput,
     ProposalEvent,
+    SearchAgendasInput,
     SearchTasksInput,
-    SearchThreadsInput,
     TaskProposal,
     ToolEvent,
     ToolName,
@@ -53,7 +53,7 @@ MAX_ROUNDS = 6
 
 WEEKDAYS = "월화수목금토일"
 
-REF_PATTERN = re.compile(r"\[\[(thread|task):([^\[\]\s]+)\]\]")
+REF_PATTERN = re.compile(r"\[\[(agenda|task):([^\[\]\s]+)\]\]")
 # 질문 속 작업 언급 — 화면의 @ 자동완성이 '@HW-4' 로 넣는다. 접두사 규칙은 프로젝트와 같다
 # 뒤에 조사가 바로 붙어도('@HW-4는') 잡는다. 앞이 영숫자면 이메일 같은 것이라 뺀다
 MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9]{0,7}-\d+)(?![A-Za-z0-9_])")
@@ -61,14 +61,14 @@ MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9]{0,7}-\d+
 SYSTEM_PROMPT = """\
 너는 사내 업무 도구 innoFlow 의 도우미다. 지금 프로젝트는 '{project_name}' 이다.
 오늘은 {today} 이다(한국 시간).
-사용자의 질문에 이 프로젝트에 저장된 안건(thread) · 안건 이력(entry) · 작업(task)을
+사용자의 질문에 이 프로젝트에 저장된 안건(agenda) · 작업(task)을
 찾아 근거로 답한다. 작업을 만들어 달라고 하면 작업 초안을 낸다.
 
 ## 찾는 법
 - 답하기 전에 반드시 도구로 찾는다. 기억이나 짐작으로 답하지 않는다
 - 검색은 글자 일부가 맞는 것을 찾는다. 처음에 안 나오면 표현을 바꿔 다시 찾는다
   (예: 'OS' ↔ '운영체제' ↔ '우분투', 'DB' ↔ '데이터베이스')
-- 안건을 찾았으면 get_thread 로 이력을 읽고 답한다. 검색 결과의 한 줄만 보고 단정하지 않는다
+- 안건을 찾았으면 get_agenda 로 결정내용을 읽고 답한다. 검색 결과의 한 줄만 보고 단정하지 않는다
 - 도구 고르기: 특정 낱말 · 주제의 작업은 search_tasks, 작업 전체를 훑어야 하면(전체 현황 · 빠진 것)
   list_tasks, 중복 · 겹치는 작업은 find_similar_tasks 다. 하나를 자세히 보려면 get_task.
   리스크 · 막힘 · 무엇부터 정해야 하나는 get_decision_risks 다
@@ -93,25 +93,22 @@ SYSTEM_PROMPT = """\
    파트를 콕 집었으면 그 이름을 part_id 에 넣는다
 2. 답은 level 이 high 인 것부터 도구가 준 순서대로 말한다. 한 줄마다 왜(신호) ·
    무엇이 막히나(막힌 작업 · impactTaskCount) · 다음 할 일(누가 무엇을 정하면 되나)을 말하고
-   [[thread:ID]] · [[task:ID]] 근거를 단다. 담당자는 list_members 로 이름을 찾아 말한다
+   [[agenda:ID]] · [[task:ID]] 근거를 단다. 담당자는 list_members 로 이름을 찾아 말한다
 3. tasks 의 decidedButBlocked 는 걸린 안건이 다 정해졌으니 "막힘을 풀어도 된다" 고 말한다.
    너는 작업 상태를 바꾸지 못한다 — 화면에서 사람이 바꾼다고 말한다
 4. 점수 · 등급 · 날 수 같은 숫자는 도구가 준 그대로만 쓴다. 지어내거나 고쳐 매기지 않는다.
    리스크가 하나도 없으면 없다고 말한다
 5. 신호는 영어 이름 대신 화면의 말로 쓴다 —
-   overdue 기한 지남 · dueSoon 기한 임박 · deferredRepeatedly 여러 번 미룸 · stale 오래 멈춤 ·
+   overdue 기한 지남 · dueSoon 기한 임박 · stale 오래 멈춤 ·
    blocking 작업을 막는 중 · decisionAfterTaskDue 작업 기한이 먼저 · noOwner 담당자 없음 ·
-   noDueDate 기한 없음 / decidedButBlocked 풀어도 됨 · blockedWithoutThread 막힌 이유 없음 ·
+   noDueDate 기한 없음 / decidedButBlocked 풀어도 됨 · blockedWithoutAgenda 막힌 이유 없음 ·
    dueBeforeDecision 결정이 기한보다 늦음. 등급은 high 높음 · medium 중간 · low 낮음
 
 ## 답하는 규칙
-1. 안건의 결정은 **결정 항목마다** 따로다 — get_thread 의 items 가 항목마다
-   지금의 결정(decision)을 준다.
-   결정이 바뀐 항목은 그 항목의 **마지막 decide · change 줄이 지금의 결정**이다.
-   바뀐 적이 있으면 그 흐름(무엇에서 무엇으로)도 짧게 같이 말한다
+1. 안건의 결정은 get_agenda 의 agenda.decision(결정내용) 글이 지금의 결정이다.
+   여러 줄이면 줄마다 따로 정한 것일 수 있다 — 글에 적힌 그대로 옮기고 지어 보태지 않는다
 2. 안건 state 가 decided 가 아니면 "아직 안 정해졌다" 고 말한다.
-   항목 중 일부만 정해졌으면 정해진 것과 아직인 것을 나눠 말한다.
-   미룬 적이 있으면 미룬 횟수(kind 가 defer 인 줄의 수)와 마지막 미룸의 사유를 같이 준다
+   결정내용이 적혀 있어도 decided 가 아니면 "아직 확정은 아니다" 고 같이 말한다
 3. 찾지 못하면 지어내지 않고 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
 4. 이 프로젝트 밖은 찾지 않는다. 도구는 이 프로젝트 안만 본다
 
@@ -122,13 +119,13 @@ SYSTEM_PROMPT = """\
 - 사용자가 @ 없이 작업 키(HW-4)를 말해도 get_task 의 task_id 에 키를 넣어 읽을 수 있다
 
 ## 근거 표시
-- 답에 쓴 안건 · 작업마다 본문 안에 [[thread:ID]] · [[task:ID]] 를 붙인다.
+- 답에 쓴 안건 · 작업마다 본문 안에 [[agenda:ID]] · [[task:ID]] 를 붙인다.
   ID 는 도구 결과의 id 그대로다
 - 도구 결과에 없던 ID 는 절대 쓰지 않는다
 - ID 는 [[…]] 안에만 쓴다. 본문에는 키(HW-4) · 제목 · 이름으로 말하고 ID 를 따로 늘어놓지 않는다.
   담당자는 ID(ownerId) 가 아니라 이름으로 말한다 — 이름이 없으면 list_members 로 바꾼다
 - 답은 한국어 존댓말(~습니다 · ~요)로, 짧고 분명하게 쓴다. 영어 문장을 섞지 않는다.
-  이력의 kind 이름(decide 등)을 그대로 쓰지 말고 우리말로 풀어 쓴다
+  상태 이름(decided 등)을 그대로 쓰지 말고 우리말(대기 · 논의중 · 결정)로 풀어 쓴다
 - "찾아보겠습니다" 처럼 도구를 부르는 과정을 글로 중계하지 않는다 — 화면이 따로 보여 준다.
   글은 찾은 뒤의 답만 쓴다
 - 채팅창은 마크다운 가운데 **굵게** · *기울임* · `코드` · 목록(- 또는 1.) · 코드 블록(```)만 그린다.
@@ -155,11 +152,11 @@ SYSTEM_PROMPT = """\
    "등록했다" 고 말하지 않는다
 8. "@HW-20 분석해서 필요한 작업 하위에 추가해줘" 처럼 작업을 나눠 달라면:
    get_task 로 그 작업의 제목 · 본문 · 걸어 둔 안건 · 이미 있는 하위 작업(children)을 읽는다.
-   걸린 안건의 결정이 할 일을 정하면 get_thread 로 읽는다. 그다음 그 작업을 끝내는 데 필요한데
+   걸린 안건의 결정이 할 일을 정하면 get_agenda 로 읽는다. 그다음 그 작업을 끝내는 데 필요한데
    **children 에 아직 없는** 할 일만 하위 작업 초안(parent_id = 그 작업의 id)으로 낸다.
    이미 있는 하위 작업과 겹치는 것은 내지 않는다. 담당자 · 기간은 말하지 않았으면 비워 둔다.
    답에는 무엇을 근거로 나눴는지 한 줄 말하고,
-   읽은 작업 · 안건의 [[task:ID]] · [[thread:ID]] 를 붙인다
+   읽은 작업 · 안건의 [[task:ID]] · [[agenda:ID]] 를 붙인다
 9. 지난 답 뒤의 [작업 초안 …] 은 화면이 덧붙인 기록이다 — 네가 쓰는 형식이 아니다.
    '대기' · '취소' 인 초안을 고쳐 달라면 고친 새 초안을 낸다.
    '등록됨' 인 작업은 이미 저장됐다 — 채팅으로는 고치지 못하니 화면에서 고치라고 말한다
@@ -182,12 +179,12 @@ _DATE_OR_NULL = {"type": ["string", "null"], "description": "YYYY-MM-DD. 말하�
 
 TOOLS: list[ToolSpec] = [
     {
-        "name": "search_threads",
+        "name": "search_agendas",
         "description": (
             "이 프로젝트의 안건을 글자로 찾는다. "
-            "제목 · 배경 · 후보 · 이력(결정 · 미룸 등)의 글을 본다. "
+            "제목 · 배경(description) · 결정내용(decision)의 글을 본다. "
             "결과마다 id · state(queued 대기 / open 논의중 / decided 결정) · 맞은 자리(matched) · "
-            "발췌(snippet) · 지금의 결정(decision, 마지막 decide/change 줄. 없으면 '')을 준다."
+            "발췌(snippet) · 결정내용(decision, 없으면 '')을 준다."
         ),
         "input_schema": {
             "type": "object",
@@ -204,17 +201,16 @@ TOOLS: list[ToolSpec] = [
         },
     },
     {
-        "name": "get_thread",
+        "name": "get_agenda",
         "description": (
-            "안건 하나를 읽는다 — 안건(배경 · 후보 포함) + 결정 항목(items: 항목마다 정했는지 · "
-            "지금의 결정) + 이력 전부(등록 순서, 오래된 것부터, itemId 로 항목을 가리킨다) "
-            "+ 연결된 작업. 이력의 kind: raise 제기, defer 미룸, decide 결정, refine 세부, "
-            "change 결정 변경, split 분리. defer 의 itemId 가 null 이면 안건 전체를 미룬 것이다."
+            "안건 하나를 읽는다 — 제목 · 배경(description) · 결정내용(decision) · "
+            "상태(state) · 담당자(ownerId) · 기한(dueDate) · 파트(partId) · 결정된 시각(decidedAt) "
+            "+ 연결된 작업."
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"thread_id": {"type": "string"}},
-            "required": ["thread_id"],
+            "properties": {"agenda_id": {"type": "string"}},
+            "required": ["agenda_id"],
         },
     },
     {
@@ -282,7 +278,7 @@ TOOLS: list[ToolSpec] = [
         "name": "get_decision_risks",
         "description": (
             "안 정해진 안건이 막는(막을) 일을 규칙으로 계산한 결정 리스크 보고서를 준다. "
-            "threads: 위험한 안건(score 내림차순, level high/medium/low, signals, "
+            "agendas: 위험한 안건(score 내림차순, level high/medium/low, signals, "
             "blockedTaskIds · impactTaskCount), tasks: 안건과 어긋난 작업(signal 하나), "
             "owners: 사람별로 몰린 정도(memberId null 은 담당자 없음), settings: 쓴 기준. "
             "member_id 를 주면 그 사람이 맡은 안건 · 작업만, part_id 를 주면 그 파트의 것만 남긴다"
@@ -382,11 +378,11 @@ def tool_label(name: ToolName, raw: object) -> str:
     query = raw.get("query") if isinstance(raw, dict) else None
     shown = f'"{query.strip()[:30]}" ' if isinstance(query, str) and query.strip() else ""
     match name:
-        case "search_threads":
+        case "search_agendas":
             return f"{shown}안건 찾는 중"
         case "search_tasks":
             return f"{shown}작업 찾는 중"
-        case "get_thread":
+        case "get_agenda":
             return "안건 이력 읽는 중"
         case "get_task":
             return "작업 읽는 중"
@@ -408,21 +404,21 @@ async def run_tool(
     """(결과 JSON 문자열, 오류인가). project_id 는 경로에서 온 것만 쓴다 — Claude 가 못 바꾼다."""
     try:
         match name:
-            case "search_threads":
-                a = SearchThreadsInput.model_validate(raw)
-                threads = await search_service.search_threads(
+            case "search_agendas":
+                a = SearchAgendasInput.model_validate(raw)
+                agendas = await search_service.search_agendas(
                     session, project_id, a.query, state=a.state, limit=a.limit
                 )
-                return _dump_list(threads), False
+                return _dump_list(agendas), False
             case "search_tasks":
                 b = SearchTasksInput.model_validate(raw)
                 tasks = await search_service.search_tasks(
                     session, project_id, b.query, status=b.status, limit=b.limit
                 )
                 return _dump_list(tasks), False
-            case "get_thread":
-                c = GetThreadInput.model_validate(raw)
-                doc = await search_service.get_thread(session, project_id, c.thread_id)
+            case "get_agenda":
+                c = GetAgendaInput.model_validate(raw)
+                doc = await search_service.get_agenda(session, project_id, c.agenda_id)
                 return doc.model_dump_json(by_alias=True), False
             case "get_task":
                 d = GetTaskInput.model_validate(raw)

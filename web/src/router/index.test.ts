@@ -11,7 +11,7 @@ import type { Me, ProjectSnapshot } from '@/types/domain'
 /* 라우터 가드 · 401 리다이렉트 — 서버 모드로 fetch 를 가짜로 세워 진짜 라우터를 돌린다.
    화면 컴포넌트는 늦게 받으므로 가볍게 바꿔 둔다(작업 화면은 dhtmlx 를 끌고 온다) */
 vi.mock('@/views/TasksView.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('@/views/ThreadListView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/AgendaListView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/ProjectsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/LoginView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/AdminMembersView.vue', () => ({ default: { template: '<div />' } }))
@@ -34,11 +34,9 @@ const user: Me = {
 
 const snapshot = (projectId: string): ProjectSnapshot => ({
   project: projects.find((p) => p.id === projectId)!,
-  threads: [],
-  decisionItems: [],
-  entries: [],
+  agendas: [],
   tasks: [],
-  taskThreadLinks: [],
+  taskAgendaLinks: [],
   parts: [],
   partMembers: [],
 })
@@ -90,9 +88,9 @@ describe('로그인 전', () => {
   it('어느 화면이든 /login?next=<가려던 주소> 로 보낸다', async () => {
     me = null
     setActivePinia(createPinia())
-    await router.push('/threads/t3?x=1')
+    await router.push('/agendas/t3?x=1')
     expect(router.currentRoute.value.name).toBe('login')
-    expect(router.currentRoute.value.query.next).toBe('/threads/t3?x=1')
+    expect(router.currentRoute.value.query.next).toBe('/agendas/t3?x=1')
   })
 
   it('첫 화면으로 가던 것이면 next 를 달지 않는다', () => {
@@ -103,8 +101,8 @@ describe('로그인 전', () => {
 
 describe('쓰다가 세션이 끝나면', () => {
   it('아무 요청에서나 401 이 오면 비우고 지금 주소를 달아 로그인으로 보낸다', async () => {
-    await router.push('/threads/t3')
-    expect(path()).toBe('/threads/t3')
+    await router.push('/agendas/t3')
+    expect(path()).toBe('/agendas/t3')
     const data = useDataStore()
     expect(data.status).toBe('ready')
 
@@ -112,7 +110,7 @@ describe('쓰다가 세션이 끝나면', () => {
     await api.fetchMembers().catch(() => null)
     await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('login'))
 
-    expect(router.currentRoute.value.query.next).toBe('/threads/t3')
+    expect(router.currentRoute.value.query.next).toBe('/agendas/t3')
     expect(useAuthStore().me).toBeNull()
     expect(data.status).toBe('anonymous')
     expect(data.allProjects).toEqual([])
@@ -178,18 +176,18 @@ describe('권한 가드', () => {
   it('부여받은 프로젝트가 없으면 일반 사용자는 프로젝트 목록(안내)으로, 시스템 관리자는 등록으로', async () => {
     visible = []
     setActivePinia(createPinia())
-    await router.push('/threads')
+    await router.push('/agendas')
     expect(path()).toBe('/projects')
 
     me = { ...user, systemRole: 'admin', projectRoles: {} }
     setActivePinia(createPinia())
-    await router.push('/threads')
+    await router.push('/agendas')
     expect(path()).toBe('/projects/new')
   })
 
   it('로그인해 있으면 로그인 화면을 거치지 않고 next 로 간다', async () => {
-    await router.push('/login?next=/threads')
-    expect(path()).toBe('/threads')
+    await router.push('/login?next=/agendas')
+    expect(path()).toBe('/agendas')
   })
 })
 

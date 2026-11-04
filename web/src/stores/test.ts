@@ -148,7 +148,7 @@ export const useTestStore = defineStore('test', () => {
     if (partStore.scope === 'all') return null
     return visibleInMyParts({
       tasks: tests.value,
-      threads: [],
+      agendas: [],
       links: [],
       memberId: data.currentMemberId,
       myPartIds: partStore.myPartIds,
@@ -218,9 +218,9 @@ export const useTestStore = defineStore('test', () => {
         ? { ref, label: task.key, title: task.title, missing: false }
         : { ref, label: '지워진 작업', title: '', missing: true }
     }
-    const thread = data.allThreads.find((t) => t.id === ref.id)
-    return thread
-      ? { ref, label: thread.title, title: thread.title, missing: false }
+    const agenda = data.allAgendas.find((t) => t.id === ref.id)
+    return agenda
+      ? { ref, label: agenda.title, title: agenda.title, missing: false }
       : { ref, label: '지워진 안건', title: '', missing: true }
   }
 

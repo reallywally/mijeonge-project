@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entries, tasks, taskThreadLinks, threads } from '@/fixtures'
+import { tasks, taskAgendaLinks, agendas } from '@/fixtures'
 import { DEFAULT_RISK_SETTINGS } from '@/lib/risk'
 import {
   ATTENTION_LIMIT,
@@ -11,7 +11,7 @@ import {
   statusSpan,
   type ProgressInput,
 } from '@/lib/progress'
-import type { Task, TaskThreadLink, Thread } from '@/types/domain'
+import type { Task, TaskAgendaLink, Agenda } from '@/types/domain'
 
 /* 리포트의 규칙 계산 — 신호마다 · 점수 · 정렬 · 30개 · KST 날 수 · previous (docs/api/report.md '규칙이 세는 것') */
 
@@ -42,20 +42,20 @@ function task(id: string, over: Partial<Task> = {}): Task {
   }
 }
 
-function thread(id: string, state: Thread['state']): Thread {
+function agenda(id: string, state: Agenda['state'], decidedAt: string | null = null): Agenda {
   return {
     id,
     projectId: 'p1',
     title: id,
     description: '',
-    options: [],
+    decision: '',
     dueDate: null,
     state,
     ownerId: null,
-    parentThreadId: null,
     partId: null,
-    ccIds: [],
     createdAt: '2026-09-01T00:00:00Z',
+    decidedAt,
+    decisionRev: decidedAt ? 1 : 0,
     minutesId: null,
     creatorId: null,
   }
@@ -64,19 +64,18 @@ function thread(id: string, state: Thread['state']): Thread {
 function facts(
   ts: Task[],
   more: {
-    links?: TaskThreadLink[]
-    threads?: Thread[]
+    links?: TaskAgendaLink[]
+    agendas?: Agenda[]
   } & Partial<ProgressInput> = {},
 ) {
   return progressFacts({
     tasks: ts,
-    threads: more.threads ?? [],
-    entries: more.entries ?? [],
+    agendas: more.agendas ?? [],
     links: more.links ?? [],
     settings: more.settings ?? DEFAULT_RISK_SETTINGS,
     today: more.today ?? TODAY,
     previous: more.previous ?? null,
-    riskyThreadIds: more.riskyThreadIds ?? [],
+    riskyAgendaIds: more.riskyAgendaIds ?? [],
   })
 }
 
@@ -164,19 +163,19 @@ describe('신호', () => {
     const f = facts(
       [task('all'), task('some'), task('none')].map((t) => ({ ...t, status: 'blocked' as const })),
       {
-        threads: [thread('d1', 'decided'), thread('d2', 'decided'), thread('o1', 'open')],
+        agendas: [agenda('d1', 'decided'), agenda('d2', 'decided'), agenda('o1', 'open')],
         links: [
-          { taskId: 'all', threadId: 'd1' },
-          { taskId: 'all', threadId: 'd2' },
-          { taskId: 'some', threadId: 'd1' },
-          { taskId: 'some', threadId: 'o1' },
+          { taskId: 'all', agendaId: 'd1' },
+          { taskId: 'all', agendaId: 'd2' },
+          { taskId: 'some', agendaId: 'd1' },
+          { taskId: 'some', agendaId: 'o1' },
         ],
       },
     )
     expect(signalsOf(f, 'all')).toEqual(['decidedButBlocked'])
     expect(signalsOf(f, 'some')).toEqual([])
     expect(signalsOf(f, 'none')).toEqual([])
-    expect(f.attention.find((a) => a.taskId === 'all')!.weight.threadCount).toBe(2)
+    expect(f.attention.find((a) => a.taskId === 'all')!.weight.agendaCount).toBe(2)
   })
 
   it('완료 작업에는 신호를 내지 않는다', () => {
@@ -205,7 +204,7 @@ describe('무게 · 점수 · 정렬', () => {
       openChildren: 2,
       openLines: 1,
       totalLines: 2,
-      threadCount: 0,
+      agendaCount: 0,
       priority: 'high',
     })
   })
@@ -224,7 +223,7 @@ describe('무게 · 점수 · 정렬', () => {
 })
 
 describe('진척 · 결정 · 사람 · previous', () => {
-  it('기간 안에 그 상태가 된 · 등록된 작업과 기간 안 이력의 안건', () => {
+  it('기간 안에 그 상태가 된 · 등록된 작업과 기간 안에 정해진 안건', () => {
     const f = facts(
       [
         task('done1', { status: 'done', statusChangedAt: '2026-10-14T00:00:00Z' }),
@@ -238,49 +237,13 @@ describe('진척 · 결정 · 사람 · previous', () => {
         task('new1', { createdAt: '2026-10-20T10:00:00Z' }),
       ],
       {
-        threads: [thread('t1', 'decided'), thread('t2', 'open')],
-        entries: [
-          {
-            id: 'e1',
-            threadId: 't1',
-            itemId: 'i1',
-            kind: 'decide',
-            text: '',
-            detail: [],
-            note: '',
-            ownerId: null,
-            createdAt: '2026-10-15T00:00:00Z',
-            minutesId: null,
-            creatorId: null,
-          },
-          {
-            id: 'e2',
-            threadId: 't2',
-            itemId: null,
-            kind: 'defer',
-            text: '',
-            detail: [],
-            note: '',
-            ownerId: null,
-            createdAt: '2026-10-16T00:00:00Z',
-            minutesId: null,
-            creatorId: null,
-          },
-          {
-            id: 'e3',
-            threadId: 't2',
-            itemId: 'i2',
-            kind: 'change',
-            text: '',
-            detail: [],
-            note: '',
-            ownerId: null,
-            createdAt: '2026-10-01T00:00:00Z',
-            minutesId: null,
-            creatorId: null,
-          },
+        /* 정해진 때가 기간 안인 것만 — 기간 전에 정해진 t3 · 논의중으로 돌아간 t2 는 빠진다 */
+        agendas: [
+          agenda('t1', 'decided', '2026-10-15T00:00:00Z'),
+          agenda('t2', 'open'),
+          agenda('t3', 'decided', '2026-10-01T00:00:00Z'),
         ],
-        riskyThreadIds: Array.from({ length: 12 }, (_, i) => `r${i}`),
+        riskyAgendaIds: Array.from({ length: 12 }, (_, i) => `r${i}`),
       },
     )
     expect(f.progress).toMatchObject({
@@ -293,9 +256,9 @@ describe('진척 · 결정 · 사람 · previous', () => {
       startedTaskIds: ['doing1'],
       createdTaskIds: ['new1'],
     })
-    expect(f.decisions.decidedThreadIds).toEqual(['t1'])
-    expect(f.decisions.deferredThreadIds).toEqual(['t2'])
-    expect(f.decisions.riskyThreadIds).toHaveLength(10)
+    expect(f.decisions.decidedAgendaIds).toEqual(['t1'])
+    expect(f.decisions).not.toHaveProperty('deferredAgendaIds')
+    expect(f.decisions.riskyAgendaIds).toHaveLength(10)
   })
 
   it('사람별 — 담당 작업이 있는 사람만, 손쓸 작업이 많은 순, 담당자 없음은 뒤', () => {
@@ -323,13 +286,12 @@ describe('시드 (p1, 2026-10-20 기본 기준)', () => {
   const p1 = tasks.filter((t) => t.projectId === 'p1')
   const f = progressFacts({
     tasks: p1,
-    threads: threads.filter((t) => t.projectId === 'p1'),
-    entries,
-    links: taskThreadLinks,
+    agendas: agendas.filter((t) => t.projectId === 'p1'),
+    links: taskAgendaLinks,
     settings: DEFAULT_RISK_SETTINGS,
     today: TODAY,
     previous: null,
-    riskyThreadIds: ['t5', 't3', 't8', 't9'],
+    riskyAgendaIds: ['t5', 't3', 't8', 't9'],
   })
 
   it('k20 — 진행 중 12일째(계획 3일) · 기한 지남, 같은 점수 중 기한이 일러 맨 위', () => {

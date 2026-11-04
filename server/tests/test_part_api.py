@@ -60,28 +60,28 @@ async def test_snapshot_carries_parts_and_members(client: httpx.AsyncClient) -> 
 async def test_seed_parts_match_contract_table(client: httpx.AsyncClient) -> None:
     snap = await snapshot(client)
     tasks = {t["id"]: t["partId"] for t in snap["tasks"]}
-    threads = {t["id"]: t["partId"] for t in snap["threads"]}
+    agendas = {t["id"]: t["partId"] for t in snap["agendas"]}
     assert {k for k, v in tasks.items() if v == "pt1"} == {"k4", "k19", "k20", "k21", "k22"}
     assert {k for k, v in tasks.items() if v == "pt2"} == {f"k{n}" for n in range(6, 17)}
     assert {k for k, v in tasks.items() if v == "pt3"} == {"k18"}
     assert {k for k, v in tasks.items() if v is None} == {"k1", "k2", "k3", "k5", "k17"}
-    assert {k for k, v in threads.items() if v == "pt1"} == {"t1", "t2", "t4"}
-    assert {k for k, v in threads.items() if v == "pt2"} == {"t3", "t7", "t8"}
-    assert {k for k, v in threads.items() if v == "pt3"} == {"t5"}
-    assert {k for k, v in threads.items() if v is None} == {"t6", "t9"}
+    assert {k for k, v in agendas.items() if v == "pt1"} == {"t1", "t2", "t4"}
+    assert {k for k, v in agendas.items() if v == "pt2"} == {"t3", "t7", "t8"}
+    assert {k for k, v in agendas.items() if v == "pt3"} == {"t5"}
+    assert {k for k, v in agendas.items() if v is None} == {"t6", "t9"}
 
 
 async def test_project_without_parts_has_empty_lists(client: httpx.AsyncClient) -> None:
     snap = await snapshot(client, "p2")
     assert snap["parts"] == [] and snap["partMembers"] == []
-    assert all(t["partId"] is None for t in snap["tasks"] + snap["threads"])
+    assert all(t["partId"] is None for t in snap["tasks"] + snap["agendas"])
 
 
 async def test_snapshot_does_not_filter_by_part(as_member: AsMember) -> None:
     """파트는 권한이 아니다 — 파트가 없는 사람(admin 말고 u2 는 pt3 뿐)도 전부 받는다."""
     u2 = await as_member("u2")
     snap = await snapshot(u2)
-    assert len(snap["tasks"]) == 22 and len(snap["threads"]) == 9
+    assert len(snap["tasks"]) == 22 and len(snap["agendas"]) == 9
     assert len(snap["parts"]) == 3
 
 
@@ -349,8 +349,8 @@ async def test_foreign_or_missing_part_is_400(client: httpx.AsyncClient) -> None
         for method, url, body in [
             ("POST", "/api/projects/p1/tasks", {"title": "x", "partId": part_id}),
             ("PATCH", "/api/tasks/k1", {"partId": part_id}),
-            ("POST", "/api/projects/p1/threads", {"title": "x", "partId": part_id}),
-            ("PATCH", "/api/threads/t6", {"partId": part_id}),
+            ("POST", "/api/projects/p1/agendas", {"title": "x", "partId": part_id}),
+            ("PATCH", "/api/agendas/t6", {"partId": part_id}),
         ]:
             res = await client.request(method, url, json=body)
             assert res.status_code == 400, (method, url)
@@ -363,8 +363,8 @@ async def test_archived_part_cannot_be_newly_attached(client: httpx.AsyncClient)
     for method, url, body in [
         ("POST", "/api/projects/p1/tasks", {"title": "x", "partId": "pt1"}),
         ("PATCH", "/api/tasks/k5", {"partId": "pt1"}),
-        ("POST", "/api/projects/p1/threads", {"title": "x", "partId": "pt1"}),
-        ("PATCH", "/api/threads/t6", {"partId": "pt1"}),
+        ("POST", "/api/projects/p1/agendas", {"title": "x", "partId": "pt1"}),
+        ("PATCH", "/api/agendas/t6", {"partId": "pt1"}),
         # 상위를 따라오는 것도 새로 다는 것이다
         ("POST", "/api/projects/p1/tasks", {"title": "x", "parentId": "k4"}),
     ]:
@@ -379,8 +379,8 @@ async def test_keeping_an_archived_part_is_allowed(client: httpx.AsyncClient) ->
     for method, url, body in [
         ("PATCH", "/api/tasks/k4", {"title": "개발 환경"}),
         ("PATCH", "/api/tasks/k4", {"partId": "pt1", "status": "done"}),
-        ("PATCH", "/api/threads/t1", {"title": "서버 OS"}),
-        ("PATCH", "/api/threads/t1", {"partId": "pt1"}),
+        ("PATCH", "/api/agendas/t1", {"title": "서버 OS"}),
+        ("PATCH", "/api/agendas/t1", {"partId": "pt1"}),
     ]:
         res = await client.request(method, url, json=body)
         assert res.status_code == 200, (method, url, res.json())
@@ -393,15 +393,15 @@ async def test_keeping_an_archived_part_is_allowed(client: httpx.AsyncClient) ->
 # --- 안건 -----------------------------------------------------------------------------
 
 
-async def test_thread_part(client: httpx.AsyncClient) -> None:
-    res = await client.post("/api/projects/p1/threads", json={"title": "안 보냄"})
+async def test_agenda_part(client: httpx.AsyncClient) -> None:
+    res = await client.post("/api/projects/p1/agendas", json={"title": "안 보냄"})
     assert res.status_code == 201 and res.json()["partId"] is None
 
-    res = await client.post("/api/projects/p1/threads", json={"title": "AI", "partId": "pt2"})
+    res = await client.post("/api/projects/p1/agendas", json={"title": "AI", "partId": "pt2"})
     assert res.json()["partId"] == "pt2"
-    thread_id = res.json()["id"]
+    agenda_id = res.json()["id"]
 
-    res = await client.patch(f"/api/threads/{thread_id}", json={"partId": None})
+    res = await client.patch(f"/api/agendas/{agenda_id}", json={"partId": None})
     assert res.status_code == 200 and res.json()["partId"] is None
-    res = await client.patch(f"/api/threads/{thread_id}", json={"title": "AI 안건"})
+    res = await client.patch(f"/api/agendas/{agenda_id}", json={"title": "AI 안건"})
     assert res.json()["partId"] is None

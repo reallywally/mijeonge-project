@@ -46,32 +46,30 @@ uv run python -m scripts.create_admin --email a@b.com --name 홍길동   # 비�
 | 작업 일괄 등록 (챗봇 초안) | `POST /api/projects/{projectId}/tasks/batch` (한 트랜잭션 · `tempId` → id · `taskIdByTempId`) |
 | 작업 수정 | `PATCH /api/tasks/{taskId}` (상태 · 담당자 · 기간 · 상위 작업을 하나로 받는다) |
 | 작업 본문 줄 토글 | `PATCH /api/tasks/{taskId}/lines/{lineId}` |
-| 작업 ↔ 안건 | `PUT` · `DELETE /api/tasks/{taskId}/threads/{threadId}` |
+| 작업 ↔ 안건 | `PUT` · `DELETE /api/tasks/{taskId}/agendas/{agendaId}` |
 | 작업 댓글 목록 · 등록 | `GET` · `POST /api/tasks/{taskId}/comments` (등록 순 · 오래된 것 먼저) |
 | 댓글 수정 · 삭제 | `PATCH` · `DELETE /api/comments/{commentId}` (로그인이 없어 작성자 일치는 안 본다) |
 | 검색 | `GET /api/projects/{projectId}/search?q=` |
 | 챗봇 (SSE) | `POST /api/projects/{projectId}/chat` — 답 · 도구 진행 · 작업 초안(`proposal`) · 근거. 초안은 저장하지 않는다 |
 | 작업 ↔ 회의 | `PUT` · `DELETE /api/tasks/{taskId}/meetings/{meetingId}` |
-| 안건 등록 | `POST /api/projects/{projectId}/threads` |
-| 회의 밖 줄 | `POST /api/threads/{threadId}/entries` |
+| 안건 등록 | `POST /api/projects/{projectId}/agendas` (제목 · 설명 · 결정내용 · 상태 + 담당자 · 기한 · 파트) |
+| 안건 수정 · 삭제 | `PATCH` · `DELETE /api/agendas/{agendaId}` — 결정내용 · 상태도 PATCH 로 바꾼다. 결정 시각 · 결정 판은 서버가 맞춘다 (`docs/api/agenda.md`) |
+| 안건 변경 이력 | `GET /api/agendas/{agendaId}/history` |
 | **새 회의 저장** | `POST /api/projects/{projectId}/meetings` |
 | 회의 ↔ 작업 | `PUT` · `DELETE /api/meetings/{meetingId}/tasks/{taskId}` |
 
-스냅샷은 그 프로젝트의 레코드 전부(`threads` · `entries` · `meetings` · `tasks` · 링크 둘)를
+스냅샷은 그 프로젝트의 레코드 전부(`agendas` · `tasks` · `taskAgendaLinks` · 파트 둘)를
 한 번에 준다 — 화면의 `stores/data.ts` 가 들고 있는 것과 같은 모양이다. 집계는 여전히 화면이 한다.
 
 **배열 순서까지가 계약이다.** 안건 · 작업 목록에는 정렬이 없어서 배열 순서가 곧 화면 순서다.
 등록 순서(`seq`)로 내보낸다.
 
-쓰기는 **바뀐 레코드를 그대로 돌려준다** — 스냅샷을 다시 받지 않아도 되게. 줄 하나가 안건
-상태까지 바꾸므로 `POST /threads/{id}/entries` 는 `{entry, thread}` 를 같이 준다. 링크는
+쓰기는 **바뀐 레코드를 그대로 돌려준다** — 스냅샷을 다시 받지 않아도 되게. 링크는
 `PUT`/`DELETE` 라 두 번 눌러도 결과가 같고, 없는 링크를 지워도 204 다.
 
-**새 회의 저장이 제일 큰 자리다.** 안건 등록 · 회의 · 줄 여럿 · 안건 상태 변경이 **한 트랜잭션**에서
-돈다(하나 틀어지면 통째로 없던 일이다). 회의 중에 처음 만든 안건은 화면이 `tempId` 로 가리키는데,
-서버가 실제 id 를 미리 만들어 **줄 · 메모 · 하위 안건의 부모** 세 곳을 치환하고
-`threadIdByTempId` 로 돌려준다. 응답의 `threads` 는 이 저장으로 바뀐 안건 전부다.
-memo 의 시나리오 넷을 API 호출만으로 따라가는 검사가 `tests/test_scenarios.py` 에 있다.
+회의는 2026-10-11 걷어냈고(위 표의 회의 줄은 옛 기록이다), 안건 이력 줄 · 결정 항목은 2026-11-04 걷었다 —
+안건은 제목 · 설명 · 결정내용 · 상태 네 칸이고 결정이 바뀐 기록은 변경 이력(`agenda_history`)에 남는다.
+memo 의 시나리오를 API 호출만으로 따라가는 검사가 `tests/test_scenarios.py` 에 있다.
 
 ## 마이그레이션
 

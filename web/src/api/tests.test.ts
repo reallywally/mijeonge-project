@@ -59,9 +59,9 @@ describe('목업 갈래 — 시드', () => {
     ])
     const t8 = got.find((t) => t.key === 'HW-T8')!
     expect(t8.statusDays).toBe(1)
-    expect(got.find((t) => t.key === 'HW-T4')!.changedEntryIds).toEqual(['e3'])
+    expect(got.find((t) => t.key === 'HW-T4')!.changedAgendaIds).toEqual(['t2'])
     /* 태그한 작업으로 안건에 닿지만 바뀐 것이 없다 */
-    expect(got.find((t) => t.key === 'HW-T2')!.changedEntryIds).toEqual([])
+    expect(got.find((t) => t.key === 'HW-T2')!.changedAgendaIds).toEqual([])
     expect(got.find((t) => t.key === 'HW-T7')!).toMatchObject({
       resultNote: '관리 화면 주소를 직접 치면 열린다.',
     })
@@ -84,7 +84,7 @@ describe('목업 갈래 — 쓰기', () => {
       parentId: 'tc5',
       content: '단계\n1. 관리자가 [잠금 풀기] → 다시 로그인된다',
       refs: [
-        { kind: 'thread', id: 't2' },
+        { kind: 'agenda', id: 't2' },
         { kind: 'task', id: 'k21' },
         { kind: 'task', id: 'k21' },
       ],
@@ -97,12 +97,12 @@ describe('목업 갈래 — 쓰기', () => {
       createdBy: 'u2',
       partId: 'pt1',
       statusDays: 0,
-      changedEntryIds: [],
+      changedAgendaIds: [],
       content: '단계\n1. 관리자가 [잠금 풀기] → 다시 로그인된다',
       /* 겹친 태그는 하나로, 작업 먼저 */
       refs: [
         { kind: 'task', id: 'k21' },
-        { kind: 'thread', id: 't2' },
+        { kind: 'agenda', id: 't2' },
       ],
     })
     /* 지운 번호는 다시 쓰지 않는다 */
@@ -166,14 +166,14 @@ describe('목업 갈래 — 쓰기', () => {
   })
 
   it('태그 걸기 · 떼기는 멱등이고, 기준을 새로 찍는다 · [그대로 맞다] 로 기준 바뀜이 풀린다', async () => {
-    expect((await fetchTest('tc4')).changedEntryIds).toEqual(['e3'])
-    expect((await confirmTestBasis('tc4')).changedEntryIds).toEqual([])
+    expect((await fetchTest('tc4')).changedAgendaIds).toEqual(['t2'])
+    expect((await confirmTestBasis('tc4')).changedAgendaIds).toEqual([])
 
-    const tagged = await putTestRef('tc7', { kind: 'thread', id: 't1' })
-    expect(tagged.refs).toEqual([{ kind: 'thread', id: 't1' }])
-    expect((await putTestRef('tc7', { kind: 'thread', id: 't1' })).refs).toHaveLength(1)
-    await deleteTestRef('tc7', { kind: 'thread', id: 't1' })
-    await deleteTestRef('tc7', { kind: 'thread', id: 't1' })
+    const tagged = await putTestRef('tc7', { kind: 'agenda', id: 't1' })
+    expect(tagged.refs).toEqual([{ kind: 'agenda', id: 't1' }])
+    expect((await putTestRef('tc7', { kind: 'agenda', id: 't1' })).refs).toHaveLength(1)
+    await deleteTestRef('tc7', { kind: 'agenda', id: 't1' })
+    await deleteTestRef('tc7', { kind: 'agenda', id: 't1' })
     expect((await fetchTest('tc7')).refs).toEqual([])
   })
 
@@ -216,7 +216,7 @@ describe('서버 갈래', () => {
     await deleteTest('t1')
     await setTestStatus('t1', { status: 'pass' })
     await putTestRef('t1', { kind: 'task', id: 'k/4' })
-    await deleteTestRef('t1', { kind: 'thread', id: 't2' })
+    await deleteTestRef('t1', { kind: 'agenda', id: 't2' })
     await confirmTestBasis('t1')
 
     expect(fake.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
@@ -227,7 +227,7 @@ describe('서버 갈래', () => {
       ['/api/tests/t1', 'DELETE'],
       ['/api/tests/t1/status', 'POST'],
       ['/api/tests/t1/refs/task/k%2F4', 'PUT'],
-      ['/api/tests/t1/refs/thread/t2', 'DELETE'],
+      ['/api/tests/t1/refs/agenda/t2', 'DELETE'],
       ['/api/tests/t1/basis', 'POST'],
     ])
     /* 태그 걸기 · 기준은 본문이 없다 */

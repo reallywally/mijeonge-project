@@ -6,19 +6,18 @@ from pydantic import Field
 from app.models.risk import RISK_RANGES
 from app.schemas.base import Schema
 
-ThreadRiskSignal = Literal[
+AgendaRiskSignal = Literal[
     "overdue",
     "dueSoon",
-    "deferredRepeatedly",
     "stale",
     "blocking",
     "decisionAfterTaskDue",
     "noOwner",
     "noDueDate",
 ]
-TaskRiskSignal = Literal["decidedButBlocked", "blockedWithoutThread", "dueBeforeDecision"]
+TaskRiskSignal = Literal["decidedButBlocked", "blockedWithoutAgenda", "dueBeforeDecision"]
 RiskLevel = Literal["high", "medium", "low"]
-RiskThreadState = Literal["queued", "open"]
+RiskAgendaState = Literal["queued", "open"]
 RiskTaskStatus = Literal["todo", "doing", "blocked"]
 
 
@@ -29,35 +28,32 @@ def _bounded(column: str) -> object:
 
 
 class RiskSettings(Schema):
-    """문턱값 다섯. PUT 은 다섯 값을 통째로 받는다 — 빠진 키는 422 다.
+    """문턱값 넷. PUT 은 네 값을 통째로 받는다 — 빠진 키는 422 다.
 
     `high_score > medium_score` 는 둘을 같이 봐야 해서 서비스가 본다 —
     detail 키를 `highScore` 로 짚으려고.
     """
 
     due_soon_days: Annotated[int, _bounded("due_soon_days")]
-    defer_count: Annotated[int, _bounded("defer_count")]
     stale_days: Annotated[int, _bounded("stale_days")]
     high_score: Annotated[int, _bounded("high_score")]
     medium_score: Annotated[int, _bounded("medium_score")]
 
 
-class ThreadRisk(Schema):
-    thread_id: str
+class AgendaRisk(Schema):
+    agenda_id: str
     title: str
-    state: RiskThreadState
+    state: RiskAgendaState
     owner_id: str | None
     part_id: str | None
     due_date: date | None
     overdue_days: int
-    defer_count: int
-    last_defer_note: str
     idle_days: int
     blocked_task_ids: list[str]
     waiting_task_ids: list[str]
     impact_task_count: int
     nearest_task_due: date | None
-    signals: list[ThreadRiskSignal]
+    signals: list[AgendaRiskSignal]
     score: int
     level: RiskLevel
 
@@ -70,15 +66,15 @@ class TaskRisk(Schema):
     owner_id: str | None
     part_id: str | None
     due: date | None
-    thread_ids: list[str]
+    agenda_ids: list[str]
     signal: TaskRiskSignal
 
 
 class OwnerLoad(Schema):
     # null 은 '담당자 없음'
     member_id: str | None
-    open_threads: int
-    overdue_threads: int
+    open_agendas: int
+    overdue_agendas: int
     blocked_tasks: int
     blocking_impact: int
 
@@ -86,7 +82,7 @@ class OwnerLoad(Schema):
 class DecisionRiskReport(Schema):
     as_of: date
     settings: RiskSettings
-    threads: list[ThreadRisk]
+    agendas: list[AgendaRisk]
     tasks: list[TaskRisk]
     owners: list[OwnerLoad]
 
@@ -98,5 +94,5 @@ SUMMARY_IDS_MAX = 100
 class RiskSummaryInput(Schema):
     """POST .../risks/summary. 화면에 지금 보이는 줄 — 키는 둘 다 있어야 한다(빈 배열은 된다)."""
 
-    thread_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)
+    agenda_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)
     task_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)

@@ -23,7 +23,7 @@ const names: HistoryNames = {
   member: (id) => ({ u1: '김철수', u3: '박지민' })[id] ?? null,
   part: (id) => ({ pt1: '인프라' })[id] ?? null,
   task: (id) => ({ k4: 'HW-4', k19: 'HW-19' })[id] ?? null,
-  thread: (id) => ({ t1: '서버 OS 결정' })[id] ?? null,
+  agenda: (id) => ({ t1: '서버 OS 결정' })[id] ?? null,
   test: (id) => ({ tc1: 'HW-T1' })[id] ?? null,
 }
 
@@ -181,11 +181,11 @@ describe('화면 말', () => {
   it("지금 없는(지운) 사람 · 작업 · 안건은 '(삭제됨)'", () => {
     expect(task(change('ownerId', 'u9', 'u1')).from).toBe(MISSING)
     expect(task(change('parentId', 'k99', null)).from).toBe(MISSING)
-    expect(task(change('thread', null, 't99')).value).toBe(MISSING)
+    expect(task(change('agenda', null, 't99')).value).toBe(MISSING)
   })
 
   it('걸기 · 떼기는 무엇을 걸고 뗐는지 한 값으로', () => {
-    expect(task(change('thread', null, 't1'))).toMatchObject({
+    expect(task(change('agenda', null, 't1'))).toMatchObject({
       label: '안건 걸기',
       value: '서버 OS 결정',
     })
@@ -198,7 +198,7 @@ describe('화면 말', () => {
       label: '작업 태그 걸기',
       value: 'HW-4',
     })
-    expect(test(change('threadRef', 't1', null))).toMatchObject({
+    expect(test(change('agendaRef', 't1', null))).toMatchObject({
       label: '안건 태그 떼기',
       value: '서버 OS 결정',
     })
@@ -321,84 +321,76 @@ describe('화면 말', () => {
 })
 
 describe('안건 이력', () => {
-  const thread = (c: ReturnType<typeof change>) => changeView('thread', c, names)
+  const agenda = (c: ReturnType<typeof change>) => changeView('agenda', c, names)
 
-  it('칸 이름은 제목 · 배경 · 후보 · 담당자 · 파트 · 기한 · 참조, 등록 · 삭제는 문구 하나', () => {
-    expect(thread(change('created', null, null)).label).toBe('등록')
-    expect(thread(change('deleted', null, null)).label).toBe('삭제')
-    expect(thread(change('title', 'DB', 'DB 결정'))).toMatchObject({
+  it('칸 이름은 제목 · 설명 · 결정내용 · 상태 · 담당자 · 파트 · 기한, 등록 · 삭제는 문구 하나', () => {
+    expect(agenda(change('created', null, null)).label).toBe('등록')
+    expect(agenda(change('deleted', null, null)).label).toBe('삭제')
+    expect(agenda(change('title', 'DB', 'DB 결정'))).toMatchObject({
       label: '제목',
       from: 'DB',
       to: 'DB 결정',
     })
-    expect(thread(change('description', '', '배경 글'))).toMatchObject({
-      label: '배경',
+    expect(agenda(change('description', '', '배경 글'))).toMatchObject({
+      label: '설명',
       from: '(비움)',
       long: true,
     })
-    expect(thread(change('options', null, '우분투\n록키'))).toMatchObject({
-      label: '후보',
-      from: '없음',
-      to: '우분투\n록키',
+    expect(agenda(change('decision', '', '우분투\n- 24.04'))).toMatchObject({
+      label: '결정내용',
+      from: '(비움)',
+      to: '우분투\n- 24.04',
+      long: true,
       block: true,
     })
-    expect(thread(change('ownerId', null, 'u1'))).toMatchObject({ label: '담당자', to: '김철수' })
-    expect(thread(change('partId', 'pt1', null))).toMatchObject({ label: '파트', to: '공통' })
-    expect(thread(change('dueDate', null, '2026-09-12'))).toMatchObject({
+    expect(agenda(change('state', 'open', 'decided'))).toMatchObject({
+      label: '상태',
+      from: '논의중',
+      to: '결정됨',
+    })
+    expect(agenda(change('ownerId', null, 'u1'))).toMatchObject({ label: '담당자', to: '김철수' })
+    expect(agenda(change('partId', 'pt1', null))).toMatchObject({ label: '파트', to: '공통' })
+    expect(agenda(change('dueDate', null, '2026-09-12'))).toMatchObject({
       label: '기한',
       from: '없음',
       to: '9/12',
     })
-    expect(thread(change('ccIds', [], ['u1', 'u9']))).toMatchObject({
-      label: '참조',
-      from: '없음',
-      to: `김철수, ${MISSING}`,
-    })
   })
 
-  it("이력 줄 칸은 그 줄의 종류를 앞에 — '결정 줄 고침' · '미룸 줄 메모' · '결정 줄 지움'", () => {
-    expect(thread(change('entryText', '정했다', '다시 정했다', 'decide'))).toMatchObject({
-      label: '결정 줄 고침',
-      from: '정했다',
-      to: '다시 정했다',
-    })
-    expect(thread(change('entryNote', null, '사유', 'defer'))).toMatchObject({
-      label: '미룸 줄 메모',
-      from: '없음',
-      to: '사유',
-    })
-    expect(thread(change('entryDeleted', '정했다', null, 'decide'))).toMatchObject({
-      label: '결정 줄 지움',
-      value: '정했다',
-    })
-  })
-
-  it('결정 항목 칸 — 추가 · 이름 · 삭제', () => {
-    expect(thread(change('itemCreated', null, '세션 길이'))).toMatchObject({
-      label: '결정 항목 추가',
-      value: '세션 길이',
-    })
-    expect(thread(change('itemTitle', '세션', '세션 길이'))).toMatchObject({
-      label: '결정 항목 이름',
-      from: '세션',
-      to: '세션 길이',
-    })
-    expect(thread(change('itemDeleted', '세션 길이', null))).toMatchObject({
-      label: '결정 항목 삭제',
-      value: '세션 길이',
-    })
-  })
-
-  it('칸 표 순서로 놓는다 — 등록 · 삭제 다음 글 칸, 이력 줄 칸은 맨 뒤', () => {
+  it('칸 표 순서로 놓는다 — 등록 · 삭제 다음 글 칸, 그다음 상태 · 사람 · 기한', () => {
     const ordered = orderChanges(
       [
-        change('entryText', 'a', 'b', 'decide'),
-        change('ccIds', [], ['u1']),
+        change('dueDate', null, '2026-09-12'),
+        change('state', 'open', 'decided'),
+        change('decision', '', 'x'),
         change('title', 'a', 'b'),
-        change('options', null, 'x'),
       ],
-      'thread',
+      'agenda',
     )
-    expect(ordered.map((c) => c.field)).toEqual(['title', 'options', 'ccIds', 'entryText'])
+    expect(ordered.map((c) => c.field)).toEqual(['title', 'decision', 'state', 'dueDate'])
+  })
+
+  it('모르는 칸(지난 모델의 후보 · 참조 · 이력 줄 · 결정 항목)은 건너뛰고, 그것뿐인 줄은 뺀다', () => {
+    const row = (id: string, changes: ReturnType<typeof change>[]): HistoryEntry => ({
+      id,
+      changedAt: '2026-10-01T00:00:00Z',
+      changedBy: 'u1',
+      backfilled: false,
+      changes,
+    })
+    const view = historyView(
+      'agenda',
+      [
+        row('a', [change('created', null, null)]),
+        row('b', [change('options', null, '우분투'), change('ccIds', [], ['u1'])]),
+        row('c', [change('title', 'a', 'b'), change('entryText', 'x', 'y', 'decide')]),
+        row('d', [change('itemCreated', null, '세션'), change('entryDeleted', 'x', null, 'defer')]),
+      ],
+      names,
+    )
+    expect(view.map((e) => [e.id, e.changes.map((c) => c.field)])).toEqual([
+      ['c', ['title']],
+      ['a', ['created']],
+    ])
   })
 })

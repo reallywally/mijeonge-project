@@ -6,10 +6,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 from app.time import now
 
-# 문턱값 다섯의 범위 (docs/api/risk.md '기준 설정'). 스키마와 CHECK 가 같은 값을 본다
+# 문턱값 넷의 범위 (docs/api/risk.md '기준 설정'). 스키마와 CHECK 가 같은 값을 본다
 RISK_RANGES: dict[str, tuple[int, int]] = {
     "due_soon_days": (1, 30),
-    "defer_count": (1, 10),
     "stale_days": (1, 90),
     "high_score": (2, 30),
     "medium_score": (1, 29),
@@ -33,7 +32,6 @@ class RiskSetting(Base):
         ForeignKey("project.id", ondelete="CASCADE"), primary_key=True
     )
     due_soon_days: Mapped[int] = mapped_column(Integer)
-    defer_count: Mapped[int] = mapped_column(Integer)
     stale_days: Mapped[int] = mapped_column(Integer)
     high_score: Mapped[int] = mapped_column(Integer)
     medium_score: Mapped[int] = mapped_column(Integer)
