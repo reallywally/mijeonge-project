@@ -1,129 +1,216 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { Check, ChevronRight, Clock, Plus } from 'lucide-vue-next'
+import { Check, ChevronRight, Clock, Loader2, Pencil, Plus, Trash2 } from 'lucide-vue-next'
+import DecisionEntryForm, { type DecisionEntryDraft } from '@/components/app/DecisionEntryForm.vue'
 import PersonChip from '@/components/app/PersonChip.vue'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { useDataStore } from '@/stores/data'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { toastError } from '@/lib/notify'
+import { ITEM_TITLE_MAX } from '@/lib/thread'
 import { useThreadStore } from '@/stores/thread'
-import type { ThreadDetail } from '@/types/domain'
+import type { DecisionItem, ThreadDetail } from '@/types/domain'
 
-/* 안건 상세의 '결정' 영역 — 이 앱이 하려는 일이 여기 모인다. 정하면 결정으로, 못 정하면 사유를 달아
-   미룸으로 남긴다. 결정인지 미루기인지 먼저 고르고, 고른 쪽에 맞는 칸만 보여 준다.
-   상태는 손으로 바꾸지 않고 여기서 남긴 줄로만 바뀐다.
-   결정된 안건은 결정 내용을 크게 보여 주고, 바꾸면 새 결정 줄이 앞의 것을 대체한다(앞의 것은 이력에 남는다).
-   줄 남기기는 프로젝트 멤버 누구나다. 다만 '다시 볼 날' 은 안건 기한을 고치는 일이라 고칠 권한이 있을 때만 보인다 */
+/* 안건 상세의 '결정' 영역 — 이 앱이 하려는 일이 여기 모인다. 안건 안에서 따로 정할 것(결정 항목)마다
+   결정 · 미룸 · 세부 추가를 남기고, 항목이 전부 정해져야 안건이 결정됨이 된다.
+   상태는 손으로 바꾸지 않고 여기서 남긴 줄로만 바뀐다. 결정을 바꾸면 그 항목 안에서만 앞의 것을 대체한다.
+   항목이 없는 안건은 예전처럼 결정인지 미루기인지 먼저 고르고, 결정이면 항목 이름(안건 제목)도 같이 받는다.
+   줄 남기기 · 항목 더하기는 프로젝트 멤버 누구나다. 항목 이름 바꾸기 · 지우기는 줄 고치기와 같은 경계,
+   '다시 볼 날' 은 안건 기한을 고치는 일이라 고칠 권한이 있을 때만 보인다 */
 const props = defineProps<{ detail: ThreadDetail; canEditThread?: boolean }>()
 const emit = defineEmits<{ (e: 'open-thread', id: string): void }>()
 
-const data = useDataStore()
 const threadStore = useThreadStore()
 
-/* 'view' 는 결정된 안건을 보기만 하는 때, 'choose' 는 결정 전 안건에서 아직 무엇을 남길지 안 고른 때다 */
-type Mode = 'view' | 'choose' | 'decide' | 'defer' | 'refine'
-const mode = ref<Mode>('choose')
-const text = ref('')
-const note = ref('')
-const ownerId = ref<string | null>(null)
-/* 미룰 때 다시 볼 날 — 고르면 결정 기한도 그날로 옮긴다. 안 옮기면 미루자마자 '기한 지남' 이 된다 */
-const nextDue = ref('')
+type Mode = 'decide' | 'defer' | 'refine'
+/**
+ * 지금 열린 남기는 칸. place 'item' 은 그 항목 줄 아래, 'free' 는 항목 목록 아래 한 자리 —
+ * 안건 전체 미루기와 항목 없는 안건의 첫 결정이 쓴다. 새 항목을 만드는 중에 목록 모양이 바뀌어도
+ * 칸이 같은 자리에 남아 적은 것을 잃지 않게 자리를 열 때 정해 둔다
+ */
+interface OpenForm {
+  place: 'item' | 'free'
+  mode: Mode
+  /** null 이면 새 항목(결정 · 세부) 또는 안건 전체(미룸) */
+  itemId: string | null
+  /** 항목 없는 안건의 '결정 / 미루기' 갈림길에서 열었나 */
+  fromChoice: boolean
+}
+const form = ref<OpenForm | null>(null)
 const saving = ref(false)
-const NONE = 'none'
 
-const textInput = ref<InstanceType<typeof Input> | null>(null)
+/* 항목 더하기 · 이름 바꾸기 */
+const adding = ref(false)
+const newTitle = ref('')
+const addInput = ref<InstanceType<typeof Input> | null>(null)
+const renamingId = ref<string | null>(null)
+const renameDraft = ref('')
+const renameInput = ref<InstanceType<typeof Input>[] | null>(null)
+
+const items = computed(() => props.detail.items)
+const hasItems = computed(() => items.value.length > 0)
+/* 항목 없는 안건의 첫 갈림길 — 아무것도 안 열었거나 거기서 열었을 때 선다 */
+const showChoice = computed(() =>
+  form.value ? form.value.fromChoice : !hasItems.value && !adding.value,
+)
+
+/* 지우기 확인 */
+const deleteTarget = ref<DecisionItem | null>(null)
+const confirmOpen = computed({
+  get: () => deleteTarget.value !== null,
+  set: (v: boolean) => {
+    if (!v) deleteTarget.value = null
+  },
+})
+const deleting = ref(false)
 
 function reset() {
-  mode.value = props.detail.settled ? 'view' : 'choose'
-  text.value = ''
-  note.value = ''
-  ownerId.value = null
-  nextDue.value = ''
+  form.value = null
+  adding.value = false
+  newTitle.value = ''
+  renamingId.value = null
+  deleteTarget.value = null
 }
 
-/* 다른 안건으로 옮기거나 결정이 서면(결정 전 → 결정됨) 칸을 처음 모양으로 */
-watch(() => [props.detail.thread.id, props.detail.settled] as const, reset, { immediate: true })
+/* 다른 안건으로 옮기면 칸을 처음 모양으로 */
+watch(() => props.detail.thread.id, reset, { immediate: true })
 
-async function switchTo(next: Mode) {
-  mode.value = next
-  text.value = ''
-  note.value = ''
-  await nextTick()
-  ;(textInput.value?.$el as HTMLInputElement | undefined)?.focus()
+function open(next: OpenForm) {
+  adding.value = false
+  form.value = next
 }
 
-function cancel() {
-  reset()
-}
-
-/* 결정 전 안건의 첫 갈림길 — 둘 중 하나를 고르면 그쪽 칸이 열린다 */
+/* 항목 없는 안건의 첫 갈림길 — 둘 중 하나를 고르면 그쪽 칸이 열린다 */
 const CHOICES = [
   { mode: 'decide', label: '결정', hint: '무엇으로 정했는지 남깁니다', icon: Check },
   { mode: 'defer', label: '미루기', hint: '못 정한 사유를 남깁니다', icon: Clock },
 ] as const
 
-const LOOK: Record<
-  Exclude<Mode, 'view' | 'choose'>,
-  { label: string; placeholder: string; submit: string }
-> = {
-  decide: {
-    label: '결정한 내용',
-    placeholder: '한 줄로 — 어떻게 정했나요',
-    submit: '결정으로 남기기',
-  },
-  defer: {
-    label: '미루는 사유',
-    placeholder: '한 줄로 — 왜 지금 못 정하나요, 무엇을 기다리나요',
-    submit: '미루기로 남기기',
-  },
-  refine: {
-    label: '덧붙일 세부',
-    placeholder: '한 줄로 — 무엇을 더 정했나요',
-    submit: '세부로 남기기',
-  },
+function choose(mode: Mode) {
+  open({ place: 'free', mode, itemId: null, fromChoice: true })
 }
-const look = computed(() =>
-  mode.value === 'view' || mode.value === 'choose' ? null : LOOK[mode.value],
+
+const openFor = (itemId: string, mode: Mode) =>
+  open({ place: 'item', mode, itemId, fromChoice: false })
+const isOpenOn = (itemId: string) => form.value?.place === 'item' && form.value.itemId === itemId
+
+/** 새 항목의 이름 칸에 미리 채울 값 — 항목을 만들 때만 */
+const newItemTitle = computed(() =>
+  form.value && form.value.itemId === null && form.value.mode !== 'defer'
+    ? props.detail.thread.title
+    : null,
 )
 
-async function submit() {
-  const line = text.value.trim()
-  const kind = mode.value
-  if (!line || kind === 'view' || kind === 'choose' || saving.value) return
-  const id = props.detail.thread.id
-  const due = nextDue.value
+async function submit(draft: DecisionEntryDraft) {
+  const f = form.value
+  if (!f || saving.value) return
+  const threadId = props.detail.thread.id
   saving.value = true
-  const saved = await threadStore.addEntry(id, kind, line, note.value.trim(), ownerId.value)
-  saving.value = false
-  /* 실패는 스토어가 알렸다 — 적은 것을 그대로 두어 다시 남길 수 있게 한다 */
-  if (!saved) return
-  /* 다시 볼 날은 줄이 남은 뒤에 안건 기한으로 옮긴다 — 줄 없이 기한만 바뀌면 왜 바뀌었는지가 사라진다 */
-  if (kind === 'defer' && due && props.canEditThread) threadStore.updateThread(id, { dueDate: due })
-  reset()
-}
-
-/* 상세 설명은 여러 줄이다 — Enter 는 줄바꿈, 남기기는 ⌘/Ctrl+Enter */
-function onNoteKeydown(e: KeyboardEvent) {
-  if (e.isComposing) return
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault()
-    submit()
+  try {
+    /* 항목이 없으면 먼저 만든다. 줄 남기기가 실패해도 다시 누르면 만든 항목에 남는다 */
+    if (f.itemId === null && f.mode !== 'defer') {
+      const made = await threadStore.addItem(threadId, draft.itemTitle)
+      if (!made) return
+      f.itemId = made
+    }
+    const saved = await threadStore.addEntry(
+      threadId,
+      f.mode,
+      draft.text,
+      draft.note,
+      draft.ownerId,
+      f.itemId,
+    )
+    /* 실패는 스토어가 알렸다 — 적은 것을 그대로 두어 다시 남길 수 있게 한다 */
+    if (!saved) return
+    /* 다시 볼 날은 줄이 남은 뒤에 안건 기한으로 옮긴다 — 줄 없이 기한만 바뀌면 왜 바뀌었는지가 사라진다 */
+    if (f.mode === 'defer' && f.itemId === null && draft.nextDue && props.canEditThread)
+      threadStore.updateThread(threadId, { dueDate: draft.nextDue })
+    form.value = null
+  } finally {
+    saving.value = false
   }
 }
 
-function onKeydown(e: KeyboardEvent) {
-  /* 한글 조합 중의 Enter 는 글자를 맺는 키다 — 그때 남기면 마지막 글자가 잘린다 */
+async function startAdding() {
+  form.value = null
+  adding.value = true
+  newTitle.value = ''
+  await nextTick()
+  ;(addInput.value?.$el as HTMLInputElement | undefined)?.focus()
+}
+
+async function addItem() {
+  const title = newTitle.value.trim()
+  if (!title || saving.value) return
+  saving.value = true
+  const made = await threadStore.addItem(props.detail.thread.id, title)
+  saving.value = false
+  if (!made) return
+  adding.value = false
+  newTitle.value = ''
+}
+
+function onAddKeydown(e: KeyboardEvent) {
   if (e.isComposing) return
   if (e.key === 'Enter') {
     e.preventDefault()
-    submit()
+    addItem()
+  } else if (e.key === 'Escape') {
+    /* 팝업까지 닫히지 않게 여기서 멈춘다 */
+    e.stopPropagation()
+    e.preventDefault()
+    adding.value = false
+  }
+}
+
+async function startRename(item: DecisionItem) {
+  renamingId.value = item.id
+  renameDraft.value = item.title
+  await nextTick()
+  ;(renameInput.value?.[0]?.$el as HTMLInputElement | undefined)?.focus()
+}
+
+/* 비우면 원래 이름으로 돌아간다 — 스토어도 빈 이름은 받지 않는다 */
+function commitRename() {
+  const id = renamingId.value
+  if (!id) return
+  renamingId.value = null
+  if (renameDraft.value.trim()) threadStore.renameItem(id, renameDraft.value)
+}
+
+function onRenameKeydown(e: KeyboardEvent) {
+  if (e.isComposing) return
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    commitRename()
+  } else if (e.key === 'Escape') {
+    e.stopPropagation()
+    e.preventDefault()
+    renamingId.value = null
+  }
+}
+
+async function removeItem() {
+  const target = deleteTarget.value
+  if (!target || deleting.value) return
+  deleting.value = true
+  try {
+    await threadStore.deleteItem(target.id)
+    if (form.value?.itemId === target.id) form.value = null
+    deleteTarget.value = null
+  } catch (e) {
+    deleteTarget.value = null
+    toastError(e)
+  } finally {
+    deleting.value = false
   }
 }
 </script>
@@ -136,100 +223,193 @@ function onKeydown(e: KeyboardEvent) {
   >
     <div class="flex items-center gap-2">
       <span class="text-xs font-medium tracking-wider text-muted-foreground">결정</span>
+      <span v-if="hasItems" class="text-xs text-muted-foreground" data-decision-progress>
+        {{ detail.settledCount }}/{{ items.length }} 정함
+      </span>
       <span class="grow" />
       <span v-if="!detail.settled && detail.deferCount > 0" class="text-xs text-muted-foreground">
         지금까지 {{ detail.deferCount }}번 미뤄졌습니다
       </span>
     </div>
 
-    <!-- 결정됨 — 무엇을 · 왜 · 언제가 맨 위에 크게 -->
-    <div v-if="detail.settled" class="flex flex-col gap-3.5">
-      <div class="flex items-start gap-3">
-        <span class="mt-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary">
-          <Check class="size-3 text-primary-foreground" />
-        </span>
-        <p class="min-w-0 grow text-lg leading-relaxed font-semibold text-pretty">
-          {{ detail.current }}
-        </p>
-      </div>
-
-      <div
-        v-if="detail.detail.length"
-        class="ml-8 flex flex-col gap-1.5 border-l-2 border-border pl-3.5"
+    <!-- 항목마다 — 정한 것은 무엇을 · 왜 · 언제가 크게, 아직인 것은 결정 · 미루기 -->
+    <ul v-if="hasItems" class="flex flex-col gap-4" aria-label="결정 항목">
+      <li
+        v-for="v in items"
+        :key="v.item.id"
+        class="group flex flex-col gap-2.5"
+        :data-decision-item="v.item.id"
       >
-        <p v-for="(line, i) in detail.detail" :key="i" class="text-sm leading-relaxed text-pretty">
-          {{ line }}
-        </p>
-      </div>
-
-      <p
-        v-if="detail.settledNote"
-        class="ml-8 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
-      >
-        <span class="font-medium text-foreground">상세 설명</span> — {{ detail.settledNote }}
-      </p>
-
-      <div class="ml-8 flex items-center gap-2">
-        <PersonChip v-if="detail.settledOwnerName" :name="detail.settledOwnerName" />
-        <span class="text-xs text-muted-foreground">{{ detail.settledLabel }}</span>
-      </div>
-
-      <div v-if="detail.subThreads.length" class="ml-8 flex flex-col gap-2">
-        <div class="text-xs font-medium tracking-wider text-muted-foreground">
-          따로 떼어낸 하위 안건
-        </div>
-        <button
-          v-for="sub in detail.subThreads"
-          :key="sub.thread.id"
-          type="button"
-          class="flex min-h-11 items-center gap-2.5 rounded-md border border-border bg-background px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
-          @click="emit('open-thread', sub.thread.id)"
-        >
+        <div class="flex items-start gap-3">
           <span
-            class="size-1.5 shrink-0 rounded-full"
-            :class="sub.thread.state === 'decided' ? 'bg-primary' : 'bg-muted-foreground'"
+            v-if="v.settled"
+            class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary"
+            aria-label="정함"
+          >
+            <Check class="size-3 text-primary-foreground" />
+          </span>
+          <span
+            v-else
+            class="mt-0.5 size-5 shrink-0 rounded-full border-2 border-muted-foreground/40"
+            aria-label="아직"
           />
-          <span class="min-w-0 grow text-sm leading-snug text-pretty">{{ sub.thread.title }}</span>
-          <span class="shrink-0 text-xs text-muted-foreground">{{ sub.splitAtLabel }}</span>
-          <ChevronRight class="size-3 shrink-0 text-muted-foreground" />
-        </button>
-      </div>
 
-      <div v-if="mode === 'view'" class="ml-8 flex items-center gap-2">
-        <Button variant="outline" size="sm" @click="switchTo('decide')">결정 바꾸기</Button>
-        <Button variant="ghost" size="sm" class="text-muted-foreground" @click="switchTo('refine')">
-          <Plus class="size-3.5" />
-          세부 추가
-        </Button>
-      </div>
-    </div>
+          <div class="flex min-w-0 grow flex-col gap-0.5">
+            <div class="flex min-h-6 flex-wrap items-center gap-2">
+              <Input
+                v-if="renamingId === v.item.id"
+                ref="renameInput"
+                v-model="renameDraft"
+                aria-label="항목 이름"
+                :maxlength="ITEM_TITLE_MAX"
+                class="h-7 max-w-[360px] text-sm"
+                @keydown="onRenameKeydown"
+                @blur="commitRename"
+              />
+              <span
+                v-else
+                class="min-w-0 text-pretty"
+                :class="
+                  v.settled ? 'text-xs text-muted-foreground' : 'text-sm leading-snug font-medium'
+                "
+                data-item-title
+                >{{ v.item.title }}</span
+              >
+              <span v-if="v.deferCount > 0" class="text-xs text-muted-foreground">
+                — 미룸 {{ v.deferCount }}회
+              </span>
+              <span class="grow" />
+              <template v-if="threadStore.canEditItem(v.item) && renamingId !== v.item.id">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label="항목 이름 바꾸기"
+                  @click="startRename(v.item)"
+                >
+                  <Pencil class="size-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="h-6 gap-1 px-1.5 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                  aria-label="항목 지우기"
+                  @click="deleteTarget = v.item"
+                >
+                  <Trash2 class="size-3" />
+                </Button>
+              </template>
+              <template v-if="!v.settled && !isOpenOn(v.item.id)">
+                <Button variant="outline" size="sm" @click="openFor(v.item.id, 'decide')">
+                  <Check class="size-3.5" />
+                  결정
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="text-muted-foreground"
+                  @click="openFor(v.item.id, 'defer')"
+                >
+                  <Clock class="size-3.5" />
+                  미루기
+                </Button>
+              </template>
+            </div>
+            <p
+              v-if="v.settled"
+              class="leading-relaxed font-semibold text-pretty"
+              :class="items.length === 1 ? 'text-lg' : 'text-base'"
+            >
+              {{ v.current }}
+            </p>
+          </div>
+        </div>
 
-    <!-- 결정 전 — 결정인지 미루기인지 먼저 고른다 -->
-    <template v-else-if="mode !== 'refine'">
-      <p v-if="mode === 'choose'" class="text-sm leading-relaxed text-muted-foreground">
+        <template v-if="v.settled">
+          <div
+            v-if="v.detail.length"
+            class="ml-8 flex flex-col gap-1.5 border-l-2 border-border pl-3.5"
+          >
+            <p v-for="(line, i) in v.detail" :key="i" class="text-sm leading-relaxed text-pretty">
+              {{ line }}
+            </p>
+          </div>
+
+          <p
+            v-if="v.settledNote"
+            class="ml-8 text-sm leading-relaxed whitespace-pre-line text-muted-foreground"
+          >
+            <span class="font-medium text-foreground">상세 설명</span> — {{ v.settledNote }}
+          </p>
+
+          <div class="ml-8 flex flex-wrap items-center gap-2">
+            <PersonChip v-if="v.settledOwnerName" :name="v.settledOwnerName" />
+            <span class="text-xs text-muted-foreground">{{ v.settledLabel }}</span>
+            <template v-if="!isOpenOn(v.item.id)">
+              <span class="grow" />
+              <Button variant="outline" size="sm" @click="openFor(v.item.id, 'decide')">
+                바꾸기
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="text-muted-foreground"
+                @click="openFor(v.item.id, 'refine')"
+              >
+                <Plus class="size-3.5" />
+                세부 추가
+              </Button>
+            </template>
+          </div>
+        </template>
+
+        <DecisionEntryForm
+          v-if="form && isOpenOn(v.item.id)"
+          :key="form.mode"
+          class="ml-8"
+          :mode="form.mode"
+          :options="detail.thread.options"
+          framed
+          :saving="saving"
+          @submit="submit"
+          @cancel="form = null"
+        />
+      </li>
+    </ul>
+
+    <!-- 항목 없는 안건 — 결정인지 미루기인지 먼저 고른다 -->
+    <template v-if="showChoice">
+      <p v-if="!form" class="text-sm leading-relaxed text-muted-foreground">
         아직 정해지지 않았습니다. 오늘 무엇을 남길지 고르세요.
       </p>
-      <div class="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="남길 것">
+      <div
+        v-if="form?.mode !== 'refine'"
+        class="grid grid-cols-2 gap-2.5"
+        role="radiogroup"
+        aria-label="남길 것"
+      >
         <button
           v-for="c in CHOICES"
           :key="c.mode"
           type="button"
           role="radio"
-          :aria-checked="mode === c.mode"
+          :aria-checked="form?.mode === c.mode"
           class="flex items-start gap-3 rounded-md border px-3.5 py-3 text-left transition-colors"
           :class="
-            mode === c.mode
+            form?.mode === c.mode
               ? 'border-primary bg-primary text-primary-foreground'
               : 'border-border bg-card hover:bg-muted'
           "
-          @click="mode !== c.mode && switchTo(c.mode)"
+          @click="form?.mode !== c.mode && choose(c.mode)"
         >
           <component :is="c.icon" class="mt-0.5 size-4 shrink-0" />
           <span class="flex flex-col gap-0.5">
             <span class="text-sm font-medium">{{ c.label }}</span>
             <span
               class="text-xs"
-              :class="mode === c.mode ? 'text-primary-foreground/80' : 'text-muted-foreground'"
+              :class="
+                form?.mode === c.mode ? 'text-primary-foreground/80' : 'text-muted-foreground'
+              "
             >
               {{ c.hint }}
             </span>
@@ -237,117 +417,109 @@ function onKeydown(e: KeyboardEvent) {
         </button>
       </div>
       <button
-        v-if="mode === 'choose'"
+        v-if="!form"
         type="button"
         class="self-end text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-        @click="switchTo('refine')"
+        @click="choose('refine')"
       >
         결정 없이 세부만 덧붙이기
       </button>
     </template>
 
-    <!-- 남기는 칸 — 결정 · 미루기 · 세부 추가가 같은 모양이다 -->
-    <div
-      v-if="look"
-      class="flex flex-col gap-3"
-      :class="detail.settled ? 'rounded-md border border-border bg-muted/50 p-3.5' : ''"
-    >
-      <div class="flex flex-col gap-1.5">
-        <label for="decision-text" class="text-xs font-medium">
-          {{ look.label }}
-          <span class="font-normal text-muted-foreground">(필수)</span>
-        </label>
-        <Input
-          id="decision-text"
-          ref="textInput"
-          v-model="text"
-          :placeholder="look.placeholder"
-          class="bg-background"
-          @keydown="onKeydown"
-        />
-        <div
-          v-if="mode === 'decide' && detail.thread.options.length"
-          class="flex flex-wrap items-center gap-1.5 pt-0.5"
-        >
-          <span class="text-xs text-muted-foreground">후보에서 고르기</span>
-          <button
-            v-for="(option, i) in detail.thread.options"
-            :key="i"
-            type="button"
-            class="inline-flex h-7 items-center rounded-md border px-2.5 text-xs transition-colors"
-            :class="
-              text === option
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card hover:bg-muted'
-            "
-            :aria-pressed="text === option"
-            @click="text = option"
-          >
-            {{ option }}
-          </button>
-        </div>
-      </div>
+    <!-- 목록 아래 한 자리 — 안건 전체 미루기 · 항목 없는 안건의 첫 결정 -->
+    <DecisionEntryForm
+      v-if="form && form.place === 'free'"
+      :key="form.mode"
+      :mode="form.mode"
+      :options="detail.thread.options"
+      :item-title="newItemTitle"
+      :with-next-due="form.mode === 'defer' && form.itemId === null && canEditThread"
+      :framed="!form.fromChoice"
+      :saving="saving"
+      @submit="submit"
+      @cancel="form = null"
+    />
 
-      <div v-if="mode !== 'defer'" class="flex flex-col gap-1.5">
-        <label for="decision-note" class="text-xs font-medium">
-          상세 설명
-          <span class="font-normal text-muted-foreground">(선택 · ⌘/Ctrl+Enter 로 남기기)</span>
-        </label>
-        <Textarea
-          id="decision-note"
-          v-model="note"
-          rows="3"
-          placeholder="무엇을 보고 · 누구에게 확인하고 정했나요. 조건 · 예외도 적어 두세요"
-          class="bg-background [field-sizing:content]"
-          @keydown="onNoteKeydown"
-        />
-      </div>
-
-      <div v-if="mode === 'defer' && canEditThread" class="flex flex-col gap-1.5">
-        <label for="decision-next-due" class="text-xs font-medium">
-          다시 볼 날 <span class="font-normal text-muted-foreground">(선택)</span>
-        </label>
-        <div class="flex flex-wrap items-center gap-2">
-          <Input
-            id="decision-next-due"
-            :model-value="nextDue"
-            type="date"
-            class="w-[180px] bg-background"
-            @change="(e: Event) => (nextDue = (e.target as HTMLInputElement).value)"
-          />
-          <span class="text-xs text-muted-foreground"> 고르면 결정 기한도 이날로 옮깁니다 </span>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs font-medium">처리한 사람</span>
-        <Select
-          :model-value="ownerId ?? NONE"
-          @update:model-value="(v) => (ownerId = v === NONE ? null : String(v))"
-        >
-          <SelectTrigger class="h-8 w-[140px] bg-background text-xs" aria-label="처리한 사람">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem :value="NONE">선택 안 함</SelectItem>
-            <SelectItem v-for="m in data.assignable" :key="m.id" :value="m.id">
-              {{ m.name }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-        <span v-if="mode === 'decide' && ownerId" class="text-xs text-muted-foreground">
-          담당자도 이 사람으로 바뀝니다
-        </span>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2 pt-1">
-        <Button :disabled="!text.trim() || saving" @click="submit">
-          <Check v-if="mode === 'decide'" class="size-4" />
-          <Clock v-else-if="mode === 'defer'" class="size-4" />
-          {{ look.submit }}
-        </Button>
-        <Button variant="outline" @click="cancel">취소</Button>
-      </div>
+    <div v-if="adding" class="flex flex-wrap items-center gap-2">
+      <Input
+        id="decision-item-new"
+        ref="addInput"
+        v-model="newTitle"
+        aria-label="새 결정 항목"
+        placeholder="무엇을 따로 정하나요 — 한 줄로"
+        :maxlength="ITEM_TITLE_MAX"
+        class="max-w-[360px] grow bg-background"
+        @keydown="onAddKeydown"
+      />
+      <Button size="sm" :disabled="!newTitle.trim() || saving" @click="addItem">추가</Button>
+      <Button variant="outline" size="sm" @click="adding = false">취소</Button>
     </div>
+    <div v-else-if="form?.place !== 'free'" class="flex flex-wrap items-center gap-2">
+      <Button variant="ghost" size="sm" class="text-muted-foreground" @click="startAdding">
+        <Plus class="size-3.5" />
+        결정 항목 추가
+      </Button>
+      <span class="grow" />
+      <template v-if="hasItems">
+        <span v-if="detail.threadDeferCount > 0" class="text-xs text-muted-foreground">
+          안건 전체 미룸 {{ detail.threadDeferCount }}회
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="text-muted-foreground"
+          @click="open({ place: 'free', mode: 'defer', itemId: null, fromChoice: false })"
+        >
+          <Clock class="size-3.5" />
+          안건 전체 미루기
+        </Button>
+      </template>
+    </div>
+
+    <div v-if="detail.subThreads.length" class="flex flex-col gap-2">
+      <div class="text-xs font-medium tracking-wider text-muted-foreground">
+        따로 떼어낸 하위 안건
+      </div>
+      <button
+        v-for="sub in detail.subThreads"
+        :key="sub.thread.id"
+        type="button"
+        class="flex min-h-11 items-center gap-2.5 rounded-md border border-border bg-background px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
+        @click="emit('open-thread', sub.thread.id)"
+      >
+        <span
+          class="size-1.5 shrink-0 rounded-full"
+          :class="sub.thread.state === 'decided' ? 'bg-primary' : 'bg-muted-foreground'"
+        />
+        <span class="min-w-0 grow text-sm leading-snug text-pretty">{{ sub.thread.title }}</span>
+        <span class="shrink-0 text-xs text-muted-foreground">{{ sub.splitAtLabel }}</span>
+        <ChevronRight class="size-3 shrink-0 text-muted-foreground" />
+      </button>
+    </div>
+
+    <Dialog v-model:open="confirmOpen">
+      <DialogContent class="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle class="text-pretty">
+            '{{ deleteTarget?.title ?? '' }}' 항목을 지울까요?
+          </DialogTitle>
+          <DialogDescription class="text-pretty">
+            이 항목에 남긴 줄은 이력에 남지만 안건 상태를 셀 때는 빠집니다. 되돌릴 수 없습니다.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" @click="confirmOpen = false">취소</Button>
+          <Button
+            variant="destructive"
+            :disabled="deleting"
+            data-item-delete-confirm
+            @click="removeItem"
+          >
+            <Loader2 v-if="deleting" class="animate-spin" />
+            지우기
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>

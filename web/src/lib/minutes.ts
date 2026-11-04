@@ -1,4 +1,5 @@
 import type { ApiError } from '@/api/client'
+import { ITEM_TITLE_MAX } from '@/lib/thread'
 import type {
   Entry,
   MinutesApplyInput,
@@ -94,6 +95,16 @@ export const outcomeCount = (o: MinutesOutcome) =>
   o.threads.length + o.entries.length + o.tasks.length
 
 /**
+ * 이력이 들어갈 항목을 가르는 열쇠 — 이름은 앞뒤 공백을 떼고 견준다.
+ * 이름이 빈 결정 · 세부 추가는 안건 제목의 항목, 이름이 빈 미룸은 안건 전체다(안건 제목은 여기서 모른다)
+ */
+export function entryItemKey(e: Pick<ProposedEntryBody, 'kind' | 'itemTitle'>): string {
+  const title = e.itemTitle.trim()
+  if (title) return `item:${title}`
+  return e.kind === 'defer' ? 'thread' : 'default'
+}
+
+/**
  * apply 의 검사 규칙 중 DB 를 안 보는 것 — 어긋난 자리를 `threads.0.title` 처럼 한 번에 모은다(422 detail).
  * 안건 · 담당자 · 상위 작업이 있는지는 목업 api 가 데이터를 보고 따로 본다
  */
@@ -122,6 +133,8 @@ export function minutesApplyProblems(input: MinutesApplyInput): Record<string, s
   const body = (at: string, e: ProposedEntryBody) => {
     if (!KINDS.includes(e.kind)) detail[`${at}.kind`] = '결정 · 미룸 · 세부 추가 중 하나입니다.'
     if (!e.text.trim()) detail[`${at}.text`] = '내용을 적어 주세요.'
+    if (e.itemTitle.trim().length > ITEM_TITLE_MAX)
+      detail[`${at}.itemTitle`] = `항목 이름은 ${ITEM_TITLE_MAX}자까지입니다.`
   }
 
   threads.forEach((t, i) => {
@@ -130,13 +143,13 @@ export function minutesApplyProblems(input: MinutesApplyInput): Record<string, s
     if (t.entry) body(`threads.${i}.entry`, t.entry)
   })
 
-  const threadOnce = new Set<string>()
+  const itemOnce = new Set<string>()
   entries.forEach((e, i) => {
     claim(`entries.${i}`, e.tempId)
     body(`entries.${i}`, e)
-    if (threadOnce.has(e.threadId))
-      detail[`entries.${i}.threadId`] = '한 안건에 이력은 하나까지입니다.'
-    threadOnce.add(e.threadId)
+    const key = `${e.threadId}\n${entryItemKey(e)}`
+    if (itemOnce.has(key)) detail[`entries.${i}.itemTitle`] = '한 항목에 이력은 하나까지입니다.'
+    itemOnce.add(key)
   })
 
   const newThreads = new Set(threads.map((t) => t.tempId))
@@ -165,6 +178,7 @@ const hintOf = (ownerId: string | null, hint: string) => (ownerId === null ? hin
 function plainBody(e: ProposedEntryBody): ProposedEntryBody {
   return {
     kind: e.kind,
+    itemTitle: e.itemTitle,
     text: e.text,
     detail: [...e.detail],
     note: e.note,

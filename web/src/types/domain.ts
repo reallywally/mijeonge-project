@@ -170,9 +170,53 @@ export interface Thread {
   creatorId: string | null
 }
 
+/**
+ * 결정 항목 — 안건 하나 안에서 따로 정하는 것 하나 (예: '로그인 방식' 안건의 'SSO 여부' · '세션 길이').
+ * 항목의 상태는 따로 두지 않고 이력에서 센다 — 그 항목에 지우지 않은 decide · change 줄이 있으면 정해진 것이다.
+ * 항목이 하나라도 있는 안건은 **모든 항목이 정해져야** decided 다. 배열 순서가 화면 순서다.
+ */
+export interface DecisionItem {
+  id: string
+  threadId: string
+  /** 무엇을 정하나 — 한 줄 · 1 ~ 200자 */
+  title: string
+  createdAt: string
+  /** 등록한 사람 — 서버가 요청한 사람으로 찍는다 */
+  creatorId: string | null
+}
+
+/** POST /api/threads/{id}/items — 항목은 안건 끝에 붙는다 */
+export interface DecisionItemInput {
+  title: string
+}
+
+/** 항목 더하기의 응답 — POST /api/threads/{id}/items. 정해진 안건에 항목이 붙으면 open 으로 돌아가므로 안건도 준다 */
+export interface DecisionItemCreateResult {
+  item: DecisionItem
+  thread: Thread
+}
+
+/** PATCH /api/threads/{id}/items/{itemId} — 이름 바꾸기 */
+export interface DecisionItemPatch {
+  title: string
+}
+
+/**
+ * 항목 지우기의 응답 — DELETE /api/threads/{id}/items/{itemId}. 그 항목의 줄은 이력에 남지만
+ * 상태 계산에서 빠지므로(지운 항목이 '정해지지 않음' 으로 안건을 붙잡지 않는다) 바뀐 안건을 받아 갈아끼운다
+ */
+export interface DecisionItemDeleteResult {
+  thread: Thread
+}
+
 export interface Entry {
   id: string
   threadId: string
+  /**
+   * 이 줄이 다루는 결정 항목. decide · change · refine 은 항목에 달린다(항목 없이 남기지 않는다).
+   * defer 는 항목에 달면 그 항목만, null 이면 안건 전체를 미룬 것이다. raise · split 은 늘 null
+   */
+  itemId: string | null
   kind: EntryKind
   /** 한 줄 요약 */
   text: string
@@ -200,6 +244,9 @@ export interface ThreadRow {
   dueLabel: string
   /** 결정 기한이 지났는데 아직 못 정함 */
   overdue: boolean
+  /** 결정 항목 수 · 그중 정한 수 — 항목이 둘 이상이면 목록에 '2/3' 으로 선다 */
+  itemCount: number
+  settledItemCount: number
 }
 
 /** 안건을 먼저 등록할 때 화면이 넘기는 것. 제목 말고는 다 비워도 된다 */
@@ -237,8 +284,10 @@ export interface ThreadEvent {
   /** 이 줄이 놓이는 날짜 — createdAt 의 KST 날짜 */
   at: string
   ownerName: string | null
-  /** 뒤에 온 결정에 밀려난 줄 — 취소선으로 남는다 */
+  /** 같은 항목의 뒤에 온 결정에 밀려난 줄 — 취소선으로 남는다 */
   superseded: boolean
+  /** 이 줄이 달린 결정 항목의 이름. 안건 전체의 줄이면 null, 지운 항목이면 '지운 항목' */
+  itemTitle: string | null
 }
 
 /** 이 안건에서 떼어낸 하위 안건 */
@@ -247,25 +296,41 @@ export interface SubThreadRow {
   splitAtLabel: string
 }
 
-/** 안건 상세 한 화면 — 지금 결정된 내용 + 이력 */
+/** 결정 항목 하나 — 지금 결정 · 상세를 그 항목 안에서만 센다 */
+export interface DecisionItemView {
+  item: DecisionItem
+  /** 그 항목에 결정 · 변경 줄이 있는가 */
+  settled: boolean
+  /** 그 항목의 마지막 결정 · 변경의 한 줄 요약 */
+  current: string
+  /** 그 결정의 조건별 상세 + 그 뒤에 그 항목에 붙은 세부 추가 */
+  detail: string[]
+  /** 언제 정해졌는지 */
+  settledLabel: string
+  /** 그 결정에 적힌 상세 설명 */
+  settledNote: string
+  settledOwnerName: string | null
+  /** 이 항목만 미룬 횟수 */
+  deferCount: number
+}
+
+/** 안건 상세 한 화면 — 항목별 지금 결정 + 이력 */
 export interface ThreadDetail {
   thread: Thread
   ownerName: string | null
   events: ThreadEvent[]
+  /** 미룬 횟수 전부 — 항목을 미룬 것 · 안건 전체를 미룬 것 */
   deferCount: number
+  /** 항목 없이 안건 전체를 미룬 횟수 */
+  threadDeferCount: number
   /** 결정 기한이 지났는데 아직 못 정함 */
   overdue: boolean
-  /** 결정 · 변경 줄이 하나라도 있는가 */
+  /** 결정 항목 — 등록 순 */
+  items: DecisionItemView[]
+  /** 정한 항목 수 */
+  settledCount: number
+  /** 항목이 하나 이상이고 전부 정해졌는가 */
   settled: boolean
-  /** 마지막 결정 · 변경의 한 줄 요약 */
-  current: string
-  /** 그 결정의 조건별 상세 + 그 뒤에 붙은 세부 추가 */
-  detail: string[]
-  /** 언제 정해졌는지 */
-  settledLabel: string
-  /** 그 결정에 적힌 근거 */
-  settledNote: string
-  settledOwnerName: string | null
   subThreads: SubThreadRow[]
 }
 
@@ -491,6 +556,8 @@ export interface ProjectInput {
 /** 안건 이력 한 줄을 남길 때 넘기는 것 — POST /api/threads/{id}/entries */
 export interface EntryInput {
   kind: EntryKind
+  /** decide · change · refine 은 필수(없으면 422 ENTRY_ITEM_REQUIRED), defer 는 선택, raise · split 은 보내지 않는다 */
+  itemId?: string | null
   text: string
   detail?: string[]
   note?: string
@@ -518,6 +585,8 @@ export interface EntryDeleteResult {
 export interface ProjectSnapshot {
   project: Project
   threads: Thread[]
+  /** 안건 등록 순 → 안건 안의 항목 순. 지운 항목은 싣지 않는다 */
+  decisionItems: DecisionItem[]
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
@@ -835,6 +904,12 @@ export interface ProposedEntry extends ProposedEntryBody {
 
 export interface ProposedEntryBody {
   kind: 'decide' | 'defer' | 'refine'
+  /**
+   * 결정 항목의 이름. 등록할 때 그 안건에 같은 이름의(앞뒤 공백을 뗀) 지우지 않은 항목이 있으면 거기,
+   * 없으면 새 항목을 만들어 단다. decide · refine 인데 '' 이면 안건 제목을 이름으로 쓴다.
+   * defer 인데 '' 이면 안건 전체를 미룬 것이다
+   */
+  itemTitle: string
   /** 한 줄 — 결정이면 무엇으로, 미룸이면 무엇을 */
   text: string
   /** 조건별 상세. 없으면 [] */
@@ -878,6 +953,8 @@ export interface MinutesApplyResult {
   threads: Thread[]
   /** 새 안건의 이력 + 기존 안건의 이력. 새 안건 것 먼저, 각각 요청 순서 */
   entries: Entry[]
+  /** 등록하면서 새로 만든 결정 항목 — entries[].itemId 가 가리키는 것 중 화면이 아직 모르는 것. 만든 순서 (API.md Q66) */
+  decisionItems: DecisionItem[]
   /** 이력 때문에 상태가 바뀐 기존 안건 */
   updatedThreads: Thread[]
   tasks: Task[]

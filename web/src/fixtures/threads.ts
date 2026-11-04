@@ -1,4 +1,4 @@
-import type { Entry, Thread } from '@/types/domain'
+import type { DecisionItem, Entry, Thread } from '@/types/domain'
 
 /**
  * 안건과 그 이력. Entry 하나가 안건에 남긴 한 줄이다.
@@ -186,6 +186,7 @@ export const entries: Entry[] = [
   {
     id: 'e2',
     threadId: 't5',
+    itemId: null,
     kind: 'defer',
     text: '이번 회의에서는 정하지 못했다',
     detail: [],
@@ -199,6 +200,7 @@ export const entries: Entry[] = [
   {
     id: 'e1',
     threadId: 't1',
+    itemId: 'di1',
     kind: 'decide',
     text: '우분투 최신 버전으로 한다',
     detail: [],
@@ -212,6 +214,7 @@ export const entries: Entry[] = [
   {
     id: 'e3',
     threadId: 't2',
+    itemId: 'di2',
     kind: 'decide',
     text: 'mysql 을 쓴다',
     detail: ['postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다', 'supabase 는 비용 때문에 뺀다'],
@@ -224,6 +227,7 @@ export const entries: Entry[] = [
   {
     id: 'e4',
     threadId: 't3',
+    itemId: null,
     kind: 'defer',
     text: '이번 회의에서는 정하지 못했다',
     detail: [],
@@ -233,10 +237,25 @@ export const entries: Entry[] = [
     minutesId: null,
     creatorId: 'u1',
   },
+  // 항목이 둘인 안건 — in 은 정했고 out 은 아직이라 논의중이다
+  {
+    id: 'e8',
+    threadId: 't5',
+    itemId: 'di5',
+    kind: 'decide',
+    text: '계약번호 · 상품코드 · 가입일 셋을 넘긴다',
+    detail: [],
+    note: '기간계 담당자와 통화로 in 쪽만 먼저 맞췄다.',
+    ownerId: 'u4',
+    createdAt: '2026-09-10T07:00:00Z',
+    minutesId: null,
+    creatorId: 'u4',
+  },
   // 시나리오 2 — 두 번째 미룸
   {
     id: 'e5',
     threadId: 't5',
+    itemId: null,
     kind: 'defer',
     text: '여전히 업무 정의가 없어 또 미룬다',
     detail: [],
@@ -248,8 +267,22 @@ export const entries: Entry[] = [
   },
   // 시나리오 3
   {
+    id: 'e7',
+    threadId: 't6',
+    itemId: 'di7',
+    kind: 'decide',
+    text: '전체 일정은 미루지 않는다',
+    detail: [],
+    note: '',
+    ownerId: 'u1',
+    createdAt: '2026-09-15T06:50:00Z',
+    minutesId: null,
+    creatorId: 'u1',
+  },
+  {
     id: 'e6',
     threadId: 't6',
+    itemId: 'di4',
     kind: 'decide',
     text: '전체 일정은 그대로 두고 테스트 기간만 2주 줄인다',
     detail: ['늘어난 개발 기간은 그대로 둔다', '통합 테스트를 3주에서 1주로 줄인다'],
@@ -257,6 +290,57 @@ export const entries: Entry[] = [
     ownerId: 'u1',
     createdAt: '2026-09-15T07:00:00Z',
     minutesId: null,
+    creatorId: 'u1',
+  },
+]
+
+/**
+ * 결정 항목 — 안건 하나 안에서 따로 정하는 것. 안건 등록 순(threads 배열 순) → 안건 안의 항목 순(스냅샷과 같다).
+ * di1 · di2 · di4 는 서버 시드와 같다. t5 의 둘과 t6 의 '전체 일정'(di7)은 목업에만 있는 여러 항목 예시다
+ * 결정이 하나뿐이던 안건(t1 · t2)은 이행 규칙과 같은 모양(안건 제목의 항목 하나 · creatorId null)이다.
+ * t6 은 두 항목이 다 정해졌고, t5 는 둘 중 하나만 정해져 논의중이다. 결정이 없는 안건에는 항목이 없다
+ */
+export const decisionItems: DecisionItem[] = [
+  {
+    id: 'di1',
+    threadId: 't1',
+    title: '서버 OS 결정',
+    createdAt: '2026-09-09T02:00:00Z',
+    creatorId: null,
+  },
+  {
+    id: 'di2',
+    threadId: 't2',
+    title: 'DB 결정',
+    createdAt: '2026-09-10T06:05:00Z',
+    creatorId: null,
+  },
+  {
+    id: 'di5',
+    threadId: 't5',
+    title: '요청(in) 항목',
+    createdAt: '2026-09-10T06:30:00Z',
+    creatorId: 'u4',
+  },
+  {
+    id: 'di6',
+    threadId: 't5',
+    title: '응답(out) 항목',
+    createdAt: '2026-09-10T06:31:00Z',
+    creatorId: 'u4',
+  },
+  {
+    id: 'di4',
+    threadId: 't6',
+    title: '테스트 기간',
+    createdAt: '2026-09-15T06:40:00Z',
+    creatorId: 'u1',
+  },
+  {
+    id: 'di7',
+    threadId: 't6',
+    title: '전체 일정',
+    createdAt: '2026-09-15T06:41:00Z',
     creatorId: 'u1',
   },
 ]

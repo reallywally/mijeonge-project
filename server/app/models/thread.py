@@ -129,12 +129,54 @@ class ThreadCc(Base):
     sort_order: Mapped[int] = mapped_column(Integer)
 
 
+class DecisionItem(Base):
+    """결정 항목 — 안건 안에서 따로 정하는 것 하나. 상태는 두지 않고 이력에서 센다."""
+
+    __tablename__ = "decision_item"
+    __table_args__ = (
+        # 안건과 같은 프로젝트여야 한다 (Q13 · Q16 과 같은 방식). 안건을 지우면 같이 지운다
+        ForeignKeyConstraint(
+            ["thread_id", "project_id"], ["thread.id", "thread.project_id"], ondelete="CASCADE"
+        ),
+        # 이력 줄의 복합 FK 가 이 유니크를 본다 — 다른 안건의 항목에 줄이 달리지 않게
+        UniqueConstraint("id", "thread_id"),
+        Index(
+            "ix_decision_item_thread_id_live",
+            "thread_id",
+            "sort_order",
+            postgresql_where=sql_text("not is_deleted"),
+            sqlite_where=sql_text("not is_deleted"),
+        ),
+        trgm_index("decision_item", "title"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    # FK 는 위의 복합 FK 하나뿐이다
+    project_id: Mapped[str] = mapped_column(String(36))
+    thread_id: Mapped[str] = mapped_column(String(36))
+    title: Mapped[str] = mapped_column(Text)
+    # 등록한 사람. 이행으로 만든 지난 항목은 null
+    creator_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # 안건 안의 화면 순서 — 지금은 등록 순으로만 붙는다
+    sort_order: Mapped[int] = mapped_column(Integer)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+    # 논리 삭제 — 그 항목의 줄은 이력에 남고 안건 상태 계산에서만 빠진다
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=FALSE)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+
+
 class Entry(Base):
     """안건 이력 한 줄. 결정 · 미룸이 남는 유일한 자리다."""
 
     __tablename__ = "entry"
     __table_args__ = (
         CheckConstraint(f"kind in {ENTRY_KINDS}", name="kind"),
+        # 항목은 같은 안건의 것만 단다. item_id 가 null 이면 걸리지 않는다
+        ForeignKeyConstraint(
+            ["item_id", "thread_id"], ["decision_item.id", "decision_item.thread_id"]
+        ),
         Index("ix_entry_thread_id_created_at", "thread_id", "created_at"),
         trgm_index("entry", "text"),
         trgm_index("entry", "note"),
@@ -142,6 +184,10 @@ class Entry(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     thread_id: Mapped[str] = mapped_column(ForeignKey("thread.id", ondelete="CASCADE"))
+    # 이 줄이 다루는 결정 항목. decide · change · refine 은 늘 달리고,
+    # defer 는 null 이면 안건 전체다.
+    # FK 는 위의 복합 FK 하나뿐이다
+    item_id: Mapped[str | None] = mapped_column(String(36), index=True)
     kind: Mapped[str] = mapped_column(String(16))
     text: Mapped[str] = mapped_column(Text, default="")
     # 왜 그렇게 됐는지

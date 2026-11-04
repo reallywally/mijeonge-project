@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isUnreachable } from '@/api'
 import {
+  decisionItems,
   entries,
   members,
   partMembers,
@@ -45,6 +46,9 @@ function later() {
 const snapshotOf = (projectId: string): ProjectSnapshot => ({
   project: projects.find((p) => p.id === projectId)!,
   threads: threads.filter((t) => t.projectId === projectId),
+  decisionItems: decisionItems.filter((i) =>
+    threads.some((t) => t.id === i.threadId && t.projectId === projectId),
+  ),
   entries: entries.filter((e) =>
     threads.some((t) => t.id === e.threadId && t.projectId === projectId),
   ),
@@ -347,7 +351,7 @@ describe('만드는 것', () => {
     expect(data.allThreads).toHaveLength(before)
   })
 
-  it('이력 한 줄은 응답의 줄을 넣고 안건을 갈아끼운다', async () => {
+  it('이력 한 줄은 응답의 줄을 넣고 안건을 갈아끼운다 — 항목을 싣는다', async () => {
     const data = await booted()
     const thread = useThreadStore()
     const t4 = data.allThreads.find((t) => t.id === 't4')!
@@ -366,9 +370,10 @@ describe('만드는 것', () => {
       ),
     )
 
-    expect(await thread.addEntry('t4', 'decide', '주 1회 백업', '', 'u1')).toBe(true)
+    expect(await thread.addEntry('t4', 'decide', '주 1회 백업', '', 'u1', 'srv-i')).toBe(true)
     expect(calls.at(-1)!.body).toEqual({
       kind: 'decide',
+      itemId: 'srv-i',
       text: '주 1회 백업',
       detail: [],
       note: '',
@@ -376,6 +381,34 @@ describe('만드는 것', () => {
     })
     expect(data.allEntries.at(-1)!.id).toBe('srv-e')
     expect(data.allThreads.find((t) => t.id === 't4')!.state).toBe('decided')
+  })
+
+  it('결정 항목 — 더하면 항목을 넣고 안건을 갈아끼우고, 지우면 빼고 다시 잰 안건으로', async () => {
+    const data = await booted()
+    const thread = useThreadStore()
+    const t1 = data.allThreads.find((t) => t.id === 't1')!
+    expect(data.allDecisionItems.filter((i) => i.threadId === 't1').map((i) => i.id)).toEqual([
+      'di1',
+    ])
+    const made = {
+      id: 'srv-i',
+      threadId: 't1',
+      title: '커널 버전',
+      createdAt: '2026-10-11T01:00:00Z',
+      creatorId: 'u0',
+    }
+    on('POST /api/threads/t1/items', () =>
+      json({ item: made, thread: { ...t1, state: 'open' } }, 201),
+    )
+    expect(await thread.addItem('t1', '  커널 버전 ')).toBe('srv-i')
+    expect(calls.at(-1)!.body).toEqual({ title: '커널 버전' })
+    expect(data.allDecisionItems.at(-1)).toEqual(made)
+    expect(data.allThreads.find((t) => t.id === 't1')!.state).toBe('open')
+
+    on('DELETE /api/threads/t1/items/srv-i', () => json({ thread: { ...t1, state: 'decided' } }))
+    await thread.deleteItem('srv-i')
+    expect(data.allDecisionItems.some((i) => i.id === 'srv-i')).toBe(false)
+    expect(data.allThreads.find((t) => t.id === 't1')!.state).toBe('decided')
   })
 
   it('프로젝트를 만들면 그 프로젝트로 옮겨 스냅샷을 받는다', async () => {
@@ -386,6 +419,7 @@ describe('만드는 것', () => {
       json({
         project: made,
         threads: [],
+        decisionItems: [],
         entries: [],
         tasks: [],
         taskThreadLinks: [],

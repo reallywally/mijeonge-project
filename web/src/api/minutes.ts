@@ -18,8 +18,10 @@ import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
 import { inheritedPartId } from '@/lib/part'
+import { threadStateOf } from '@/lib/thread'
 import { batchDepthProblems, nextTaskOrder, taskDepths, TASK_DEPTH_MESSAGE } from '@/lib/task'
 import type {
+  DecisionItem,
   Entry,
   Me,
   Minutes,
@@ -171,10 +173,13 @@ function toEntryBody(v: unknown): ProposedEntryBody | null {
   const note = str(v.note)
   const ownerHint = str(v.ownerHint)
   const detail = strings(v.detail)
+  /* 항목 이름은 2026-11-03 에 붙었다 — 아직 안 싣는 서버가 있어도 초안째 버리지 않고 '' 로 받는다 */
+  const itemTitle = v.itemTitle === undefined ? '' : str(v.itemTitle)
   if (kind !== 'decide' && kind !== 'defer' && kind !== 'refine') return null
   if (text === null || note === null || ownerHint === null || detail === null) return null
+  if (itemTitle === null) return null
   if (ownerId !== null && typeof ownerId !== 'string') return null
-  return { kind, text, detail, note, ownerId, ownerHint }
+  return { kind, itemTitle, text, detail, note, ownerId, ownerHint }
 }
 
 function toThread(v: unknown): ProposedThread | null {
@@ -391,9 +396,32 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
 
   const createdAt = nowIso()
   const clean = (lines: string[]) => lines.map((s) => s.trim()).filter(Boolean)
-  const toEntryRow = (threadId: string, e: ProposedEntryBody): Entry => ({
+  /* 항목 — 같은 이름(앞뒤 공백 뗌)의 항목이 그 안건에 있으면 거기, 없으면 새로 만든다.
+     결정 · 세부 추가인데 이름이 비었으면 안건 제목, 미룸인데 비었으면 안건 전체(null) */
+  const items: DecisionItem[] = []
+  const itemsOf = (threadId: string) => [
+    ...world.decisionItems.filter((i) => i.threadId === threadId),
+    ...items.filter((i) => i.threadId === threadId),
+  ]
+  const itemFor = (thread: Thread, e: ProposedEntryBody): string | null => {
+    const title = e.itemTitle.trim() || (e.kind === 'defer' ? '' : thread.title)
+    if (!title) return null
+    const found = itemsOf(thread.id).find((i) => i.title === title)
+    if (found) return found.id
+    const item: DecisionItem = {
+      id: nextId('mni'),
+      threadId: thread.id,
+      title,
+      createdAt,
+      creatorId: me.id,
+    }
+    items.push(item)
+    return item.id
+  }
+  const toEntryRow = (thread: Thread, e: ProposedEntryBody): Entry => ({
     id: nextId('mne'),
-    threadId,
+    threadId: thread.id,
+    itemId: itemFor(thread, e),
     kind: e.kind,
     text: e.text.trim(),
     detail: clean(e.detail),
@@ -403,12 +431,14 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     minutesId,
     creatorId: me.id,
   })
-  /* 이력이 안건에 남기는 흔적 — POST /threads/{id}/entries 와 같다 */
+  /* 이력이 안건에 남기는 흔적 — POST /threads/{id}/entries 와 같다. 상태는 항목 · 줄로 다시 잰다 */
+  const entries: Entry[] = []
   const touch = (thread: Thread, e: ProposedEntryBody) => {
-    if (e.kind === 'decide') {
-      thread.state = 'decided'
-      if (e.ownerId) thread.ownerId = e.ownerId
-    } else if (thread.state === 'queued') thread.state = 'open'
+    if (e.kind === 'decide' && e.ownerId) thread.ownerId = e.ownerId
+    thread.state = threadStateOf(itemsOf(thread.id), [
+      ...world.entries.filter((x) => x.threadId === thread.id),
+      ...entries.filter((x) => x.threadId === thread.id),
+    ])
   }
 
   const threadIdByTempId: Record<string, string> = {}
@@ -433,22 +463,30 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
     return thread
   })
 
-  const entries: Entry[] = []
   input.threads.forEach((t, i) => {
     if (!t.entry) return
-    entries.push(toEntryRow(threads[i].id, t.entry))
+    entries.push(toEntryRow(threads[i], t.entry))
     touch(threads[i], t.entry)
   })
 
-  const updatedThreads: Thread[] = []
+  /* 한 안건에 항목별 이력이 여럿 올 수 있다 — 안건 사본은 하나로 이어 고친다 */
+  const afters = new Map<string, Thread>()
   for (const e of input.entries) {
     const before = ownThread(e.threadId)!
     /* 데이터 스토어의 반응형 객체라 structuredClone 을 못 쓴다 — 칸을 떠서 고친다 */
-    const after: Thread = { ...before, options: [...before.options], ccIds: [...before.ccIds] }
-    entries.push(toEntryRow(after.id, e))
+    const after = afters.get(before.id) ?? {
+      ...before,
+      options: [...before.options],
+      ccIds: [...before.ccIds],
+    }
+    afters.set(before.id, after)
+    entries.push(toEntryRow(after, e))
     touch(after, e)
-    if (after.state !== before.state || after.ownerId !== before.ownerId) updatedThreads.push(after)
   }
+  const updatedThreads = [...afters.values()].filter((after) => {
+    const before = ownThread(after.id)!
+    return after.state !== before.state || after.ownerId !== before.ownerId
+  })
 
   const prefix = projects.find((p) => p.id === projectId)?.taskKeyPrefix ?? 'TASK'
   let no = world.tasks
@@ -505,11 +543,27 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
   /* 등록 때 함께 건 안건은 created 에 든 것으로 본다 — 따로 줄을 안 만든다 */
   for (const t of tasks) recordMockHistory('task', t.id, [change('created', null, null)])
   for (const t of threads) recordMockHistory('thread', t.id, [change('created', null, null)])
+  /* 새로 만든 결정 항목은 그 안건의 이력에 '결정 항목 추가' 로 */
+  for (const threadId of new Set(items.map((i) => i.threadId)))
+    recordMockHistory(
+      'thread',
+      threadId,
+      items.filter((i) => i.threadId === threadId).map((i) => change('itemCreated', null, i.title)),
+    )
 
   /* 안 보냈거나 null 이면 지금 요약 그대로. 요약은 사람이 고친 것이 아니라 updatedAt 은 그대로 */
   if (input.summary != null) minutes.summary = input.summary.trim()
 
-  return { threads, entries, updatedThreads, tasks, links, threadIdByTempId, taskIdByTempId }
+  return {
+    threads,
+    entries,
+    updatedThreads,
+    tasks,
+    links,
+    threadIdByTempId,
+    taskIdByTempId,
+    decisionItems: items,
+  }
 }
 
 /** 고른 초안을 한 번에 등록한다 — 한 트랜잭션이라 하나라도 틀리면 아무것도 안 남는다. 만든 것에 출처가 붙는다 */

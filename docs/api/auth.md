@@ -200,6 +200,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. 권한을 먼저 보고 그다음 하위 작업(409 `TASK_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 작업은 없는 작업과 같은 404 로 간다 (`API.md` 엔드포인트 표) |
 | 안건 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}` | **생성자(`Thread.creatorId`) · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02) — 작업과 달리 **담당자도 지운다**. 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 안건으로 본다(작업과 같다). 지우기는 권한을 먼저 보고 그다음 떼어낸 하위 안건(409 `THREAD_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 안건은 없는 안건과 같은 404 로 간다(그 아래 경로 · 그 안건의 확인 요청 id 경로까지) |
 | 이력 줄 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}/entries/{entryId}` | **그 줄 생성자(`Entry.creatorId`) · 안건 생성자 · 안건 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 지운 줄은 404 `ENTRY_NOT_FOUND` |
+| 결정 항목 — `POST` · `PATCH` · `DELETE /api/threads/{threadId}/items[/{itemId}]` | 더하기는 **프로젝트 멤버 누구나**(줄 남기기와 같다). 이름 바꾸기 · 지우기는 이력 줄과 같은 기준 — **그 항목 생성자(`DecisionItem.creatorId`) · 안건 생성자 · 안건 담당자 · 그 프로젝트 관리자 · 시스템 관리자**. 그 밖은 403 `FORBIDDEN`. 지운 항목은 404 `ITEM_NOT_FOUND` (2026-11-03) |
 | 이력 줄 남기기 — `POST /api/threads/{threadId}/entries` | **바뀌지 않는다** — 프로젝트 멤버 누구나(회의에서 누구든 결정을 적는다). `creatorId` 는 요청한 사람으로 찍는다 (2026-11-02) |
 | 챗봇 `propose_tasks` · `list_members` 도구 | 그 프로젝트의 활성 멤버만 담당자 후보로 본다 |
 | `GET /api/members` | `Member` 에 `active` 가 늘어난다. 로그인만 하면 누구나 부를 수 있다 |

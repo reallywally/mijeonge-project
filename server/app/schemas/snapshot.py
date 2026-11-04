@@ -2,7 +2,7 @@ from app.schemas.base import Schema
 from app.schemas.part import PartMemberOut, PartOut
 from app.schemas.project import ProjectOut
 from app.schemas.task import TaskOut, TaskThreadLinkOut
-from app.schemas.thread import EntryOut, ThreadOut
+from app.schemas.thread import DecisionItemOut, EntryOut, ThreadOut
 
 
 class SnapshotOut(Schema):
@@ -16,6 +16,8 @@ class SnapshotOut(Schema):
     # 프로젝트를 빨리 바꿨을 때 늦게 온 옛 응답을 id 로 가릴 수 있다
     project: ProjectOut
     threads: list[ThreadOut]
+    # 안건 등록 순 → 안건 안의 항목 순. 지운 항목은 싣지 않는다
+    decision_items: list[DecisionItemOut]
     entries: list[EntryOut]
     tasks: list[TaskOut]
     task_thread_links: list[TaskThreadLinkOut]

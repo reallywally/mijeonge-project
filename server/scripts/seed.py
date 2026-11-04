@@ -24,6 +24,7 @@ from app.models import (
     AuthIdentity,
     AuthSession,
     CheckRequest,
+    DecisionItem,
     Entry,
     EntryDetail,
     Member,
@@ -281,6 +282,42 @@ def threads() -> list[Thread]:
     ]
 
 
+# 결정 항목 — (id, 안건, 이름, 등록한 사람, 등록 시각). 목업(`web/src/fixtures/threads.ts`)의 값 ·
+# 배열 순서 그대로다(안건 등록 순 → 안건 안의 항목 순). t1 · t2 는 이행 규칙과 같은 모양
+# (안건 제목 · 등록한 사람 없음 · 결정 줄의 시각), t5 는 둘 중 하나만 정해졌고 t6 은 둘 다 정해졌다
+DECISION_ITEMS: list[tuple[str, str, str, str | None, str]] = [
+    ("di1", "t1", "서버 OS 결정", None, "2026-09-09T02:00:00Z"),
+    ("di2", "t2", "DB 결정", None, "2026-09-10T06:05:00Z"),
+    ("di5", "t5", "요청(in) 항목", "u4", "2026-09-10T06:30:00Z"),
+    ("di6", "t5", "응답(out) 항목", "u4", "2026-09-10T06:31:00Z"),
+    ("di4", "t6", "테스트 기간", "u1", "2026-09-15T06:40:00Z"),
+    ("di7", "t6", "전체 일정", "u1", "2026-09-15T06:41:00Z"),
+]
+# 결정 줄 → 항목. 미룸(e2 · e4 · e5)은 안건 전체다
+ENTRY_ITEMS = {"e1": "di1", "e3": "di2", "e8": "di5", "e7": "di7", "e6": "di4"}
+
+
+def decision_items() -> list[DecisionItem]:
+    rows: list[DecisionItem] = []
+    taken: dict[str, int] = {}
+    for id_, thread_id, title, creator, created in DECISION_ITEMS:
+        # 안건 안의 순서는 배열에 나온 차례다
+        order = taken.get(thread_id, 0)
+        taken[thread_id] = order + 1
+        rows.append(
+            DecisionItem(
+                id=id_,
+                project_id="p1",
+                thread_id=thread_id,
+                title=title,
+                creator_id=creator,
+                created_at=at(created),
+                sort_order=order,
+            )
+        )
+    return rows
+
+
 def entry(
     id_: str,
     thread_id: str,
@@ -294,6 +331,7 @@ def entry(
     return Entry(
         id=id_,
         thread_id=thread_id,
+        item_id=ENTRY_ITEMS.get(id_),
         kind=kind,
         text=text,
         note=note,
@@ -310,19 +348,9 @@ def entry(
 
 def entries() -> list[Entry]:
     # 화면은 이력 줄의 날짜를 createdAt 의 KST 날짜로 찍는다(예전에는 회의 날짜였다).
-    # 회의에 붙어 있던 e2 · e3 · e4 · e5 · e6 은 KST 로 그 회의 날짜와 이미 같아 그대로 둔다
+    # 회의에 붙어 있던 e2 · e3 · e4 · e5 · e6 은 KST 로 그 회의 날짜와 이미 같아 그대로 둔다.
+    # 배열 순서가 등록 순서(seq)다 — 목업과 같은 순서로 둔다
     return [
-        # 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
-        entry(
-            "e1",
-            "t1",
-            "decide",
-            "우분투 최신 버전으로 한다",
-            [],
-            "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.",
-            "u3",
-            "2026-09-09T02:00:00Z",
-        ),
         # 시나리오 2 — 첫 번째 미룸
         entry(
             "e2",
@@ -333,6 +361,17 @@ def entries() -> list[Entry]:
             "기간계 업무 정의가 안 돼 in · out 을 정할 수 없다. 다음 주 월요일에 다시 본다.",
             "u4",
             "2026-09-07T07:30:00Z",
+        ),
+        # 시나리오 1 — 회의 밖 처리. 공유가 안 됐을 뿐 이미 정해져 있던 것
+        entry(
+            "e1",
+            "t1",
+            "decide",
+            "우분투 최신 버전으로 한다",
+            [],
+            "PM 에게 전달받아 이도현이 정리했다. 회의로 다루지 않았다.",
+            "u3",
+            "2026-09-09T02:00:00Z",
         ),
         # 시나리오 1 — 회의에서 정한 것
         entry(
@@ -358,6 +397,17 @@ def entries() -> list[Entry]:
             "u1",
             "2026-09-10T06:08:00Z",
         ),
+        # 항목이 둘인 안건 — in 은 정했고 out 은 아직이라 논의중이다
+        entry(
+            "e8",
+            "t5",
+            "decide",
+            "계약번호 · 상품코드 · 가입일 셋을 넘긴다",
+            [],
+            "기간계 담당자와 통화로 in 쪽만 먼저 맞췄다.",
+            "u4",
+            "2026-09-10T07:00:00Z",
+        ),
         # 시나리오 2 — 두 번째 미룸
         entry(
             "e5",
@@ -369,7 +419,17 @@ def entries() -> list[Entry]:
             "u4",
             "2026-09-14T07:10:00Z",
         ),
-        # 시나리오 3
+        # 시나리오 3 — 항목 둘을 같은 회의에서 정했다
+        entry(
+            "e7",
+            "t6",
+            "decide",
+            "전체 일정은 미루지 않는다",
+            [],
+            "",
+            "u1",
+            "2026-09-15T06:50:00Z",
+        ),
         entry(
             "e6",
             "t6",
@@ -1039,6 +1099,7 @@ async def clear(session: AsyncSession) -> None:
         Task,
         EntryDetail,
         Entry,
+        DecisionItem,
         ThreadOption,
         ThreadCc,
         ThreadHistory,
@@ -1083,6 +1144,7 @@ async def advance_identity(session: AsyncSession) -> None:
         (table, "seq")
         for table in (
             "thread",
+            "decision_item",
             "entry",
             "task",
             "task_comment",
@@ -1119,6 +1181,8 @@ async def seed(session: AsyncSession) -> None:
     session.add_all(part_members())
     session.add_all(in_order(threads()))
     await session.flush()
+    session.add_all(in_order(decision_items()))
+    await session.flush()
     session.add_all(in_order(entries()))
     session.add_all(in_order(tasks()))
     await session.flush()
@@ -1154,6 +1218,7 @@ async def run() -> None:
         "grant": len(grants()),
         "part": len(PARTS),
         "thread": len(threads()),
+        "decision_item": len(DECISION_ITEMS),
         "entry": len(entries()),
         "task": len(tasks()),
         "comment": len(comments()),

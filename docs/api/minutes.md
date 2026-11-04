@@ -79,6 +79,12 @@ export interface ProposedEntry extends ProposedEntryBody {
 
 export interface ProposedEntryBody {
   kind: 'decide' | 'defer' | 'refine'
+  /**
+   * 결정 항목의 이름 (2026-11-03). 등록할 때 그 안건에 같은 이름의(앞뒤 공백을 뗀) 지우지 않은 항목이
+   * 있으면 거기, 없으면 새 항목을 만들어 단다. decide · refine 인데 '' 이면 안건 제목을 이름으로 쓴다.
+   * defer 인데 '' 이면 안건 전체를 미룬 것이다(itemId null)
+   */
+  itemTitle: string
   /** 한 줄 — 결정이면 무엇으로, 미룸이면 무엇을 */
   text: string
   /** 조건별 상세. 없으면 [] */
@@ -112,7 +118,8 @@ export interface ProposedMinutesTask extends ProposedTask {
 - `ownerId` 는 기존 안건 등록 · 이력 · 작업과 같은 담당자 검사를 받는다. `ownerHint` 는 `ownerId` 가 null 일 때만 채운다
 - `threadId` · `threadIds` 는 그 프로젝트의 안건, `threadTempIds` 는 이 초안의 새 안건
 - 작업 규칙은 `tasks/batch` 그대로 — `parentTempId` 는 자기보다 앞의 작업, `parentId` 와 같이 쓰지 않는다, `start ≤ due`
-- 한 안건에 이력은 **하나**까지(같은 `threadId` 둘 금지). 새 안건과 기존 안건이 같은 것을 가리키면 Claude 가 기존 쪽으로 낸다 — 서버는 막지 못한다
+- ~~한 안건에 이력은 **하나**까지(같은 `threadId` 둘 금지)~~ → **한 결정 항목에 이력은 하나까지**(2026-11-03) — 같은 `threadId` 에 같은 `itemTitle`(앞뒤 공백을 뗀) 둘 금지. `itemTitle` 이 `''` 인 것끼리는 kind 로 가른다 — `decide` · `refine` 은 '안건 제목 항목', `defer` 는 '안건 전체' 로 센다. 자리는 `entries.N.itemTitle`. 새 안건과 기존 안건이 같은 것을 가리키면 Claude 가 기존 쪽으로 낸다 — 서버는 막지 못한다
+- `itemTitle` 은 앞뒤 공백을 떼고 200자까지(`threads.N.entry.itemTitle` · `entries.N.itemTitle`). 안 보내면 `''` 로 받는다
 
 ## 게시판 — `Minutes`
 
@@ -224,6 +231,8 @@ export interface MinutesApplyResult {
   threads: Thread[]
   /** 새 안건의 이력 + 기존 안건의 이력. 새 안건 것 먼저, 각각 요청 순서 */
   entries: Entry[]
+  /** 등록하면서 새로 만든 결정 항목 — entries[].itemId 가 가리키는 것 중 화면이 아직 모르는 것. 만든 순서 (Q66, 2026-11-03) */
+  decisionItems: DecisionItem[]
   /** 이력 때문에 상태가 바뀐 기존 안건 */
   updatedThreads: Thread[]
   tasks: Task[]
@@ -235,7 +244,9 @@ export interface MinutesApplyResult {
 
 - 만든 안건 · 이력(새 안건의 것 · 기존 안건의 것 모두) · 작업에 **`minutesId` = 그 회의록**. 기존 안건 자체에는 붙이지 않는다
 - 만드는 순서: 새 안건(`queued`, 파트는 공통 `null`) → 그 이력 → 기존 안건의 이력 → 작업(`todo`, 본문 `[]`, `key` 배열 순 발번) → 작업 ↔ 안건 링크
-- 이력이 상태를 바꾸는 규칙은 `POST /api/threads/{threadId}/entries` 와 같다 — `decide` 면 `decided`, 그 밖은 `queued` 면 `open`
+- 이력은 `itemTitle` 로 결정 항목을 찾거나 만들어 단다(위 `ProposedEntryBody`). 새로 만든 항목은 안건 끝에 붙고 변경 이력에 `itemCreated` 가 남는다(등록한 사람 = 요청한 사람)
+- 이력이 상태를 바꾸는 규칙은 `POST /api/threads/{threadId}/entries` 와 같다 — 항목이 전부 정해지면 `decided`, 아니면 줄이 있으니 `open`(2026-11-03). 그래서 정해진 안건에 새 이름의 결정이 오면 새 항목이 생겨 `open` 으로 돌아갈 수 있다(`updatedThreads` 에 실린다)
+- **새로 만든 결정 항목은 응답의 `decisionItems` 에 싣는다**(Q66 닫힘) — 만든 순서, 이미 있던 항목에 단 이력이면 싣지 않는다(없으면 `[]`). 화면은 스냅샷을 다시 받지 않고 이것을 더한다
 - 이력의 `createdAt` 은 등록하는 지금이다(회의 날짜가 아니다) — 다른 이력과 같은 규칙
 - 화면이 새 안건을 빼면 그 `tempId` 를 가리키는 `threadTempIds` 도 화면이 지우고 보낸다. 남아 있으면 422
 - 오류: 404 `MINUTES_NOT_FOUND` · 422 `VALIDATION_ERROR`(`detail` 은 `threads.N.title` · `entries.N.threadId` · `tasks.N.threadTempIds.0` 처럼 자리를 짚는다 — `tasks/batch` 의 표기를 넓힌다) · 400 `THREAD_NOT_FOUND`(`entries.N.threadId` · `tasks.N.threadIds.M`) · 400 `THREAD_OWNER_NOT_FOUND` · `ENTRY_OWNER_NOT_FOUND` · `TASK_OWNER_NOT_FOUND`(그 자리의 `….ownerId`, 기존 등록 · 이력과 같은 코드 · 같은 경계) · 400 `TASK_PARENT_NOT_FOUND` · 400 `TASK_DEPTH_EXCEEDED`(작업은 4단까지 · Q64, `tasks.N.parentTempId` · `tasks.N.parentId`)
@@ -284,6 +295,7 @@ export interface MinutesApplyResult {
   - 아직 안 정했고 다음에 정해야 할 것 → 새 안건(`entry: null`). 후보가 말로 나오면 `options`
   - 누가 하기로 한 일 → 작업. 어느 안건의 결정에서 나온 일이면 그 안건에 건다
   - 새 안건을 내기 전에 `search_threads` 로 **이미 있는지 먼저 본다**
+  - 한 안건에서 결정이 여럿 나왔으면 결정 항목(`item_title`)을 나눠 이력을 여러 개 낸다 — 한 항목에 이력은 하나까지. 이미 있는 항목은 `get_thread` 의 `items` 이름을 그대로 쓴다. 정할 것이 하나뿐이거나 안건 전체를 미룬 것이면 `''` (2026-11-03)
   - 회의록에 없는 것을 지어내지 않는다. `quote` 는 회의록 글자 그대로
   - 사람 이름이 멤버에 없거나 여럿에 걸리면 `ownerId: null` + `ownerHint`
 

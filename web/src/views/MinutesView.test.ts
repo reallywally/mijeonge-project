@@ -260,6 +260,10 @@ describe('상세 — AI 정리 → 등록 → 나온 것', () => {
       '회의록: 최 선임 — 골라 주세요',
     )
     expect($('[data-minutes-apply]')!.textContent).toContain('등록 6건')
+    /* 이력 줄은 결정 항목 이름을 고칠 수 있다 — 비운 미룸은 안건 전체 */
+    const item = $('[data-minutes-row="e1"] input[aria-label="결정 항목"]') as HTMLInputElement
+    expect(item.value).toBe('')
+    expect(item.placeholder).toBe('비우면 안건 전체를 미룸')
   })
 
   it('새 안건을 끄면 "안건 연결이 빠집니다", 등록하면 검토가 닫히고 나온 것 칩 · 요약이 는다', async () => {

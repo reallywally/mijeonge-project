@@ -20,6 +20,7 @@ import {
   projectDateRangeError,
 } from '@/lib/project'
 import type {
+  DecisionItem,
   Entry,
   Member,
   Part,
@@ -154,6 +155,7 @@ export const createProject = (input: ProjectInput) =>
 export interface SnapshotRecords {
   project: Project
   allThreads: Thread[]
+  allDecisionItems: DecisionItem[]
   allEntries: Entry[]
   allTasks: Task[]
   taskThreads: TaskThreadLink[]
@@ -165,6 +167,7 @@ export function toRecords(snapshot: ProjectSnapshot): SnapshotRecords {
   return {
     project: snapshot.project,
     allThreads: snapshot.threads,
+    allDecisionItems: snapshot.decisionItems,
     allEntries: snapshot.entries,
     allTasks: snapshot.tasks,
     taskThreads: snapshot.taskThreadLinks,

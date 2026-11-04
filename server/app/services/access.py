@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, not_found
 from app.models import (
     CheckRequest,
+    DecisionItem,
     Entry,
     Member,
     Minutes,
@@ -209,3 +210,8 @@ def can_edit_thread(scope: Scope, thread: Thread) -> bool:
 def can_edit_entry(scope: Scope, thread: Thread, entry: Entry) -> bool:
     """이력 한 줄을 고치고 지울 수 있나 — 그 줄을 남긴 사람 + 안건을 고칠 수 있는 사람."""
     return can_edit_thread(scope, thread) or entry.creator_id == scope.actor.id
+
+
+def can_edit_item(scope: Scope, thread: Thread, item: DecisionItem) -> bool:
+    """결정 항목의 이름을 바꾸고 지울 수 있나 — 줄과 같은 기준(등록한 사람 + 안건을 고칠 사람)."""
+    return can_edit_thread(scope, thread) or item.creator_id == scope.actor.id

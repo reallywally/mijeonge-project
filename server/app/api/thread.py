@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import ProjectScope
 from app.db import get_session
 from app.schemas.thread import (
+    DecisionItemAdded,
+    DecisionItemCreate,
+    DecisionItemOut,
+    DecisionItemPatch,
+    DecisionItemRemoved,
     EntryAdded,
     EntryCreate,
     EntryOut,
@@ -41,6 +46,34 @@ async def patch_thread(
 async def delete_thread(thread_id: str, scope: ProjectScope, session: Session) -> None:
     """생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자. 떼어낸 하위 안건이 있으면 409."""
     await thread_service.delete_thread(session, thread_id, scope)
+
+
+@router.post("/threads/{thread_id}/items", status_code=201)
+async def add_item(
+    thread_id: str, payload: DecisionItemCreate, scope: ProjectScope, session: Session
+) -> DecisionItemAdded:
+    """결정 항목 더하기 — 프로젝트 멤버 누구나. 안건 상태가 바뀔 수 있어 안건도 같이 준다."""
+    return await thread_service.add_item(session, thread_id, payload, scope.actor.id)
+
+
+@router.patch("/threads/{thread_id}/items/{item_id}")
+async def patch_item(
+    thread_id: str,
+    item_id: str,
+    payload: DecisionItemPatch,
+    scope: ProjectScope,
+    session: Session,
+) -> DecisionItemOut:
+    """항목 이름 바꾸기 — 등록한 사람 · 안건을 고칠 수 있는 사람."""
+    return await thread_service.patch_item(session, thread_id, item_id, payload, scope)
+
+
+@router.delete("/threads/{thread_id}/items/{item_id}")
+async def delete_item(
+    thread_id: str, item_id: str, scope: ProjectScope, session: Session
+) -> DecisionItemRemoved:
+    """항목 지우기(논리) — 안건 상태를 다시 세어 안건을 돌려준다."""
+    return await thread_service.delete_item(session, thread_id, item_id, scope)
 
 
 @router.post("/threads/{thread_id}/entries", status_code=201)

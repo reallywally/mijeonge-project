@@ -335,6 +335,48 @@ describe('목업 apply', () => {
     ])
   })
 
+  it('항목 — 같은 이름이면 그 항목, 없으면 새 항목. 비운 결정은 안건 제목, 비운 미룸은 안건 전체', async () => {
+    const input = fullInput()
+    const base = input.entries[0]
+    input.entries = [
+      { ...base, tempId: 'x1', threadId: 't5', kind: 'decide', itemTitle: ' 응답(out) 항목 ' },
+      { ...base, tempId: 'x2', threadId: 't5', kind: 'refine', itemTitle: '오류 코드' },
+      { ...base, tempId: 'x3', threadId: 't3', kind: 'defer', itemTitle: '' },
+    ]
+    input.threads[1].entry = { ...input.threads[1].entry!, kind: 'decide', itemTitle: '' }
+    const r = await applyMinutes('m1', input)
+
+    expect(r.decisionItems.map((i) => [i.threadId, i.title])).toEqual([
+      [r.threads[1].id, '기간계 테스트 데이터 마스킹 범위'],
+      ['t5', '오류 코드'],
+    ])
+    const made = Object.fromEntries(r.decisionItems.map((i) => [i.title, i.id]))
+    expect(r.entries.map((e) => [e.threadId, e.itemId])).toEqual([
+      [r.threads[1].id, made['기간계 테스트 데이터 마스킹 범위']],
+      ['t5', 'di6'],
+      ['t5', made['오류 코드']],
+      ['t3', null],
+    ])
+    /* 새 안건은 하나뿐인 항목이 정해져 결정됨, t5 는 새 항목이 아직이라 논의중 그대로(담당자만 바뀐다) */
+    expect(r.threads[1].state).toBe('decided')
+    expect(r.updatedThreads.map((t) => [t.id, t.state, t.ownerId])).toEqual([['t5', 'open', 'u1']])
+  })
+
+  it('한 안건에 항목이 다르면 이력이 여럿이어도 된다 — 같은 항목 둘은 422', async () => {
+    const input = fullInput()
+    const base = { ...input.entries[0], threadId: 't5', kind: 'decide' as const }
+    input.entries = [
+      { ...base, tempId: 'x1', itemTitle: '요청(in) 항목' },
+      { ...base, tempId: 'x2', itemTitle: '응답(out) 항목' },
+    ]
+    const r = await applyMinutes('m1', input)
+    expect(r.updatedThreads.map((t) => [t.id, t.state])).toEqual([['t5', 'decided']])
+
+    input.entries[1].itemTitle = ' 요청(in) 항목'
+    const e = await rejected(applyMinutes('m1', input))
+    expect(e.detail).toEqual({ 'entries.1.itemTitle': '한 항목에 이력은 하나까지입니다.' })
+  })
+
   it('422 — detail 이 보낸 줄의 자리를 짚는다', async () => {
     const input = fullInput()
     input.threads[0].title = '  '
@@ -349,7 +391,7 @@ describe('목업 apply', () => {
     expect(e.detail).toEqual({
       'threads.0.title': expect.any(String),
       'threads.1.entry.text': expect.any(String),
-      'entries.1.threadId': '한 안건에 이력은 하나까지입니다.',
+      'entries.1.itemTitle': '한 항목에 이력은 하나까지입니다.',
       'tasks.0.threadTempIds.0': '이 초안의 새 안건이 아닙니다.',
       'tasks.1.due': expect.any(String),
       'tasks.2.parentTempId': expect.any(String),

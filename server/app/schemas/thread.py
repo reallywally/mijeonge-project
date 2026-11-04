@@ -11,6 +11,12 @@ CC_MAX = 20
 
 EntryKindIn = Literal["raise", "defer", "decide", "refine", "change", "split"]
 
+# 결정 항목 이름 — 한 줄 · 1 ~ 200자. 앞뒤 공백을 떼고 센다(string_too_short · string_too_long)
+ITEM_TITLE_MAX = 200
+ItemTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=ITEM_TITLE_MAX)
+]
+
 
 class ThreadOut(Schema):
     id: str
@@ -34,11 +40,24 @@ class ThreadOut(Schema):
     minutes_id: str | None = None
 
 
+class DecisionItemOut(Schema):
+    """결정 항목 하나. 정했는지는 싣지 않는다 — 화면이 이력에서 센다."""
+
+    id: str
+    thread_id: str
+    title: str
+    created_at: Utc
+    # 등록한 사람. 이행으로 만든 지난 항목은 null
+    creator_id: str | None
+
+
 class EntryOut(Schema):
     """안건 이력 한 줄."""
 
     id: str
     thread_id: str
+    # decide · change · refine 은 늘 있다. defer 는 null 이면 안건 전체, raise · split 은 늘 null
+    item_id: str | None
     kind: str
     text: str
     # entry_detail 행을 문자열 배열로 편다 — 화면이 string[] 로 들고 있다
@@ -70,10 +89,37 @@ class EntryCreate(Schema):
     """이력 한 줄. 화면은 decide · refine · defer 셋만 보내지만 kind 전부를 받는다."""
 
     kind: EntryKindIn
+    # kind 와 짝이 맞는지는 서비스가 본다 — 오류 code 를 나눠 내야 해서다
+    item_id: str | None = None
     text: str
     detail: list[str] = []
     note: str = ""
     owner_id: str | None = None
+
+
+class DecisionItemCreate(Schema):
+    """항목은 안건 끝에 붙는다."""
+
+    title: ItemTitle
+
+
+class DecisionItemPatch(Schema):
+    """이름 바꾸기."""
+
+    title: ItemTitle
+
+
+class DecisionItemAdded(Schema):
+    """정해진 안건에 항목이 붙으면 open 으로 돌아간다 — 안건도 같이 준다."""
+
+    item: DecisionItemOut
+    thread: ThreadOut
+
+
+class DecisionItemRemoved(Schema):
+    """항목을 지우면 상태를 다시 센다 — 바뀐 안건을 돌려준다."""
+
+    thread: ThreadOut
 
 
 class ThreadPatch(Schema):

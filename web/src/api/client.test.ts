@@ -100,6 +100,7 @@ describe('스냅샷', () => {
       closedAt: null,
     },
     threads: [],
+    decisionItems: [],
     entries: [],
     tasks: [],
     taskThreadLinks: [{ taskId: 'k1', threadId: 't1' }],
@@ -111,6 +112,7 @@ describe('스냅샷', () => {
     const records = toRecords(snapshot)
     expect(Object.keys(records).sort()).toEqual(
       [
+        'allDecisionItems',
         'allEntries',
         'allTasks',
         'allThreads',

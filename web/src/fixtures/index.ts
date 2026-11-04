@@ -1,5 +1,5 @@
 export { members, projects } from './people'
-export { threads, entries } from './threads'
+export { threads, entries, decisionItems } from './threads'
 export { tasks, taskThreadLinks } from './tasks'
 export { taskComments } from './comments'
 export { accounts, projectGrants, MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from './accounts'

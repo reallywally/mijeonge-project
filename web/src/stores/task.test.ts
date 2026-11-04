@@ -99,7 +99,8 @@ describe('작업 상세', () => {
     const task = useTaskStore()
     const row = task.taskDetail('k18')!.threads[0]
     expect(row.line).toBe('여전히 업무 정의가 없어 또 미룬다')
-    expect(row.where).toBe('마지막 기록 · 9월 14일')
+    /* 항목이 둘 이상이면 몇 개 정했는지도 */
+    expect(row.where).toBe('마지막 기록 · 9월 14일 · 결정 1/2 정함')
   })
 
   it('기록이 하나도 없는 안건은 그렇다고 적는다', () => {

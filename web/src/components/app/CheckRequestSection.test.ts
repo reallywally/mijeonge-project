@@ -104,7 +104,7 @@ describe('[확인 요청]', () => {
 
   it('결정을 바꾸면 다시 열리고, 앞 결정 묶음은 접혀서 아래에 있다', async () => {
     await signedIn('u1@inno-ax.com')
-    await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null)
+    await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null, 'di2')
     await mountDetail('t2')
 
     expect(sendButton()!.disabled).toBe(false)

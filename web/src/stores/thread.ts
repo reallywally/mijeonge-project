@@ -6,6 +6,7 @@ import { canDeleteThread, canEditEntry, canEditThread } from '@/lib/access'
 import { kstToday, localDay, monthDay, nowIso } from '@/lib/date'
 import { change, entryPatchChanges, threadPatchChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
+import { isDecisionKind, itemTitleProblem, threadStateOf } from '@/lib/thread'
 import { useAuthStore } from '@/stores/auth'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
@@ -13,6 +14,8 @@ import { useHistoryStore } from '@/stores/history'
 import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
 import type {
+  DecisionItem,
+  DecisionItemView,
   Entry,
   EntryKind,
   EntryPatch,
@@ -54,11 +57,17 @@ export const useThreadStore = defineStore('thread', () => {
       .slice()
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
+  /** 안건의 결정 항목 — 등록 순(배열 순서) */
+  const itemsOfThread = (threadId: string): DecisionItem[] =>
+    data.allDecisionItems.filter((i) => i.threadId === threadId)
+
   const rows = computed<ThreadRow[]>(() => {
     /* 오늘은 계산할 때 한 번만 읽는다 — 화면을 연 채 자정을 넘기는 경우까지는 쫓지 않는다 */
     const today = kstToday()
     return threads.value.map((thread) => {
       const own = entriesOfThread(thread.id)
+      const items = itemsOfThread(thread.id)
+      const settled = new Set(own.filter((e) => isDecisionKind(e.kind)).map((e) => e.itemId))
       return {
         thread,
         ownerName: data.memberName(thread.ownerId),
@@ -67,6 +76,8 @@ export const useThreadStore = defineStore('thread', () => {
         lastEntryLabel: own[0] ? monthDay(own[0].createdAt) : '—',
         dueLabel: thread.dueDate ? monthDay(thread.dueDate) : '—',
         overdue: isOverdue(thread, today),
+        itemCount: items.length,
+        settledItemCount: items.filter((i) => settled.has(i.id)).length,
       }
     })
   })
@@ -99,38 +110,57 @@ export const useThreadStore = defineStore('thread', () => {
    *
    * 이력은 새 줄이 위로 온다. 같은 날짜의 줄끼리는 등록한 순서를 뒤집는다 —
    * 그 '등록한 순서' 는 allEntries 의 배열 순서다. **배열 순서가 계약이다** (API.md Q4).
+   * 결정의 대체 · 세부 추가 · 미룸은 항목 안에서만 센다 — 한 항목을 바꿔도 다른 항목의 결정은 그대로다.
    */
   function threadDetail(threadId: string): ThreadDetail | null {
     const thread = data.allThreads.find((t) => t.id === threadId)
     if (!thread) return null
+    const items = itemsOfThread(threadId)
 
     const ordered = data.allEntries
       .map((entry, seqNo) => ({ entry, seqNo, at: localDay(entry.createdAt) }))
       .filter((x) => x.entry.threadId === threadId)
       .sort((a, b) => b.at.localeCompare(a.at) || b.seqNo - a.seqNo)
 
-    /* 결정 · 변경은 뒤에 온 것이 앞의 것을 대체한다. 위에서부터 첫 줄만 살아 있다. */
-    let decisionSeen = false
+    /* 같은 항목의 결정 · 변경은 뒤에 온 것이 앞의 것을 대체한다. 항목마다 위에서부터 첫 줄만 살아 있다. */
+    const decided = new Set<string | null>()
+    const titleOf = (itemId: string | null) =>
+      itemId === null ? null : (items.find((i) => i.id === itemId)?.title ?? '지운 항목')
     const events: ThreadEvent[] = ordered.map((x) => {
-      const decides = x.entry.kind === 'decide' || x.entry.kind === 'change'
-      const superseded = decides && decisionSeen
-      if (decides) decisionSeen = true
+      const decides = isDecisionKind(x.entry.kind)
+      const superseded = decides && decided.has(x.entry.itemId)
+      if (decides) decided.add(x.entry.itemId)
       return {
         entry: x.entry,
         at: x.at,
         ownerName: data.memberName(x.entry.ownerId),
         superseded,
+        itemTitle: titleOf(x.entry.itemId),
       }
     })
 
-    const decisionAt = events.findIndex(
-      (e) => !e.superseded && (e.entry.kind === 'decide' || e.entry.kind === 'change'),
-    )
-    const decision = decisionAt >= 0 ? events[decisionAt] : null
-    /* 결정보다 나중에 붙은 세부 추가는 그 결정의 상세로 올라간다 (오래된 것부터) */
-    const refines = decision
-      ? events.slice(0, decisionAt).filter((e) => e.entry.kind === 'refine')
-      : []
+    const itemViews: DecisionItemView[] = items.map((item) => {
+      const own = events.filter((e) => e.entry.itemId === item.id)
+      const decisionAt = own.findIndex((e) => !e.superseded && isDecisionKind(e.entry.kind))
+      const decision = decisionAt >= 0 ? own[decisionAt] : null
+      /* 그 항목의 결정보다 나중에 붙은 세부 추가는 그 결정의 상세로 올라간다 (오래된 것부터) */
+      const refines = decision
+        ? own.slice(0, decisionAt).filter((e) => e.entry.kind === 'refine')
+        : []
+      return {
+        item,
+        settled: decision !== null,
+        current: decision?.entry.text ?? '',
+        detail: decision
+          ? [...decision.entry.detail, ...refines.map((e) => e.entry.text).reverse()]
+          : [],
+        settledLabel: decision ? settledLabel(decision, refines[0] ?? null) : '',
+        settledNote: decision?.entry.note ?? '',
+        settledOwnerName: decision ? (decision.ownerName ?? data.memberName(thread.ownerId)) : null,
+        deferCount: own.filter((e) => e.entry.kind === 'defer').length,
+      }
+    })
+    const settledCount = itemViews.filter((v) => v.settled).length
 
     const subThreads: SubThreadRow[] = data.allThreads
       .filter((t) => t.parentThreadId === threadId)
@@ -141,15 +171,12 @@ export const useThreadStore = defineStore('thread', () => {
       ownerName: data.memberName(thread.ownerId),
       events,
       deferCount: events.filter((e) => e.entry.kind === 'defer').length,
+      threadDeferCount: events.filter((e) => e.entry.kind === 'defer' && e.entry.itemId === null)
+        .length,
       overdue: isOverdue(thread, kstToday()),
-      settled: decision !== null,
-      current: decision?.entry.text ?? '',
-      detail: decision
-        ? [...decision.entry.detail, ...refines.map((e) => e.entry.text).reverse()]
-        : [],
-      settledLabel: decision ? settledLabel(decision, refines[0] ?? null) : '',
-      settledNote: decision?.entry.note ?? '',
-      settledOwnerName: decision ? (decision.ownerName ?? data.memberName(thread.ownerId)) : null,
+      items: itemViews,
+      settledCount,
+      settled: itemViews.length > 0 && settledCount === itemViews.length,
       subThreads,
     }
   }
@@ -282,8 +309,8 @@ export const useThreadStore = defineStore('thread', () => {
 
   /**
    * 이력 한 줄을 남긴다 — POST /api/threads/{id}/entries.
-   * 결정으로 남기면 안건이 결정됨이 되고 처리한 사람이 있으면 담당자도 그 사람이 된다.
-   * 그 밖의 줄은 대기 중이던 안건을 논의중으로 옮긴다.
+   * 결정 · 세부 추가는 항목(itemId)에 단다. 미룸은 항목에 달면 그 항목만, null 이면 안건 전체를 미룬 것이다.
+   * 항목이 전부 정해지면 안건이 결정됨이 되고, 결정에 처리한 사람이 있으면 담당자도 그 사람이 된다.
    * 서버 모드에서는 응답의 줄을 넣고 안건을 갈아끼운다. 남겼으면 true 다.
    */
   async function addEntry(
@@ -292,10 +319,18 @@ export const useThreadStore = defineStore('thread', () => {
     text: string,
     note: string,
     ownerId: string | null,
+    itemId: string | null = null,
   ): Promise<boolean> {
     if (!data.mock) {
       try {
-        const res = await api.addEntry(threadId, { kind, text, detail: [], note, ownerId })
+        const res = await api.addEntry(threadId, {
+          kind,
+          itemId,
+          text,
+          detail: [],
+          note,
+          ownerId,
+        })
         data.allEntries.push(res.entry)
         replaceThread(res.thread)
         return true
@@ -307,9 +342,26 @@ export const useThreadStore = defineStore('thread', () => {
 
     const current = data.allThreads.find((t) => t.id === threadId)?.ownerId ?? null
     if (data.rejectOwner(ownerId, 'ENTRY_OWNER_NOT_FOUND', current)) return false
+    /* 목업도 서버처럼 항목을 따진다 — 결정 · 세부 추가는 항목이 있어야 하고, 그 안건의 항목이어야 한다 */
+    if (kind !== 'defer' && itemId === null) {
+      toastError(
+        new ApiError(422, {
+          code: 'ENTRY_ITEM_REQUIRED',
+          message: '결정 · 세부 추가는 결정 항목에 남깁니다.',
+        }),
+      )
+      return false
+    }
+    if (itemId !== null && !itemsOfThread(threadId).some((i) => i.id === itemId)) {
+      toastError(
+        new ApiError(404, { code: 'ITEM_NOT_FOUND', message: '결정 항목을 찾을 수 없습니다.' }),
+      )
+      return false
+    }
     data.allEntries.push({
       id: data.nextId('ne'),
       threadId,
+      itemId,
       kind,
       text,
       detail: [],
@@ -322,13 +374,104 @@ export const useThreadStore = defineStore('thread', () => {
 
     const thread = data.allThreads.find((t) => t.id === threadId)
     if (!thread) return true
-    if (kind === 'decide') {
-      thread.state = 'decided'
-      if (ownerId) thread.ownerId = ownerId
-    } else if (thread.state === 'queued') {
-      thread.state = 'open'
+    if (kind === 'decide' && ownerId) thread.ownerId = ownerId
+    thread.state = threadStateOf(itemsOfThread(threadId), entriesOfThread(threadId))
+    return true
+  }
+
+  /** 항목 이름 바꾸기 · 지우기 — 그 항목을 등록한 사람 · 안건을 고칠 수 있는 사람 (줄 고치기와 같은 경계) */
+  function canEditItem(item: DecisionItem) {
+    const thread = data.allThreads.find((t) => t.id === item.threadId)
+    return !!thread && canEditEntry(auth.me, item, thread, thread.projectId)
+  }
+
+  /**
+   * 결정 항목을 더한다 — POST /api/threads/{id}/items. 안건 끝에 붙는다. 누구나 더한다(줄 남기기와 같다).
+   * 정해진 안건에 더하면 논의중으로 돌아간다. 만든 항목의 id, 실패하면 알리고 null 이다
+   */
+  async function addItem(threadId: string, title: string): Promise<string | null> {
+    const clean = title.trim()
+    if (!data.mock) {
+      try {
+        const res = await api.createItem(threadId, { title: clean })
+        data.allDecisionItems.push(res.item)
+        replaceThread(res.thread)
+        history.touched('thread', threadId)
+        return res.item.id
+      } catch (e) {
+        toastError(e)
+        return null
+      }
+    }
+    const problem = itemTitleProblem(clean)
+    if (problem) {
+      toastError(
+        new ApiError(422, {
+          code: 'VALIDATION_ERROR',
+          message: '입력값이 올바르지 않습니다.',
+          detail: { title: problem },
+        }),
+      )
+      return null
+    }
+    const thread = data.allThreads.find((t) => t.id === threadId)
+    if (!thread) return null
+    const id = data.nextId('ni')
+    data.allDecisionItems.push({
+      id,
+      threadId,
+      title: clean,
+      createdAt: nowIso(),
+      creatorId: data.currentMemberId,
+    })
+    thread.state = threadStateOf(itemsOfThread(threadId), entriesOfThread(threadId))
+    logMock(threadId, [change('itemCreated', null, clean)])
+    return id
+  }
+
+  /**
+   * 항목 이름을 바꾼다 — PATCH /api/threads/{id}/items/{itemId}. 상태는 그대로다.
+   * 빈 이름 · 200자 넘는 이름은 받지 않는다(서버도 422). 화면에 먼저 반영하고 돌아온 항목으로 갈아끼운다
+   */
+  function renameItem(itemId: string, title: string) {
+    const item = data.allDecisionItems.find((i) => i.id === itemId)
+    if (!item || itemTitleProblem(title)) return false
+    if (rejectEdit(canEditItem(item))) return false
+    const clean = title.trim()
+    if (clean === item.title) return true
+    logMock(item.threadId, [change('itemTitle', item.title, clean)])
+    item.title = clean
+    if (!data.mock) {
+      afterWrite(
+        item.threadId,
+        data.save(
+          `item:${itemId}`,
+          () => api.patchItem(item.threadId, itemId, { title: clean }),
+          (next) => {
+            const at = data.allDecisionItems.findIndex((i) => i.id === next.id)
+            if (at >= 0) data.allDecisionItems[at] = next
+          },
+        ),
+      )
     }
     return true
+  }
+
+  /**
+   * 항목을 지운다(논리 삭제). 그 항목의 줄은 이력에 남지만 상태 계산에서 빠진다 — 다시 잰 안건을 서버가 돌려준다.
+   * 실패하면 ApiError 를 던진다
+   */
+  async function deleteItem(itemId: string) {
+    const item = data.allDecisionItems.find((i) => i.id === itemId)
+    if (!item) return
+    const threadId = item.threadId
+    try {
+      const res = await api.deleteItem(threadId, itemId)
+      data.allDecisionItems = data.allDecisionItems.filter((i) => i.id !== itemId)
+      replaceThread(res.thread)
+    } finally {
+      history.touched('thread', threadId)
+    }
   }
 
   /**
@@ -369,6 +512,7 @@ export const useThreadStore = defineStore('thread', () => {
   async function deleteThread(threadId: string) {
     await api.deleteThread(threadId)
     data.allThreads = data.allThreads.filter((t) => t.id !== threadId)
+    data.allDecisionItems = data.allDecisionItems.filter((i) => i.threadId !== threadId)
     data.allEntries = data.allEntries.filter((e) => e.threadId !== threadId)
     data.taskThreads = data.taskThreads.filter((l) => l.threadId !== threadId)
     /* 받아 둔 확인 요청 · 테스트 태그에서도 빠졌다 — 받아 둔 목록이 있으면 다시 받는다 */
@@ -403,10 +547,15 @@ export const useThreadStore = defineStore('thread', () => {
     openCount,
     overdueCount,
     entriesOfThread,
+    itemsOfThread,
     threadDetail,
     addThread,
     updateThread,
     addEntry,
+    addItem,
+    renameItem,
+    deleteItem,
+    canEditItem,
     updateEntry,
     canEdit,
     canDelete,

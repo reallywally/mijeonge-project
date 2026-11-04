@@ -83,7 +83,14 @@ propose_minutes 로 낸다. 너는 아무것도 저장하지 못한다 — 사�
 5. 새 안건을 내기 전에 search_threads 로 **이미 있는지 먼저 본다**. 있으면 새로 만들지 말고
    그 안건에 붙일 이력(entries)으로 낸다. 검색은 글자 일부가 맞는 것을 찾으니 짧은 낱말로,
    안 나오면 표현을 바꿔 다시 찾는다. 헷갈리면 get_thread 로 읽어 본다
-6. 한 안건에 이력은 하나까지다. 같은 안건에 여러 말이 나왔으면 한 줄로 합치고 detail 에 나눠 적는다
+6. 안건 안에서 따로 정하는 것 하나하나가 결정 항목이다
+   (예: '로그인 방식' 안건의 'SSO 여부' · '세션 길이').
+   이력마다 item_title 에 그 항목의 이름을 짧게 적는다 — get_thread 의 items 에 같은 것이 있으면
+   그 이름을 글자 그대로 쓴다. 한 안건에서 결정이 여럿 나왔으면 항목을 나눠 이력을 여러 개 낸다.
+   **한 항목에 이력은 하나까지다** — 같은 항목에 여러 말이 나왔으면 한 줄로 합치고
+   detail 에 나눠 적는다.
+   안건에 정할 것이 하나뿐이면 item_title 은 '' 로 둔다(안건 제목을 쓴다).
+   안건 전체를 미룬 것이면 defer 의 item_title 을 '' 로 둔다
 7. 회의록에 없는 것을 지어내지 않는다.
    quote 는 근거가 된 회의록의 한두 문장을 **글자 그대로** 옮긴다
 8. 사람: 위 멤버 목록으로 id 를 잇는다. 이름이 멤버에 없거나 여럿에 걸리면("김 책임" 등)
@@ -114,13 +121,19 @@ _OWNER_HINT = {
 _QUOTE = {"type": "string", "description": "근거 — 회의록의 한두 문장을 글자 그대로"}
 _ENTRY_FIELDS: dict[str, Any] = {
     "kind": {"type": "string", "enum": ["decide", "defer", "refine"]},
+    "item_title": {
+        "type": "string",
+        "description": (
+            "결정 항목의 이름(200자까지). 정할 것이 하나뿐이거나 안건 전체를 미룬 것이면 ''"
+        ),
+    },
     "text": {"type": "string", "description": "한 줄 — 결정이면 무엇으로, 미룸이면 무엇을"},
     "detail": {"type": "array", "items": {"type": "string"}, "description": "조건별 상세"},
     "note": {"type": "string", "description": "왜 — 미룸이면 사유. 없으면 ''"},
     "owner_id": _OWNER,
     "owner_hint": _OWNER_HINT,
 }
-_ENTRY_REQUIRED = ["kind", "text", "detail", "note", "owner_id", "owner_hint"]
+_ENTRY_REQUIRED = ["kind", "item_title", "text", "detail", "note", "owner_id", "owner_hint"]
 
 PROPOSE_TOOL: ToolSpec = {
     "name": "propose_minutes",
@@ -181,7 +194,7 @@ PROPOSE_TOOL: ToolSpec = {
             "entries": {
                 "type": "array",
                 "maxItems": MINUTES_ENTRIES_MAX,
-                "description": "이미 있는 안건에 붙일 이력 — 한 안건에 하나까지",
+                "description": "이미 있는 안건에 붙일 이력 — 한 결정 항목에 하나까지",
                 "items": {
                     "type": "object",
                     "properties": {

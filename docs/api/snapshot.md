@@ -12,7 +12,7 @@
 
 ```ts
 import type {
-  Entry, Part, PartMember, Project, Task, TaskThreadLink, Thread,
+  DecisionItem, Entry, Part, PartMember, Project, Task, TaskThreadLink, Thread,
 } from '@/types/domain'
 
 /** GET /api/projects/{projectId}/snapshot */
@@ -21,6 +21,8 @@ export interface ProjectSnapshot {
       프로젝트를 빨리 바꿨을 때 늦게 온 옛 응답을 id 로 가릴 수 있다 */
   project: Project
   threads: Thread[]
+  /** 결정 항목 — 안건 등록 순 → 안건 안의 항목 순. 지운 항목은 싣지 않는다 (2026-11-03) */
+  decisionItems: DecisionItem[]
   entries: Entry[]
   tasks: Task[]
   taskThreadLinks: TaskThreadLink[]
@@ -113,6 +115,36 @@ export interface Task {
 - 자리를 바꾸는 길은 `POST /api/tasks/{taskId}/move` 하나다(`API.md` 엔드포인트 표)
 - 리비전 `0030_task_order` 가 있던 작업을 (프로젝트, 상위) 묶음마다 `seq` 순으로 0, 1, 2… 로 채운다(지운 작업도 센다). 시드는 같은 상위 안의 배열 순서대로
 
+### 결정 항목 — `decisionItems` · `Entry.itemId` (2026-11-03)
+
+안건 하나 안에서 **따로 정하는 것**이 여럿일 수 있다(예: '로그인 방식' 안건의 'SSO 여부' · '세션 길이').
+사용자가 '항목마다 따로 결정' 을 골랐다 — 결정 로그 2026-11-03. 쓰기 경로 · 오류는 `API.md` 엔드포인트 표.
+
+```ts
+export interface DecisionItem {
+  id: string
+  threadId: string
+  /** 무엇을 정하나 — 한 줄 · 1 ~ 200자(앞뒤 공백을 뗀다) */
+  title: string
+  createdAt: string
+  /** 등록한 사람 — 서버가 요청한 사람으로 찍는다. 이행으로 만든 지난 항목은 null */
+  creatorId: string | null
+}
+export interface Entry {
+  // … 그대로
+  /** decide · change · refine 은 늘 항목에 달린다. defer 는 null 이면 안건 전체, raise · split 은 늘 null */
+  itemId: string | null
+}
+```
+
+- **항목의 상태는 싣지 않는다** — 그 항목에 지우지 않은 `decide` · `change` 줄이 있으면 정해진 것이다(화면이 센다)
+- **결정의 대체는 항목 안에서만** — 같은 항목의 `decide` · `change` 중 마지막(`seq`) 하나가 그 항목의 지금 결정이다. `refine` 은 그 항목의 지금 결정 뒤에 붙으면 그 결정의 상세다
+- **안건 상태** — 지우지 않은 항목이 하나 이상이고 **전부 정해졌으면** `decided`, 아니면 셀 줄이 있으면 `open`, 없으면 `queued`. 항목이 0개면 `decided` 가 될 수 없다. 정해진 안건에 항목을 더하면 `open` 으로 돌아간다
+- **지운 항목** — `decisionItems` 에서 빠진다. 그 항목의 줄은 `entries` 에 **남는다**(이력이다) — 그래서 `Entry.itemId` 가 `decisionItems` 에 없는 id 를 가리킬 수 있다. 그 줄은 안건 상태 계산에서 빠진다
+- 순서 — 안건의 `seq` → 안건 안의 등록 순(`sort_order`, 그다음 `seq`). 지금은 등록 순으로만 붙는다
+- 지난 데이터 — 리비전 `0031_decision_item` 이 지우지 않은 안건 중 `decide` · `change` · `refine` 줄이 있는 안건마다 항목 하나(제목 = 안건 제목, `createdAt` = 그 줄들 중 가장 이른 것, `creatorId` null)를 만들고 그 줄(지운 줄 포함)을 단다. `defer` · `raise` · `split` 은 null — 지난 안건의 상태 · 지금 결정이 그대로다
+- 시드 — 목업(`web/src/fixtures/threads.ts`)과 **값 · 배열 순서까지 같다**(2026-11-03 맞춤). 항목은 `di1`(t1 '서버 OS 결정', e1) · `di2`(t2 'DB 결정', e3) — 이행 규칙과 같은 모양(등록한 사람 null, 시각은 결정 줄과 같다) · `di5`(t5 '요청(in) 항목', u4, e8 로 정함) · `di6`(t5 '응답(out) 항목', u4, 아직) · `di4`(t6 '테스트 기간', u1, e6) · `di7`(t6 '전체 일정', u1, e7). 그래서 t5 는 항목 하나만 정해 `open`, t6 은 둘 다 정해 `decided` 다. 줄은 `e2 · e1 · e3 · e4 · e8 · e5 · e7 · e6` 순(seq)이고 미룸(e2 · e4 · e5)은 안건 전체(`itemId` null)다
+
 ### `Thread` · `Entry` 가 한 필드씩 늘었다 (2026-11-02, 생성자)
 
 스냅샷의 `threads` · `entries` · 안건 쓰기 응답(등록 · 수정 · 이력 줄 남기기 · 고치기 · 지우기 · 회의록 반영) 모두 같은 모양이다.
@@ -149,6 +181,7 @@ export interface Entry {
 | 키 | 기준 |
 | --- | --- |
 | `threads` | `thread.projectId === projectId` — **지운 안건(논리 삭제, 2026-11-02)은 빠진다** |
+| `decisionItems` | `threadId` 가 위 `threads` 안에 있는 것. **지운 항목(논리 삭제)은 빠진다** (2026-11-03) |
 | `entries` | `entry.threadId` 가 위 `threads` 안에 있는 것. **`Entry` 에는 `projectId` 가 없다** — 안건을 타고 걸러진다. **지운 줄(2026-11-02)은 빠진다** |
 | `tasks` | `task.projectId === projectId` — **지운 작업(논리 삭제, 2026-11-02)은 빠진다**. 삭제 여부를 나타내는 필드는 없다 |
 | `taskThreadLinks` | `taskId` 가 위 `tasks` 안에 있는 것 (Q13 — 프로젝트를 넘는 링크를 어떻게 할지). 지운 작업 · 지운 안건(2026-11-02)의 링크는 DB 에 남지만 나가지 않는다 |
@@ -175,6 +208,7 @@ export interface Entry {
 | 키 | 순서 | 화면이 순서에 기대나 |
 | --- | --- | --- |
 | `entries` | `seq ASC` (= 등록 순서) | **그렇다** — 안건 이력의 동점을 이 순서로 가른다 |
+| `decisionItems` | 안건 `seq` → 항목 `sort_order` → `seq` | **그렇다** — 안건 안의 항목 순서가 화면 순서다 (2026-11-03) |
 | `threads` | `created_at ASC, id ASC` | 아니다. 화면이 다시 정렬한다 |
 | `tasks` | `created_at ASC, id ASC` | 아니다 |
 | 링크 둘 | 두 id 오름차순 | 아니다 |
@@ -191,7 +225,8 @@ export interface Entry {
 | --- | --- |
 | `Project` | `description` · `startDate` · `endDate` · `closedAt` |
 | `Thread` | `ownerId` · `creatorId` · `parentThreadId` · `dueDate` · `partId` · `minutesId` |
-| `Entry` | `ownerId` · `creatorId` · `minutesId` |
+| `Entry` | `itemId` · `ownerId` · `creatorId` · `minutesId` |
+| `DecisionItem` | `creatorId` (2026-11-03) |
 | `Task` | `parentId` · `ownerId` · `creatorId` · `start` · `due` · `partId` · `minutesId` |
 | `MinutesItem` · `Minutes` | `meetingDate` (스냅샷 밖 — `GET /api/projects/{projectId}/minutes` 등으로만 나간다, `minutes.md`) |
 | `TaskComment` | `authorId` · `editedAt` (스냅샷 밖 — `GET /api/tasks/{taskId}/comments` 로만 나간다) |

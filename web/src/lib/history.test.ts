@@ -373,6 +373,22 @@ describe('안건 이력', () => {
     })
   })
 
+  it('결정 항목 칸 — 추가 · 이름 · 삭제', () => {
+    expect(thread(change('itemCreated', null, '세션 길이'))).toMatchObject({
+      label: '결정 항목 추가',
+      value: '세션 길이',
+    })
+    expect(thread(change('itemTitle', '세션', '세션 길이'))).toMatchObject({
+      label: '결정 항목 이름',
+      from: '세션',
+      to: '세션 길이',
+    })
+    expect(thread(change('itemDeleted', '세션 길이', null))).toMatchObject({
+      label: '결정 항목 삭제',
+      value: '세션 길이',
+    })
+  })
+
   it('칸 표 순서로 놓는다 — 등록 · 삭제 다음 글 칸, 이력 줄 칸은 맨 뒤', () => {
     const ordered = orderChanges(
       [

@@ -125,9 +125,9 @@ describe('안건 상세의 [확인 요청]', () => {
     await signedIn('u1@inno-ax.com')
     const checks = useCheckStore()
     await checks.load()
-    expect(await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null)).toBe(
-      true,
-    )
+    expect(
+      await useThreadStore().addEntry('t2', 'decide', 'PostgreSQL 로 바꾼다', '', null, 'di2'),
+    ).toBe(true)
 
     const next = checks.forThread('t2')!
     expect(next.block).toBeNull()
@@ -229,7 +229,8 @@ describe('참조', () => {
     const checks = useCheckStore()
     await checks.load()
     expect(checks.forThread(made!)?.block).toBe('not-decided')
-    await threads.addEntry(made!, 'decide', '정했다', '', null)
+    const item = await threads.addItem(made!, '새 안건')
+    await threads.addEntry(made!, 'decide', '정했다', '', null, item)
     expect(checks.forThread(made!)?.block).toBeNull()
     expect(await checks.send(made!)).toBe(1)
   })
@@ -275,7 +276,8 @@ describe('배지', () => {
     data.setProject('p2')
     /* u1 은 p2 에서 일반 사용자라 t10 을 못 고친다 — 참조는 데이터로 붙인다 */
     data.allThreads.find((t) => t.id === 't10')!.ccIds = ['u3']
-    await threads.addEntry('t10', 'decide', '여기도 정했다', '', null)
+    const item = await threads.addItem('t10', '이관 범위')
+    await threads.addEntry('t10', 'decide', '여기도 정했다', '', null, item)
     expect(await useCheckStore().send('t10')).toBe(1)
     await switchTo('u3@inno-ax.com')
 

@@ -12,6 +12,8 @@
 
 import httpx
 
+from tests.conftest import item_of
+
 
 async def start(client: httpx.AsyncClient, name: str, prefix: str) -> str:
     """1. 최상위 프로젝트 등록 — 그리고 사람들을 부여한다. 부여받은 사람만 담당자가 된다."""
@@ -74,6 +76,7 @@ async def test_scenario_1_dev_environment(client: httpx.AsyncClient) -> None:
             f"/api/threads/{os_thread['id']}/entries",
             json={
                 "kind": "decide",
+                "itemId": await item_of(client, os_thread["id"], "서버 OS"),
                 "text": "우분투 최신 버전으로 한다",
                 "note": "PM 에게 전달받아 이도현이 정리했다.",
                 "ownerId": "u3",
@@ -88,6 +91,7 @@ async def test_scenario_1_dev_environment(client: httpx.AsyncClient) -> None:
             f"/api/threads/{db_thread['id']}/entries",
             json={
                 "kind": "decide",
+                "itemId": await item_of(client, db_thread["id"], "사용할 DB"),
                 "text": "mysql 을 쓴다",
                 "detail": [
                     "postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다",
@@ -210,6 +214,7 @@ async def test_scenario_3_schedule_settled_at_once(client: httpx.AsyncClient) ->
             f"/api/threads/{thread['id']}/entries",
             json={
                 "kind": "decide",
+                "itemId": await item_of(client, thread["id"], "일정 조율 방식"),
                 "text": "전체 일정은 그대로 두고 테스트 기간만 2주 줄인다",
                 "detail": [
                     "늘어난 개발 기간은 그대로 둔다",

@@ -3,7 +3,7 @@ import { login, logout } from '@/api/auth'
 import { confirmCheck, fetchCheckPendingCount, fetchChecks, sendCheck } from '@/api/checks'
 import { ApiError } from '@/api/client'
 import { type MockWorld, provideMockWorld, resetMockAuth } from '@/api/mockAuth'
-import { entries, MOCK_PASSWORD, taskThreadLinks, tasks, threads } from '@/fixtures'
+import { decisionItems, entries, MOCK_PASSWORD, taskThreadLinks, tasks, threads } from '@/fixtures'
 import type { Entry, Task, Thread } from '@/types/domain'
 
 /* 확인 요청 — 목업 갈래가 서버와 같은 검사 · 같은 코드를 내는지, 서버 갈래가 계약의 경로로 가는지 본다
@@ -42,6 +42,7 @@ function world(patch: Partial<Thread> = {}, extra: Partial<MockWorld> = {}): Moc
   const entry: Entry = {
     id: 'ne1',
     threadId: thread.id,
+    itemId: 'ni1',
     kind: 'decide',
     text: '정했다',
     detail: [],
@@ -53,6 +54,7 @@ function world(patch: Partial<Thread> = {}, extra: Partial<MockWorld> = {}): Moc
   }
   return {
     threads: [...threads, thread],
+    decisionItems: [...decisionItems],
     entries: [...entries, entry],
     tasks: [...tasks],
     taskThreads: [...taskThreadLinks],
@@ -114,6 +116,7 @@ describe('목업 갈래', () => {
     const change: Entry = { ...world().entries.at(-1)!, id: 'ne2', threadId: 't2', kind: 'change' }
     provideMockWorld(() => ({
       threads,
+      decisionItems,
       entries: [...entries, change],
       tasks,
       taskThreads: taskThreadLinks,

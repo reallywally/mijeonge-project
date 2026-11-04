@@ -38,6 +38,8 @@ THREAD_KEYS = {
 ENTRY_KEYS = {
     "id",
     "threadId",
+    # 결정 항목 — decide · change · refine 은 늘 있다. defer 는 null 이면 안건 전체
+    "itemId",
     "kind",
     "text",
     "detail",
@@ -101,6 +103,8 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
         # 고른 프로젝트 자신 — 딥링크로 바로 들어와도 헤더가 선다 (API.md Q7)
         "project",
         "threads",
+        # 결정 항목 — 안건 등록 순 → 안건 안의 항목 순
+        "decisionItems",
         "entries",
         "tasks",
         "taskThreadLinks",
@@ -111,6 +115,7 @@ async def test_snapshot_fields_match_domain_ts(client: httpx.AsyncClient) -> Non
     assert set(snap["project"]) == PROJECT_KEYS
     assert set(snap["threads"][0]) == THREAD_KEYS
     assert set(snap["entries"][0]) == ENTRY_KEYS
+    assert set(snap["decisionItems"][0]) == {"id", "threadId", "title", "createdAt", "creatorId"}
     assert set(snap["tasks"][0]) == TASK_KEYS
     assert set(snap["tasks"][3]["body"][0]) == {"id", "kind", "text", "done", "level"}
     assert set(snap["taskThreadLinks"][0]) == {"taskId", "threadId"}
@@ -132,13 +137,16 @@ async def test_arrays_come_in_registration_order(client: httpx.AsyncClient) -> N
 
     `stores/thread.ts` 의 `rows` 와 작업 목록에는 정렬이 아예 없다. 게다가 안건 이력은
     같은 날짜의 줄을 배열 인덱스(seqNo)로 가른다. 그래서 등록 순서(`seq`)로 내보낸다 —
-    `created_at` 으로 세우면 안 된다. 픽스처의 e1(09-09)과 e2(09-07)처럼 적은 순서와
-    시각 순서가 다른 줄도 있다.
+    `created_at` 으로 세우면 안 된다. 픽스처의 t5(09-07)처럼 적은 순서와 시각 순서가 다른
+    안건도 있다 — t1 ~ t4(09-08 ~ 09-10) 뒤에 선다.
     """
     snap = (await client.get("/api/projects/p1/snapshot")).json()
 
     assert [t["id"] for t in snap["threads"]] == [f"t{n}" for n in range(1, 10)]
-    assert [e["id"] for e in snap["entries"]] == [f"e{n}" for n in range(1, 7)]
+    # 목업(`web/src/fixtures/threads.ts`)의 배열 순서 그대로
+    assert [e["id"] for e in snap["entries"]] == ["e2", "e1", "e3", "e4", "e8", "e5", "e7", "e6"]
+    # 결정 항목 — 안건 등록 순 → 안건 안의 항목 순
+    assert [i["id"] for i in snap["decisionItems"]] == ["di1", "di2", "di5", "di6", "di4", "di7"]
     assert [t["key"] for t in snap["tasks"]] == [f"HW-{n}" for n in range(1, 23)]
 
 

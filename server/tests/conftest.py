@@ -31,6 +31,7 @@ from app.main import app
 from app.models import (
     Base,
     CheckRequest,
+    DecisionItem,
     Entry,
     Member,
     Minutes,
@@ -59,6 +60,7 @@ SEQ_MODELS: tuple[tuple[type[Base], str], ...] = (
         (model, "seq")
         for model in (
             Thread,
+            DecisionItem,
             Entry,
             Task,
             TaskComment,
@@ -253,3 +255,29 @@ async def pg_session() -> AsyncGenerator[AsyncSession, None]:
 async def pg_client(pg_session: AsyncSession) -> AsyncGenerator[httpx.AsyncClient, None]:
     async for c in _app_on(pg_session):
         yield c
+
+
+async def item_of(c: httpx.AsyncClient, thread_id: str, title: str = "") -> str:
+    """그 안건의 결정 항목 id — 이름을 주면 그 이름, 아니면 첫 항목. 없으면 만든다.
+
+    decide · change · refine 은 항목 없이 못 남긴다 — 결정을 남기는 검사가 이것으로 항목을 고른다.
+    """
+    # 시드의 프로젝트 둘 중 그 안건이 있는 쪽 스냅샷에서 찾는다
+    for project in ("p1", "p2"):
+        snapshot = await c.get(f"/api/projects/{project}/snapshot")
+        if snapshot.status_code != 200:
+            continue
+        for item in snapshot.json()["decisionItems"]:
+            if item["threadId"] == thread_id and (not title or item["title"] == title):
+                return str(item["id"])
+    res = await c.post(f"/api/threads/{thread_id}/items", json={"title": title or "결정"})
+    assert res.status_code == 201, res.text
+    return str(res.json()["item"]["id"])
+
+
+async def decide(
+    c: httpx.AsyncClient, thread_id: str, text: str = "정했다", kind: str = "decide", **extra: Any
+) -> httpx.Response:
+    """그 안건의 (첫) 결정 항목에 결정 한 줄 — 응답 그대로."""
+    body = {"kind": kind, "itemId": await item_of(c, thread_id), "text": text, **extra}
+    return await c.post(f"/api/threads/{thread_id}/entries", json=body)

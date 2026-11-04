@@ -184,6 +184,30 @@ describe('등록', () => {
     expect(useDataStore().allThreads.find((t) => t.id === 't3')!.state).toBe('decided')
   })
 
+  it('항목 이름을 고쳐 등록하면 새 항목이 데이터 스토어에 들어가고 줄이 그 항목에 달린다', async () => {
+    const data = useDataStore()
+    const minutes = await drafted()
+    minutes.form!.entries[0].kind = 'decide'
+    minutes.form!.entries[0].itemTitle = '  호출 범위 '
+    expect(minutes.applyInput!.entries[0].itemTitle).toBe('  호출 범위 ')
+    expect(await minutes.apply()).toBe(true)
+
+    const item = data.allDecisionItems.find((i) => i.threadId === 't3')!
+    expect(item.title).toBe('호출 범위')
+    expect(data.allEntries.at(-1)).toMatchObject({ threadId: 't3', itemId: item.id })
+    expect(data.allThreads.find((t) => t.id === 't3')!.state).toBe('decided')
+  })
+
+  it('한 안건의 같은 항목에 두 줄이면 등록을 막는다 — 이름은 앞뒤 공백을 떼고 견준다', async () => {
+    const minutes = await drafted()
+    const first = minutes.form!.entries[0]
+    minutes.form!.entries.push({ ...first, tempId: 'e2', itemTitle: ' ' })
+    minutes.setPicked('e2', true)
+    expect(minutes.problems).toEqual({ e2: '같은 항목에 남기는 이력이 이미 있습니다.' })
+    minutes.form!.entries[1].itemTitle = '다른 항목'
+    expect(minutes.problems).toEqual({})
+  })
+
   it('실패하면 알리고 검토에 남는다 — 짚은 자리는 보낸 순서가 아니라 그 줄(tempId)에 붙는다', async () => {
     const data = useDataStore()
     const threads = data.allThreads.length

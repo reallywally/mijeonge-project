@@ -17,7 +17,7 @@ from collections.abc import Sequence
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Entry, Part, PartMember, Task, TaskThreadLink, Thread
+from app.models import DecisionItem, Entry, Part, PartMember, Task, TaskThreadLink, Thread
 from app.schemas.part import PartMemberOut
 from app.schemas.project import ProjectOut
 from app.schemas.snapshot import SnapshotOut
@@ -26,7 +26,7 @@ from app.services import project as project_service
 from app.services.access import live_task_ids, live_thread_ids
 from app.services.part import to_part
 from app.services.task import comment_counts, since_or_created, status_since_map, to_task
-from app.services.thread import to_entry, to_thread
+from app.services.thread import to_entry, to_item, to_thread
 
 
 async def _all[T](session: AsyncSession, query: Select[tuple[T]]) -> Sequence[T]:
@@ -41,6 +41,18 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
         select(Thread)
         .where(Thread.project_id == project_id, Thread.is_deleted.is_(False))
         .order_by(Thread.seq),
+    )
+    items = await _all(
+        session,
+        select(DecisionItem)
+        .join(Thread, Thread.id == DecisionItem.thread_id)
+        .where(
+            DecisionItem.project_id == project_id,
+            Thread.is_deleted.is_(False),
+            DecisionItem.is_deleted.is_(False),
+        )
+        # 안건 등록 순 → 안건 안의 항목 순
+        .order_by(Thread.seq, DecisionItem.sort_order, DecisionItem.seq),
     )
     entries = await _all(
         session,
@@ -89,6 +101,7 @@ async def load_snapshot(session: AsyncSession, project_id: str) -> SnapshotOut:
     return SnapshotOut(
         project=ProjectOut.model_validate(project),
         threads=[to_thread(row) for row in threads],
+        decision_items=[to_item(row) for row in items],
         entries=[to_entry(row) for row in entries],
         tasks=[to_task(row, counts.get(row.id, 0), since_or_created(since, row)) for row in tasks],
         task_thread_links=[TaskThreadLinkOut.model_validate(row) for row in task_threads],

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Member
 from app.services import chat as chat_service
-from tests.conftest import AsMember
+from tests.conftest import AsMember, decide
 from tests.test_contract_types import contract_keys
 
 
@@ -506,7 +506,7 @@ async def _thread_by(c: httpx.AsyncClient, owner_id: str | None) -> dict[str, An
 
 
 async def _entry_on(c: httpx.AsyncClient, thread_id: str) -> str:
-    res = await c.post(f"/api/threads/{thread_id}/entries", json={"kind": "refine", "text": "줄"})
+    res = await c.post(f"/api/threads/{thread_id}/entries", json={"kind": "defer", "text": "줄"})
     assert res.status_code == 201, res.json()
     entry_id: str = res.json()["entry"]["id"]
     return entry_id
@@ -549,9 +549,7 @@ async def test_thread_edit_and_delete_are_for_creator_owner_and_admins(
 async def test_anyone_in_the_project_may_add_an_entry(as_member: AsMember) -> None:
     """남기기는 그대로 — 회의에서 누구든 결정을 적는다."""
     thread = await _thread_by(await as_member("u2"), None)
-    res = await (await as_member("u3")).post(
-        f"/api/threads/{thread['id']}/entries", json={"kind": "decide", "text": "정함"}
-    )
+    res = await decide(await as_member("u3"), thread["id"], "정함")
     assert res.status_code == 201
     assert res.json()["entry"]["creatorId"] == "u3"
 

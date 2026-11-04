@@ -218,15 +218,23 @@ export const useTaskStore = defineStore('task', () => {
   function threadRow(thread: Thread): TaskThreadRow {
     const detail = threadStore.threadDetail(thread.id)
     const deferCount = detail?.deferCount ?? 0
+    const items = detail?.items ?? []
     if (detail?.settled) {
-      return { thread, deferCount, line: detail.current, where: detail.settledLabel }
+      /* 항목이 여럿이면 지금 결정을 한 줄로 잇는다 */
+      return {
+        thread,
+        deferCount,
+        line: items.map((i) => i.current).join(' · '),
+        where: items.length === 1 ? items[0].settledLabel : `항목 ${items.length}개 모두 정해짐`,
+      }
     }
     const last = detail?.events[0]
+    const progress = items.length >= 2 ? ` · 결정 ${detail!.settledCount}/${items.length} 정함` : ''
     return {
       thread,
       deferCount,
       line: last ? last.entry.text : '아직 아무 기록이 없습니다.',
-      where: last ? `마지막 기록 · ${monthDay(last.at)}` : '기록 없음',
+      where: last ? `마지막 기록 · ${monthDay(last.at)}${progress}` : '기록 없음',
     }
   }
 

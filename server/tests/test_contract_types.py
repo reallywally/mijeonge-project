@@ -63,6 +63,7 @@ Pick = Callable[[dict[str, Any]], list[dict[str, Any]]]
 CASES: list[tuple[str, Pick]] = [
     ("Project", lambda body: [body["project"]]),
     ("Thread", lambda body: body["threads"]),
+    ("DecisionItem", lambda body: body["decisionItems"]),
     ("Entry", lambda body: body["entries"]),
     ("Task", lambda body: body["tasks"]),
     ("TaskLine", lambda body: [line for task in body["tasks"] for line in task["body"]]),
@@ -216,6 +217,7 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
     assert set(snapshot) == {
         "project",
         "threads",
+        "decisionItems",
         "entries",
         "tasks",
         "taskThreadLinks",
@@ -353,7 +355,7 @@ _PROPOSED_TASK = {
     "due",
     "priority",
 }
-_ENTRY_BODY = {"kind", "text", "detail", "note", "ownerId", "ownerHint"}
+_ENTRY_BODY = {"kind", "itemTitle", "text", "detail", "note", "ownerId", "ownerHint"}
 _MINUTES_ITEM = {"id", "projectId", "title", "meetingDate", "authorId", "createdAt", "updatedAt"}
 MINUTES_SHAPES: dict[str, set[str]] = {
     "MinutesItem": _MINUTES_ITEM,
@@ -378,6 +380,7 @@ MINUTES_SHAPES: dict[str, set[str]] = {
     "MinutesApplyResult": {
         "threads",
         "entries",
+        "decisionItems",
         "updatedThreads",
         "tasks",
         "links",

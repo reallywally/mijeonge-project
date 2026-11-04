@@ -68,11 +68,13 @@ async def test_get_thread_reads_options_history_and_tasks(session: AsyncSession)
 
 
 async def test_get_thread_history_follows_seq(session: AsyncSession) -> None:
-    """두 번 미룬 안건 — 이력은 등록 순서(seq)대로다 (API.md Q15)."""
+    """두 번 미룬 안건 — 이력은 등록 순서(seq)대로다 (API.md Q15). 사이에 항목 하나의 결정."""
     await seed(session)
     doc = await search_service.get_thread(session, "p1", "t5")
-    assert [entry.id for entry in doc.entries] == ["e2", "e5"]
-    assert [entry.kind for entry in doc.entries] == ["defer", "defer"]
+    assert [entry.id for entry in doc.entries] == ["e2", "e8", "e5"]
+    assert [entry.kind for entry in doc.entries] == ["defer", "decide", "defer"]
+    # 항목 둘 중 하나만 정해졌다
+    assert [(i.id, i.decided) for i in doc.items] == [("di5", True), ("di6", False)]
 
 
 async def test_get_thread_out_of_project_is_not_found(session: AsyncSession) -> None:
@@ -108,8 +110,18 @@ async def test_tool_results_dump_as_camel_case_json(session: AsyncSession) -> No
     doc = (await search_service.get_thread(session, "p1", "t1")).model_dump(
         mode="json", by_alias=True
     )
-    assert set(doc) == {"thread", "entries", "tasks"}
+    assert set(doc) == {"thread", "items", "entries", "tasks"}
     assert doc["entries"][0]["threadId"] == "t1"
+    assert doc["entries"][0]["itemId"] == "di1"
+    # 항목마다 정했는지 · 지금의 결정 (규칙 11)
+    assert doc["items"] == [
+        {
+            "id": "di1",
+            "title": "서버 OS 결정",
+            "decided": True,
+            "decision": "우분투 최신 버전으로 한다",
+        }
+    ]
     assert doc["thread"]["createdAt"].endswith("Z")
 
 
@@ -247,11 +259,17 @@ async def test_changed_decision_is_the_last_line(pg_client: httpx.AsyncClient) -
     """결정이 바뀐 안건은 마지막 decide · change 줄이 지금의 결정이다. 뒤의 다른 줄은 안 친다."""
     changed = await pg_client.post(
         "/api/threads/t2/entries",
-        json={"kind": "change", "text": "PostgreSQL 로 바꾼다", "note": "호환성 문제가 풀렸다"},
+        json={
+            "kind": "change",
+            "itemId": "di2",
+            "text": "PostgreSQL 로 바꾼다",
+            "note": "호환성 문제가 풀렸다",
+        },
     )
     assert changed.status_code == 201
     refined = await pg_client.post(
-        "/api/threads/t2/entries", json={"kind": "refine", "text": "버전은 17 로 한다"}
+        "/api/threads/t2/entries",
+        json={"kind": "refine", "itemId": "di2", "text": "버전은 17 로 한다"},
     )
     assert refined.status_code == 201
 

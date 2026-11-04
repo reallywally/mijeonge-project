@@ -89,6 +89,9 @@
 | 403 | `FORBIDDEN` | 안건을 고치거나 지우려 할 때(생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자가 아닐 때), 이력 줄을 고치거나 지우려 할 때(그 줄 생성자 · 위 넷이 아닐 때) — `docs/api/auth.md` '안건' (2026-11-02) |
 | 409 | `THREAD_HAS_CHILDREN` | 떼어낸 하위 안건(`parentThreadId` 가 이 안건)이 있는 안건을 지우려 할 때. 지운 하위는 세지 않는다 (2026-11-02) |
 | 404 | `ENTRY_NOT_FOUND` | 경로의 이력 줄이 없을 때 · 그 안건의 줄이 아닐 때 · 지운 줄일 때(고치기 · 지우기, 2026-11-02) |
+| 422 | `ENTRY_ITEM_REQUIRED` | 이력 줄 남기기의 `decide` · `change` · `refine` 에 `itemId` 가 없거나 `null` 일 때 — `detail` 은 `{ "itemId": … }` (2026-11-03). `raise` · `split` 에 `itemId` 를 보내면 422 `VALIDATION_ERROR`(`detail.itemId`) |
+| 404 | `ITEM_NOT_FOUND` | 결정 항목이 없을 때 · 그 안건의 항목이 아닐 때 · 지운 항목일 때 — 경로(`…/items/{itemId}` 고치기 · 지우기)와 이력 줄 남기기의 `itemId` 둘 다 (2026-11-03) |
+| 403 | `FORBIDDEN` | 결정 항목의 이름을 바꾸거나 지우려 할 때 — 그 항목 생성자 · 안건 생성자 · 안건 담당자 · 프로젝트 관리자 · 시스템 관리자가 아닐 때(이력 줄과 같은 기준, 2026-11-03) |
 | 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때 — **8단계부터는 그 프로젝트의 활성 멤버가 아닐 때**(이미 걸린 담당자를 그대로 두는 수정은 통과). `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
@@ -112,7 +115,7 @@
 | GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18). **지운 프로젝트는 빠지고, `active` → `planned` → `closed`**(그 안은 전과 같은 순서) | `Project[]` (Q9 로 `taskKeyPrefix`, 2026-11-02 `description` · `startDate` · `endDate` · `status` · `closedAt` 이 늘었다) | 연결 (2026-11-02 늘림 — 구현, 같은 날 `status` 에 `planned` 늘림 — 구현) |
 | POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18). `description` · `startDate` · `endDate` 는 선택 | `Project` · 201 | 연결 (2026-11-02 늘림 — 구현) |
 | GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 연결 |
-| GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다 | `ProjectSnapshot` | 연결 |
+| GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다. **2026-11-03 `decisionItems` · `Entry.itemId` 가 늘었다**(`docs/api/snapshot.md` '결정 항목') | `ProjectSnapshot` | 연결 (2026-11-03 늘림 — 구현) |
 
 쓰기(3단계)는 스토어 함수 하나가 엔드포인트 하나다. 응답은 **바뀐 레코드**를 돌려준다.
 
@@ -132,9 +135,12 @@
 | POST | `/api/tasks/{taskId}/comments` | 댓글 등록 — `{ body }`. `body` 는 앞뒤 공백을 떼고 비면 422. **작성자는 로그인한 사람** — `authorId` 를 보내도 무시한다 (8단계) | `TaskComment` · 201 | 구현 |
 | PATCH | `/api/comments/{commentId}` | 댓글 본문 수정 — `{ body }`. `editedAt` 이 지금 시각이 된다. 빈 `body` 는 422, 없는 댓글은 404 `COMMENT_NOT_FOUND`. **작성자만** 고친다 — 그 밖은 403 `FORBIDDEN` (8단계) | `TaskComment` | 구현 |
 | DELETE | `/api/comments/{commentId}` | 댓글 삭제. 없는 댓글은 404 `COMMENT_NOT_FOUND`. 작성자 · 그 프로젝트 관리자 · 시스템 관리자만 — 그 밖은 403 `FORBIDDEN` (8단계) | 204 | 구현 |
-| POST | `/api/threads/{threadId}/entries` | 이력 한 줄 — 결정 · 미룸 · 세부 추가. 이력을 남기는 유일한 길이다. `decide` 면 안건이 `decided`, 그 밖의 줄은 `queued` 면 `open` 으로. **프로젝트 멤버 누구나**(권한은 그대로). `entry.creatorId` 는 요청한 사람 — 보내도 무시. 변경 이력에는 안 남긴다(그 줄 자체가 기록이다) (2026-11-02) | `{ entry, thread }` · 201 | 연결 (2026-11-02 `creatorId` — 구현) |
+| POST | `/api/threads/{threadId}/entries` | 이력 한 줄 — 결정 · 미룸 · 세부 추가. 이력을 남기는 유일한 길이다. ~~`decide` 면 안건이 `decided`, 그 밖의 줄은 `queued` 면 `open` 으로.~~ **2026-11-03 부터 `itemId`(결정 항목) — `decide` · `change` · `refine` 은 필수(422 `ENTRY_ITEM_REQUIRED`), `defer` 는 선택(null = 안건 전체), `raise` · `split` 은 보내지 않는다. 그 안건의 지우지 않은 항목이 아니면 404 `ITEM_NOT_FOUND`. 상태는 다시 센다 — 지우지 않은 항목이 있고 전부 정해졌으면(그 항목에 지우지 않은 `decide` · `change` 줄) `decided`, 아니면 셀 줄이 있으면 `open`, 없으면 `queued`(지운 항목의 줄은 세지 않는다)**. **프로젝트 멤버 누구나**(권한은 그대로). `entry.creatorId` 는 요청한 사람 — 보내도 무시. 변경 이력에는 안 남긴다(그 줄 자체가 기록이다) (2026-11-02) | `{ entry, thread }` · 201 | 연결 (2026-11-02 `creatorId` — 구현) |
 | PATCH | `/api/threads/{threadId}/entries/{entryId}` | 이력 한 줄의 글 고치기 — `text` · `note` 만, 보낸 필드만 바꾼다(앞뒤 공백을 뗀다). 실수로 남긴 결정 · 메모를 바로잡는 길이다. **`kind` · `ownerId` 는 못 바꾸고 안건 상태도 그대로다** — 바꾸려면 새 줄을 남긴다. 빈 `text` · `null` 은 422, 그 안건의 줄이 아니거나 지운 줄이면 404 `ENTRY_NOT_FOUND`. **그 줄 생성자 · 안건 생성자 · 안건 담당자 · 프로젝트 관리자 · 시스템 관리자만** — 그 밖은 403 `FORBIDDEN`. 변경 이력에 `entryText` · `entryNote` (2026-11-02) | `Entry` | 연결 (2026-11-02 권한 · 이력 — 구현) |
-| DELETE | `/api/threads/{threadId}/entries/{entryId}` | 이력 한 줄 지우기 — **논리 삭제**. 지운 줄은 스냅샷 `entries` · 검색 · 챗봇 · 리스크(미룬 횟수 등) · 리포트 · 확인 요청의 '최근 결정' 에서 빠진다. **안건 상태를 다시 센다** — 남은 줄에 `decide` · `change` 가 있으면 `decided`, 줄이 있으면 `open`, 없으면 `queued`. 담당자는 되돌리지 않는다. 권한은 위 PATCH 와 같다. 변경 이력에 `entryDeleted`. 없거나 지운 줄은 404 `ENTRY_NOT_FOUND` (2026-11-02) | `{ thread }` | 구현 |
+| DELETE | `/api/threads/{threadId}/entries/{entryId}` | 이력 한 줄 지우기 — **논리 삭제**. 지운 줄은 스냅샷 `entries` · 검색 · 챗봇 · 리스크(미룬 횟수 등) · 리포트 · 확인 요청의 '최근 결정' 에서 빠진다. **안건 상태를 다시 센다** — ~~남은 줄에 `decide` · `change` 가 있으면 `decided`, 줄이 있으면 `open`, 없으면 `queued`.~~ 2026-11-03 부터 결정 항목 규칙으로 센다(위 POST 와 같다). 담당자는 되돌리지 않는다. 권한은 위 PATCH 와 같다. 변경 이력에 `entryDeleted`. 없거나 지운 줄은 404 `ENTRY_NOT_FOUND` (2026-11-02) | `{ thread }` | 구현 |
+| POST | `/api/threads/{threadId}/items` | **결정 항목** 더하기 — `{ title }`(앞뒤 공백을 떼고 1 ~ 200자, 아니면 422). 안건 끝에 붙는다. **프로젝트 멤버 누구나**(줄 남기기와 같다). `creatorId` 는 요청한 사람. 정해진 안건에 붙으면 `open` 으로 돌아가므로 안건도 준다. 변경 이력에 `itemCreated` (2026-11-03, 결정 로그 · `docs/api/snapshot.md` '결정 항목') | `DecisionItemCreateResult` `{ item, thread }` · 201 | 구현 |
+| PATCH | `/api/threads/{threadId}/items/{itemId}` | 항목 이름 바꾸기 — `{ title }`. 상태는 그대로. **그 항목 생성자 · 안건 생성자 · 안건 담당자 · 프로젝트 관리자 · 시스템 관리자** — 그 밖은 403 `FORBIDDEN`. 없거나 다른 안건 것이거나 지운 항목이면 404 `ITEM_NOT_FOUND`. 변경 이력에 `itemTitle`(같은 이름이면 안 남김) (2026-11-03) | `DecisionItem` | 구현 |
+| DELETE | `/api/threads/{threadId}/items/{itemId}` | 항목 지우기 — **논리 삭제**. 스냅샷 `decisionItems` 에서 빠지고, 그 항목의 줄은 `entries` 에 남지만 **상태 계산에서 빠진다** → 안건 상태를 다시 세어 돌려준다. 권한 · 404 는 위 PATCH 와 같다. 변경 이력에 `itemDeleted` (2026-11-03) | `DecisionItemDeleteResult` `{ thread }` | 구현 |
 
 읽기 넷은 열린 질문이 없어 `합의` 를 거쳐 바로 `구현` 으로 올렸다. 프론트가 `src/api/` 로 붙이면 `연결` 이 된다.
 `uv run fastapi dev` 로 띄우고 `/api/projects` → `/api/projects/p1/snapshot` 순으로 받으면 목업과 같은 데이터가 온다
@@ -235,7 +241,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q66).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q67).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |
