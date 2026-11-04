@@ -15,6 +15,7 @@
 
 | 파일 | 담는 것 |
 | --- | --- |
+| `docs/api/agenda.md` | **안건(Agenda)** — 제목 · 설명 · 결정내용 · 상태 네 칸 + 담당자 · 기한 · 파트. `thread` → `agenda` 이름 바꾸기 · 걷어낸 것 · 따라 바뀌는 기능 · 이행 (2026-11-04). **다른 문서의 `Thread` · `Entry` · `DecisionItem` 설명보다 이 파일이 앞선다** |
 | `docs/api/snapshot.md` | `ProjectSnapshot` 응답 · `ProjectInput` 요청 · `task.key` 발번 |
 | `docs/api/chat.md` | AI 챗봇 — 요청 · SSE 스트림 · 근거 표시 · 검색 · 작업 초안 · 한 번에 등록 |
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
