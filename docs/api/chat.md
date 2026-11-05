@@ -342,3 +342,45 @@ export interface TaskBatchResult {
 - **답하는 규칙** — 지금의 결정은 `agenda.decision` 글 그대로다. 결정내용이 있어도 `decided` 가 아니면 "아직 확정은 아니다" 고 같이 말한다. 미룬 횟수 · 마지막 미룸 사유는 없어졌다. 상태 이름은 우리말(대기 · 논의중 · 결정)로 쓴다
 - **리스크 신호** — `deferredRepeatedly` 는 없어졌다(`risk.md`)
 - 지금 도구 전체: `search_agendas` · `get_agenda` · `search_tasks` · `get_task` · `list_tasks` · `find_similar_tasks` · `get_decision_risks` · `list_members` · `propose_tasks`
+
+## AI 챗봇 — 테스트 언급 `@HW-T3` (2026-11-05)
+
+작업처럼 테스트도 `@` 로 콕 집는다. **요청 · 응답 모양은 그대로** — 글자로만 오간다. 챗봇은 그동안 테스트를 읽는 도구가 없었으므로 `get_test` 를 더한다.
+
+- **화면** — 입력칸에서 `@` 를 치면 지금 프로젝트의 **작업과 테스트가 한 목록**에 뜬다(같은 규칙: 키가 친 글로 시작하는 것 먼저,
+  그다음 키 · 제목에 든 것, 8개까지 — 작업 · 테스트를 섞어 원래 순서대로, 작업 먼저). 줄마다 키 · 제목 · 상태(테스트는 테스트 상태 이름),
+  테스트 줄에는 '테스트' 표시를 단다. 고르면 `@HW-T3 ` 가 들어간다. 챗봇 창을 열면 테스트 목록을 받아 둔다(`testStore.ensure`)
+- **키의 모양** — 테스트 키는 `@` + 접두사 + `-T` + 번호(`@HW-T3`). 서버의 `MENTION_PATTERN` 이 `-T?\d+` 를 받는다(대소문자 무관).
+  작업 키(`HW-3`)와 겹치지 않는다
+- **서버** — 질문의 `@키` 중 `-T번호` 는 그 프로젝트의 테스트로 찾아 `[@ 로 가리킨 작업 · 테스트]` 기록에
+  `- @HW-T3: {"kind": "test", "id", "key", "title", "status"}` 로 붙인다(작업 줄은 `"kind": "task"` 를 더한다). 없는 키 · 다른 프로젝트는 전처럼 `이 프로젝트에 없다`
+- **도구 `get_test`** (화면 라벨 '테스트 읽는 중') — `test_id` 에 테스트 id 나 키(`HW-T3`). 돌려주는 것:
+  id · key · title · content(테스트 내용) · testData · status(묶음이면 하위에서 모은 상태) · statusDays · signals · 상위 키 · 담당자 이름 · 참조 이름(ccNames) ·
+  start · due · 태그(작업 키 · 제목 / 안건 제목) · 바로 아래 하위 테스트(id · key · title · status) · resultNote(지난 결과 메모, 있으면) ·
+  **조치 내역**(`test_comment`, 등록 순 최근 20개 — 작성자 이름 · 시각 · 본문)
+- **근거 링크** — 답 본문의 근거 표기에 `[[test:<id>]]` 가 는다(`REF_PATTERN`). `ChatRef.kind` 에 `'test'` 가 늘고, 화면은 누르면 테스트 상세(`/tests/:id`)로 간다
+- 시스템 프롬프트에 한 줄: 테스트를 물으면 `get_test` 로 읽고, 근거는 `[[test:id]]` 로 단다. 테스트를 만들거나 고치는 도구는 없다(읽기만)
+
+### 구현에서 메운 것 (2026-11-05, 화면)
+
+- **칩 모양** — 테스트 근거 칩은 작업 칩과 같이 키 + 제목(상태 배지 없음). 고르는 목록의 '테스트' 표시는 상태 앞의 작은 테두리 글자
+- **없는 테스트** — `testStore` 에 없는 id(다른 프로젝트 · 지어낸 id · 아직 못 받은 목록)는 작업처럼 칩도 글자도 그리지 않는다. 목록은 창을 열 때 받으므로 열린 창의 답에는 보통 이미 있다
+- **테스트 칩은 챗봇 창에서만 누른다** — `ChatRefText` 에 `open-test` 를 더했지만 리포트 · 리스크 화면은 받지 않는다(그쪽 서버는 `[[test:…]]` 를 내지 않는다)
+- **도구 이름** — `ChatEvent` 의 `tool.name` 에 `'get_test'` 를 더했다(화면은 `label` 만 띄운다)
+- **목업** — 질문에 `@HW-T` · `테스트` 가 들면 `get_test` 한 번에 `[[test:tc7]]` · `[[test:tc6]]` 근거를 단 답을 낸다. 작업 초안 낱말(`만들어` …)이 먼저 걸린다
+
+### 구현에서 메운 것 (2026-11-05, 서버)
+
+- **`get_test` 결과의 모양** — `{ id, key, title, content, testData, status, statusDays, signals, parentKey, owner, ccNames, start, due, tags, children, resultNote, comments }`.
+  `owner` 는 담당자 이름(없으면 `null`), `tags` 는 `{ kind: 'task' | 'agenda', id, key, title }`(안건은 `key: null`) — 근거 표시(`[[task:ID]]` · `[[agenda:ID]]`)를 달 수 있게 **id 도 싣는다**.
+  태그 순서는 `TestCase.refs` 그대로(작업 먼저, 그 안은 등록 순), 지운 작업 · 안건의 태그는 빠진다.
+  `comments` 는 `{ author, createdAt, body }`(작성자 이름, 없으면 `null` · `createdAt` 은 `Z` UTC)
+- **묶음** — 상태 · 신호를 화면(`stores/test.ts` 의 `rolled`)과 같이 **하위 전부에서** 모은다(하위가 묶음이면 그 묶음이 모은 것). 상태는 `lib/testcase.ts` `worstStatus` 와 같은 순서
+  (`fail` > `blocked` > `testing` > `draft` · `ready` > `pass`, 작성 중 · 준비됨이 섞이면 `draft`), 신호는 겹치지 않게 계약 표 순서로.
+  계약은 signals 를 `TestCase` 그대로라 했지만 묶음의 그것은 늘 `[]` 라 화면과 다른 말을 하게 되어 화면 쪽에 맞췄다. **묶음의 `statusDays` 는 `null`** — 묶음 자기 상태의 날 수는 모은 상태와 뜻이 맞지 않는다.
+  `children[].status` 와 언급 줄(`kind: "test"`)의 `status` 도 모은 상태다. 셈은 `services/test.py` 의 `roll_up` · `worst_status` 하나
+- **`resultNote`** — 비었으면 `null`(있으면 앞뒤 공백을 뗀 글)
+- **없는 · 다른 프로젝트의 테스트** — 도구 오류 `{"error": "테스트를 찾을 수 없습니다."}`, `get_task` 와 같다. 키는 대문자로 맞춰 찾는다(`hw-t3` 도 된다)
+- **언급의 갈래** — 키가 `접두사-T번호` 꼴이면 테스트, 아니면 작업으로 찾는다(`search.is_test_key`). 작업 키는 숫자만이라 겹치지 않는다
+- **리포트 · 리스크 요약** — `REF_PATTERN` 을 같이 쓰므로, 두 곳의 근거 거르기를 종류별로 바꿔 `[[test:…]]` 는 칩으로 내지 않는다(그쪽 데이터에 테스트가 없다)
+- 지금 도구 전체: `search_agendas` · `get_agenda` · `search_tasks` · `get_task` · `get_test` · `list_tasks` · `find_similar_tasks` · `get_decision_risks` · `list_members` · `propose_tasks`

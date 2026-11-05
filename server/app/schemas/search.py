@@ -1,8 +1,10 @@
+from datetime import date
 from typing import Literal
 
 from app.schemas.agenda import AgendaOut
-from app.schemas.base import Schema
+from app.schemas.base import Schema, Utc
 from app.schemas.task import TaskOut
+from app.schemas.test import TestRefKind, TestSignal
 
 AgendaPlace = Literal["title", "description", "decision"]
 TaskPlace = Literal["title", "body"]
@@ -65,6 +67,57 @@ class TaskDoc(Schema):
     agendas: list[LinkedAgenda]
     # 바로 아래 하위 작업 — 챗봇이 하위 작업을 더할 때 이미 있는 것과 겹치지 않게 본다
     children: list[LinkedTask]
+
+
+class LinkedTest(Schema):
+    id: str
+    key: str
+    title: str
+    # 묶음이면 하위에서 모은 상태 — 화면이 보이는 것과 같다
+    status: str
+
+
+class TestTag(Schema):
+    """테스트에 건 태그. id 는 근거 표시([[task:ID]] · [[agenda:ID]])에 쓴다."""
+
+    kind: TestRefKind
+    id: str
+    # 작업이면 작업 키, 안건이면 null
+    key: str | None
+    title: str
+
+
+class TestNote(Schema):
+    """조치 내역 한 줄 — 작성자는 이름으로."""
+
+    author: str | None
+    created_at: Utc
+    body: str
+
+
+class TestDoc(Schema):
+    """챗봇 get_test 의 결과 — 테스트 하나 (docs/api/chat.md '테스트 언급')."""
+
+    id: str
+    key: str
+    title: str
+    content: str
+    test_data: str
+    # 묶음이면 하위에서 모은 상태 · 신호, 묶음의 statusDays 는 null — 화면과 같다
+    status: str
+    status_days: int | None
+    signals: list[TestSignal]
+    parent_key: str | None
+    owner: str | None
+    cc_names: list[str]
+    start: date | None
+    due: date | None
+    tags: list[TestTag]
+    children: list[LinkedTest]
+    # 지난 결과 메모 — 비었으면 null
+    result_note: str | None
+    # 등록 순, 최근 것만 (COMMENTS_MAX)
+    comments: list[TestNote]
 
 
 # 아래 둘은 챗봇의 list_tasks · find_similar_tasks 결과다 — 화면 계약이 아니다

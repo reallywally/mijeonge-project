@@ -18,6 +18,7 @@ ToolName = Literal[
     "get_agenda",
     "search_tasks",
     "get_task",
+    "get_test",
     "list_tasks",
     "find_similar_tasks",
     "get_decision_risks",
@@ -83,7 +84,7 @@ class ChatInput(Schema):
 
 
 class ChatRef(Schema):
-    kind: Literal["agenda", "task"]
+    kind: Literal["agenda", "task", "test"]
     id: str
 
 
@@ -143,6 +144,11 @@ class GetAgendaInput(Schema):
 
 class GetTaskInput(Schema):
     task_id: str
+
+
+class GetTestInput(Schema):
+    # 테스트 id 나 테스트 키(HW-T3)
+    test_id: str
 
 
 class ListTasksInput(Schema):

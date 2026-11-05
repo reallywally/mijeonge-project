@@ -10,6 +10,7 @@
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -24,6 +25,7 @@ from app.api import chat as chat_api
 from app.config import Settings, settings
 from app.llm.anthropic_provider import AnthropicProvider, make_client
 from app.main import app
+from app.models import TestCase, TestComment
 from app.services import chat as chat_service
 from app.services.ratelimit import RateLimiter
 from app.time import today_kst
@@ -200,6 +202,7 @@ async def test_request_follows_the_settings(session: AsyncSession) -> None:
         "get_agenda",
         "search_tasks",
         "get_task",
+        "get_test",
         "list_tasks",
         "find_similar_tasks",
         "get_decision_risks",
@@ -724,6 +727,8 @@ async def test_proposal_on_user_is_422(client: httpx.AsyncClient) -> None:
         ("@hw-2는 누가 해? @HW-1 이랑 @HW-2 도", ["HW-2", "HW-1"]),
         ("(@PAS-1) 와 @MG-10, 끝", ["PAS-1", "MG-10"]),
         ("메일 a@HW-1 · 그냥 HW-1 · @HW · @-1 · @HW-1x", []),
+        ("@hw-t3 이랑 @HW-3, 다시 @HW-T3는", ["HW-T3", "HW-3"]),
+        ("@HW-T · @HW-T3x · @HW-TT3 · a@HW-T3", []),
     ],
 )
 def test_mentioned_keys(text: str, keys: list[str]) -> None:
@@ -739,8 +744,8 @@ async def test_mentions_are_resolved_in_this_project_only(client: httpx.AsyncCli
     assert res.status_code == 200
 
     content = fake.calls[0]["messages"][0]["content"]
-    assert content.startswith(ask + "\n\n[@ 로 가리킨 작업]")
-    assert '- @HW-1: {"id": "k1", "key": "HW-1", "title": "설계"' in content
+    assert content.startswith(ask + "\n\n[@ 로 가리킨 작업 · 테스트]")
+    assert '- @HW-1: {"kind": "task", "id": "k1", "key": "HW-1", "title": "설계"' in content
     assert "- @PAS-1: 이 프로젝트에 없다" in content
     assert "- @HW-999: 이 프로젝트에 없다" in content
     assert "현행 분석" not in content
@@ -761,6 +766,150 @@ async def test_get_task_takes_a_key(session: AsyncSession) -> None:
     # 다른 프로젝트의 키로는 못 읽는다
     _, is_error = await chat_service.run_tool(session, "p1", "get_task", {"task_id": "PAS-1"})
     assert is_error
+
+
+# --- @ 로 가리킨 테스트 · get_test --------------------------------------------
+
+
+def _other_project_test() -> TestCase:
+    return TestCase(
+        id="xt1",
+        project_id="p2",
+        key="PAS-T1",
+        title="이관 검증",
+        content="",
+        test_data="",
+        status="draft",
+        status_changed_at=datetime(2026, 10, 1, tzinfo=UTC),
+        result_note="",
+        created_at=datetime(2026, 10, 1, tzinfo=UTC),
+    )
+
+
+async def test_test_mentions_are_resolved_in_this_project_only(
+    client: httpx.AsyncClient, session: AsyncSession
+) -> None:
+    """@HW-T5 는 묶음이라 하위에서 모은 상태(fail)로 간다. 다른 프로젝트 · 없는 키는 '없다'."""
+    session.add(_other_project_test())
+    await session.commit()
+    fake = FakeClient(Turn(texts=["답"]))
+    use(fake)
+    ask = "@hw-t5 랑 @HW-1, @PAS-T1 · @HW-T99 어때?"
+    res = await client.post(URL, json={"messages": [{"role": "user", "text": ask}]})
+    assert res.status_code == 200
+
+    content = fake.calls[0]["messages"][0]["content"]
+    assert content.startswith(ask + "\n\n[@ 로 가리킨 작업 · 테스트]")
+    lines = content.split("\n")[3:]
+    assert lines[0] == "- @HW-T5: " + json.dumps(
+        {
+            "kind": "test",
+            "id": "tc5",
+            "key": "HW-T5",
+            "title": "계정 배포 시나리오",
+            "status": "fail",
+        },
+        ensure_ascii=False,
+    )
+    assert lines[1].startswith('- @HW-1: {"kind": "task", "id": "k1"')
+    assert lines[2:] == ["- @PAS-T1: 이 프로젝트에 없다", "- @HW-T99: 이 프로젝트에 없다"]
+    assert "이관 검증" not in content
+
+
+async def test_get_test_takes_a_key_and_rolls_up_groups(session: AsyncSession) -> None:
+    await seed(session)
+    content, is_error = await chat_service.run_tool(session, "p1", "get_test", {"test_id": "hw-t5"})
+    assert not is_error
+    doc = json.loads(content)
+    assert set(doc) == {
+        "id",
+        "key",
+        "title",
+        "content",
+        "testData",
+        "status",
+        "statusDays",
+        "signals",
+        "parentKey",
+        "owner",
+        "ccNames",
+        "start",
+        "due",
+        "tags",
+        "children",
+        "resultNote",
+        "comments",
+    }
+    # 묶음 — 하위(막힘 · 실패 · 테스트 중) 가운데 가장 나쁜 것, 며칠째는 없다
+    assert (doc["id"], doc["status"], doc["statusDays"]) == ("tc5", "fail", None)
+    assert doc["owner"] == "이도현" and doc["parentKey"] is None
+    assert [(c["key"], c["status"]) for c in doc["children"]] == [
+        ("HW-T6", "blocked"),
+        ("HW-T7", "fail"),
+        ("HW-T8", "testing"),
+    ]
+    assert doc["resultNote"] is None and doc["comments"] == []
+
+
+async def test_get_test_reads_tags_note_cc_and_latest_comments(session: AsyncSession) -> None:
+    await seed(session)
+    session.add_all(
+        TestComment(
+            test_id="tc7",
+            author_id="u1" if no % 2 else "u4",
+            body=f"조치 {no}",
+            created_at=datetime(2026, 10, 1, tzinfo=UTC) + timedelta(minutes=no),
+        )
+        for no in range(1, 23)
+    )
+    await session.commit()
+
+    content, is_error = await chat_service.run_tool(session, "p1", "get_test", {"test_id": "tc7"})
+    assert not is_error
+    doc = json.loads(content)
+    assert doc["key"] == "HW-T7" and doc["parentKey"] == "HW-T5"
+    assert doc["status"] == "fail" and isinstance(doc["statusDays"], int)
+    assert doc["resultNote"] == "관리 화면 주소를 직접 치면 열린다."
+    assert doc["children"] == []
+    # 최근 20개를 등록 순으로 — 1 · 2 는 밀려난다
+    assert [c["body"] for c in doc["comments"]] == [f"조치 {no}" for no in range(3, 23)]
+    assert doc["comments"][0] == {
+        "author": "김서연",
+        "createdAt": "2026-10-01T00:03:00Z",
+        "body": "조치 3",
+    }
+
+    content, _ = await chat_service.run_tool(session, "p1", "get_test", {"test_id": "HW-T6"})
+    tags = json.loads(content)["tags"]
+    assert tags == [{"kind": "task", "id": "k21", "key": "HW-21", "title": tags[0]["title"]}]
+
+    content, _ = await chat_service.run_tool(session, "p1", "get_test", {"test_id": "HW-T2"})
+    doc = json.loads(content)
+    assert doc["ccNames"] == ["이도현"] and doc["testData"]
+    assert doc["tags"][0]["kind"] == "task" and doc["tags"][0]["key"] == "HW-4"
+
+
+async def test_get_test_cannot_read_other_projects(session: AsyncSession) -> None:
+    await seed(session)
+    session.add(_other_project_test())
+    await session.commit()
+    for test_id in ("xt1", "PAS-T1", "HW-T99"):
+        content, is_error = await chat_service.run_tool(
+            session, "p1", "get_test", {"test_id": test_id}
+        )
+        assert is_error
+        assert json.loads(content) == {"error": "테스트를 찾을 수 없습니다."}
+    content, is_error = await chat_service.run_tool(
+        session, "p2", "get_test", {"test_id": "xt1", "project_id": "p1"}
+    )
+    assert not is_error and json.loads(content)["key"] == "PAS-T1"
+
+
+def test_test_refs_and_label() -> None:
+    refs = chat_service.extract_refs("[[test:tc7]] 과 [[task:k4]], [[test:tc7]]")
+    assert [(r.kind, r.id) for r in refs] == [("test", "tc7"), ("task", "k4")]
+    assert chat_service.tool_label("get_test", {}) == "테스트 읽는 중"
+    assert "get_test" in chat_service.SYSTEM_PROMPT and "[[test:ID]]" in chat_service.SYSTEM_PROMPT
 
 
 # --- 이미 있는 작업 밑에 하위 작업 초안 ---------------------------------------

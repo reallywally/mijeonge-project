@@ -464,7 +464,7 @@ const area =
             <div class="flex min-h-9 items-center gap-2">
               <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">담당자</dt>
               <dd class="min-w-0 grow">
-                <OwnerSelect v-model="ownerId" label="담당자" />
+                <OwnerSelect v-model="ownerId" label="담당자" self-assign />
               </dd>
             </div>
 

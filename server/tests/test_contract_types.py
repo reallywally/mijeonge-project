@@ -8,10 +8,12 @@
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from httpx import AsyncClient
+
+from app.schemas.chat import ChatRef, ToolName
 
 DOMAIN_TS = Path(__file__).resolve().parents[2] / "web" / "src" / "types" / "domain.ts"
 
@@ -616,9 +618,7 @@ def test_test_shapes_do_not_drift_from_domain_ts(name: str) -> None:
     if name not in FIELDS:
         return
     declared = all_fields(name)
-    assert set(declared) == TEST_SHAPES[name], (
-        f"domain.ts 의 {name} 이 test.md 와 다르다"
-    )
+    assert set(declared) == TEST_SHAPES[name], f"domain.ts 의 {name} 이 test.md 와 다르다"
     nullable = {field for field, allowed in declared.items() if allowed}
     assert nullable == TEST_NULLABLE.get(name, set())
 
@@ -681,3 +681,22 @@ async def test_history_responses_match_contract(client: AsyncClient) -> None:
             assert isinstance(change["subject"], str)
             nulls["HistoryChange"] |= {k for k, v in change.items() if v is None}
     assert nulls == HISTORY_NULLABLE
+
+
+def _quoted(text: str) -> set[str]:
+    return set(re.findall(r"'(\w+)'", text))
+
+
+def test_chat_ref_kinds_match_domain_ts() -> None:
+    """근거 표시의 종류 — 서버가 내는 것과 화면이 그리는 것이 같아야 한다(chat.md '테스트 언급')."""
+    source = DOMAIN_TS.read_text(encoding="utf-8")
+    declared = re.search(r"export interface ChatRef \{\n  kind: ([^\n]+)\n", source)
+    assert declared is not None
+    assert _quoted(declared.group(1)) == set(get_args(ChatRef.model_fields["kind"].annotation))
+
+
+def test_chat_tool_names_match_domain_ts() -> None:
+    source = DOMAIN_TS.read_text(encoding="utf-8")
+    declared = re.search(r"type: 'tool'\n      name:\n((?:        \| '\w+'\n)+)", source)
+    assert declared is not None
+    assert _quoted(declared.group(1)) == set(get_args(ToolName))

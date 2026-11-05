@@ -98,6 +98,13 @@ describe('답 본문의 근거 표시', () => {
     expect(collectRefs('[[thread:t5]] [[agenda:t5]]')).toEqual([{ kind: 'agenda', id: 't5' }])
   })
 
+  it('[[test:ID]] 는 테스트 근거다', () => {
+    expect(splitRefs('[[test:tc3]] 가 실패했습니다')).toEqual([
+      { ref: { kind: 'test', id: 'tc3' } },
+      { text: ' 가 실패했습니다' },
+    ])
+  })
+
   it('모르는 종류 · 빈 id 는 글자 그대로 둔다', () => {
     expect(splitRefs('[[meeting:m1]] [[agenda:]]')).toEqual([
       { text: '[[meeting:m1]] [[agenda:]]' },

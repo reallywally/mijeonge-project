@@ -7,6 +7,7 @@ import { parseMarkdown } from '@/lib/markdown'
 import type { Block, Inline, ListItem } from '@/lib/markdown'
 import { useTaskStore } from '@/stores/task'
 import { useAgendaStore } from '@/stores/agenda'
+import { useTestStore } from '@/stores/test'
 import type { ChatRef } from '@/types/domain'
 
 /* AI 가 낸 답 본문. v-html 로 그리지 않는다 — 근거 표시는 칩으로 바꾼다.
@@ -14,10 +15,16 @@ import type { ChatRef } from '@/types/domain'
    아니면(리포트 · 리스크 요약 — 프롬프트가 마크다운을 쓰지 말라고 한다) 줄바꿈만 살린다.
    스냅샷(지금 프로젝트)에 없는 id 는 그리지 않는다 — 지어낸 id 를 보이지 않는다 (docs/api/chat.md) */
 const props = defineProps<{ text: string; markdown?: boolean }>()
-const emit = defineEmits<{ 'open-agenda': [id: string]; 'open-task': [id: string] }>()
+const emit = defineEmits<{
+  'open-agenda': [id: string]
+  'open-task': [id: string]
+  /* 테스트 근거는 챗봇 답에만 나온다 — 테스트 목록을 받아 두는 것도 챗봇 창이다 */
+  'open-test': [id: string]
+}>()
 
 const agendaStore = useAgendaStore()
 const taskStore = useTaskStore()
+const testStore = useTestStore()
 
 const CHIP =
   'mx-0.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 align-middle text-xs hover:bg-accent'
@@ -37,6 +44,23 @@ function chip(ref: ChatRef): VNodeChild {
       [
         h('span', { class: 'truncate' }, row.agenda.title),
         h(AgendaStateBadge, { state: row.agenda.state }),
+      ],
+    )
+  }
+  if (ref.kind === 'test') {
+    const test = testStore.byId[ref.id]
+    if (!test) return null
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: CHIP,
+        'data-ref-test': test.id,
+        onClick: () => emit('open-test', test.id),
+      },
+      [
+        h('span', { class: 'shrink-0 font-mono text-muted-foreground' }, test.key),
+        h('span', { class: 'truncate' }, test.title),
       ],
     )
   }

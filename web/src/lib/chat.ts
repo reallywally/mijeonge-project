@@ -76,7 +76,7 @@ export function chatErrorText(error: ApiError): string {
 export type ChatSegment = { text: string } | { ref: ChatRef }
 
 /* 옛 리포트 · 대화의 [[thread:ID]] 도 같은 안건 칩으로 읽는다 (docs/api/agenda.md) */
-const REF_RE = /\[\[(agenda|thread|task):([^\]\s]+)\]\]/g
+const REF_RE = /\[\[(agenda|thread|task|test):([^\]\s]+)\]\]/g
 /* 받는 중 끝에 걸린 덜 온 표시('[[thr' · '[[task:k1') — 다 올 때까지 글자로 비치지 않게 뗀다 */
 const PARTIAL_REF_RE = /\[(?:\[(?:[a-z]*(?::[^\]\s]*\]?)?)?)?$/
 
@@ -90,7 +90,7 @@ export function splitRefs(text: string): ChatSegment[] {
   let at = 0
   for (const m of body.matchAll(REF_RE)) {
     if (m.index > at) out.push({ text: body.slice(at, m.index) })
-    out.push({ ref: { kind: m[1] === 'task' ? 'task' : 'agenda', id: m[2] } })
+    out.push({ ref: { kind: m[1] === 'thread' ? 'agenda' : (m[1] as ChatRef['kind']), id: m[2] } })
     at = m.index + m[0].length
   }
   if (at < body.length) out.push({ text: body.slice(at) })

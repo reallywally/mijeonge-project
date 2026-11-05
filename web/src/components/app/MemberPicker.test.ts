@@ -42,7 +42,7 @@ beforeEach(async () => {
 const assignable = () => useDataStore().assignable
 
 describe('담당자 고르기', () => {
-  const mountOwner = (initial: string | null = null) => {
+  const mountOwner = (initial: string | null = null, extra: Record<string, unknown> = {}) => {
     const owner = ref<string | null>(initial)
     mount(
       defineComponent(
@@ -51,6 +51,7 @@ describe('담당자 고르기', () => {
             modelValue: owner.value,
             'onUpdate:modelValue': (v: string | null) => (owner.value = v),
             label: '담당자',
+            ...extra,
           }),
       ),
       { attachTo: document.body },
@@ -96,6 +97,22 @@ describe('담당자 고르기', () => {
     await key('ArrowUp')
     await key('Enter')
     expect(owner.value).toBeNull()
+  })
+
+  it('selfAssign 이면 [나에게 할당] 이 서고, 누르면 내가 담당이 되며 버튼은 사라진다', async () => {
+    const owner = mountOwner(null, { selfAssign: true })
+    await flushPromises()
+    $('[data-assign-me]')!.click()
+    await flushPromises()
+    expect(owner.value).toBe('u1')
+    expect($('[data-assign-me]')).toBeNull()
+  })
+
+  it('selfAssign 이 없거나 막힌 칸이면 [나에게 할당] 이 서지 않는다', async () => {
+    mountOwner()
+    mountOwner(null, { selfAssign: true, disabled: true })
+    await flushPromises()
+    expect($('[data-assign-me]')).toBeNull()
   })
 })
 

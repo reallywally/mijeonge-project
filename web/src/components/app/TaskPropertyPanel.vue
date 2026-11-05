@@ -99,6 +99,7 @@ const ghost = computed(() =>
             label="담당자"
             :trigger-class="ghost"
             :disabled="readonly"
+            self-assign
           />
         </dd>
       </div>

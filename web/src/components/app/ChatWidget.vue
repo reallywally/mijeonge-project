@@ -6,11 +6,17 @@ import ChatProposalCard from '@/components/app/ChatProposalCard.vue'
 import ChatRefText from '@/components/app/ChatRefText.vue'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { insertMention, mentionCandidates, mentionQuery, type MentionQuery } from '@/lib/mention'
-import { taskStatusLabel } from '@/lib/task'
+import {
+  insertMention,
+  mentionCandidates,
+  mentionItems,
+  mentionQuery,
+  type MentionQuery,
+} from '@/lib/mention'
 import { useChatStore } from '@/stores/chat'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
+import { useTestStore } from '@/stores/test'
 
 /* 오른쪽 아래 챗봇. App.vue 에 한 번만 둔다 — 화면을 옮겨도 대화가 이어진다.
    창을 닫으면 대화가 끝난다 (API.md Q26). 최소화는 창만 내린다 — 대화 · 쓰던 글 · 받는 중인 답이 그대로다.
@@ -18,6 +24,7 @@ import { useTaskStore } from '@/stores/task'
 const data = useDataStore()
 const chat = useChatStore()
 const taskStore = useTaskStore()
+const testStore = useTestStore()
 const router = useRouter()
 
 const EXAMPLES = ['서버 OS 뭐로 정했지?', '아직 안 정해진 안건 뭐 있어?', '막힌 작업 알려줘']
@@ -30,12 +37,14 @@ const scroller = ref<HTMLElement | null>(null)
 const inputEl = () => input.value?.$el as HTMLTextAreaElement | undefined
 const focusInput = () => inputEl()?.focus()
 
-/* '@' 를 치면 작업을 골라 '@HW-4' 로 넣는다 — 서버가 그 키를 작업으로 찾아 Claude 에게 넘긴다.
-   한글은 조합 중에도 고를 수 있게 v-model 이 아니라 입력칸의 지금 글로 본다 */
+/* '@' 를 치면 작업 · 테스트를 골라 '@HW-4' · '@HW-T3' 로 넣는다 — 서버가 그 키를 찾아 Claude 에게 넘긴다.
+   테스트 목록은 창을 열 때 받아 둔다. 한글은 조합 중에도 고를 수 있게 v-model 이 아니라 입력칸의 지금 글로 본다 */
 const mention = ref<MentionQuery | null>(null)
 const picked = ref(0)
 const candidates = computed(() =>
-  mention.value ? mentionCandidates(taskStore.tasks, mention.value.query) : [],
+  mention.value
+    ? mentionCandidates(mentionItems(taskStore.tasks, testStore.tests), mention.value.query)
+    : [],
 )
 const mentionOpen = computed(() => candidates.value.length > 0)
 
@@ -48,9 +57,9 @@ function trackMention() {
 
 async function pickMention(index = picked.value) {
   const el = inputEl()
-  const task = candidates.value[index]
-  if (!el || !mention.value || !task) return
-  const next = insertMention(el.value, mention.value, task.key)
+  const item = candidates.value[index]
+  if (!el || !mention.value || !item) return
+  const next = insertMention(el.value, mention.value, item.key)
   draft.value = next.text
   mention.value = null
   await nextTick()
@@ -60,6 +69,7 @@ async function pickMention(index = picked.value) {
 
 async function show() {
   open.value = true
+  testStore.ensure()
   await nextTick()
   /* 최소화했다 다시 열면 이어지던 대화의 맨 아래부터 */
   if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
@@ -92,6 +102,9 @@ function openAgenda(id: string) {
 }
 function openTask(id: string) {
   void router.push({ name: 'task', params: { id } })
+}
+function openTest(id: string) {
+  void router.push({ name: 'test', params: { id } })
 }
 
 /* Enter 는 보내기, Shift+Enter 는 줄바꿈. 한글 조합을 끝내는 Enter 는 보내지 않는다 */
@@ -227,6 +240,7 @@ watch(
                 data-answer-text
                 @open-agenda="openAgenda"
                 @open-task="openTask"
+                @open-test="openTest"
               />
               <ChatProposalCard
                 v-if="line.proposal"
@@ -273,13 +287,13 @@ watch(
           v-if="mentionOpen"
           id="chat-mentions"
           role="listbox"
-          aria-label="작업 고르기"
+          aria-label="작업 · 테스트 고르기"
           class="absolute inset-x-3 bottom-full z-10 mb-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           <li
             v-for="(t, i) in candidates"
             :id="`chat-mention-${i}`"
-            :key="t.id"
+            :key="`${t.kind}:${t.id}`"
             role="option"
             :aria-selected="i === picked"
             class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
@@ -289,9 +303,13 @@ watch(
           >
             <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ t.key }}</span>
             <span class="min-w-0 grow truncate">{{ t.title }}</span>
-            <span class="shrink-0 text-xs text-muted-foreground">{{
-              taskStatusLabel(t.status)
-            }}</span>
+            <span
+              v-if="t.kind === 'test'"
+              class="shrink-0 rounded-sm border border-border px-1 text-xs text-muted-foreground"
+              data-mention-test
+              >테스트</span
+            >
+            <span class="shrink-0 text-xs text-muted-foreground">{{ t.statusLabel }}</span>
           </li>
         </ul>
         <Textarea
@@ -300,7 +318,7 @@ watch(
           rows="1"
           maxlength="2000"
           aria-label="질문"
-          placeholder="질문을 입력하세요 · @ 로 작업 언급"
+          placeholder="질문을 입력하세요 · @ 로 작업 · 테스트 언급"
           class="max-h-32 min-h-9 resize-none"
           role="combobox"
           aria-autocomplete="list"

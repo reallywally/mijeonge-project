@@ -476,7 +476,7 @@ async def write(
     refs = [
         ref
         for ref in extract_refs(body)
-        if ref.id in (context.agenda_ids if ref.kind == "agenda" else context.task_ids)
+        if ref.id in {"agenda": context.agenda_ids, "task": context.task_ids}.get(ref.kind, ())
     ]
     try:
         item = await _save(session, project_id, actor_id, facts, body)

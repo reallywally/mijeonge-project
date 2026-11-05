@@ -1,4 +1,6 @@
+import re
 from collections.abc import Iterable, Sequence
+from datetime import date
 from typing import Any, Literal
 
 from sqlalchemy import (
@@ -20,13 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, aliased
 
 from app.errors import ApiError, not_found
-from app.models import Agenda, Member, Task, TaskAgendaLink, TaskLine
+from app.models import Agenda, Member, Task, TaskAgendaLink, TaskLine, TestCase, TestComment
 from app.schemas.search import (
     AgendaDoc,
     AgendaHit,
     AgendaPlace,
     LinkedAgenda,
     LinkedTask,
+    LinkedTest,
     SearchResult,
     SimilarPair,
     TaskBrief,
@@ -34,8 +37,13 @@ from app.schemas.search import (
     TaskHit,
     TaskList,
     TaskPlace,
+    TestDoc,
+    TestNote,
+    TestTag,
 )
+from app.schemas.test import TestRefOut, TestSignal
 from app.services import project as project_service
+from app.services import test as test_service
 from app.services.agenda import to_agenda
 from app.services.task import comment_count, status_since, to_task
 
@@ -56,6 +64,11 @@ TASK_LIST_MAX = 300
 # 비슷한 작업 쌍 — 이보다 낮으면 안 낸다. 0.3 이면 '설계' ↔ '데이터 설계'(0.43),
 # '초기 스키마 DDL 작성' ↔ '초기 스키마 반영 및 검증'(0.32)까지 걸린다
 SIMILAR_THRESHOLD = 0.3
+
+# 챗봇 get_test 가 싣는 조치 내역 — 최근 것만
+TEST_COMMENTS_MAX = 20
+# 테스트 키(HW-T3) — 작업 키(HW-3)와 '-T' 로 갈린다
+TEST_KEY = re.compile(r"^[A-Z][A-Z0-9]{0,7}-T\d+$")
 
 # 같은 점수면 이 순서로 고른다 (API.md '검색')
 _AGENDA_PLACES: tuple[AgendaPlace, ...] = ("title", "description", "decision")
@@ -337,6 +350,136 @@ async def get_task(session: AsyncSession, project_id: str, task_id: str) -> Task
             LinkedAgenda(id=id_, title=title, state=state) for id_, title, state in agendas.all()
         ],
     )
+
+
+def is_test_key(key: str) -> bool:
+    return TEST_KEY.match(key.strip().upper()) is not None
+
+
+async def tests_by_key(
+    session: AsyncSession, project_id: str, keys: Iterable[str]
+) -> dict[str, tuple[TestCase, str]]:
+    """테스트 키(HW-T3) → (테스트, 화면이 보이는 상태). 묶음은 하위에서 모은 상태다.
+    없는 키 · 다른 프로젝트의 키는 빠진다."""
+    wanted = {key.upper() for key in keys}
+    if not wanted:
+        return {}
+    found = (
+        await session.scalars(
+            select(TestCase).where(TestCase.project_id == project_id, TestCase.key.in_(wanted))
+        )
+    ).all()
+    if not found:
+        return {}
+    rolled = await _rolled_status(session, project_id)
+    return {test.key: (test, rolled.get(test.id, (test.status, []))[0]) for test in found}
+
+
+async def _rolled_status(
+    session: AsyncSession, project_id: str
+) -> dict[str, tuple[str, list[TestSignal]]]:
+    """신호 없이 상태만 모은다 — 언급 한 줄에는 상태만 싣는다."""
+    rows = await session.execute(
+        select(TestCase.id, TestCase.parent_id, TestCase.status).where(
+            TestCase.project_id == project_id
+        )
+    )
+    return test_service.roll_up(
+        {
+            test_id: test_service.RollNode(parent_id, status, [])
+            for test_id, parent_id, status in rows.tuples()
+        }
+    )
+
+
+async def get_test(session: AsyncSession, project_id: str, test_id: str, *, today: date) -> TestDoc:
+    """test_id 에 테스트 키(HW-T3)를 넣어도 찾는다. 다른 프로젝트의 것은 없는 것과 같다."""
+    found = await session.scalar(
+        select(TestCase.id).where(
+            TestCase.project_id == project_id,
+            or_(TestCase.id == test_id, TestCase.key == test_id.strip().upper()),
+        )
+    )
+    if found is None:
+        raise not_found("TEST_NOT_FOUND", "테스트를 찾을 수 없습니다.")
+
+    # 묶음의 상태 · 신호는 하위 전부에서 모으니 프로젝트의 테스트를 한 번에 센다
+    tests = await test_service.list_tests(session, project_id, today=today)
+    by_id = {test.id: test for test in tests}
+    test = by_id[found]
+    rolled = test_service.roll_up(
+        {t.id: test_service.RollNode(t.parent_id, t.status, list(t.signals)) for t in tests}
+    )
+    children = [t for t in tests if t.parent_id == test.id]
+    status, signals = rolled[test.id]
+
+    member_ids = {test.owner_id, *test.cc_ids} - {None}
+    comments = (
+        await session.execute(
+            select(TestComment.author_id, TestComment.body, TestComment.created_at)
+            .where(TestComment.test_id == test.id)
+            .order_by(TestComment.seq.desc())
+            .limit(TEST_COMMENTS_MAX)
+        )
+    ).all()
+    member_ids |= {author for author, _, _ in comments if author is not None}
+    names = await session.execute(select(Member.id, Member.name).where(Member.id.in_(member_ids)))
+    name_of = dict(names.tuples().all())
+
+    return TestDoc(
+        id=test.id,
+        key=test.key,
+        title=test.title,
+        content=test.content,
+        test_data=test.test_data,
+        status=status,
+        status_days=None if children else test.status_days,
+        signals=signals,
+        parent_key=by_id[test.parent_id].key if test.parent_id in by_id else None,
+        owner=name_of.get(test.owner_id) if test.owner_id else None,
+        cc_names=[name_of[member_id] for member_id in test.cc_ids if member_id in name_of],
+        start=test.start,
+        due=test.due,
+        tags=await _test_tags(session, project_id, test.refs),
+        children=[
+            LinkedTest(id=t.id, key=t.key, title=t.title, status=rolled[t.id][0]) for t in children
+        ],
+        result_note=test.result_note.strip() or None,
+        comments=[
+            TestNote(author=name_of.get(author) if author else None, created_at=at, body=body)
+            for author, body, at in reversed(comments)
+        ],
+    )
+
+
+async def _test_tags(
+    session: AsyncSession, project_id: str, refs: Sequence[TestRefOut]
+) -> list[TestTag]:
+    """태그 순서는 TestCaseOut.refs 그대로(작업 먼저, 그 안은 등록 순)."""
+    task_ids = [ref.id for ref in refs if ref.kind == "task"]
+    agenda_ids = [ref.id for ref in refs if ref.kind == "agenda"]
+    tasks = await session.execute(
+        select(Task.id, Task.key, Task.title).where(
+            Task.id.in_(task_ids), Task.project_id == project_id, Task.is_deleted.is_(False)
+        )
+    )
+    task_of = {id_: (key, title) for id_, key, title in tasks.tuples()}
+    agendas = await session.execute(
+        select(Agenda.id, Agenda.title).where(
+            Agenda.id.in_(agenda_ids),
+            Agenda.project_id == project_id,
+            Agenda.is_deleted.is_(False),
+        )
+    )
+    agenda_of = dict(agendas.tuples().all())
+    tags: list[TestTag] = []
+    for ref in refs:
+        if ref.kind == "task" and ref.id in task_of:
+            key, title = task_of[ref.id]
+            tags.append(TestTag(kind="task", id=ref.id, key=key, title=title))
+        elif ref.kind == "agenda" and ref.id in agenda_of:
+            tags.append(TestTag(kind="agenda", id=ref.id, key=None, title=agenda_of[ref.id]))
+    return tags
 
 
 def _brief(task: Task, key_of: dict[str, str], name_of: dict[str, str]) -> TaskBrief:

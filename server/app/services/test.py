@@ -57,6 +57,8 @@ SIGNAL_ORDER: tuple[TestSignal, ...] = (
 )
 NOT_STARTED = ("draft", "ready")
 WITH_NOTE = ("fail", "blocked")
+# 묶음의 상태 — 하위 중 가장 나쁜 것. 화면(web/src/lib/testcase.ts worstStatus)과 같은 순서
+BADNESS: dict[str, int] = {"fail": 0, "blocked": 1, "testing": 2, "draft": 3, "ready": 3, "pass": 4}
 
 
 def _test_not_found() -> ApiError:
@@ -250,6 +252,56 @@ def signals(
         "basisChanged": changed,
     }
     return [signal for signal in SIGNAL_ORDER if hits[signal]]
+
+
+def worst_status(statuses: Iterable[str]) -> str | None:
+    """작성 중 · 준비됨이 섞이면 작성 중 — 아직 덜 된 쪽을 보인다(화면과 같다)."""
+    worst: str | None = None
+    for status in statuses:
+        if (
+            worst is None
+            or BADNESS[status] < BADNESS[worst]
+            or (BADNESS[status] == BADNESS[worst] and status == "draft")
+        ):
+            worst = status
+    return worst
+
+
+@dataclass(frozen=True)
+class RollNode:
+    parent_id: str | None
+    status: str
+    signals: list[TestSignal]
+
+
+def roll_up(nodes: dict[str, RollNode]) -> dict[str, tuple[str, list[TestSignal]]]:
+    """테스트마다 화면이 보이는 상태 · 신호 — 묶음은 하위에서 모은다(web/src/stores/test.ts).
+    하위가 묶음이면 그 묶음이 모은 것을 쓴다. 고리가 있어도 멈추게 본 것을 뺀다."""
+    children: dict[str, list[str]] = defaultdict(list)
+    for test_id, node in nodes.items():
+        if node.parent_id is not None and node.parent_id in nodes:
+            children[node.parent_id].append(test_id)
+    rolled: dict[str, tuple[str, list[TestSignal]]] = {}
+
+    def visit(test_id: str, seen: frozenset[str]) -> None:
+        if test_id in rolled:
+            return
+        node = nodes[test_id]
+        kids = [kid for kid in children.get(test_id, []) if kid not in seen]
+        if not kids:
+            rolled[test_id] = (node.status, node.signals)
+            return
+        for kid in kids:
+            visit(kid, seen | {test_id})
+        got = {signal for kid in kids for signal in rolled[kid][1]}
+        rolled[test_id] = (
+            worst_status(rolled[kid][0] for kid in kids) or node.status,
+            [signal for signal in SIGNAL_ORDER if signal in got],
+        )
+
+    for test_id in nodes:
+        visit(test_id, frozenset({test_id}))
+    return rolled
 
 
 async def _build(

@@ -4,7 +4,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { resetMockAuth } from '@/api/mockAuth'
+import { MOCK_PASSWORD } from '@/fixtures'
 import { chatReplies } from '@/fixtures/chat'
+import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useDataStore } from '@/stores/data'
 import ChatWidget from './ChatWidget.vue'
@@ -13,6 +16,7 @@ import ChatWidget from './ChatWidget.vue'
 enableAutoUnmount(afterEach)
 
 beforeEach(() => {
+  localStorage.clear()
   setActivePinia(createPinia())
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 })
@@ -21,13 +25,14 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-/* 칩이 주소로 가는지 보려고 이름 있는 두 경로만 둔다 */
+/* 칩이 주소로 가는지 보려고 이름 있는 경로만 둔다 */
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/agendas/:id', name: 'agenda', component: { template: '<div />' } },
       { path: '/tasks/:id', name: 'task', component: { template: '<div />' } },
+      { path: '/tests/:id', name: 'test', component: { template: '<div />' } },
       { path: '/:any(.*)*', component: { template: '<div />' } },
     ],
   })
@@ -41,6 +46,15 @@ async function opened(router = makeRouter()) {
 }
 
 const textarea = (w: ReturnType<typeof mount>) => w.get('textarea')
+
+/* 테스트 목록은 로그인해야 받는다 — 창을 열면 받아 두는지 보려고 먼저 들어온다 */
+async function openedSignedIn(router = makeRouter()) {
+  resetMockAuth()
+  await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
+  const w = await opened(router)
+  await flushPromises()
+  return w
+}
 
 describe('챗봇 창', () => {
   it('버튼을 누르면 창이 열리고 입력칸에 포커스가 간다. 빈 대화면 예시 질문 셋이 선다', async () => {
@@ -192,6 +206,52 @@ describe('챗봇 창', () => {
     expect(el.value).toBe('이거 @HW-2 봐줘')
   })
 
+  it("창을 열면 테스트를 받아 두고, @HW-T 를 치면 테스트가 '테스트' 표시 · 테스트 상태와 함께 뜬다", async () => {
+    const w = await openedSignedIn()
+    const el = textarea(w).element as HTMLTextAreaElement
+    await textarea(w).setValue('@HW-T')
+    el.setSelectionRange(5, 5)
+    await textarea(w).trigger('input')
+
+    expect(w.get('[role="listbox"]').attributes('aria-label')).toBe('작업 · 테스트 고르기')
+    const options = w.findAll('[role="option"]')
+    expect(options.length).toBeGreaterThan(1)
+    expect(options.every((o) => o.find('[data-mention-test]').exists())).toBe(true)
+    const t7 = options.find((o) => o.text().includes('HW-T7'))
+    expect(t7?.text()).toContain('권한 없는 계정 접근 차단')
+    expect(t7?.text()).toContain('실패')
+  })
+
+  it('작업과 테스트가 한 목록에 — 작업 줄에는 테스트 표시가 없다', async () => {
+    const w = await openedSignedIn()
+    const el = textarea(w).element as HTMLTextAreaElement
+    await textarea(w).setValue('@계정')
+    el.setSelectionRange(3, 3)
+    await textarea(w).trigger('input')
+
+    const options = w.findAll('[role="option"]')
+    const kinds = options.map((o) => o.find('[data-mention-test]').exists())
+    /* 작업이 먼저, 테스트가 뒤 */
+    expect(kinds[0]).toBe(false)
+    expect(kinds).toContain(true)
+    expect(kinds.slice(kinds.indexOf(true)).every(Boolean)).toBe(true)
+  })
+
+  it('테스트를 고르면 @HW-T3 이 들어간다', async () => {
+    const w = await openedSignedIn()
+    const el = textarea(w).element as HTMLTextAreaElement
+    await textarea(w).setValue('이거 @hw-t3')
+    el.setSelectionRange(9, 9)
+    await textarea(w).trigger('input')
+
+    const options = w.findAll('[role="option"]')
+    expect(options[0].text()).toContain('HW-T3')
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await nextTick()
+    expect(el.value).toBe('이거 @HW-T3 ')
+    expect(useChatStore().lines).toHaveLength(0)
+  })
+
   it('답은 HTML 로 그리지 않는다', async () => {
     const w = await opened()
     const chat = useChatStore()
@@ -315,6 +375,33 @@ describe('챗봇 창 — 근거 칩', () => {
 
     expect(w.find('[role="dialog"]').exists()).toBe(true)
     expect(useChatStore().lines).toHaveLength(1)
+  })
+
+  it('테스트 근거는 key + 제목 칩이고, 누르면 /tests/:id 로 간다. 없는 테스트는 그리지 않는다', async () => {
+    const router = makeRouter()
+    const w = await openedSignedIn(router)
+    useChatStore().lines.push(answer('[[test:tc3]] 가 진행 중이고 [[test:tc999]] 끝'))
+    await nextTick()
+
+    const chip = w.get('[data-ref-test="tc3"]')
+    expect(chip.text()).toContain('HW-T3')
+    expect(chip.text()).toContain('비밀번호 5회 틀림 잠금')
+    expect(w.findAll('[data-ref-test]')).toHaveLength(1)
+    expect(w.get('[data-answer-text]').text()).not.toContain('tc999')
+
+    await chip.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/tests/tc3')
+    expect(w.find('[role="dialog"]').exists()).toBe(true)
+  })
+
+  it('목업 답이 테스트를 콕 집으면 테스트 칩으로 선다', async () => {
+    const w = await openedSignedIn()
+    await textarea(w).setValue('@HW-T7 왜 실패했어?')
+    await textarea(w).trigger('keydown', { key: 'Enter' })
+    await vi.runAllTimersAsync()
+    expect(w.get('[data-ref-test="tc7"]').text()).toContain('HW-T7')
+    expect(w.get('[data-ref-test="tc6"]').text()).toContain('HW-T6')
   })
 
   it('받는 중 끝에 걸린 덜 온 표시는 닫힐 때까지 비치지 않는다', async () => {

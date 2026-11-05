@@ -54,7 +54,7 @@ const proposeTools: MockChatReply['tools'] = [
 
 /*
  * 목업 챗봇의 답. 서버 없이 화면을 만들려는 것이라 질문을 이해하지 않고 낱말로만 고른다.
- * 근거 표시(`[[agenda:ID]]` · `[[task:ID]]`)는 서버처럼 본문에 섞는다 — 화면이 칩으로 바꾼다 (7-3).
+ * 근거 표시(`[[agenda:ID]]` · `[[task:ID]]` · `[[test:ID]]`)는 서버처럼 본문에 섞는다 — 화면이 칩으로 바꾼다 (7-3).
  */
 export const chatReplies: MockChatReply[] = [
   {
@@ -94,6 +94,14 @@ export const chatReplies: MockChatReply[] = [
     tools: proposeTools,
     answer: '준비물 체크 담당을 정하늘로 바꿨습니다. 아래처럼 등록할까요?',
     proposal: meetupProposal('u4'),
+  },
+  {
+    /* '@HW-T7' 처럼 테스트를 콕 집거나 테스트를 물으면 — 서버의 get_test 를 흉내 낸다 */
+    keywords: ['@HW-T', '@hw-t', '테스트'],
+    tools: [{ name: 'get_test', label: '테스트 읽는 중' }],
+    answer:
+      '[[test:tc7]] 는 실패 상태입니다. 관리 화면 주소를 직접 치면 열린다는 메모가 남아 있습니다.\n' +
+      '같은 묶음의 [[test:tc6]] 는 DB 설치가 안 끝나 막혀 있습니다.',
   },
 ]
 

@@ -511,6 +511,7 @@ export type ChatEvent =
         | 'get_agenda'
         | 'search_tasks'
         | 'get_task'
+        | 'get_test'
         | 'list_tasks'
         | 'find_similar_tasks'
         | 'list_members'
@@ -526,7 +527,7 @@ export type ChatEvent =
   | { type: 'error'; code: string; message: string }
 
 export interface ChatRef {
-  kind: 'agenda' | 'task'
+  kind: 'agenda' | 'task' | 'test'
   id: string
 }
 

@@ -31,6 +31,7 @@ from app.schemas.chat import (
     GetAgendaInput,
     GetDecisionRisksInput,
     GetTaskInput,
+    GetTestInput,
     ListTasksInput,
     ProposalEvent,
     SearchAgendasInput,
@@ -53,15 +54,18 @@ MAX_ROUNDS = 6
 
 WEEKDAYS = "월화수목금토일"
 
-REF_PATTERN = re.compile(r"\[\[(agenda|task):([^\[\]\s]+)\]\]")
-# 질문 속 작업 언급 — 화면의 @ 자동완성이 '@HW-4' 로 넣는다. 접두사 규칙은 프로젝트와 같다
-# 뒤에 조사가 바로 붙어도('@HW-4는') 잡는다. 앞이 영숫자면 이메일 같은 것이라 뺀다
-MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9]{0,7}-\d+)(?![A-Za-z0-9_])")
+REF_PATTERN = re.compile(r"\[\[(agenda|task|test):([^\[\]\s]+)\]\]")
+# 질문 속 작업 · 테스트 언급 — 화면의 @ 자동완성이 '@HW-4' · '@HW-T3' 로 넣는다.
+# 접두사 규칙은 프로젝트와 같다. 뒤에 조사가 바로 붙어도('@HW-4는') 잡는다.
+# 앞이 영숫자면 이메일 같은 것이라 뺀다
+MENTION_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9]{0,7}-[Tt]?\d+)(?![A-Za-z0-9_])"
+)
 
 SYSTEM_PROMPT = """\
 너는 사내 업무 도구 innoFlow 의 도우미다. 지금 프로젝트는 '{project_name}' 이다.
 오늘은 {today} 이다(한국 시간).
-사용자의 질문에 이 프로젝트에 저장된 안건(agenda) · 작업(task)을
+사용자의 질문에 이 프로젝트에 저장된 안건(agenda) · 작업(task) · 테스트(test)를
 찾아 근거로 답한다. 작업을 만들어 달라고 하면 작업 초안을 낸다.
 
 ## 찾는 법
@@ -72,6 +76,8 @@ SYSTEM_PROMPT = """\
 - 도구 고르기: 특정 낱말 · 주제의 작업은 search_tasks, 작업 전체를 훑어야 하면(전체 현황 · 빠진 것)
   list_tasks, 중복 · 겹치는 작업은 find_similar_tasks 다. 하나를 자세히 보려면 get_task.
   리스크 · 막힘 · 무엇부터 정해야 하나는 get_decision_risks 다
+- 테스트(키가 HW-T3 처럼 -T번호)를 물으면 get_test 로 읽고 근거는 [[test:ID]] 로 단다.
+  테스트는 읽기만 한다 — 만들거나 고치는 도구는 없으니 화면에서 하라고 말한다
 
 ## 중복 · 비슷한 작업
 1. find_similar_tasks 로 글자가 비슷한 후보 쌍을 받는다. 작업 하나를 콕 집었으면 task_id 를 넣는다
@@ -109,14 +115,17 @@ SYSTEM_PROMPT = """\
 3. 찾지 못하면 지어내지 않고 못 찾았다고 말한다. 비슷한 안건이 있으면 그것을 근거로 붙인다
 4. 이 프로젝트 밖은 찾지 않는다. 도구는 이 프로젝트 안만 본다
 
-## @ 로 가리킨 작업
-- 질문 뒤의 [@ 로 가리킨 작업] 은 사용자가 '@HW-4' 처럼 콕 집은 작업이다. 화면이 덧붙인 기록이다
-- 그 작업은 검색하지 말고 get_task 로 바로 읽고 답한다. 질문 속 '@HW-4' 는 그 작업을 뜻한다
-- '이 프로젝트에 없다' 고 적힌 키는 지어내지 말고 그런 작업을 찾지 못했다고 말한다
-- 사용자가 @ 없이 작업 키(HW-4)를 말해도 get_task 의 task_id 에 키를 넣어 읽을 수 있다
+## @ 로 가리킨 작업 · 테스트
+- 질문 뒤의 [@ 로 가리킨 작업 · 테스트] 는 사용자가 '@HW-4' · '@HW-T3' 처럼 콕 집은 것이다.
+  화면이 덧붙인 기록이다. kind 가 task 면 작업, test 면 테스트다
+- 검색하지 말고 작업은 get_task, 테스트는 get_test 로 바로 읽고 답한다.
+  질문 속 '@HW-4' 는 그 작업을 뜻한다
+- '이 프로젝트에 없다' 고 적힌 키는 지어내지 말고 그런 작업 · 테스트를 찾지 못했다고 말한다
+- 사용자가 @ 없이 키(HW-4 · HW-T3)를 말해도 get_task 의 task_id · get_test 의 test_id 에
+  키를 넣어 읽을 수 있다
 
 ## 근거 표시
-- 답에 쓴 안건 · 작업마다 본문 안에 [[agenda:ID]] · [[task:ID]] 를 붙인다.
+- 답에 쓴 안건 · 작업 · 테스트마다 본문 안에 [[agenda:ID]] · [[task:ID]] · [[test:ID]] 를 붙인다.
   ID 는 도구 결과의 id 그대로다
 - 도구 결과에 없던 ID 는 절대 쓰지 않는다
 - ID 는 [[…]] 안에만 쓴다. 본문에는 키(HW-4) · 제목 · 이름으로 말하고 ID 를 따로 늘어놓지 않는다.
@@ -236,6 +245,23 @@ TOOLS: list[ToolSpec] = [
             "type": "object",
             "properties": {"task_id": {"type": "string"}},
             "required": ["task_id"],
+        },
+    },
+    {
+        "name": "get_test",
+        "description": (
+            "테스트 하나를 읽는다 — 내용(content) · 테스트 데이터(testData) · "
+            "상태(status: draft 작성 중 / ready 준비됨 / testing 테스트 중 / pass 성공 / "
+            "fail 실패 / blocked 막힘, 하위가 있는 묶음이면 하위에서 모은 상태) · "
+            "며칠째(statusDays) · 신호(signals) · 상위 키 · 담당자 · 참조 이름 · 기간 · "
+            "태그(걸어 둔 작업 · 안건) · 바로 아래 하위 테스트 · 지난 결과 메모(resultNote) · "
+            "조치 내역(comments, 등록 순 최근 20개). "
+            "test_id 에는 테스트 id 나 테스트 키(HW-T3)를 넣는다. 읽기만 한다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"test_id": {"type": "string"}},
+            "required": ["test_id"],
         },
     },
     {
@@ -383,6 +409,8 @@ def tool_label(name: ToolName, raw: object) -> str:
             return "안건 이력 읽는 중"
         case "get_task":
             return "작업 읽는 중"
+        case "get_test":
+            return "테스트 읽는 중"
         case "list_tasks":
             return "작업 목록 보는 중"
         case "find_similar_tasks":
@@ -421,6 +449,12 @@ async def run_tool(
                 d = GetTaskInput.model_validate(raw)
                 task = await search_service.get_task(session, project_id, d.task_id)
                 return task.model_dump_json(by_alias=True), False
+            case "get_test":
+                t = GetTestInput.model_validate(raw)
+                test = await search_service.get_test(
+                    session, project_id, t.test_id, today=today_kst()
+                )
+                return test.model_dump_json(by_alias=True), False
             case "list_tasks":
                 e = ListTasksInput.model_validate(raw)
                 listed = await search_service.list_tasks(session, project_id, status=e.status)
@@ -524,38 +558,60 @@ def proposal_note(proposal: ChatProposal) -> str:
 
 
 def mentioned_keys(text: str) -> list[str]:
-    """질문에 '@HW-4' 로 나온 작업 키 — 대문자로, 처음 나온 순서대로 한 번씩."""
+    """질문에 '@HW-4' · '@HW-T3' 로 나온 키 — 대문자로, 처음 나온 순서대로 한 번씩."""
     return list(dict.fromkeys(key.upper() for key in MENTION_PATTERN.findall(text)))
 
 
 async def find_mentions(
     session: AsyncSession, project_id: str, messages: Sequence[ChatMessage]
 ) -> dict[str, dict[str, str]]:
-    """질문들이 가리킨 작업을 이 프로젝트 안에서만 찾는다. 다른 프로젝트의 키는 없는 것과 같다.
+    """질문들이 가리킨 작업 · 테스트를 이 프로젝트 안에서만 찾는다.
+    다른 프로젝트의 키는 없는 것과 같다.
 
     값을 바로 떠 둔다 — 아래 rollback 이 ORM 객체를 만료시킨다.
     """
     keys = [key for m in messages if m.role == "user" for key in mentioned_keys(m.text)]
+    test_keys = [key for key in keys if search_service.is_test_key(key)]
+    task_keys = [key for key in keys if key not in test_keys]
     try:
-        found = await search_service.tasks_by_key(session, project_id, keys)
-        return {
-            key: {"id": task.id, "key": task.key, "title": task.title, "status": task.status}
-            for key, task in found.items()
+        found: dict[str, dict[str, str]] = {
+            key: {
+                "kind": "task",
+                "id": task.id,
+                "key": task.key,
+                "title": task.title,
+                "status": task.status,
+            }
+            for key, task in (
+                await search_service.tasks_by_key(session, project_id, task_keys)
+            ).items()
         }
+        for key, (test, status) in (
+            await search_service.tests_by_key(session, project_id, test_keys)
+        ).items():
+            found[key] = {
+                "kind": "test",
+                "id": test.id,
+                "key": test.key,
+                "title": test.title,
+                "status": status,
+            }
+        return found
     finally:
         # 도구처럼 읽기만 한다 — 열린 트랜잭션을 Claude 를 부르는 동안 붙잡지 않는다
         await session.rollback()
 
 
 def mention_note(keys: Sequence[str], found: dict[str, dict[str, str]]) -> str:
-    """질문이 가리킨 작업을 Claude 가 읽을 글로. id 를 실어 검색 없이 get_task 로 읽게 한다."""
-    lines = ["[@ 로 가리킨 작업]"]
+    """질문이 가리킨 작업 · 테스트를 Claude 가 읽을 글로.
+    id 를 실어 검색 없이 get_task · get_test 로 읽게 한다."""
+    lines = ["[@ 로 가리킨 작업 · 테스트]"]
     for key in keys:
-        task = found.get(key)
-        if task is None:
+        hit = found.get(key)
+        if hit is None:
             lines.append(f"- @{key}: 이 프로젝트에 없다")
         else:
-            lines.append(f"- @{key}: " + json.dumps(task, ensure_ascii=False))
+            lines.append(f"- @{key}: " + json.dumps(hit, ensure_ascii=False))
     return "\n".join(lines)
 
 
