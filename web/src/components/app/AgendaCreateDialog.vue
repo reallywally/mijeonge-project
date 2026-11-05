@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { ChevronRight, FolderClosed } from 'lucide-vue-next'
 import AgendaFields from '@/components/app/AgendaFields.vue'
-import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
+import AgendaPropertyPanel from '@/components/app/AgendaPropertyPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
@@ -10,8 +10,8 @@ import { useDataStore } from '@/stores/data'
 import { useAgendaStore } from '@/stores/agenda'
 import type { AgendaState } from '@/types/domain'
 
-/* 안건 추가 — 제목 · 설명 · 결정내용 · 상태 넷. 담당자 · 기한 · 파트는 만든 뒤 상세의 속성 패널에서 고른다.
-   상세는 고치는 즉시 들어가지만 여기는 아직 안건이 없으니 적어 두었다가 '만들기'로 한꺼번에 넣는다.
+/* 안건 추가 — 안건 상세와 같은 모양의 팝업이다. 왼쪽 제목 · 설명 · 결정내용, 오른쪽 속성 패널(상태 · 결정 기한 ·
+   담당자 · 파트). 상세는 고치는 즉시 들어가지만 여기는 아직 안건이 없으니 적어 두었다가 '만들기'로 한꺼번에 넣는다.
    만들면 바로 그 안건의 상세로 넘어간다.
    작업 상세 · 추가에서도 띄운다 — 찾던 제목을 채워 열고(initialTitle), 만들면 그 작업에 건다(부모 몫).
    그때는 linkNote 로 어디에 걸리는지 알리고, 한 건만 만들므로 '계속 추가' 를 숨긴다. */
@@ -26,6 +26,10 @@ const title = ref('')
 const description = ref('')
 const decision = ref('')
 const state = ref<AgendaState>('queued')
+/* 결정 기한은 'YYYY-MM-DD' 또는 빈 문자열(속성 패널과 같은 모양). 파트는 안 고르면 공통 */
+const dueDate = ref('')
+const ownerId = ref<string | null>(null)
+const partId = ref<string | null>(null)
 const keepOpen = ref(false)
 const saving = ref(false)
 
@@ -37,6 +41,9 @@ function resetForm() {
   description.value = ''
   decision.value = ''
   state.value = 'queued'
+  dueDate.value = ''
+  ownerId.value = null
+  partId.value = null
 }
 
 watch(
@@ -59,6 +66,9 @@ async function submit() {
     description: description.value,
     decision: decision.value,
     state: state.value,
+    dueDate: dueDate.value || null,
+    ownerId: ownerId.value,
+    partId: partId.value,
   })
   saving.value = false
   /* 실패는 스토어가 알렸다 — 폼을 그대로 두어 다시 누를 수 있게 한다 */
@@ -85,7 +95,7 @@ function onKeydown(e: KeyboardEvent) {
 <template>
   <Dialog v-model:open="open">
     <DialogScrollContent
-      class="max-w-[760px] gap-0 p-0"
+      class="max-w-[1100px] gap-0 p-0"
       @open-auto-focus.prevent="focusTitle"
       @keydown="onKeydown"
     >
@@ -98,30 +108,31 @@ function onKeydown(e: KeyboardEvent) {
         <DialogTitle class="text-xs font-normal">안건 추가</DialogTitle>
       </div>
 
-      <div class="flex flex-col px-[22px] pt-4 pb-6">
-        <AgendaFields
-          ref="fields"
-          v-model:title="title"
-          v-model:description="description"
-          v-model:decision="decision"
-        >
-          <template #under-title>
-            <DialogDescription class="text-xs text-muted-foreground">
-              제목만 있어도 됩니다. 나머지는 아는 만큼만 적고, 상세에서 언제든 고칩니다.
-            </DialogDescription>
-            <p v-if="linkNote" class="text-xs font-medium text-primary" data-agenda-link-note>
-              {{ linkNote }}
-            </p>
-          </template>
+      <div class="flex items-stretch">
+        <div class="flex min-w-0 grow flex-col px-[22px] pt-4 pb-6">
+          <AgendaFields
+            ref="fields"
+            v-model:title="title"
+            v-model:description="description"
+            v-model:decision="decision"
+          >
+            <template #under-title>
+              <DialogDescription class="text-xs text-muted-foreground">
+                제목만 있어도 됩니다. 나머지는 아는 만큼만 적고, 상세에서 언제든 고칩니다.
+              </DialogDescription>
+              <p v-if="linkNote" class="text-xs font-medium text-primary" data-agenda-link-note>
+                {{ linkNote }}
+              </p>
+            </template>
+          </AgendaFields>
+        </div>
 
-          <section class="flex items-center gap-2">
-            <span class="w-[72px] shrink-0 text-xs font-medium">상태</span>
-            <AgendaStateSelect v-model="state" trigger-class="h-8 w-[160px] px-2 text-xs" />
-            <span class="text-xs text-muted-foreground"
-              >담당자 · 기한 · 파트는 만든 뒤 상세에서 고릅니다</span
-            >
-          </section>
-        </AgendaFields>
+        <AgendaPropertyPanel
+          v-model:state="state"
+          v-model:due-date="dueDate"
+          v-model:owner-id="ownerId"
+          v-model:part-id="partId"
+        />
       </div>
 
       <div class="flex items-center gap-2.5 border-t border-border bg-muted/50 px-5 py-3">

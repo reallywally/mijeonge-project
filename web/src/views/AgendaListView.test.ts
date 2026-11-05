@@ -7,6 +7,7 @@ import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { useAgendaStore } from '@/stores/agenda'
+import AgendaPropertyPanel from '@/components/app/AgendaPropertyPanel.vue'
 import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
 import AgendaListView from './AgendaListView.vue'
 
@@ -211,17 +212,21 @@ describe('안건 권한 · 지우기', () => {
 })
 
 describe('안건 추가', () => {
-  it('제목 · 설명 · 결정내용 · 상태 넷 — 담당자 · 기한 칸은 없고, 만들면 그 안건의 상세로 간다', async () => {
+  it('상세와 같은 모양 — 제목 · 설명 · 결정내용과 속성 패널(상태 · 결정 기한 · 담당자 · 파트)을 적어 만들면 그 안건의 상세로 간다', async () => {
     const { w, router } = await mountView('/agendas/new')
     expect(popupText()).toContain('안건 추가')
     expect(popupButton('만들기')!.hasAttribute('disabled')).toBe(true)
-    expect($('input[aria-label="결정 기한"]')).toBeNull()
-    expect($('[aria-label="담당자"]')).toBeNull()
+    expect($('input[aria-label="결정 기한"]')).not.toBeNull()
+    expect($('[aria-label="담당자"]')).not.toBeNull()
 
     await type('textarea[aria-label="제목"]', '배포 창구 정하기')
     await type('textarea[aria-label="설명"]', '배포 요청이 여러 군데로 온다')
     await type('textarea[aria-label="결정내용"]', '운영팀으로 모은다')
     w.findComponent(AgendaStateSelect).vm.$emit('update:modelValue', 'decided')
+    const panel = w.findComponent(AgendaPropertyPanel)
+    panel.vm.$emit('update:dueDate', '2026-12-01')
+    panel.vm.$emit('update:ownerId', 'u2')
+    panel.vm.$emit('update:partId', 'pt1')
     await flushPromises()
     await click(popupButton('만들기'))
 
@@ -231,6 +236,9 @@ describe('안건 추가', () => {
       decision: '운영팀으로 모은다',
       state: 'decided',
       decisionRev: 1,
+      dueDate: '2026-12-01',
+      ownerId: 'u2',
+      partId: 'pt1',
     })
     expect(router.currentRoute.value.path).toBe(`/agendas/${made.id}`)
   })
