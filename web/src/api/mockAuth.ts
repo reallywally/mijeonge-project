@@ -32,6 +32,7 @@ import type {
   RiskSettings,
   Task,
   TaskAgendaLink,
+  TestComment,
   Agenda,
 } from '@/types/domain'
 
@@ -69,6 +70,9 @@ interface MockDb {
   testSeq: number
   /** 프로젝트별 다음 테스트 번호 — 지운 번호를 다시 쓰지 않는다 */
   nextTestNo: Record<string, number>
+  /** 테스트 조치 내역 — 배열 순서가 seq 순서다. 시드는 없다 */
+  testComments: TestComment[]
+  testCommentSeq: number
   /** 변경 이력 — 작업 · 테스트 · 안건 id 마다 등록 순서대로 */
   taskHistory: Record<string, HistoryEntry[]>
   testHistory: Record<string, HistoryEntry[]>
@@ -95,6 +99,8 @@ const fresh = (): MockDb => ({
   tests: structuredClone(testCases),
   testSeq: 0,
   nextTestNo: {},
+  testComments: [],
+  testCommentSeq: 0,
   taskHistory: structuredClone(taskHistory),
   testHistory: structuredClone(testHistory),
   agendaHistory: structuredClone(agendaHistory),

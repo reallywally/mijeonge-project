@@ -449,12 +449,19 @@ async def test_blocked_keeps_note(client: httpx.AsyncClient) -> None:
     assert body["resultNote"] == ""
 
 
+@pytest.mark.parametrize("body", [{"status": "fail"}, {"status": "blocked", "note": "   "}])
+async def test_fail_and_blocked_note_is_optional(
+    client: httpx.AsyncClient, body: dict[str, Any]
+) -> None:
+    """메모는 실패 · 막힘에서도 선택이다 — 까닭은 조치 내역에 적는다 (test-comment.md)."""
+    res = await status(client, "tc2", **body)
+    assert res.status_code == 200, res.json()
+    assert (res.json()["status"], res.json()["resultNote"]) == (body["status"], "")
+
+
 @pytest.mark.parametrize(
     ("body", "field"),
     [
-        ({"status": "fail"}, "note"),
-        ({"status": "fail", "note": "   "}, "note"),
-        ({"status": "blocked", "note": ""}, "note"),
         ({"status": "fail", "note": "가" * 4001}, "note"),
         ({"status": "done"}, "status"),
     ],

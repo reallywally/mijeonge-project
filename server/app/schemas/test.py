@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from pydantic import StringConstraints
 
 from app.schemas.base import Schema, Utc
+from app.schemas.task import CommentBody
 
 TestStatus = Literal["draft", "ready", "testing", "pass", "fail", "blocked"]
 # 순서가 곧 signals 배열의 순서다 (계약의 신호 표)
@@ -58,6 +59,8 @@ class TestCaseOut(Schema):
     changed_agenda_ids: list[str]
     created_by: str | None
     created_at: Utc
+    # 조치 내역 수 — 상세 제목 옆 '조치 N' (docs/api/test-comment.md)
+    comment_count: int
 
 
 class TestCreate(Schema):
@@ -99,5 +102,26 @@ class TestPatch(Schema):
 
 class TestStatusInput(Schema):
     status: TestStatus
-    # fail · blocked 면 필수. 그 밖엔 버린다
+    # fail · blocked 에서만 남긴다(선택 — docs/api/test-comment.md). 그 밖엔 버린다
     note: TestText = ""
+
+
+class TestCommentOut(Schema):
+    """조치 내역 한 줄 — 작업 댓글과 같은 모양 (docs/api/test-comment.md)."""
+
+    id: str
+    test_id: str
+    author_id: str | None
+    body: str
+    created_at: Utc
+    # 한 번도 안 고쳤으면 null
+    edited_at: Utc | None
+
+
+class TestCommentCreate(Schema):
+    # 작성자는 로그인한 사람이다 — authorId 를 실어 와도 받지 않는다(모르는 키는 버린다)
+    body: CommentBody
+
+
+class TestCommentPatch(Schema):
+    body: CommentBody

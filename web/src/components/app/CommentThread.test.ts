@@ -8,7 +8,7 @@ import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { useCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
-import TaskComments from './TaskComments.vue'
+import CommentThread from './CommentThread.vue'
 
 /* 작업 상세의 댓글 칸 — 목록 · 남기기 키 · 고치기는 작성자만 · 지우기는 관리자도가 화면에서 스토어까지 닿는지 본다 */
 enableAutoUnmount(afterEach)
@@ -21,7 +21,10 @@ beforeEach(() => {
 })
 
 async function mounted(taskId = 'k4') {
-  const w = mount(TaskComments, { props: { taskId }, attachTo: document.body })
+  const w = mount(CommentThread, {
+    props: { kind: 'task', targetId: taskId },
+    attachTo: document.body,
+  })
   await flushPromises()
   return w
 }

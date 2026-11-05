@@ -1,17 +1,20 @@
-"""작업 댓글 — 목록 · 등록 · 수정 · 삭제.
+"""작업 댓글 · 테스트 조치 내역 — 목록 · 등록 · 수정 · 삭제.
 
 작성자는 로그인한 사람이다. 고치기는 작성자만, 지우기는 작성자 · 그 프로젝트 관리자 ·
 시스템 관리자다 (docs/api/auth.md '이미 있는 API 에서 바뀌는 것').
+조치 내역도 같은 규칙이다 (docs/api/test-comment.md).
 """
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import not_found
-from app.models import TaskComment, new_id
+from app.models import TaskComment, TestComment, new_id
 from app.schemas.task import TaskCommentCreate, TaskCommentOut, TaskCommentPatch
+from app.schemas.test import TestCommentCreate, TestCommentOut, TestCommentPatch
 from app.services.access import Scope, forbidden
 from app.services.task import load_task
+from app.services.test import load_test
 from app.time import now
 
 
@@ -64,6 +67,63 @@ async def edit_comment(
 
 async def delete_comment(session: AsyncSession, comment_id: str, scope: Scope) -> None:
     comment = await _load_comment(session, comment_id)
+    if comment.author_id != scope.actor.id and not scope.can_manage:
+        raise forbidden()
+    await session.delete(comment)
+    await session.commit()
+
+
+# --- 테스트 조치 내역 ---
+
+
+async def _load_test_comment(session: AsyncSession, comment_id: str) -> TestComment:
+    found = await session.execute(select(TestComment).where(TestComment.id == comment_id))
+    comment = found.scalar_one_or_none()
+    if comment is None:
+        raise not_found("TEST_COMMENT_NOT_FOUND", "조치 내역을 찾을 수 없습니다.")
+    return comment
+
+
+async def list_test_comments(session: AsyncSession, test_id: str) -> list[TestCommentOut]:
+    await load_test(session, test_id)
+    rows = await session.execute(
+        select(TestComment).where(TestComment.test_id == test_id).order_by(TestComment.seq)
+    )
+    return [TestCommentOut.model_validate(row) for row in rows.scalars().all()]
+
+
+async def add_test_comment(
+    session: AsyncSession, test_id: str, author_id: str, payload: TestCommentCreate
+) -> TestCommentOut:
+    # 이력 · 신호 · 기준에 닿지 않는다 — 테스트 행은 건드리지 않는다
+    await load_test(session, test_id)
+    comment = TestComment(
+        id=new_id(),
+        test_id=test_id,
+        author_id=author_id,
+        body=payload.body,
+        created_at=now(),
+        edited_at=None,
+    )
+    session.add(comment)
+    await session.commit()
+    return TestCommentOut.model_validate(comment)
+
+
+async def edit_test_comment(
+    session: AsyncSession, comment_id: str, scope: Scope, payload: TestCommentPatch
+) -> TestCommentOut:
+    comment = await _load_test_comment(session, comment_id)
+    if comment.author_id != scope.actor.id:
+        raise forbidden()
+    comment.body = payload.body
+    comment.edited_at = now()
+    await session.commit()
+    return TestCommentOut.model_validate(comment)
+
+
+async def delete_test_comment(session: AsyncSession, comment_id: str, scope: Scope) -> None:
+    comment = await _load_test_comment(session, comment_id)
     if comment.author_id != scope.actor.id and not scope.can_manage:
         raise forbidden()
     await session.delete(comment)

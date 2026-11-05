@@ -8,6 +8,7 @@ import {
   testSinceLabel,
   testStatusDays,
   testStatusProblem,
+  TEST_TEXT_MAX,
   worstStatus,
 } from './testcase'
 import type { SignalInput } from './testcase'
@@ -127,10 +128,10 @@ describe('화면 말 · 검사', () => {
     expect(testFieldProblems({ title: '로그인' })).toEqual({})
   })
 
-  it('상태 검사 — 실패 · 막힘은 메모만 본다', () => {
-    expect(testStatusProblem('blocked', ' ')).toHaveProperty('note')
-    expect(testStatusProblem('fail', ' ')).toHaveProperty('note')
-    expect(testStatusProblem('fail', '안 됨')).toEqual({})
-    expect(testStatusProblem('pass', undefined)).toEqual({})
+  it('상태 검사 — 메모는 비어도 되고 길이만 본다', () => {
+    expect(testStatusProblem(' ')).toEqual({})
+    expect(testStatusProblem(undefined)).toEqual({})
+    expect(testStatusProblem('안 됨')).toEqual({})
+    expect(testStatusProblem('가'.repeat(TEST_TEXT_MAX + 1))).toHaveProperty('note')
   })
 })

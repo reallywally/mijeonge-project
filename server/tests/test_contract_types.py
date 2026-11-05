@@ -593,16 +593,20 @@ TEST_SHAPES: dict[str, set[str]] = {
         "changedAgendaIds",
         "createdBy",
         "createdAt",
+        # 조치 내역 수 (docs/api/test-comment.md)
+        "commentCount",
     },
     "TestInput": _TEST_EDITABLE | {"refs"},
     "TestPatch": _TEST_EDITABLE,
     "TestStatusInput": {"status", "note"},
+    "TestComment": {"id", "testId", "authorId", "body", "createdAt", "editedAt"},
 }
 _TEST_EDITABLE_NULLABLE = {"parentId", "start", "due", "ownerId", "partId"}
 TEST_NULLABLE: dict[str, set[str]] = {
     "TestCase": _TEST_EDITABLE_NULLABLE | {"statusChangedBy", "createdBy"},
     "TestInput": _TEST_EDITABLE_NULLABLE,
     "TestPatch": _TEST_EDITABLE_NULLABLE,
+    "TestComment": {"authorId", "editedAt"},
 }
 
 
@@ -612,7 +616,9 @@ def test_test_shapes_do_not_drift_from_domain_ts(name: str) -> None:
     if name not in FIELDS:
         return
     declared = all_fields(name)
-    assert set(declared) == TEST_SHAPES[name], f"domain.ts 의 {name} 이 test.md 와 다르다"
+    assert set(declared) == TEST_SHAPES[name], (
+        f"domain.ts 의 {name} 이 test.md 와 다르다"
+    )
     nullable = {field for field, allowed in declared.items() if allowed}
     assert nullable == TEST_NULLABLE.get(name, set())
 

@@ -520,7 +520,7 @@ async def test_status_brings_note(client: httpx.AsyncClient) -> None:
 
 async def test_rejected_status_leaves_no_line(client: httpx.AsyncClient) -> None:
     before = await history(client, "tests/tc8")
-    res = await client.post("/api/tests/tc8/status", json={"status": "fail", "note": ""})
+    res = await client.post("/api/tests/tc8/status", json={"status": "done"})
     assert res.status_code == 422
     assert await history(client, "tests/tc8") == before
 

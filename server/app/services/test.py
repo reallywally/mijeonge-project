@@ -22,6 +22,7 @@ from app.models import (
     TaskAgendaLink,
     TestCase,
     TestCc,
+    TestComment,
     TestRef,
 )
 from app.models.base import new_id
@@ -188,6 +189,17 @@ async def _groups(session: AsyncSession, test_ids: Collection[str]) -> set[str]:
     return {parent_id for parent_id in rows.all() if parent_id is not None}
 
 
+async def _comment_counts(session: AsyncSession, test_ids: Collection[str]) -> dict[str, int]:
+    if not test_ids:
+        return {}
+    rows = await session.execute(
+        select(TestComment.test_id, func.count())
+        .where(TestComment.test_id.in_(test_ids))
+        .group_by(TestComment.test_id)
+    )
+    return {test_id: count for test_id, count in rows.tuples()}
+
+
 async def _has_children(session: AsyncSession, test_id: str) -> bool:
     return bool(await _groups(session, [test_id]))
 
@@ -253,6 +265,7 @@ async def _build(
     reached = {test_id: _reached(refs.get(test_id, []), links) for test_id in ids}
     changes = await _decision_changes(session, set().union(*reached.values()) if reached else set())
     groups = await _groups(session, ids)
+    comments = await _comment_counts(session, ids)
 
     built: list[TestCaseOut] = []
     for row in rows:
@@ -287,6 +300,7 @@ async def _build(
                 changed_agenda_ids=changed,
                 created_by=row.created_by,
                 created_at=row.created_at,
+                comment_count=comments.get(row.id, 0),
             )
         )
     return built
@@ -565,9 +579,8 @@ async def set_status(
     test = await load_test(session, test_id)
     if await _has_children(session, test.id):
         raise bad_request("TEST_GROUP_STATUS", "하위가 있는 테스트는 상태를 직접 바꿀 수 없습니다.")
+    # 메모는 실패 · 막힘에서도 선택이다 — 까닭은 조치 내역에 적는다 (docs/api/test-comment.md)
     note = payload.note.strip()
-    if payload.status in WITH_NOTE and not note:
-        raise _invalid("note", "값을 입력해 주세요.")
     result_note = note if payload.status in WITH_NOTE else ""
     # 상태는 같은 값이어도 남긴다 — 며칠째가 다시 0 이 된 까닭이다. 메모의 빈 값은 null 로 남긴다
     changed = [history_service.change("status", test.status, payload.status)]

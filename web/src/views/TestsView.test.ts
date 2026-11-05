@@ -3,7 +3,8 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
-import { resetMockAuth } from '@/api/mockAuth'
+import { createTestComment } from '@/api/comments'
+import { resetMockAuth, writeMockSession } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { Select } from '@/components/ui/select'
 import MemberPicker from '@/components/app/MemberPicker.vue'
@@ -99,6 +100,12 @@ const popupText = () => document.body.textContent?.replace(/\s+/g, ' ') ?? ''
 const button = (label: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === label)
 
+/** 속성 패널의 상태 고르기 — 그 테스트의 지금 상태를 쥔 Select */
+const statusSelect = (w: Awaited<ReturnType<typeof mountAt>>['w'], testId: string) =>
+  w
+    .findAllComponents(Select)
+    .find((s) => s.props('modelValue') === useTestStore().byId[testId].status)!
+
 async function click(el: Element | undefined | null) {
   expect(el, '누를 것을 못 찾았다').toBeTruthy()
   ;(el as HTMLElement).click()
@@ -183,55 +190,37 @@ describe("테스트 화면 — '지금'", () => {
 })
 
 describe('테스트 상세', () => {
-  it('줄을 누르면 주소가 붙고 상태 · N일째가 보인다. [성공] 으로 바꾼다', async () => {
-    await mountAt('/tests?view=list')
+  it('줄을 누르면 주소가 붙고 상태 · N일째가 보인다. 상태 고르기로 성공으로 바꾼다', async () => {
+    const { w } = await mountAt('/tests?view=list')
     await click($('[data-test-row="tc3"]'))
     expect(window.location.pathname).toBe('/tests/tc3')
     expect(popupText()).toContain('비밀번호 5회 틀림 잠금')
-    expect(text('[data-test-since]')).toBe('테스트 중 · 12일째')
+    expect(text('[data-test-status-days]')).toBe('12일째')
 
-    await click(button('성공'))
+    statusSelect(w, 'tc3').vm.$emit('update:modelValue', 'pass')
+    await flushPromises()
     expect(useTestStore().byId.tc3.status).toBe('pass')
-    expect(text('[data-test-since]')).toBe('성공 · 오늘부터')
+    expect(text('[data-test-status-days]')).toBe('오늘부터')
   })
 
-  it('실패는 메모가 있어야 하고 단계 번호를 받는다', async () => {
-    await mountAt('/tests/tc8')
-    await click(button('실패'))
-    await click(button('실패로 남기기'))
-    expect(text('[data-test-status-form]')).toContain('실패한 까닭을 적어 주세요.')
-    await type('textarea[aria-label="실패 메모"]', '빈 파일이 받아진다')
-    await click(button('실패로 남기기'))
-    expect(useTestStore().byId.tc8).toMatchObject({
-      status: 'fail',
-      resultNote: '빈 파일이 받아진다',
-    })
-    expect(text('[data-test-result-note]')).toBe('빈 파일이 받아진다')
-  })
-
-  it('결과 버튼은 [성공] · [실패] 둘 — 나머지는 상태 칸에서 고르고, 막힘은 메모를 받은 뒤 보낸다', async () => {
+  it('상태 칸 · [성공] · [실패] 는 없다 — 고르기에서 실패 · 막힘을 골라도 메모 없이 바로 보낸다', async () => {
     const { w } = await mountAt('/tests/tc8')
-    for (const gone of ['테스트 시작', '다시 시작', '막힘', '준비됨', '통과'])
+    for (const gone of ['성공', '실패', '실패로 남기기', '막힘으로 남기기', '테스트 시작', '통과'])
       expect(button(gone), gone).toBeUndefined()
-    const status = () =>
-      w
-        .findAllComponents(Select)
-        .find((s) => s.props('modelValue') === useTestStore().byId.tc8.status)!
+    expect($('textarea[aria-label="실패 메모"]')).toBeNull()
 
-    status().vm.$emit('update:modelValue', 'ready')
+    statusSelect(w, 'tc8').vm.$emit('update:modelValue', 'fail')
+    await flushPromises()
+    expect(useTestStore().byId.tc8).toMatchObject({ status: 'fail', resultNote: '' })
+    expect($('textarea[aria-label="실패 메모"]')).toBeNull()
+
+    statusSelect(w, 'tc8').vm.$emit('update:modelValue', 'blocked')
+    await flushPromises()
+    expect(useTestStore().byId.tc8).toMatchObject({ status: 'blocked', resultNote: '' })
+
+    statusSelect(w, 'tc8').vm.$emit('update:modelValue', 'ready')
     await flushPromises()
     expect(useTestStore().byId.tc8.status).toBe('ready')
-
-    status().vm.$emit('update:modelValue', 'blocked')
-    await flushPromises()
-    /* 메모를 받기 전에는 보내지 않는다 */
-    expect(useTestStore().byId.tc8.status).toBe('ready')
-    await type('textarea[aria-label="막힘 메모"]', '내려받기 권한이 없다')
-    await click(button('막힘으로 남기기'))
-    expect(useTestStore().byId.tc8).toMatchObject({
-      status: 'blocked',
-      resultNote: '내려받기 권한이 없다',
-    })
     expect(text('[data-test-status-days]')).toBe('오늘부터')
   })
 
@@ -273,6 +262,73 @@ describe('테스트 상세', () => {
     await mountAt('/tests/tc2', 'u3@inno-ax.com')
     expect(popupText()).toContain('올바른 계정으로 로그인')
     expect($('[data-test-remove]')).toBeNull()
+  })
+})
+
+describe('테스트 상세 — 조치 내역', () => {
+  const thread = '[data-comment-thread="test"]'
+  const items = () => $$(`${thread} li[data-comment-id]`)
+
+  it('테스트 데이터 아래에 빈 타래로 서고, 남기면 맨 뒤에 붙고 조치 N 이 는다', async () => {
+    await mountAt('/tests/tc8')
+    expect(text(`${thread} [data-comment-count]`)).toBe('조치 0')
+    expect(text(thread)).toContain('아직 조치 내역이 없습니다.')
+    /* 지난 결과 메모가 없는 테스트에는 그 칸이 없다 */
+    expect($('[data-test-result-note]')).toBeNull()
+
+    await type(`${thread} textarea[aria-label="조치 내역"]`, ' 권한 설정을 다시 걸었다 ')
+    await click(button('조치 남기기'))
+    expect(items().map((li) => li.querySelector('p')?.textContent)).toEqual([
+      '권한 설정을 다시 걸었다',
+    ])
+    expect(items()[0].textContent).toContain('김서연')
+    expect(useTestStore().byId.tc8.commentCount).toBe(1)
+    expect(text(`${thread} [data-comment-count]`)).toBe('조치 1')
+    expect(($(`${thread} textarea[aria-label="조치 내역"]`) as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('작성자는 고치고, 지우기는 한 번 더 묻고 지운다 — 조치 N 이 준다', async () => {
+    await mountAt('/tests/tc8')
+    await type(`${thread} textarea[aria-label="조치 내역"]`, '계정을 다시 만들었다')
+    await click(button('조치 남기기'))
+
+    await click($(`${thread} button[aria-label="조치 내역 고치기"]`))
+    await type(`${thread} textarea[aria-label="조치 내역 고치기"]`, '계정을 지우고 다시 만들었다')
+    await click(button('저장'))
+    expect(items()[0].querySelector('p')?.textContent).toBe('계정을 지우고 다시 만들었다')
+    expect(items()[0].textContent).toContain('(수정됨)')
+
+    await click($(`${thread} button[aria-label="조치 내역 지우기"]`))
+    expect(text(thread)).toContain('지울까요?')
+    await click(button('삭제'))
+    expect(items()).toHaveLength(0)
+    expect(useTestStore().byId.tc8.commentCount).toBe(0)
+    expect(text(`${thread} [data-comment-count]`)).toBe('조치 0')
+  })
+
+  it('남의 조치 내역 — 일반 사용자는 메뉴가 없고, 프로젝트 관리자는 지우기만 선다', async () => {
+    writeMockSession('u2')
+    await createTestComment('tc8', { body: '박지훈이 남긴 조치' })
+    const { w } = await mountAt('/tests/tc8', 'u3@inno-ax.com')
+    expect(items()).toHaveLength(1)
+    expect($(`${thread} button[aria-label="조치 내역 고치기"]`)).toBeNull()
+    expect($(`${thread} button[aria-label="조치 내역 지우기"]`)).toBeNull()
+    w.unmount()
+
+    setActivePinia(createPinia())
+    document.body.innerHTML = ''
+    await mountAt('/tests/tc8')
+    expect($(`${thread} button[aria-label="조치 내역 고치기"]`)).toBeNull()
+    expect($(`${thread} button[aria-label="조치 내역 지우기"]`)).not.toBeNull()
+  })
+
+  it('지난 결과 메모가 있으면 타래 위에 읽기 전용으로 보인다', async () => {
+    await mountAt('/tests/tc7')
+    const note = $(`${thread} [data-test-result-note]`)
+    expect(note?.textContent).toContain('지난 결과 메모')
+    /* 줄바꿈을 살려 그리므로 앞뒤에 빈칸이 끼면 안 된다 */
+    expect(note?.querySelector('p')?.textContent).toBe('관리 화면 주소를 직접 치면 열린다.')
+    expect(note?.querySelector('textarea, input')).toBeNull()
   })
 })
 
@@ -429,10 +485,9 @@ describe('테스트 상세 — 변경 이력', () => {
     expect(fail).toContain('결과 메모: 없음 → 관리 화면 주소를 직접 치면 열린다.')
     expect(created).toContain('등록')
 
-    /* 긴 결과 메모는 줄여 보이다가 펼친다 */
-    await click(button('실패'))
-    await type('textarea[aria-label="실패 메모"]', '가'.repeat(80))
-    await click(button('실패로 남기기'))
+    /* 긴 결과 메모는 줄여 보이다가 펼친다 — 화면은 메모를 더 받지 않지만 계약은 note 를 그대로 받는다 */
+    await useTestStore().setStatus('tc7', { status: 'fail', note: '가'.repeat(80) })
+    await flushPromises()
     expect(entries()[0]).toContain('상태: 실패 (다시 고름)')
     expect(entries()[0]).toContain(`${'가'.repeat(60)}…`)
     await click($('[data-history-more]'))

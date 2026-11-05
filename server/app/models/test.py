@@ -99,6 +99,28 @@ class TestCc(Base):
     sort_order: Mapped[int] = mapped_column(Integer)
 
 
+class TestComment(Base):
+    """조치 내역 한 줄 — 작업 댓글(`TaskComment`)과 같은 모양 (docs/api/test-comment.md).
+
+    테스트를 지우면 같이 지워진다. 이력 · 신호 · 기준에는 닿지 않는다.
+    """
+
+    __test__ = False
+    __tablename__ = "test_comment"
+    __table_args__ = (Index("ix_test_comment_test_id_seq", "test_id", "seq"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    test_id: Mapped[str] = mapped_column(ForeignKey("test_case.id", ondelete="CASCADE"))
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # 한 번도 안 고쳤으면 null
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 목록 순서 — created_at 으로 세우지 않는다 (API.md Q15)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
+
+
 class TestRef(Base):
     """참조 태그 — 작업이나 안건 하나. 같은 프로젝트 것만 건다 (check_request 와 같은 방식).
 

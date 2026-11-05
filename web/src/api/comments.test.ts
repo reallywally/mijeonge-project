@@ -2,12 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
 import {
   createTaskComment,
+  createTestComment,
   deleteTaskComment,
+  deleteTestComment,
   fetchTaskComments,
+  fetchTestComments,
   patchTaskComment,
+  patchTestComment,
   resetMockComments,
 } from '@/api/comments'
 import { login } from '@/api/auth'
+import { deleteTest, fetchTest } from '@/api/tests'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { taskComments } from '@/fixtures/comments'
@@ -80,6 +85,66 @@ describe('목업 갈래', () => {
   })
 })
 
+describe('목업 갈래 — 테스트 조치 내역', () => {
+  beforeEach(async () => {
+    resetMockAuth()
+    await login({ email: 'u2@inno-ax.com', password: MOCK_PASSWORD })
+  })
+
+  it('빈 타래로 시작하고, 남기고 지우면 테스트의 commentCount 가 따라간다', async () => {
+    expect(await fetchTestComments('tc8')).toEqual([])
+    const made = await createTestComment('tc8', { body: '  다시 해 봤다 ' })
+    expect(made).toMatchObject({
+      testId: 'tc8',
+      authorId: 'u2',
+      body: '다시 해 봤다',
+      editedAt: null,
+    })
+    expect((await fetchTest('tc8')).commentCount).toBe(1)
+
+    const edited = await patchTestComment(made.id, { body: '고쳤다' })
+    expect(edited.editedAt).not.toBeNull()
+    await deleteTestComment(made.id)
+    expect(await fetchTestComments('tc8')).toEqual([])
+    expect((await fetchTest('tc8')).commentCount).toBe(0)
+  })
+
+  it('빈 글은 422, 남의 글 고치기 · 일반 사용자의 지우기는 403, 없는 것은 404', async () => {
+    expect(await createTestComment('tc8', { body: ' ' }).catch((e) => e)).toMatchObject({
+      status: 422,
+      code: 'VALIDATION_ERROR',
+    })
+    const theirs = await createTestComment('tc8', { body: '박지훈의 글' })
+
+    /* 이도현(u3)은 p1 의 일반 사용자다 */
+    await login({ email: 'u3@inno-ax.com', password: MOCK_PASSWORD })
+    expect(await patchTestComment(theirs.id, { body: '남의 글' }).catch((e) => e)).toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+    })
+    expect(await deleteTestComment(theirs.id).catch((e) => e)).toMatchObject({ status: 403 })
+    expect(await patchTestComment('nope', { body: '글' }).catch((e) => e)).toMatchObject({
+      status: 404,
+      code: 'TEST_COMMENT_NOT_FOUND',
+    })
+    expect(await fetchTestComments('nope').catch((e) => e)).toMatchObject({
+      status: 404,
+      code: 'TEST_NOT_FOUND',
+    })
+  })
+
+  it('테스트를 지우면 그 조치 내역에 닿지 않는다', async () => {
+    resetMockAuth()
+    await login({ email: 'u1@inno-ax.com', password: MOCK_PASSWORD })
+    const made = await createTestComment('tc8', { body: '글' })
+    await deleteTest('tc8')
+    expect(await deleteTestComment(made.id).catch((e) => e)).toMatchObject({
+      status: 404,
+      code: 'TEST_COMMENT_NOT_FOUND',
+    })
+  })
+})
+
 describe('서버 갈래', () => {
   const comment: TaskComment = {
     id: 'c 1',
@@ -134,6 +199,31 @@ describe('서버 갈래', () => {
     fake = serve(() => new Response(null, { status: 204 }))
     expect(await deleteTaskComment('c1')).toBeUndefined()
     expect(fake.mock.calls[0][0]).toBe('/api/comments/c1')
+    expect(fake.mock.calls[0][1]).toMatchObject({ method: 'DELETE' })
+  })
+
+  it('테스트 조치 내역 — 계약의 경로 · 메서드 그대로 보낸다', async () => {
+    const row = { ...comment, testId: 'tc 8' }
+    let fake = serve(() => json(200, [row]))
+    expect(await fetchTestComments('tc 8')).toEqual([row])
+    expect(fake.mock.calls[0][0]).toBe('/api/tests/tc%208/comments')
+
+    fake = serve(() => json(201, row))
+    await createTestComment('tc8', { body: '글' })
+    expect(fake.mock.calls[0][0]).toBe('/api/tests/tc8/comments')
+    expect(fake.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ body: '글' }),
+    })
+
+    fake = serve(() => json(200, row))
+    await patchTestComment('c 1', { body: '새 글' })
+    expect(fake.mock.calls[0][0]).toBe('/api/test-comments/c%201')
+    expect(fake.mock.calls[0][1]).toMatchObject({ method: 'PATCH' })
+
+    fake = serve(() => new Response(null, { status: 204 }))
+    expect(await deleteTestComment('c1')).toBeUndefined()
+    expect(fake.mock.calls[0][0]).toBe('/api/test-comments/c1')
     expect(fake.mock.calls[0][1]).toMatchObject({ method: 'DELETE' })
   })
 

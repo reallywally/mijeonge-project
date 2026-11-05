@@ -6,19 +6,48 @@ import PersonChip from '@/components/app/PersonChip.vue'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { dayTime, relativeTime } from '@/lib/date'
-import { useCommentStore } from '@/stores/comment'
+import { useCommentStore, useTestCommentStore } from '@/stores/comment'
 import { useDataStore } from '@/stores/data'
+import { useTestStore } from '@/stores/test'
 
-/* 작업 댓글 — 작업 상세의 맨 아래. 본문은 스냅샷에 없어 열 때 받는다.
-   남기는 사람은 로그인한 사람이다. 고치기는 작성자만, 지우기는 작성자 · 프로젝트 관리자 · 시스템 관리자. */
-const props = defineProps<{ taskId: string }>()
+/* 댓글 타래 — 작업 상세 맨 아래의 댓글, 테스트 상세의 조치 내역(docs/api/test-comment.md). 본문은 열 때 받는다.
+   남기는 사람은 로그인한 사람이다. 고치기는 작성자만, 지우기는 작성자 · 프로젝트 관리자 · 시스템 관리자.
+   제목 줄 아래에 슬롯을 둔다 — 테스트의 '지난 결과 메모' 가 들어간다 */
+const props = defineProps<{ kind: 'task' | 'test'; targetId: string }>()
+
+/* 두 타래는 말만 다르다 */
+const COPY = {
+  task: {
+    noun: '댓글',
+    placeholder: '댓글을 남기세요',
+    signedOut: '로그인해야 댓글을 남길 수 있습니다',
+    send: '댓글 남기기',
+  },
+  test: {
+    noun: '조치 내역',
+    placeholder: '무엇을 해 봤고 무엇을 고쳤는지 남기세요',
+    signedOut: '로그인해야 조치 내역을 남길 수 있습니다',
+    send: '조치 남기기',
+  },
+} as const
 
 const data = useDataStore()
-const commentStore = useCommentStore()
+const testStore = useTestStore()
+const commentStore = computed(() =>
+  props.kind === 'task' ? useCommentStore() : useTestCommentStore(),
+)
+const copy = computed(() => COPY[props.kind])
 
-const comments = computed(() => commentStore.commentsOf(props.taskId))
-const status = computed(() => commentStore.statusOf(props.taskId))
+const comments = computed(() => commentStore.value.commentsOf(props.targetId))
+const status = computed(() => commentStore.value.statusOf(props.targetId))
 const me = computed(() => data.currentMemberId)
+
+/* 작업은 받은 글 수, 테스트는 '조치 N'(commentCount — 받기 전에도 선다) */
+const countLabel = computed(() =>
+  props.kind === 'task'
+    ? `${comments.value.length}개`
+    : `조치 ${testStore.byId[props.targetId]?.commentCount ?? comments.value.length}`,
+)
 
 /* '5분 전' 이 그대로 굳지 않게 1분마다 다시 잰다 */
 const now = useNow({ interval: 60_000 })
@@ -34,12 +63,12 @@ const confirmingId = ref<string | null>(null)
 const busyId = ref<string | null>(null)
 
 watch(
-  () => props.taskId,
-  (taskId) => {
+  () => [props.kind, props.targetId] as const,
+  ([, targetId]) => {
     draft.value = ''
     editingId.value = null
     confirmingId.value = null
-    void commentStore.load(taskId)
+    void commentStore.value.load(targetId)
   },
   { immediate: true },
 )
@@ -51,7 +80,7 @@ const isSubmitKey = (e: KeyboardEvent) =>
 async function send() {
   if (sending.value || !me.value || !draft.value.trim()) return
   sending.value = true
-  const ok = await commentStore.add(props.taskId, draft.value)
+  const ok = await commentStore.value.add(props.targetId, draft.value)
   sending.value = false
   if (ok) draft.value = ''
 }
@@ -79,7 +108,7 @@ async function saveEdit() {
   const commentId = editingId.value
   if (!commentId || busyId.value || !editDraft.value.trim()) return
   busyId.value = commentId
-  const ok = await commentStore.edit(commentId, editDraft.value)
+  const ok = await commentStore.value.edit(commentId, editDraft.value)
   busyId.value = null
   if (ok) cancelEdit()
 }
@@ -99,7 +128,7 @@ function onEditKeydown(e: KeyboardEvent) {
 async function confirmRemove(commentId: string) {
   if (busyId.value) return
   busyId.value = commentId
-  await commentStore.remove(commentId)
+  await commentStore.value.remove(commentId)
   busyId.value = null
   confirmingId.value = null
 }
@@ -108,10 +137,14 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
 </script>
 
 <template>
-  <section class="flex min-w-0 flex-col gap-2.5" aria-label="댓글">
+  <section
+    class="flex min-w-0 flex-col gap-2.5"
+    :aria-label="copy.noun"
+    :data-comment-thread="kind"
+  >
     <div class="flex items-baseline gap-2">
-      <span class="text-xs font-medium">댓글</span>
-      <span class="text-xs text-muted-foreground">{{ comments.length }}개</span>
+      <span class="text-xs font-medium">{{ copy.noun }}</span>
+      <span class="text-xs text-muted-foreground" data-comment-count>{{ countLabel }}</span>
       <Loader2
         v-if="status === 'loading' && comments.length > 0"
         class="size-3 animate-spin self-center text-muted-foreground"
@@ -119,25 +152,27 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
       />
     </div>
 
+    <slot />
+
     <p
       v-if="status === 'loading' && comments.length === 0"
       class="flex items-center gap-1.5 text-xs text-muted-foreground"
     >
       <Loader2 class="size-3.5 animate-spin" />
-      댓글을 불러오는 중입니다.
+      {{ copy.noun }}을 불러오는 중입니다.
     </p>
     <div
       v-else-if="status === 'error' && comments.length === 0"
       class="flex items-center gap-2 text-xs text-destructive"
     >
-      <span>{{ commentStore.errorOf(taskId) }}</span>
-      <Button variant="outline" size="xs" @click="commentStore.load(taskId)">
+      <span>{{ commentStore.errorOf(targetId) }}</span>
+      <Button variant="outline" size="xs" @click="commentStore.load(targetId)">
         <RotateCcw />
         다시 불러오기
       </Button>
     </div>
     <p v-else-if="comments.length === 0" class="text-xs text-muted-foreground">
-      아직 댓글이 없습니다.
+      아직 {{ copy.noun }}이 없습니다.
     </p>
 
     <ol v-if="comments.length > 0" class="flex flex-col">
@@ -182,7 +217,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
                 v-if="commentStore.canEdit(c)"
                 type="button"
                 class="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
-                aria-label="댓글 고치기"
+                :aria-label="`${copy.noun} 고치기`"
                 title="고치기"
                 @click="startEdit(c.id, c.body)"
               >
@@ -192,7 +227,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
                 v-if="commentStore.canRemove(c)"
                 type="button"
                 class="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
-                aria-label="댓글 지우기"
+                :aria-label="`${copy.noun} 지우기`"
                 title="지우기"
                 @click="confirmingId = c.id"
               >
@@ -207,7 +242,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
             ref="editField"
             v-model="editDraft"
             rows="2"
-            aria-label="댓글 고치기"
+            :aria-label="`${copy.noun} 고치기`"
             class="min-h-16 resize-y text-sm"
             @keydown="onEditKeydown"
           />
@@ -227,9 +262,9 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
       <Textarea
         v-model="draft"
         rows="2"
-        aria-label="댓글"
+        :aria-label="copy.noun"
         :disabled="!me"
-        :placeholder="me ? '댓글을 남기세요' : '로그인해야 댓글을 남길 수 있습니다'"
+        :placeholder="me ? copy.placeholder : copy.signedOut"
         class="min-h-16 resize-y text-sm"
         @keydown="onDraftKeydown"
       />
@@ -240,7 +275,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? '�
         <span v-else class="grow" />
         <Button type="submit" size="sm" :disabled="!me || !draft.trim() || sending">
           <Loader2 v-if="sending" class="animate-spin" />
-          댓글 남기기
+          {{ copy.send }}
         </Button>
       </div>
     </form>

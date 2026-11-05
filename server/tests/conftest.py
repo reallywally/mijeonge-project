@@ -41,6 +41,7 @@ from app.models import (
     TaskHistory,
     TaskLog,
     TestCase,
+    TestComment,
     TestHistory,
 )
 from app.services import auth as auth_service
@@ -65,6 +66,7 @@ SEQ_MODELS: tuple[tuple[type[Base], str], ...] = (
             TaskLog,
             ProjectReport,
             TestCase,
+            TestComment,
             TaskHistory,
             TestHistory,
             AgendaHistory,

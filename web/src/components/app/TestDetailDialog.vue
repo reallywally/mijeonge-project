@@ -3,13 +3,14 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, Clock, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
 import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import CcField from '@/components/app/CcField.vue'
+import CommentThread from '@/components/app/CommentThread.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
 import PartField from '@/components/app/PartField.vue'
+import TestGroupSummary from '@/components/app/TestGroupSummary.vue'
 import TestRefs from '@/components/app/TestRefs.vue'
 import TestStatusBadge from '@/components/app/TestStatusBadge.vue'
-import TestStatusSection from '@/components/app/TestStatusSection.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogDescription, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -27,12 +28,12 @@ import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
-import type { TestRef, TestStatus, TestStatusInput } from '@/types/domain'
+import type { TestRef, TestStatus } from '@/types/domain'
 
 /* 테스트 상세 · 추가 — 작업 상세와 따로 만든 팝업이다(입력 항목이 다르다, Q55).
    상세(testId)는 보는 자리가 곧 고치는 자리라 칸을 벗어나면 그 값만 바로 들어간다.
    추가(testId = null)는 같은 칸을 채운 뒤 [만들기] 로 한 번에 보낸다 — 늘 작성 중으로 들어간다.
-   왼쪽이 제목 · 태그 · 테스트 내용 · 테스트 데이터 · 상태 · 기준 바뀜, 오른쪽이 속성이다 */
+   왼쪽이 제목 · 테스트 내용 · 테스트 데이터 · 하위 요약(묶음) · 기준 바뀜 · 조치 내역, 오른쪽이 속성 · 태그(기한 아래)다 */
 const props = defineProps<{
   testId: string | null
   /** 추가할 때 미리 채울 것 — 줄의 + 는 상위, 작업 · 안건 상세의 [테스트 추가] 는 태그 */
@@ -195,15 +196,10 @@ function openRef(ref: TestRef) {
   else emit('open-agenda', ref.id)
 }
 
-function setStatus(input: TestStatusInput) {
-  if (test.value) void testStore.setStatus(test.value.id, input)
-}
-
-/* 위쪽 상태 칸 — 작업 상세의 상태 고르기처럼 고른다. 막힘 · 실패는 상태 칸(아래)이 메모를 받은 뒤 보낸다.
-   고르기는 보낸 뒤 받은 상태를 보이므로, 메모를 받는 동안은 지금 상태 그대로 선다 */
-const statusSection = ref<{ pick: (s: TestStatus) => void } | null>(null)
+/* 상태는 속성 패널의 고르기 하나로만 바꾼다 — 실패 · 막힘도 메모 없이 바로 보낸다. 까닭은 조치 내역에 적는다
+   (docs/api/test-comment.md). 고르기는 보낸 뒤 받은 상태를 보인다 */
 function pickStatus(value: unknown) {
-  statusSection.value?.pick(value as TestStatus)
+  if (test.value) void testStore.setStatus(test.value.id, { status: value as TestStatus })
 }
 
 /* 기준 바뀜 — 태그로 닿는 안건 중 테스트를 확인한 뒤 결정이 바뀐 것. 그 안건의 지금 결정내용을 보인다 */
@@ -319,8 +315,6 @@ const area =
             </DialogDescription>
           </header>
 
-          <TestRefs :refs="shownRefs" @add="addRef" @remove="removeRef" @open="openRef" />
-
           <section class="flex flex-col gap-3">
             <label class="flex flex-col gap-1">
               <span class="text-xs font-medium">테스트 내용</span>
@@ -350,13 +344,23 @@ const area =
             </label>
           </section>
 
-          <TestStatusSection
-            v-if="row"
-            ref="statusSection"
+          <TestGroupSummary
+            v-if="row?.isGroup"
             :row="row"
-            @set="setStatus"
             @open-test="(id) => emit('open-test', id)"
           />
+
+          <CommentThread v-if="test" kind="test" :target-id="test.id">
+            <!-- 상태 칸을 걷기 전에 받던 실패 · 막힘 메모 — 옮기지 않고 읽기만 한다 -->
+            <div
+              v-if="test.resultNote.trim()"
+              class="flex flex-col gap-1 rounded-md border border-border bg-muted/50 px-3 py-2"
+              data-test-result-note
+            >
+              <span class="text-xs text-muted-foreground">지난 결과 메모</span>
+              <p class="text-sm break-words whitespace-pre-wrap">{{ test.resultNote }}</p>
+            </div>
+          </CommentThread>
 
           <section
             v-if="changedAgendas.length"
@@ -516,6 +520,9 @@ const area =
               시작 · 기한이 다 있어야 간트차트에 막대가 섭니다
             </p>
           </dl>
+
+          <div class="h-px bg-border" />
+          <TestRefs :refs="shownRefs" @add="addRef" @remove="removeRef" @open="openRef" />
 
           <template v-if="test">
             <div class="h-px bg-border" />

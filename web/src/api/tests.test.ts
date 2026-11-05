@@ -172,9 +172,15 @@ describe('목업 갈래 — 쓰기', () => {
     expect((await patchTest('tc3', { parentId: 'tc5' })).parentId).toBe('tc5')
   })
 
-  it('상태 — 실패는 메모, 묶음은 직접 못 돌린다, 다른 상태로 가면 메모를 비운다', async () => {
-    const e = await failure(setTestStatus('tc3', { status: 'fail', note: ' ' }))
-    expect([e.status, Object.keys(e.detail ?? {})]).toEqual([422, ['note']])
+  it('상태 — 메모는 실패에서도 선택, 묶음은 직접 못 돌린다, 다른 상태로 가면 메모를 비운다', async () => {
+    expect(await setTestStatus('tc3', { status: 'fail' })).toMatchObject({
+      status: 'fail',
+      resultNote: '',
+    })
+    expect(await setTestStatus('tc8', { status: 'blocked', note: ' ' })).toMatchObject({
+      status: 'blocked',
+      resultNote: '',
+    })
     expect((await failure(setTestStatus('tc1', { status: 'testing' }))).code).toBe(
       'TEST_GROUP_STATUS',
     )

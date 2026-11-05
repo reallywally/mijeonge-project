@@ -2,11 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Loader2, Lock, Plus, Trash2 } from 'lucide-vue-next'
 import { ApiError } from '@/api'
+import CommentThread from '@/components/app/CommentThread.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import TaggedTests from '@/components/app/TaggedTests.vue'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
-import TaskComments from '@/components/app/TaskComments.vue'
 import TaskLinks from '@/components/app/TaskLinks.vue'
 import AgendaCreateDialog from '@/components/app/AgendaCreateDialog.vue'
 import TaskPropertyPanel from '@/components/app/TaskPropertyPanel.vue'
@@ -409,7 +409,7 @@ function onAgendaCreated(id: string) {
           <TaggedTests kind="task" :ref-id="detail.task.id" />
 
           <div class="h-px bg-border" />
-          <TaskComments :task-id="detail.task.id" />
+          <CommentThread kind="task" :target-id="detail.task.id" />
 
           <div class="h-px bg-border" />
           <HistorySection kind="task" :target-id="detail.task.id" />

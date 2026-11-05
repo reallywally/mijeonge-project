@@ -43,6 +43,7 @@ from app.models import (
     TaskLog,
     TestCase,
     TestCc,
+    TestComment,
     TestHistory,
     TestRef,
 )
@@ -979,6 +980,7 @@ async def clear(session: AsyncSession) -> None:
     """자식부터 지운다. FK 가 CASCADE 라도 순서를 눈에 보이게 둔다."""
     for model in (
         TestHistory,
+        TestComment,
         TestRef,
         TestCc,
         TestCase,

@@ -15,7 +15,7 @@ from app.models.task import (
     TaskLine,
     TaskLog,
 )
-from app.models.test import TestCase, TestCc, TestHistory, TestRef
+from app.models.test import TestCase, TestCc, TestComment, TestHistory, TestRef
 
 __all__ = [
     "AuthIdentity",
@@ -38,6 +38,7 @@ __all__ = [
     "TaskAgendaLink",
     "TestCase",
     "TestCc",
+    "TestComment",
     "TestHistory",
     "TestRef",
     "Agenda",

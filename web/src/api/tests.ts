@@ -279,6 +279,7 @@ const mock = {
       partId,
       createdBy: me.id,
       createdAt: at,
+      commentCount: 0,
       basisSeq: latestSeq(refs),
     }
     db.tests.push(row)
@@ -326,6 +327,8 @@ const mock = {
       throw mockError(409, 'TEST_HAS_CHILDREN', '하위 테스트가 있는 테스트는 지울 수 없습니다.')
     const db = mockDb()
     db.tests = db.tests.filter((t) => t.id !== testId)
+    /* 지운 테스트의 조치 내역은 닿지 않는다 */
+    db.testComments = db.testComments.filter((c) => c.testId !== testId)
   },
   status(testId: string, input: TestStatusInput): TestCase {
     const me = requireMe()
@@ -336,7 +339,7 @@ const mock = {
         'TEST_GROUP_STATUS',
         '하위 테스트가 있는 테스트는 상태를 직접 바꾸지 않습니다.',
       )
-    const problems = testStatusProblem(input.status, input.note)
+    const problems = testStatusProblem(input.note)
     if (Object.keys(problems).length > 0) throw invalid(problems)
     /* 같은 상태로 다시 보내도 시각 · 사람을 새로 찍는다(덮어쓴다) — 이력에도 status 가 남는다 */
     const before = { status: row.status, resultNote: row.resultNote }

@@ -27,6 +27,7 @@
 | `docs/api/task-flow.md` | 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕. 선행 작업은 걷었다(Q63) |
 | `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
 | `docs/api/test.md` | 테스트 — 작업과 따로 두는 기능 · 시나리오 테스트(단계는 행동 ↔ 기대 결과 짝 · 상위 테스트 묶음 · 작업 · 안건 참조 태그) · 상태와 N일째 · 손쓸 테스트 신호 · 기준 바뀜. 1단계(AI 없이)의 계약, AI 는 테두리만 |
+| `docs/api/test-comment.md` | **테스트 조치 내역** — 테스트 상세의 상태 칸을 걷고 그 자리에 댓글 같은 조치 내역(`test_comment`), 실패 · 막힘 메모는 선택으로 (2026-11-05) |
 | `docs/api/history.md` | 변경 이력 — 작업 · 테스트 · 안건(2026-11-02)을 누가 언제 무엇을 바꿨나(요청 하나 = 한 줄, 칸마다 전 · 후). 상세에서 보인다. `task_log` 와 따로 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
@@ -222,9 +223,11 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | --- | --- | --- | --- | --- |
 | GET · POST | `/api/projects/{projectId}/tests` | 목록(`seq` 순, 며칠째 · 신호 · 기준 바뀜까지 서버가 셈) · 추가. `ccIds`(참조, 2026-11-05 `cc.md`) | `TestCase[]` · 201 `TestCase` | 구현 |
 | GET · PATCH · DELETE | `/api/tests/{testId}` | 읽기 · 고치기(단계는 목록째, `ccIds` 는 통째로) · 지우기(만든 사람 · 관리자, 하위 있으면 409) | `TestCase` · 204 | 구현 |
-| POST | `/api/tests/{testId}/status` | 상태 바꾸기(실패 · 막힘은 메모, 덮어씀) | `TestCase` | 구현 |
+| POST | `/api/tests/{testId}/status` | 상태 바꾸기(실패 · 막힘의 메모는 선택 — 2026-11-05, 덮어씀) | `TestCase` | 구현 |
 | PUT · DELETE | `/api/tests/{testId}/refs/{kind}/{refId}` | 작업 · 안건 태그 걸기 · 떼기(멱등). `kind` = `task` · `agenda`(2026-11-04 `thread` 에서) | `TestCase` · 204 | 구현 |
 | POST | `/api/tests/{testId}/basis` | "그대로 맞다" — 기준 바뀜을 지운다 | `TestCase` | 구현 |
+| GET · POST | `/api/tests/{testId}/comments` | 조치 내역 — 등록 순 · 남기기(작성자는 로그인한 사람) (`docs/api/test-comment.md`) | `TestComment[]` · 201 `TestComment` | 연결 |
+| PATCH · DELETE | `/api/test-comments/{testCommentId}` | 조치 내역 고치기(작성자만) · 지우기(작성자 · 관리자) | `TestComment` · 204 | 연결 |
 
 ### 변경 이력
 

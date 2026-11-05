@@ -909,7 +909,7 @@ export interface TestCase {
   statusChangedBy: string | null
   /** 오늘(KST) − statusChangedAt 의 날짜(KST). 오늘 바뀌었으면 0 */
   statusDays: number
-  /** fail · blocked 의 메모. 그 밖엔 '' */
+  /** fail · blocked 의 메모. 그 밖엔 ''. 화면은 이제 받지 않고 지난 글만 '지난 결과 메모' 로 보인다 */
   resultNote: string
   /** YYYY-MM-DD. 테스트 기간. 둘 다 null 이면 기간 미정 */
   start: string | null
@@ -924,6 +924,21 @@ export interface TestCase {
   changedAgendaIds: string[]
   createdBy: string | null
   createdAt: string
+  /** 조치 내역 수 — 상세의 '조치 N' 에 쓴다 */
+  commentCount: number
+}
+
+/** 테스트 조치 내역 (docs/api/test-comment.md) — GET /api/tests/{testId}/comments 는 오래된 것부터 낸다.
+    본문 · 작성자 규칙은 작업 댓글과 같다. 입력 · 고치기는 TaskCommentInput · TaskCommentPatch 와 같은 { body } */
+export interface TestComment {
+  id: string
+  testId: string
+  /** 남긴 사람. 멤버가 지워졌으면 null */
+  authorId: string | null
+  body: string
+  createdAt: string
+  /** 고친 적이 없으면 null */
+  editedAt: string | null
 }
 
 /** POST /api/projects/{projectId}/tests — status 는 받지 않는다(늘 draft 로 들어간다) */
@@ -960,7 +975,7 @@ export interface TestPatch {
 /** POST /api/tests/{testId}/status */
 export interface TestStatusInput {
   status: TestStatus
-  /** fail · blocked 면 필수(앞뒤 공백을 뗀 뒤 비면 안 된다). 그 밖엔 보내도 버린다 */
+  /** fail · blocked 에서만 resultNote 에 남는다(선택, 2026-11-05). 그 밖엔 보내도 버린다 */
   note?: string
 }
 

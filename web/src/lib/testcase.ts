@@ -186,14 +186,9 @@ export function testFieldProblems(input: TestFieldsInput): Record<string, string
   return detail
 }
 
-/** 상태 바꾸기의 검사 — 실패 · 막힘은 메모 필수 */
-export function testStatusProblem(
-  status: TestStatus,
-  note: string | undefined,
-): Record<string, string> {
+/** 상태 바꾸기의 검사 — 메모는 실패 · 막힘에서도 선택이다(까닭은 조치 내역에, docs/api/test-comment.md). 길이만 본다 */
+export function testStatusProblem(note: string | undefined): Record<string, string> {
   const detail: Record<string, string> = {}
-  if ((status === 'fail' || status === 'blocked') && !(note ?? '').trim())
-    detail.note = status === 'fail' ? '실패한 까닭을 적어 주세요.' : '막힌 까닭을 적어 주세요.'
   if ((note ?? '').length > TEST_TEXT_MAX)
     detail.note = `${TEST_TEXT_MAX.toLocaleString()}자까지 적을 수 있습니다.`
   return detail

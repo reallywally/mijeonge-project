@@ -51,11 +51,13 @@ const chip =
 
 <template>
   <section class="flex min-w-0 flex-col gap-2.5" data-test-refs>
-    <div class="flex items-baseline gap-2">
-      <span class="text-xs font-medium">태그</span>
-      <span class="text-xs text-muted-foreground">{{ refs.length }}건</span>
-      <span class="grow" />
-      <span class="truncate text-xs text-muted-foreground"
+    <!-- 상세 오른쪽 속성 패널(좁다)에 선다 — 설명은 제목 옆이 아니라 아래 줄에 -->
+    <div class="flex flex-col gap-0.5">
+      <div class="flex items-baseline gap-2">
+        <span class="text-xs font-medium">태그</span>
+        <span class="text-xs text-muted-foreground">{{ refs.length }}건</span>
+      </div>
+      <span class="text-xs text-muted-foreground"
         >이 테스트가 확인하는 작업 · 안건 — 없어도 됩니다</span
       >
     </div>

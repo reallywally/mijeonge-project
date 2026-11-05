@@ -23,6 +23,7 @@ from app.models import (
     Task,
     TaskComment,
     TestCase,
+    TestComment,
 )
 from app.services.auth import Actor
 
@@ -56,6 +57,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "minutes_id": ("MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
     "report_id": ("REPORT_NOT_FOUND", "리포트를 찾을 수 없습니다."),
     "test_id": ("TEST_NOT_FOUND", "테스트를 찾을 수 없습니다."),
+    "test_comment_id": ("TEST_COMMENT_NOT_FOUND", "조치 내역을 찾을 수 없습니다."),
 }
 
 
@@ -106,6 +108,13 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
                 select(Task.project_id)
                 .join(TaskComment, TaskComment.task_id == Task.id)
                 .where(TaskComment.id == value, Task.is_deleted.is_(False))
+            )
+        case "test_comment_id":
+            # 테스트는 지우면 행이 사라지고 조치 내역도 같이 간다 — 남은 줄은 늘 산 테스트의 것이다
+            stmt = (
+                select(TestCase.project_id)
+                .join(TestComment, TestComment.test_id == TestCase.id)
+                .where(TestComment.id == value)
             )
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")

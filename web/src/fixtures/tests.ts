@@ -50,6 +50,8 @@ function mk(
     partId: null,
     createdBy: owner,
     createdAt: CREATED,
+    /* 조치 내역은 목업에 넣지 않는다 — 빈 타래로 시작 */
+    commentCount: 0,
     basisSeq: null,
     ...rest,
   }

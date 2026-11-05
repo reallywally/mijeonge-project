@@ -1,11 +1,17 @@
-import { ApiError, id, request } from '@/api/client'
-import { forbidden, requireMe } from '@/api/mockAuth'
+import { ApiError, id, mockError, request } from '@/api/client'
+import { forbidden, mockDb, requireMe } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import { tasks } from '@/fixtures'
 import { taskComments } from '@/fixtures/comments'
-import { canDeleteComment, canEditComment } from '@/lib/access'
+import { canDeleteComment, canEditComment, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
-import type { TaskComment, TaskCommentInput, TaskCommentPatch } from '@/types/domain'
+import type {
+  Me,
+  TaskComment,
+  TaskCommentInput,
+  TaskCommentPatch,
+  TestComment,
+} from '@/types/domain'
 
 /* 목업 갈래 — 서버처럼 쓰기가 남아야 상세를 다시 열어도 같은 댓글이 보인다.
    픽스처 배열을 고치면 테스트끼리 물드니 복사본을 들고, 테스트는 resetMockComments 로 되돌린다 */
@@ -101,3 +107,93 @@ export const deleteTaskComment = (commentId: string) =>
   isMockMode()
     ? later(() => mock.remove(commentId))
     : request<void>('DELETE', `/comments/${id(commentId)}`)
+
+/* ── 테스트 조치 내역 (docs/api/test-comment.md) — 작업 댓글과 같은 규칙. 목업은 테스트와 같이 mockDb 에 둔다 ── */
+
+const testNotFound = () => mockError(404, 'TEST_NOT_FOUND', '테스트를 찾을 수 없습니다.')
+const testCommentNotFound = () =>
+  mockError(404, 'TEST_COMMENT_NOT_FOUND', '조치 내역을 찾을 수 없습니다.')
+
+const emptyTestBody = () =>
+  mockError(422, 'VALIDATION_ERROR', '조치 내역을 적어 주세요.', {
+    body: '조치 내역을 적어 주세요.',
+  })
+
+/** 못 보는 프로젝트 · 지운 테스트는 없는 것처럼 404 */
+function requireTestOf(me: Me, testId: string) {
+  const test = mockDb().tests.find((t) => t.id === testId)
+  if (!test || !canSeeProject(me, test.projectId)) throw testNotFound()
+  return test
+}
+
+function requireTestComment(me: Me, commentId: string) {
+  const row = mockDb().testComments.find((c) => c.id === commentId)
+  const test = row && mockDb().tests.find((t) => t.id === row.testId)
+  if (!row || !test || !canSeeProject(me, test.projectId)) throw testCommentNotFound()
+  return { row, test }
+}
+
+const testMock = {
+  list(testId: string) {
+    requireTestOf(requireMe(), testId)
+    return structuredClone(mockDb().testComments.filter((c) => c.testId === testId))
+  },
+  create(testId: string, input: TaskCommentInput) {
+    const me = requireMe()
+    const test = requireTestOf(me, testId)
+    const body = input.body.trim()
+    if (!body) throw emptyTestBody()
+    const db = mockDb()
+    db.testCommentSeq += 1
+    const row: TestComment = {
+      id: `mtc${db.testCommentSeq}`,
+      testId,
+      authorId: me.id,
+      body,
+      createdAt: nowIso(),
+      editedAt: null,
+    }
+    db.testComments.push(row)
+    test.commentCount += 1
+    return structuredClone(row)
+  },
+  patch(commentId: string, patch: TaskCommentPatch) {
+    const me = requireMe()
+    const body = patch.body.trim()
+    if (!body) throw emptyTestBody()
+    const { row } = requireTestComment(me, commentId)
+    if (!canEditComment(me, row)) throw forbidden()
+    row.body = body
+    row.editedAt = nowIso()
+    return structuredClone(row)
+  },
+  remove(commentId: string) {
+    const me = requireMe()
+    const { row, test } = requireTestComment(me, commentId)
+    if (!canDeleteComment(me, row, test.projectId)) throw forbidden()
+    const db = mockDb()
+    db.testComments = db.testComments.filter((c) => c.id !== commentId)
+    test.commentCount = Math.max(0, test.commentCount - 1)
+  },
+}
+
+/** 오래된 것부터 */
+export const fetchTestComments = (testId: string) =>
+  isMockMode()
+    ? later(() => testMock.list(testId))
+    : request<TestComment[]>('GET', `/tests/${id(testId)}/comments`)
+
+export const createTestComment = (testId: string, input: TaskCommentInput) =>
+  isMockMode()
+    ? later(() => testMock.create(testId, input))
+    : request<TestComment>('POST', `/tests/${id(testId)}/comments`, input)
+
+export const patchTestComment = (commentId: string, patch: TaskCommentPatch) =>
+  isMockMode()
+    ? later(() => testMock.patch(commentId, patch))
+    : request<TestComment>('PATCH', `/test-comments/${id(commentId)}`, patch)
+
+export const deleteTestComment = (commentId: string) =>
+  isMockMode()
+    ? later(() => testMock.remove(commentId))
+    : request<void>('DELETE', `/test-comments/${id(commentId)}`)
