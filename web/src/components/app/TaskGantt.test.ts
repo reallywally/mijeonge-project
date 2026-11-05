@@ -79,11 +79,17 @@ describe('간트차트', () => {
     const row = w.get('.gantt_grid_data [data-task-id="k18"]')
     expect(row.get('.tg-badge').text()).toBe('막힘')
     expect(row.get('.tg-badge').classes()).toContain('tg-badge-blocked')
-    expect(row.get('.tg-avatar').text()).toBe('정')
+    /* 담당자는 첫 글자가 아니라 이름 전체 — 가리키면 같은 이름 */
+    const owner = row.get('.tg-owner')
+    expect(owner.text()).toBe(
+      useDataStore().memberName(useDataStore().allTasks.find((t) => t.id === 'k18')!.ownerId),
+    )
+    expect(owner.text().length).toBeGreaterThan(1)
+    expect(owner.attributes('title')).toBe(owner.text())
 
-    /* 담당자가 없는 줄은 빈 동그라미다 */
-    expect(w.get('.gantt_grid_data [data-task-id="k5"] .tg-avatar').classes()).toContain(
-      'tg-avatar-none',
+    /* 담당자가 없는 줄은 '–' 다 */
+    expect(w.get('.gantt_grid_data [data-task-id="k5"] .tg-owner').classes()).toContain(
+      'tg-owner-none',
     )
   })
 
@@ -104,7 +110,7 @@ describe('간트차트', () => {
     const chart = spy.mock.results[0].value as GanttStatic
     const today = new Date(2026, 8, 22)
     const day = chart.posFromDate(new Date(2026, 8, 23)) - chart.posFromDate(today)
-    /* 보이는 타임라인 = 1200 - 그리드 562. 오늘 칸의 가운데가 그 가운데에 선다 */
+    /* 보이는 타임라인 = 1200 - 그리드 528. 오늘 칸의 가운데가 그 가운데에 선다 */
     const visible = 1200 - chart.config.grid_width
     expect(chart.getScrollState().x).toBe(chart.posFromDate(today) + day / 2 - visible / 2)
     spy.mockRestore()

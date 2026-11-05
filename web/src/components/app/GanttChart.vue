@@ -54,10 +54,11 @@ function statusCell(task: GanttTask) {
   return `<span class="tg-badge tg-badge-${item.status}"><i class="tg-dot"></i>${escapeHTML(item.statusLabel)}</span>`
 }
 
+/* 담당자는 이름 전체를 적는다 — 첫 글자만으로는 같은 성(김 · 이)이 구분되지 않는다. 넘치면 말줄임, 가리키면 전체 */
 function ownerCell(task: GanttTask) {
   const name = asItem(task).ownerName
-  if (!name) return '<span class="tg-avatar tg-avatar-none">–</span>'
-  return `<span class="tg-avatar" title="${escapeHTML(name)}">${escapeHTML(name.charAt(0))}</span>`
+  if (!name) return '<span class="tg-owner tg-owner-none">–</span>'
+  return `<span class="tg-owner" title="${escapeHTML(name)}">${escapeHTML(name)}</span>`
 }
 
 /* 주말 회색 띠와 오늘 세로선. dhtmlx v10 Community 에는 marker 플러그인이 없어
@@ -131,7 +132,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.config.scale_offset_minimal = false
   g.config.row_height = 34
   g.config.scale_height = 46
-  g.config.grid_width = 562
+  g.config.grid_width = 528
   g.config.open_tree_initially = true
   /* 진척도 · 화살표는 모델에 없다 — 끌어서 만들 수 없게 막는다 */
   g.config.drag_links = false
@@ -150,7 +151,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
       template: titleCell,
     },
     { name: 'status', label: '상태', width: 104, template: statusCell },
-    { name: 'owner', label: '담당자', width: 64, align: 'center', template: ownerCell },
+    { name: 'owner', label: '담당자', width: 84, align: 'center', template: ownerCell },
     { name: 'add', label: '', width: 44 },
   ]
   applyScale(g)
@@ -469,21 +470,15 @@ function showToday() {
   color: var(--muted-foreground);
 }
 
-.tg-root .tg-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 9999px;
-  background: var(--brand-soft);
-  color: var(--primary);
-  font-size: 10.5px;
-  font-weight: 600;
+.tg-root .tg-owner {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tg-root .tg-avatar-none {
-  background: transparent;
+.tg-root .tg-owner-none {
   color: var(--muted-foreground);
 }
 
