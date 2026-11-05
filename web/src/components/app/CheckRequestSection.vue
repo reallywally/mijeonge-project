@@ -66,7 +66,7 @@ const decisionText = (b: CheckBatch) => firstLine(b.decision) || '(결정내용 
   >
     <div class="flex items-center gap-2">
       <span class="text-xs font-medium">확인 요청</span>
-      <span class="text-xs text-muted-foreground">결정을 연결 작업 담당자에게 알립니다</span>
+      <span class="text-xs text-muted-foreground">결정을 연결 작업 담당자와 참조에게 알립니다</span>
       <Loader2
         v-if="checks.loading"
         class="size-3 animate-spin text-muted-foreground"

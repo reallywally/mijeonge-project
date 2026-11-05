@@ -11,7 +11,7 @@ import { useAgendaStore } from '@/stores/agenda'
 import type { AgendaState } from '@/types/domain'
 
 /* 안건 추가 — 안건 상세와 같은 모양의 팝업이다. 왼쪽 제목 · 설명 · 결정내용, 오른쪽 속성 패널(상태 · 결정 기한 ·
-   담당자 · 파트). 상세는 고치는 즉시 들어가지만 여기는 아직 안건이 없으니 적어 두었다가 '만들기'로 한꺼번에 넣는다.
+   담당자 · 참조 · 파트). 상세는 고치는 즉시 들어가지만 여기는 아직 안건이 없으니 적어 두었다가 '만들기'로 한꺼번에 넣는다.
    만들면 바로 그 안건의 상세로 넘어간다.
    작업 상세 · 추가에서도 띄운다 — 찾던 제목을 채워 열고(initialTitle), 만들면 그 작업에 건다(부모 몫).
    그때는 linkNote 로 어디에 걸리는지 알리고, 한 건만 만들므로 '계속 추가' 를 숨긴다. */
@@ -29,6 +29,7 @@ const state = ref<AgendaState>('queued')
 /* 결정 기한은 'YYYY-MM-DD' 또는 빈 문자열(속성 패널과 같은 모양). 파트는 안 고르면 공통 */
 const dueDate = ref('')
 const ownerId = ref<string | null>(null)
+const ccIds = ref<string[]>([])
 const partId = ref<string | null>(null)
 const keepOpen = ref(false)
 const saving = ref(false)
@@ -43,6 +44,7 @@ function resetForm() {
   state.value = 'queued'
   dueDate.value = ''
   ownerId.value = null
+  ccIds.value = []
   partId.value = null
 }
 
@@ -68,6 +70,7 @@ async function submit() {
     state: state.value,
     dueDate: dueDate.value || null,
     ownerId: ownerId.value,
+    ccIds: ccIds.value,
     partId: partId.value,
   })
   saving.value = false
@@ -131,6 +134,7 @@ function onKeydown(e: KeyboardEvent) {
           v-model:state="state"
           v-model:due-date="dueDate"
           v-model:owner-id="ownerId"
+          v-model:cc-ids="ccIds"
           v-model:part-id="partId"
         />
       </div>

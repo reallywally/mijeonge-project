@@ -102,6 +102,13 @@ function setOwner(value: string | null) {
   if (t && canEdit.value && value !== t.ownerId) agendaStore.updateAgenda(t.id, { ownerId: value })
 }
 
+/* 참조는 통째로 갈아끼운다 — 같은 사람 · 같은 순서면 보내지 않는다 */
+function setCc(value: string[]) {
+  const t = agenda.value
+  if (t && canEdit.value && value.join() !== t.ccIds.join())
+    agendaStore.updateAgenda(t.id, { ccIds: value })
+}
+
 function setPart(value: string | null) {
   const t = agenda.value
   if (t && canEdit.value && value !== t.partId) agendaStore.updateAgenda(t.id, { partId: value })
@@ -179,12 +186,14 @@ async function remove() {
           :state="agenda.state"
           :due-date="agenda.dueDate ?? ''"
           :owner-id="agenda.ownerId"
+          :cc-ids="agenda.ccIds"
           :part-id="agenda.partId"
           :overdue="overdue"
           :readonly="!canEdit"
           @update:state="setState"
           @update:due-date="setDueDate"
           @update:owner-id="setOwner"
+          @update:cc-ids="setCc"
           @update:part-id="setPart"
         >
           <div class="h-px bg-border" />

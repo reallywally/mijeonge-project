@@ -46,6 +46,7 @@ function mk(
     start: null,
     due: null,
     ownerId: owner,
+    ccIds: [],
     partId: null,
     createdBy: owner,
     createdAt: CREATED,
@@ -61,6 +62,7 @@ export const testCases: MockTestCase[] = [
   }),
   mk(2, '올바른 계정으로 로그인', 'u2', {
     parentId: 'tc1',
+    ccIds: ['u3'],
     status: 'pass',
     statusChangedAt: noon('2026-10-10'),
     start: '2026-10-08',

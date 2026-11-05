@@ -145,6 +145,8 @@ export interface Agenda {
   decision: string
   state: AgendaState
   ownerId: string | null
+  /** 참조 — 알아야 하는 사람(권한 · 리스크와 무관). 고른 순서, 빈 값은 [] */
+  ccIds: string[]
   /** 등록한 사람 — 서버가 요청한 사람으로 찍는다. 기록이 없는 옛 안건은 null */
   creatorId: string | null
   /** 결정 기한 YYYY-MM-DD (Task.start · due 와 같은 형식) */
@@ -180,6 +182,8 @@ export interface AgendaInput {
   /** 안 보내면 queued */
   state?: AgendaState
   ownerId?: string | null
+  /** 안 보내면 [] */
+  ccIds?: string[]
   dueDate?: string | null
   /** 안 보내면 공통(null) */
   partId?: string | null
@@ -192,6 +196,8 @@ export interface AgendaPatch {
   decision?: string
   state?: AgendaState
   ownerId?: string | null
+  /** 통째로 갈아끼운다 */
+  ccIds?: string[]
   dueDate?: string | null
   /** null 로 공통. 보관 파트는 새로 달 수 없다(이미 달린 것을 두는 것은 된다) */
   partId?: string | null
@@ -909,6 +915,8 @@ export interface TestCase {
   start: string | null
   due: string | null
   ownerId: string | null
+  /** 참조 — 알아야 하는 사람(권한과 무관). 고른 순서, 빈 값은 [] */
+  ccIds: string[]
   partId: string | null
   /** 규칙이 붙인 신호. 하위가 있는 테스트(묶음)는 늘 [] */
   signals: TestSignal[]
@@ -929,6 +937,8 @@ export interface TestInput {
   start?: string | null
   due?: string | null
   ownerId?: string | null
+  /** 안 보내면 [] */
+  ccIds?: string[]
   /** 안 보내면 상위 테스트의 파트를 따른다(작업과 같다) */
   partId?: string | null
 }
@@ -942,6 +952,8 @@ export interface TestPatch {
   start?: string | null
   due?: string | null
   ownerId?: string | null
+  /** 통째로 갈아끼운다 */
+  ccIds?: string[]
   partId?: string | null
 }
 

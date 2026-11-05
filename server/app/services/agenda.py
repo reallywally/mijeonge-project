@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Agenda, new_id
+from app.models import Agenda, AgendaCc, new_id
 from app.schemas.agenda import AgendaCreate, AgendaOut, AgendaPatch
 from app.services import access
 from app.services import history as history_service
@@ -34,6 +34,7 @@ def to_agenda(row: Agenda) -> AgendaOut:
         decision=row.decision,
         state=row.state,
         owner_id=row.owner_id,
+        cc_ids=cc_ids(row),
         creator_id=row.creator_id,
         due_date=row.due_date,
         part_id=row.part_id,
@@ -42,6 +43,18 @@ def to_agenda(row: Agenda) -> AgendaOut:
         decision_rev=row.decision_rev,
         minutes_id=row.minutes_id,
     )
+
+
+def cc_ids(agenda: Agenda) -> list[str]:
+    return [cc.member_id for cc in agenda.cc]
+
+
+def cc_rows(project_id: str, member_ids: list[str]) -> list[AgendaCc]:
+    """검사를 마친 참조 → 행. 고른 순서가 sort_order 다."""
+    return [
+        AgendaCc(project_id=project_id, member_id=member_id, sort_order=order)
+        for order, member_id in enumerate(member_ids)
+    ]
 
 
 async def load_agenda(session: AsyncSession, agenda_id: str) -> Agenda:
@@ -112,6 +125,7 @@ def history_fields(agenda: Agenda) -> dict[str, object]:
         "decision": agenda.decision,
         "state": agenda.state,
         "ownerId": agenda.owner_id,
+        "ccIds": cc_ids(agenda),
         "partId": agenda.part_id,
         "dueDate": agenda.due_date,
     }
@@ -135,6 +149,7 @@ def new_agenda(
     creator_id: str | None,
     created_at: datetime,
     minutes_id: str | None = None,
+    cc: list[str] | None = None,
 ) -> Agenda:
     """새 안건 한 줄 — 등록 · 회의록 반영이 같이 쓴다. 결정 시각 · 판은 `apply_fields` 규칙으로.
 
@@ -156,6 +171,8 @@ def new_agenda(
         part_id=part_id,
         minutes_id=minutes_id,
         created_at=created_at,
+        # 비어 있어도 채워 둔다 — 새 객체의 컬렉션을 읽다 지연 로드를 부르지 않게
+        cc=cc_rows(project_id, cc or []),
     )
     apply_fields(
         agenda, Fields(description=description, decision=decision, state=state), created_at
@@ -169,6 +186,7 @@ async def create_agenda(
     await project_service.load_project(session, project_id)
     await guard_owner(session, project_id, payload.owner_id, "AGENDA_OWNER_NOT_FOUND")
     await part_service.guard_part(session, project_id, payload.part_id)
+    cc = await access.guard_cc(session, project_id, payload.cc_ids, "AGENDA_CC_NOT_FOUND")
     agenda = new_agenda(
         project_id,
         payload.title,
@@ -180,6 +198,7 @@ async def create_agenda(
         part_id=payload.part_id,
         creator_id=actor_id,
         created_at=now(),
+        cc=cc,
     )
     session.add(agenda)
     # 이력의 복합 FK 가 안건을 보니 안건이 먼저 들어가야 한다
@@ -189,6 +208,20 @@ async def create_agenda(
     )
     await session.commit()
     return to_agenda(agenda)
+
+
+async def _replace_cc(session: AsyncSession, agenda: Agenda, member_ids: list[str]) -> None:
+    """통째로 갈아끼운다. 같은 사람 · 같은 순서면 손대지 않는다(이력도 안 남는다)."""
+    keep = cc_ids(agenda)
+    unique = await access.guard_cc(
+        session, agenda.project_id, member_ids, "AGENDA_CC_NOT_FOUND", keep=keep
+    )
+    if unique == keep:
+        return
+    # pk 가 (agenda_id, member_id) 라 옛 줄을 먼저 지워야 같은 사람을 다시 넣을 때 안 부딪힌다
+    agenda.cc = []
+    await session.flush()
+    agenda.cc = cc_rows(agenda.project_id, unique)
 
 
 def _guard_edit(scope: Scope, agenda: Agenda) -> None:
@@ -203,7 +236,8 @@ async def patch_agenda(
     # 고치기 전 안건으로 본다 — 담당자를 남에게 넘긴 뒤의 모양으로 보지 않는다
     _guard_edit(scope, agenda)
     before = history_fields(agenda)
-    # 보낸 것만 바꾼다. ownerId · dueDate · partId 의 null 은 '비우기'다
+    # 보낸 것만 바꾼다. ownerId · dueDate · partId 의 null 은 '비우기'다.
+    # ccIds 의 null 은 스키마가 422 로 막으니 None 이면 안 보낸 것이다
     sent = payload.model_fields_set
     if "owner_id" in sent:
         # 이미 걸려 있던 담당자를 그대로 두는 수정은 막지 않는다
@@ -219,6 +253,8 @@ async def patch_agenda(
         if payload.part_id != agenda.part_id:
             await part_service.guard_part(session, agenda.project_id, payload.part_id)
         agenda.part_id = payload.part_id
+    if payload.cc_ids is not None:
+        await _replace_cc(session, agenda, payload.cc_ids)
     at = now()
     apply_fields(
         agenda,

@@ -47,6 +47,12 @@ test_case
   created_by → member · created_at
 index (project_id, seq)
 
+test_cc (2026-11-05, 리비전 0033_cc — docs/api/cc.md)
+  test_id · project_id  FK (test_id, project_id) → test_case(id, project_id) cascade
+  member_id → member
+  sort_order            -- 고른 순서
+  pk (test_id, member_id)
+
 test_ref
   test_id · project_id
   task_id    FK (task_id, project_id)   → task(id, project_id) cascade     null 가능
@@ -101,6 +107,8 @@ export interface TestCase {
   start: string | null
   due: string | null
   ownerId: string | null
+  /** 참조 — 알아야 하는 사람(권한과 무관). 고른 순서, 빈 값은 [] (2026-11-05, cc.md) */
+  ccIds: string[]
   partId: string | null
   /** 규칙이 붙인 신호. 하위가 있는 테스트(묶음)는 늘 [] */
   signals: TestSignal[]
@@ -128,6 +136,8 @@ export interface TestInput {
   start?: string | null
   due?: string | null
   ownerId?: string | null
+  /** 안 보내면 [] (2026-11-05) */
+  ccIds?: string[]
   /** 안 보내면 상위 테스트의 파트를 따른다(작업과 같다) */
   partId?: string | null
 }
@@ -141,6 +151,8 @@ export interface TestPatch {
   start?: string | null
   due?: string | null
   ownerId?: string | null
+  /** 통째로 갈아끼운다. null 422 (2026-11-05) */
+  ccIds?: string[]
   partId?: string | null
 }
 
@@ -157,6 +169,7 @@ export interface TestStatusInput {
 - `start` · `due` — 둘 다 있으면 `start ≤ due`. 아니면 422
 - 상위 — 없거나 다른 프로젝트면 400 `TEST_PARENT_NOT_FOUND`, 자기 자신 400 `TEST_PARENT_SELF`, 자손 400 `TEST_PARENT_DESCENDANT`
 - 담당자 · 파트 — 작업과 같은 검사 · 같은 `code`(`TASK_OWNER_NOT_FOUND` 자리에 `TEST_OWNER_NOT_FOUND`, 파트는 작업과 같은 것)
+- 참조(`ccIds`) — **새로 더한** id 가 그 프로젝트의 활성 멤버가 아니면 400 `TEST_CC_NOT_FOUND`(`detail` `{ "ccIds": "<id>" }`). 겹치면 앞의 하나만. 이미 걸린 사람은 그대로 둘 수 있다(Q68). `cc.md`
 - 상태 — 하위가 있는 테스트는 400 `TEST_GROUP_STATUS`(묶음은 직접 돌리지 않는다). `fail` · `blocked` 가 아니면 `resultNote` 를 비운다. **같은 상태로 다시 보내도** `statusChangedAt` · `By` 를 새로 찍는다(덮어쓴다)
 - 태그 — 같은 프로젝트의 작업 · 안건만(아니면 404 `TASK_NOT_FOUND` · `AGENDA_NOT_FOUND`), 20개까지 400 `TEST_REF_LIMIT`
 - 지우기 — 하위가 있으면 409 `TEST_HAS_CHILDREN`, 만든 사람 · 관리자가 아니면 403 `FORBIDDEN`
@@ -183,7 +196,7 @@ export interface TestStatusInput {
 - **닿는 안건** = 직접 태그한 안건 + 태그한 작업에 걸린 안건(`task_agenda_link`)
 - **결정 변경 줄**(2026-11-04) = 닿는 안건의 `agenda_history` 줄 중 `decision` 칸이 있거나 `state` 칸의 `to` 가 `decided` 인 것
 - `basis_seq` = 닿는 안건들의 결정 변경 줄 `seq` 가장 큰 값(닿는 안건이 없거나 그런 줄이 없으면 null). ~~Entry `seq`~~
-- **새로 찍는 때** — 만들 때 · `PATCH`(무엇이든 바꾸면) · 태그를 걸거나 뗄 때 · `POST .../basis`("그대로 맞다")
+- **새로 찍는 때** — 만들 때 · `PATCH`(무엇이든 바꾸면 — **`ccIds` 만 보낸 PATCH 는 빼고**, 2026-11-05 `cc.md`) · 태그를 걸거나 뗄 때 · `POST .../basis`("그대로 맞다")
 - `changedAgendaIds` = 결정 변경 줄 중 `seq > coalesce(basis_seq, 0)` 인 것이 있는 닿는 안건 — 그런 줄의 첫 `seq` 순(처음 바뀐 순). ~~`changedEntryIds` = Entry 중 `kind ∈ {decide, change}` …~~
 - 알고 두는 것 — **태그한 작업에 안건이 새로 걸리면** 그 안건의 옛 결정도 `seq` 가 크면 기준 바뀜으로 뜬다. 사람이 [그대로 맞다] 로 지운다. 결정이 바뀐 것을 놓치는 것보다 낫다
 
@@ -211,6 +224,7 @@ export interface TestStatusInput {
 | 404 | `TEST_NOT_FOUND` | 경로의 테스트가 없거나 못 보는 프로젝트 |
 | 400 | `TEST_PARENT_NOT_FOUND` · `TEST_PARENT_SELF` · `TEST_PARENT_DESCENDANT` | 상위 테스트가 없거나 · 다른 프로젝트 · 자기 · 자손 |
 | 400 | `TEST_OWNER_NOT_FOUND` | 담당자가 그 프로젝트의 활성 멤버가 아님 |
+| 400 | `TEST_CC_NOT_FOUND` | 새로 더한 참조가 그 프로젝트의 활성 멤버가 아님 (2026-11-05, `cc.md`) |
 | 400 | `TEST_GROUP_STATUS` | 하위가 있는 테스트의 상태를 바꾸려 함 |
 | 400 | `TEST_REF_LIMIT` | 태그가 20개를 넘음 |
 | 409 | `TEST_HAS_CHILDREN` | 하위가 있는 테스트를 지우려 함 |
@@ -229,6 +243,8 @@ p1 에 테스트 묶음 둘과 하위 몇 개를 둔다 — '지금' 의 카드 
 | `HW-T6` 개발자 계정 일괄 생성 | T5 | blocked · 10-02 | — | 작업 `k21` | `longBlocked` |
 | `HW-T7` 권한 없는 계정 접근 차단 | T5 | fail · 10-05 | 10-14 ~ 10-20 | — | `failedIdle` |
 | `HW-T8` 계정 목록 내려받기 | T5 | testing · 10-14 | — | — | `[]` (1일째) |
+
+참조(`ccIds`, 2026-11-05) — `HW-T2` 만 `['u3']`, 나머지는 `[]` (`cc.md` '시드 · 목업').
 
 시드가 고를 작업 · 안건 · Entry 는 서버가 정하고 아래 '구현에서 메운 것' 에 적는다. 목업(`web/src/fixtures`)도 같은 줄을 둔다.
 

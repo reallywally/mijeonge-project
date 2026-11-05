@@ -146,6 +146,37 @@ describe('담당자 거르기 (목업 갈래 · API.md Q30)', () => {
     expect(await agendas.addAgenda({ title: '새 안건', ownerId: 'u3' })).not.toBeNull()
   })
 
+  it('참조도 프로젝트의 활성 멤버만 — AGENDA_CC_NOT_FOUND, 겹친 id 는 앞의 하나만', async () => {
+    await signedIn('u2@inno-ax.com')
+    const agendas = useAgendaStore()
+    expect(await agendas.addAgenda({ title: '새 안건', ccIds: ['u1', 'u5'] })).toBeNull()
+    expect(codeOfLastToast()).toMatchObject({
+      code: 'AGENDA_CC_NOT_FOUND',
+      status: 400,
+      detail: { ccIds: 'u5' },
+    })
+    expect(agendas.updateAgenda('t9', { ccIds: ['u0'] })).toBe(false)
+    expect(codeOfLastToast()).toMatchObject({ code: 'AGENDA_CC_NOT_FOUND' })
+
+    const id = await agendas.addAgenda({ title: '새 안건', ccIds: ['u3', 'u1', 'u3'] })
+    expect(agendas.agendas.find((t) => t.id === id)!.ccIds).toEqual(['u3', 'u1'])
+    expect(agendas.updateAgenda('t9', { ccIds: ['u4', 'u4'] })).toBe(true)
+    expect(agendas.agendas.find((t) => t.id === 't9')!.ccIds).toEqual(['u4'])
+  })
+
+  it('이미 걸려 있던 참조는 빠진 사람이어도 그대로 둘 수 있다 (Q68)', async () => {
+    const data = await signedIn('u2@inno-ax.com')
+    const agendas = useAgendaStore()
+    data.allAgendas.find((t) => t.id === 't9')!.ccIds = ['u5']
+    vi.mocked(toastError).mockClear()
+    expect(agendas.updateAgenda('t9', { ccIds: ['u5', 'u4'] })).toBe(true)
+    expect(toastError).not.toHaveBeenCalled()
+    expect(agendas.agendas.find((t) => t.id === 't9')!.ccIds).toEqual(['u5', 'u4'])
+    /* 다른 안건에 새로 더하면 거절 */
+    expect(agendas.updateAgenda('t9', { ccIds: ['u4'] })).toBe(true)
+    expect(agendas.updateAgenda('t9', { ccIds: ['u4', 'u5'] })).toBe(false)
+  })
+
   it('이미 걸려 있던 담당자를 그대로 두는 것은 막지 않는다', async () => {
     const data = await signedIn('u1@inno-ax.com')
     const agenda = data.allAgendas.find((t) => t.projectId === 'p1' && t.ownerId === 'u3')!

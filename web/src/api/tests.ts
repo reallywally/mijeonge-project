@@ -7,6 +7,7 @@ import type { MockTestCase } from '@/fixtures'
 import { canDeleteComment, canSeeProject } from '@/lib/access'
 import { kstToday, nowIso } from '@/lib/date'
 import { change, diffChanges } from '@/lib/history'
+import { uniqueIds } from '@/lib/member'
 import { DEFAULT_RISK_SETTINGS } from '@/lib/risk'
 import {
   TEST_REF_MAX,
@@ -173,6 +174,22 @@ function checkOwner(projectId: string, ownerId: string | null | undefined, kept:
     })
 }
 
+/** 참조 — 새로 더하는 사람은 그 프로젝트의 활성 멤버여야 한다. 이미 걸린 사람(kept)은 그대로 둘 수 있다(API.md Q68).
+    겹친 것은 앞의 하나만 남겨 돌려준다 */
+function checkCc(projectId: string, ccIds: string[], kept: string[]): string[] {
+  const db = mockDb()
+  const ids = uniqueIds(ccIds)
+  const bad = ids.find(
+    (ccId) =>
+      !kept.includes(ccId) &&
+      (!db.members.some((m) => m.id === ccId && m.active) ||
+        !db.grants.some((g) => g.projectId === projectId && g.memberId === ccId)),
+  )
+  if (bad !== undefined)
+    throw mockError(400, 'TEST_CC_NOT_FOUND', '참조할 사람을 찾을 수 없습니다.', { ccIds: bad })
+  return ids
+}
+
 /** 파트 — 작업과 같은 검사 · 같은 code */
 function checkPart(projectId: string, partId: string | null | undefined, kept: string | null) {
   if (!partId || partId === kept) return
@@ -230,6 +247,7 @@ const mock = {
     const parentId = input.parentId ?? null
     if (parentId !== null) checkParent(projectId, parentId, null)
     checkOwner(projectId, input.ownerId, null)
+    const ccIds = checkCc(projectId, input.ccIds ?? [], [])
     const parent = parentId ? tests.find((t) => t.id === parentId) : undefined
     const partId = input.partId !== undefined ? input.partId : (parent?.partId ?? null)
     checkPart(projectId, partId, null)
@@ -257,6 +275,7 @@ const mock = {
       start: input.start ?? null,
       due: input.due ?? null,
       ownerId: input.ownerId ?? null,
+      ccIds,
       partId,
       createdBy: me.id,
       createdAt: at,
@@ -278,9 +297,11 @@ const mock = {
     if (patch.parentId) checkParent(row.projectId, patch.parentId, row.id)
     if (patch.ownerId !== undefined) checkOwner(row.projectId, patch.ownerId, row.ownerId)
     if (patch.partId !== undefined) checkPart(row.projectId, patch.partId, row.partId)
+    const ccIds =
+      patch.ccIds === undefined ? undefined : checkCc(row.projectId, patch.ccIds, row.ccIds)
 
     /* 이력 — 보낸 칸 가운데 값이 바뀐 것만 */
-    const changes = diffChanges(row, { ...patch, title: trimmed(patch.title) }, 'test')
+    const changes = diffChanges(row, { ...patch, title: trimmed(patch.title), ccIds }, 'test')
 
     if (patch.title !== undefined) row.title = trimmed(patch.title)!
     if (patch.parentId !== undefined) row.parentId = patch.parentId
@@ -289,9 +310,11 @@ const mock = {
     if (patch.start !== undefined) row.start = patch.start
     if (patch.due !== undefined) row.due = patch.due
     if (patch.ownerId !== undefined) row.ownerId = patch.ownerId
+    if (ccIds !== undefined) row.ccIds = ccIds
     if (patch.partId !== undefined) row.partId = patch.partId
-    /* 키를 하나라도 보내면 기준을 새로 찍는다(값이 같아도). 빈 {} 는 그대로 */
-    if (Object.keys(patch).length > 0) row.basisSeq = latestSeq(row.refs)
+    /* 키를 하나라도 보내면 기준을 새로 찍는다(값이 같아도). 빈 {} 와 참조만 보낸 것은 그대로 —
+       참조를 고친 것은 테스트를 다시 본 것이 아니다(서버와 같게, docs/api/cc.md) */
+    if (Object.keys(patch).some((k) => k !== 'ccIds')) row.basisSeq = latestSeq(row.refs)
     recordMockHistory('test', row.id, changes)
     return toCase(row)
   },

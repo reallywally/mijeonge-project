@@ -10,6 +10,7 @@ import AgendaCreateDialog from '@/components/app/AgendaCreateDialog.vue'
 import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -38,13 +39,15 @@ const partStore = usePartStore()
 const route = useRoute()
 const router = useRouter()
 
-/* 조회 조건 — 제목 · 파트 · 담당자 · 상태. 작업 목록과 같은 자리, 같은 순서다.
+/* 조회 조건 — 제목 · 파트 · 담당자 · 나를 참조 · 상태. 작업 목록과 같은 자리, 같은 순서다.
    파트 거르기는 [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다 */
 const titleDraft = ref('')
 const query = ref('')
 const stateFilter = ref<'all' | 'queued' | 'open' | 'decided' | 'overdue'>('all')
 const ownerFilter = ref<string>('all')
 const partFilter = ref<string>('all')
+/* 켜면 내가 참조(ccIds)에 있는 안건만 */
+const ccMine = ref(false)
 const page = ref(1)
 const perPage = 10
 
@@ -76,6 +79,10 @@ function matchesOwner(row: AgendaRow) {
   return row.agenda.ownerId === ownerFilter.value
 }
 
+const matchesCc = (row: AgendaRow) =>
+  !ccMine.value ||
+  (data.currentMemberId !== null && row.agenda.ccIds.includes(data.currentMemberId))
+
 function matchesPart(row: AgendaRow) {
   if (partFilter.value === 'all') return true
   if (partFilter.value === 'common') return row.agenda.partId === null
@@ -85,7 +92,11 @@ function matchesPart(row: AgendaRow) {
 const filtered = computed(() =>
   agendaStore.visibleRows.filter(
     (r) =>
-      r.agenda.title.includes(query.value) && matchesState(r) && matchesOwner(r) && matchesPart(r),
+      r.agenda.title.includes(query.value) &&
+      matchesState(r) &&
+      matchesOwner(r) &&
+      matchesCc(r) &&
+      matchesPart(r),
   ),
 )
 
@@ -125,6 +136,7 @@ function resetAll() {
   query.value = ''
   stateFilter.value = 'all'
   ownerFilter.value = 'all'
+  ccMine.value = false
   partFilter.value = 'all'
   resetPage()
 }
@@ -269,6 +281,15 @@ function onCreated(id: string) {
                 <SelectItem value="none">미정</SelectItem>
               </SelectContent>
             </Select>
+            <label class="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm">
+              <Checkbox
+                :model-value="ccMine"
+                aria-label="나를 참조"
+                data-cc-mine
+                @update:model-value="(v) => ((ccMine = v === true), resetPage())"
+              />
+              나를 참조
+            </label>
             <Button class="shrink-0" @click="search">
               <Search class="size-4" />
               조회
@@ -349,6 +370,13 @@ function onCreated(id: string) {
                           {{ row.agenda.title }}
                         </button>
                         <PartChip :part-id="row.agenda.partId" />
+                        <span
+                          v-if="row.agenda.ccIds.length > 0"
+                          class="shrink-0 text-xs text-muted-foreground"
+                          :title="row.agenda.ccIds.map((id) => data.memberName(id)).join(', ')"
+                          data-cc-count
+                          >참조 {{ row.agenda.ccIds.length }}</span
+                        >
                       </div>
                       <!-- 결정내용 첫 줄 — 목록에서 무엇으로 정했는지 바로 보이게 -->
                       <span

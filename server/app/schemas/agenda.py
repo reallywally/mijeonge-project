@@ -22,6 +22,8 @@ class AgendaOut(Schema):
     decision: str
     state: str
     owner_id: str | None
+    # 참조 — 알아야 하는 사람. 고른 순서, 빈 값은 [] (docs/api/cc.md)
+    cc_ids: list[str]
     # 등록한 사람. 기록이 없던 지난 안건은 null — 수정 · 삭제 권한의 근거다
     creator_id: str | None
     due_date: date | None
@@ -44,6 +46,8 @@ class AgendaCreate(Schema):
     decision: str = ""
     state: AgendaState = "queued"
     owner_id: str | None = None
+    # 겹치면 앞의 하나만 남긴다 — 서비스가 본다
+    cc_ids: list[str] = []
     due_date: date | None = None
     # 안 보내면 공통(null)이다 — 작업과 달리 따를 상위가 없다
     part_id: str | None = None
@@ -58,16 +62,19 @@ class AgendaPatch(Schema):
     state: AgendaState | None = None
     # null 로 보내면 비운다
     owner_id: str | None = None
+    # 통째로 갈아끼운다. 비우기는 [] 다
+    cc_ids: list[str] | None = None
     # null 로 보내면 비운다
     due_date: date | None = None
     # null 로 보내면 공통
     part_id: str | None = None
 
-    @field_validator("title", "description", "decision", "state")
+    @field_validator("title", "description", "decision", "state", "cc_ids")
     @classmethod
     def _not_null(cls, value: object) -> object:
         # 기본값(None)에는 안 돈다 — 화면이 명시적으로 null 을 보낸 경우만 걸린다.
-        # 이 넷은 빈 값이 '' 이거나 비울 수 없어 null 을 '비우기'로 받아 주면 계약이 두 벌이 된다
+        # 이 다섯은 빈 값이 '' · [] 이거나 비울 수 없어 null 을 '비우기'로 받아 주면
+        # 계약이 두 벌이 된다
         if value is None:
             raise PydanticCustomError("null_not_allowed", "null 로 비울 수 없는 값입니다.")
         return value

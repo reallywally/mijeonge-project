@@ -319,7 +319,7 @@ def test_removed_agenda_types_are_gone_from_domain_ts() -> None:
     """안건 간소화(docs/api/agenda.md) — 걷은 타입 · 칸이 남으면 화면이 옛 모양을 기다린다."""
     for name in ("Entry", "DecisionItem", "EntryInput", "EntryPatch", "Thread"):
         assert name not in FIELDS, f"domain.ts 에 걷은 {name} 이 남았다"
-    assert not {"options", "ccIds", "parentAgendaId"} & set(FIELDS["Agenda"])
+    assert not {"options", "parentAgendaId"} & set(FIELDS["Agenda"])
     assert not {"entries", "decisionItems"} & set(FIELDS["ProjectSnapshot"])
 
 
@@ -564,6 +564,8 @@ _TEST_EDITABLE = {
     "start",
     "due",
     "ownerId",
+    # 참조 (docs/api/cc.md)
+    "ccIds",
     "partId",
 }
 TEST_SHAPES: dict[str, set[str]] = {
@@ -585,6 +587,7 @@ TEST_SHAPES: dict[str, set[str]] = {
         "start",
         "due",
         "ownerId",
+        "ccIds",
         "partId",
         "signals",
         "changedAgendaIds",

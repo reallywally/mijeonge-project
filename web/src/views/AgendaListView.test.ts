@@ -8,6 +8,9 @@ import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { useAgendaStore } from '@/stores/agenda'
 import AgendaPropertyPanel from '@/components/app/AgendaPropertyPanel.vue'
+import CcField from '@/components/app/CcField.vue'
+import MemberPicker from '@/components/app/MemberPicker.vue'
+import { usePartStore } from '@/stores/part'
 import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
 import AgendaListView from './AgendaListView.vue'
 
@@ -75,6 +78,108 @@ describe('안건 목록 화면', () => {
     const lines = w.findAll('[data-decision-line]').map((x) => x.text())
     expect(lines).toContain('mysql 을 쓴다')
     expect(lines).toContain('우분투 최신 버전으로 한다')
+  })
+})
+
+describe('참조', () => {
+  /* 참조 칸의 '+ 참조' — 찾아 고르는 것은 MemberPicker.test.ts 가 보고, 여기는 고른 값만 흘려 넣는다 */
+  const addCc = async (w: Awaited<ReturnType<typeof mountView>>['w'], id: string) => {
+    w.findComponent(CcField).findComponent(MemberPicker).vm.$emit('pick', id)
+    await flushPromises()
+  }
+  const chips = () =>
+    [...document.body.querySelectorAll<HTMLElement>('[data-cc-field] [data-cc]')].map(
+      (c) => c.dataset.cc,
+    )
+
+  it('목록 줄에 참조 수(있을 때만), 나를 참조를 켜면 내가 참조인 안건만', async () => {
+    usePartStore().setScope('all')
+    const { w } = await mountView()
+    const rowOf = (title: string) => w.findAll('tbody tr').find((r) => r.text().includes(title))!
+    expect(rowOf('DB 결정').find('[data-cc-count]').text()).toBe('참조 2')
+    expect(rowOf('서버 OS 결정').find('[data-cc-count]').text()).toBe('참조 1')
+    expect(rowOf('사내망에서 외부 모델').find('[data-cc-count]').exists()).toBe(false)
+
+    /* 김서연(u1)은 t1 의 참조 */
+    await w.find('[data-cc-mine]').trigger('click')
+    expect(w.findAll('tbody tr').map((r) => r.text())).toHaveLength(1)
+    expect(w.find('tbody tr').text()).toContain('서버 OS 결정')
+  })
+
+  it('상세 — 담당자 바로 아래 참조 칩, + 참조로 더하고 × 로 빼면 바로 저장되고 이력이 남는다', async () => {
+    await mountView('/agendas/t2')
+    expect(chips()).toEqual(['u2', 'u4'])
+    /* 고를 것은 이미 고른 사람을 뺀 활성 멤버 */
+    await click($('button[aria-label="참조 더하기"]')!)
+    const choices = [...document.body.querySelectorAll<HTMLElement>('[data-member-choice]')].map(
+      (c) => c.dataset.memberChoice,
+    )
+    expect(choices).toContain('u1')
+    expect(choices).not.toContain('u2')
+
+    /* 다이얼로그 안에서도 찾는 칸에 포커스가 가고, 이름으로 찾아 Enter 로 고른다 */
+    const search = $<HTMLInputElement>('[data-member-picker] input')!
+    expect(document.activeElement).toBe(search)
+    await type('[data-member-picker] input', '서연')
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(agendaOf('t2').ccIds).toEqual(['u2', 'u4', 'u1'])
+    expect(chips()).toEqual(['u2', 'u4', 'u1'])
+    /* Esc 는 목록만 닫고 안건 상세는 그대로 */
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect($('[data-member-picker]')).toBeNull()
+    expect($('[data-cc-field]')).not.toBeNull()
+
+    await click($('[data-cc="u2"] [data-cc-remove]')!)
+    expect(agendaOf('t2').ccIds).toEqual(['u4', 'u1'])
+
+    const { mockDb } = await import('@/api/mockAuth')
+    const fields = mockDb()
+      .agendaHistory.t2.flatMap((e) => e.changes)
+      .filter((c) => c.field === 'ccIds')
+    expect(fields.map((c) => [c.from, c.to])).toEqual([
+      [
+        ['u2', 'u4'],
+        ['u2', 'u4', 'u1'],
+      ],
+      [
+        ['u2', 'u4', 'u1'],
+        ['u4', 'u1'],
+      ],
+    ])
+  })
+
+  it('빠진 사람(비활성)은 흐린 칩으로 남고, 고칠 때도 그대로 보낸다 — × 로는 뺀다', async () => {
+    /* 한예린(u5)은 비활성 */
+    const { w } = await mountView('/agendas/t2')
+    agendaOf('t2').ccIds = ['u5', 'u2']
+    await flushPromises()
+    expect($('[data-cc="u5"]')!.className).toContain('text-muted-foreground')
+
+    await addCc(w, 'u4')
+    expect(agendaOf('t2').ccIds).toEqual(['u5', 'u2', 'u4'])
+    await click($('[data-cc="u5"] [data-cc-remove]')!)
+    expect(agendaOf('t2').ccIds).toEqual(['u2', 'u4'])
+  })
+
+  it('읽기 전용이면 칩만 — 빼기 · 더하기가 없다', async () => {
+    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    await mountView('/agendas/t1')
+    expect(chips()).toEqual(['u1'])
+    expect($('[data-cc-remove]')).toBeNull()
+    expect($('[data-cc-add]')).toBeNull()
+  })
+
+  it('등록 — 고른 참조가 실려 들어간다', async () => {
+    const { w } = await mountView('/agendas/new')
+    await type('textarea[aria-label="제목"]', '참조 붙인 안건')
+    await addCc(w, 'u3')
+    await addCc(w, 'u4')
+    expect(chips()).toEqual(['u3', 'u4'])
+    await click(popupButton('만들기'))
+    const made = useAgendaStore().agendas.find((t) => t.title === '참조 붙인 안건')!
+    expect(made.ccIds).toEqual(['u3', 'u4'])
   })
 })
 
@@ -179,12 +284,22 @@ describe('안건 권한 · 지우기', () => {
     expect(fields.some((f) => f.textContent?.includes('mysql 8.4 를 쓴다'))).toBe(true)
   })
 
-  it('모르는 칸(지난 모델의 후보 · 참조 · 이력 줄)은 그리지 않고, 그것뿐인 줄은 통째로 뺀다', async () => {
+  it('모르는 칸(지난 모델의 후보 · 이력 줄)은 그리지 않고, 그것뿐인 줄은 통째로 뺀다 — 옛 참조 줄은 그린다', async () => {
     const { mockDb } = await import('@/api/mockAuth')
     mockDb().agendaHistory.t4.push(
       {
         id: 'old-1',
         changedAt: '2026-09-11T00:00:00Z',
+        changedBy: 'u1',
+        backfilled: false,
+        changes: [
+          { field: 'options', from: null, to: '매일', subject: '' },
+          { field: 'entryDeleted', from: 'x', to: null, subject: 'defer' },
+        ],
+      },
+      {
+        id: 'old-3',
+        changedAt: '2026-09-13T00:00:00Z',
         changedBy: 'u1',
         backfilled: false,
         changes: [
@@ -208,6 +323,10 @@ describe('안건 권한 · 지우기', () => {
     expect($('[data-history-entry="old-1"]')).toBeNull()
     expect($('[data-history-entry="old-2"] [data-history-field="title"]')).toBeTruthy()
     expect($('[data-history-entry="old-2"] [data-history-field="entryText"]')).toBeNull()
+    expect($('[data-history-entry="old-3"] [data-history-field="ccIds"]')!.textContent).toContain(
+      '박지훈',
+    )
+    expect($('[data-history-entry="old-3"] [data-history-field="options"]')).toBeNull()
   })
 })
 

@@ -670,6 +670,43 @@
 - [x] 검사 — `lib/agenda.test.ts`(판 · 정한 때 · 첫 줄) · `stores/agenda.test.ts` · `AgendaListView.test.ts` · 확인 요청 · 회의록 · 테스트 기준 · 변경 이력 · 근거 칩
 - [ ] 서버 모드로 한 번 돌려 본다(Q67 답 뒤)
 
+## 24단계 · 참조(cc) — 안건 · 테스트
+
+계약은 `docs/api/cc.md`(2026-11-05, 사용자 결정). 담당자는 그대로 1명, 참조 `ccIds: string[]` 를 더한다 — 알아야 하는 사람,
+권한 · 리스크와 무관. 서버는 같은 날 다른 에이전트가 붙인다(`0033_cc`).
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 칸 | `CcField`(23단계에 걷었던 것을 되살림) — 고른 사람 칩 · × 로 빼기 · '+ 참조' 셀렉트로 더하기. 후보는 `data.assignable` 에서 이미 고른 사람을 뺀 것, readonly 면 칩만(없으면 '없음'). 비활성 · 부여 해제가 된 사람은 흐린 칩으로 남아 고칠 때도 그대로 보내고, × 로 뺄 수 있다 | 이미 걸린 참조는 서버가 받는다(Q68, 담당자의 Q30 과 같다) |
+| 자리 | `AgendaPropertyPanel`(상세 · 등록 다이얼로그 같이) · `TestDetailDialog`(상세 · 추가) 의 담당자 바로 아래 | 계약 '상세 · 등록' |
+| 저장 | 상세는 바꾸면 바로 PATCH `{ ccIds }`(통째로, 같은 사람 · 같은 순서면 안 보냄), 등록은 POST 에 실음. 스토어 · 목업이 `uniqueIds` 로 겹친 id 를 앞의 하나만 | 계약 '모양' |
+| 목업 검사 | 새로 더하는 id 만 본다 — 이미 걸린 id 는 통과(Q68). 안건은 `data.rejectCc`(400 `AGENDA_CC_NOT_FOUND`, `detail { ccIds: <id> }`), 테스트는 `api/tests` `checkCc`(400 `TEST_CC_NOT_FOUND`) | 서버와 같은 코드 · 같은 규칙 |
+| 목록 | 안건 · 테스트 목록 조회 조건의 담당자 옆 '나를 참조' 체크(초기화하면 꺼짐), 안건 줄 제목 곁 '참조 N'(있을 때만, 툴팁에 이름) | 계약 '따라 바뀌는 기능' |
+| 확인 요청 | `lib/check` `checkRecipients` — 연결 작업 담당자(작업 순) 다음에 참조(ccIds 순), 겹치면 처음 자리 · 누른 사람 빼기 · 활성만. '받을 사람 없음' 문구 · 칸 안내도 참조를 말한다 | 계약 표 |
+| 변경 이력 | `lib/history` 칸 `ccIds` = '참조'(이름들, 비면 '없음'), 안건 · 테스트 모두 담당자 바로 뒤. `diffChanges` 가 배열을 같은 것 · 같은 순서로 견주고 사본으로 남긴다. 옛 안건 이력의 ccIds 줄도 그린다 | 계약 '변경 이력' |
+| 픽스처 | t1 = [u1] · t2 = [u2, u4] · tc2 = [u3], 나머지 [] — 이력 줄은 따로 없음 | 서버 시드와 같게 |
+
+- [x] `types/domain.ts`(`Agenda` · `TestCase` · 입력 · 패치) · `fixtures` · `lib/member`(`uniqueIds`) · `lib/history` · `lib/check` · `api/tests` · `api/checks` · `api/minutes` · `stores/data`(`rejectCc`) · `stores/agenda`
+- [x] `CcField` · `AgendaPropertyPanel` · `AgendaCreateDialog` · `AgendaDetailDialog` · `TestDetailDialog` · `CheckRequestSection` · `AgendaListView` · `TestsView`
+- [x] 검사 — `AgendaListView.test.ts`(줄의 참조 수 · 나를 참조 · 칩 더하기 / 빼기 → 저장 · 이력 · 읽기 전용 · 등록에 실림) · `TestsView.test.ts`(나를 참조 · 칩 → PATCH · 이력 · 추가에 실림) · `api/tests.test.ts`(겹침 · 400) · `stores/auth.test.ts`(안건 400 · 겹침) · `stores/server.test.ts`(POST · PATCH 몸통) · `lib/check.test.ts` · `api/checks.test.ts`(받는 사람에 참조) · `lib/history.test.ts`
+- [ ] 서버 모드로 한 번 돌려 본다(서버 `구현` 뒤)
+
+### 2026-11-05 고침 (사용자) — 담당자 · 참조를 찾아 고르기
+
+사람이 많으면 Select 목록에서 찾기 어렵다. 서버 · 계약은 그대로.
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 칸 | `MemberPicker` — `ui/popover`(shadcn-vue 레지스트리, reka-ui Popover) + 찾는 칸 + 목록. 트리거는 `#trigger` 슬롯, 나머지 속성(aria · data-*)은 트리거 버튼에. 열면 '이름으로 찾기' 에 포커스, ↑ ↓ · Enter 로 고르고 Esc 로 닫는다. 맞는 사람이 없으면 '찾는 사람이 없습니다' | Combobox 는 입력칸이 트리거 자리에 있어 지금 트리거 모양을 못 지킨다 |
+| 찾기 | `lib/member` `matchMember` — 이름에 부분 일치(대소문자 무시, 한글 그대로). `email` 이 있으면 같이 보지만 지금 `Member` 에는 없다 | 이메일은 관리 화면의 `MemberAccount` 에만 있다 |
+| 담당자 | `OwnerSelect` 가 `MemberPicker` 를 쓴다(맨 위 '미정' → null, 열 때 지금 고른 줄에 선다). `TaskPropertyPanel` · `AgendaPropertyPanel` 은 ghost 트리거로, 테스트 상세 · 회의록 검토는 지금 모양 그대로 | 같은 트리거가 세 곳에 복사돼 있었다 |
+| 참조 | `CcField` 의 '+ 참조' 가 `MemberPicker`(`exclude` = 고른 사람, `keepOpen`) — 고르면 칩이 더해지고 목록은 열린 채 찾는 말만 빈다. 흐린 칩 · Q68 규칙은 그대로 | 여럿을 잇달아 고른다 |
+| 다이얼로그 | 목록은 Portal 로 body 에 — 잘리지 않고, reka 의 겹 레이어라 Esc 는 목록만 닫는다 | |
+| 그대로 둔 것 | 목록의 담당자 거르기 · 작업 목록의 '담당자 바꾸기'(일괄, 빈 값 트리거의 동작 메뉴) | 거르기는 바꾸지 않기로, 일괄은 고르는 칸이 아니라 동작 |
+
+- [x] `ui/popover` · `MemberPicker` · `OwnerSelect` · `CcField` · `TaskPropertyPanel` · `AgendaPropertyPanel` · `lib/member`(`matchMember`)
+- [x] 검사 — `MemberPicker.test.ts`(포커스 · 걸러짐 · ↓ Enter · 없음 · 미정 · 참조 열린 채 계속) · `AgendaListView.test.ts`(다이얼로그 안에서 포커스 · 찾아 Enter · Esc 는 목록만) · `TestsView.test.ts`(참조 흘려 넣기를 `MemberPicker` 로)
+
 ---
 
 ## 진행 상황
@@ -700,6 +737,7 @@
 | 21 안건 권한 · 지우기 · 변경 이력 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-02) — 안건 · 이력 줄 고치기 · 지우기는 작성자 · 담당자 · 관리자(줄은 남긴 사람도) · 작성자 칸 · 안건 지우기(확인 · 409) · 줄 지우기(상태 재계산) · 변경 이력 칸 |
 | 22 간트 줄 끌기 | **목업으로 끝남 · 서버 갈래 계약 초안대로 붙임** (2026-11-03) — 상위 · 형제 순서(`Task.order` · `POST /api/tasks/{id}/move`) |
 | 23 안건 간소화 | 계약 **합의** (2026-11-04, `docs/api/agenda.md`) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-04). Q67 열림 |
+| 24 참조(cc) | 계약 `docs/api/cc.md` (2026-11-05, 사용자 결정) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-05). Q68 닫힘(이미 걸린 참조는 통과) |
 
 ## 아직 안 정한 것
 

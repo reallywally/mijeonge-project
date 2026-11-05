@@ -181,6 +181,27 @@ async def is_assignable(session: AsyncSession, project_id: str, member_id: str) 
     return bool(await active_project_members(session, project_id, [member_id]))
 
 
+async def guard_cc(
+    session: AsyncSession,
+    project_id: str,
+    cc_ids: list[str],
+    code: str,
+    *,
+    keep: Collection[str] = (),
+) -> list[str]:
+    """참조 배열을 검사하고 겹친 id 는 앞의 하나만 남긴다 (docs/api/cc.md).
+
+    새로 넣는 사람은 그 프로젝트의 활성 멤버여야 한다. `keep` 은 이미 참조에 있던 사람 —
+    담당자처럼 그대로 두는 것은 막지 않는다. 걸리면 400, `detail` 에 처음 걸린 id.
+    """
+    unique = list(dict.fromkeys(cc_ids))
+    granted = await active_project_members(session, project_id, unique)
+    missing = [member_id for member_id in unique if member_id not in granted | set(keep)]
+    if missing:
+        raise ApiError(400, code, "참조할 사람을 찾을 수 없습니다.", {"ccIds": missing[0]})
+    return unique
+
+
 def can_edit_task(scope: Scope, task: Task) -> bool:
     """작업 하나를 고칠 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
 

@@ -119,6 +119,7 @@ export interface HistoryEntry {
 | `title` · `content` · `testData` | `PATCH` | 글 |
 | ~~`purpose` · `precondition` · `steps`~~ | 2026-10-27 걷음(Q60) — 새로 남기지 않는다. 지난 줄에만 있다 | 글 · 글 · 단계 수 |
 | `parentId` · `ownerId` · `partId` · `start` · `due` | `PATCH` | 작업과 같다 |
+| `ccIds` (2026-11-05, `cc.md`) | `PATCH` — 칸 순서는 `ownerId` 바로 뒤 | id 배열(고른 순서). 같은 사람 · 같은 순서면 안 남긴다 |
 | `status` | `POST .../status` | 상태 값. **같은 상태로 다시 보내도** 남긴다(`from = to`) — N일째가 다시 0 이 된 까닭 |
 | ~~`failedStep`~~ | 2026-10-27 걷음(Q60) — 지난 줄에만 있다 | 단계 번호 또는 `null` |
 | `resultNote` | 상태 바꾸기가 값을 바꿈 | 글(`''` 이 아니라 비면 `null`) |
@@ -135,14 +136,17 @@ export interface HistoryEntry {
 | `created` · `deleted` | 등록 · 회의록 반영 / 삭제 | `null` · `null` (늘 그 줄의 유일한 칸) |
 | `title` · `description` · `decision` | `PATCH` · 회의록 반영(`updates`) | 글 |
 | `state` | `PATCH` · 회의록 반영(`updates`) | `queued` · `open` · `decided` |
-| `ownerId` · `partId` | `PATCH` | id 또는 `null` |
+| `ownerId` | `PATCH` | id 또는 `null` |
+| `ccIds` (2026-11-05, `cc.md`) | `PATCH` | id 배열(고른 순서). 같은 사람 · 같은 순서면 안 남긴다 |
+| `partId` | `PATCH` | id 또는 `null` |
 | `dueDate` | `PATCH` | `YYYY-MM-DD` 또는 `null` |
 
 - 한 줄 안의 칸 순서는 위 표의 순서다. 값이 같으면 안 남기고, 남길 칸이 없으면 줄 없음. `subject` 는 늘 `''`
 - 등록은 결정내용 · 상태를 같이 적어도 `created` 한 칸뿐이다
 - 이행(0032)이 채운 결정내용은 `backfilled: true` 줄 하나(`decision` `''` → 결정내용, 바꾼 사람 · 때 = 그 결정 줄을 남긴 사람 · 시각)로 남는다
-- 이행 전 줄의 칸(`options` · `ccIds` · `entryText` · `entryNote` · `entryDeleted` · `itemCreated` · `itemTitle` · `itemDeleted`)은 DB 에 그대로다 — 화면은 모르는 칸을 건너뛴다
-- 화면 칸 이름: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 파트 · 기한
+- 이행 전 줄의 칸(`options` · `entryText` · `entryNote` · `entryDeleted` · `itemCreated` · `itemTitle` · `itemDeleted`)은 DB 에 그대로다 — 화면은 모르는 칸을 건너뛴다. 옛 `ccIds` 줄은 같은 모양(id 배열)이라 2026-11-05 부터 다시 그린다
+- 등록 때 같이 고른 참조는 `created` 한 칸에 든다(따로 `ccIds` 칸을 남기지 않는다)
+- 화면 칸 이름: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 참조 · 파트 · 기한
 
 ### ~~칸 — 안건 (`thread_history`, 2026-11-02)~~ — 옛 표 (2026-11-04 전)
 
@@ -238,7 +242,7 @@ export interface HistoryEntry {
 
 ### 표기
 
-- 칸 이름 — 작업: 제목 · 상태 · 우선순위 · 담당자 · 파트 · 상위 작업 · 시작 날짜 · 기한. 테스트: 제목 · 목적 · 사전조건 · 테스트 데이터 · 상위 테스트 · 담당자 · 파트 · 시작 날짜 · 기한 · 상태 · 실패한 단계 · 결과 메모
+- 칸 이름 — 작업: 제목 · 상태 · 우선순위 · 담당자 · 파트 · 상위 작업 · 시작 날짜 · 기한. 테스트: 제목 · 목적 · 사전조건 · 테스트 데이터 · 상위 테스트 · 담당자 · 참조(2026-11-05) · 파트 · 시작 날짜 · 기한 · 상태 · 실패한 단계 · 결과 메모
 - `null` 의 화면 말은 칸마다 — 담당자 '없음' · 파트 '공통' · 상위 '최상위 작업' / '최상위 테스트' · 시작 날짜 / 기한 '미정' · 실패한 단계 / 결과 메모 '없음'. 빈 글(`''`, 목적 · 사전조건 · 테스트 데이터 · 제목)은 '(비움)'. 실패한 단계 값은 `2단계`
 - 걸기 · 떼기 칸은 `전 → 후` 대신 한 값으로 — '안건 걸기: 제목' · '안건 떼기: 제목' · '선행 작업 걸기: HW-19'(지난 `dependsOn` 줄) · '작업 태그 걸기: HW-4' · '안건 태그 떼기: 제목'
 - 같은 상태를 다시 고른 테스트 상태 줄(`from = to`)은 '상태: 테스트 중 (다시 고름)'

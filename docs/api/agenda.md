@@ -1,5 +1,9 @@
 # 안건(Agenda) — 간소화 합의 (2026-11-04)
 
+> **2026-11-05 — 참조(`ccIds`)를 되살렸다** (`cc.md`). 아래에서 '참조를 걷는다' 고 적은 자리는 그 파일이 대신한다 —
+> `Agenda.ccIds: string[]`(담당자 바로 뒤) · `AgendaInput.ccIds?` · `AgendaPatch.ccIds?`(통째로, `null` 422) · 400 `AGENDA_CC_NOT_FOUND` ·
+> 이력 칸 `ccIds`(`ownerId` 바로 뒤) · 확인 요청 받는 사람 = 연결 작업 담당자 + 참조.
+
 안건을 **제목 · 설명 · 결정내용 · 상태** 네 칸으로 줄이고, 영어 이름을 `thread` 에서 `agenda` 로 바꾼다.
 화면의 한국어 '안건' 은 그대로다. 이 파일이 안건 계약의 정답이고, 다른 문서의 `Thread` · `Entry` ·
 `DecisionItem` 설명은 이 파일로 대체된다(옛 줄은 결정 로그에 남는다).
@@ -29,6 +33,8 @@ export interface Agenda {
   decision: string
   state: AgendaState
   ownerId: string | null
+  /** 참조 — 고른 순서, 빈 값은 [] (2026-11-05, cc.md) */
+  ccIds: string[]
   /** 등록한 사람. 기록이 없던 지난 안건은 null — 수정 · 삭제 권한의 근거 */
   creatorId: string | null
   /** YYYY-MM-DD */
@@ -51,6 +57,7 @@ export interface AgendaInput {   // POST
   decision?: string
   state?: AgendaState            // 기본 'queued'
   ownerId?: string | null
+  ccIds?: string[]               // 기본 [] (2026-11-05)
   dueDate?: string | null
   partId?: string | null
 }
@@ -61,6 +68,7 @@ export interface AgendaPatch {   // PATCH — 보낸 필드만
   decision?: string              // null 422
   state?: AgendaState            // null 422
   ownerId?: string | null
+  ccIds?: string[]               // 통째로 갈아끼운다. null 422 (2026-11-05)
   dueDate?: string | null
   partId?: string | null
 }
@@ -106,19 +114,21 @@ export interface AgendaPatch {   // PATCH — 보낸 필드만
 | `created` · `deleted` | 등록 · 회의록 반영 / 삭제 | `null` · `null` |
 | `title` · `description` · `decision` | PATCH · 회의록 반영 | 글 |
 | `state` | PATCH · 회의록 반영 | `queued` · `open` · `decided` |
-| `ownerId` · `partId` | PATCH | id 또는 `null` |
+| `ownerId` | PATCH | id 또는 `null` |
+| `ccIds` (2026-11-05) | PATCH | id 배열(고른 순서) |
+| `partId` | PATCH | id 또는 `null` |
 | `dueDate` | PATCH | `YYYY-MM-DD` 또는 `null` |
 
 - 한 줄 안의 칸 순서는 위 표 순서. 값이 같으면 안 남긴다
 - 결정이 언제 어떻게 바뀌었는지는 **이 이력이 유일한 기록**이다(이력 줄이 없어졌다)
 - 이행 전에 남은 옛 줄의 칸(`options` · `ccIds` · `entryText` · `entryNote` · `entryDeleted` · `itemCreated` · `itemTitle` · `itemDeleted`)은 DB 에 그대로 둔다. **화면은 모르는 칸을 그리지 않고 건너뛴다**
-- 화면 칸 이름: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 파트 · 기한
+- 화면 칸 이름: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 참조(2026-11-05) · 파트 · 기한
 
 ## 따라 바뀌는 기능
 
 | 기능 | 바뀌는 것 |
 | --- | --- |
-| 확인 요청 (`check.md`) | `CheckRequest.threadId` → `agendaId`, `entryId` → **`decisionRev: number`** + **`decision: string`**(보낼 때 결정내용을 찍어 둔다). 보내기는 `state === 'decided'` 일 때만(아니면 지금의 '결정 안 됨' 409 code 를 `AGENDA` 로 바꿔 쓴다), **한 결정 판에 한 번** — 유니크 `(agenda_id, decision_rev, recipient_id)`. 받는 사람은 **연결 작업 담당자(나 빼고)** — 참조가 없어졌다. 받을 사람이 없으면 지금 code 그대로. 부하 칸 `load_open_threads` → `load_open_agendas` |
+| 확인 요청 (`check.md`) | `CheckRequest.threadId` → `agendaId`, `entryId` → **`decisionRev: number`** + **`decision: string`**(보낼 때 결정내용을 찍어 둔다). 보내기는 `state === 'decided'` 일 때만(아니면 지금의 '결정 안 됨' 409 code 를 `AGENDA` 로 바꿔 쓴다), **한 결정 판에 한 번** — 유니크 `(agenda_id, decision_rev, recipient_id)`. 받는 사람은 **연결 작업 담당자(나 빼고)** — 참조가 없어졌다(→ 2026-11-05 참조를 되살려 **연결 작업 담당자 + 참조**, `cc.md`). 받을 사람이 없으면 지금 code 그대로. 부하 칸 `load_open_threads` → `load_open_agendas` |
 | 리스크 (`risk.md`) | `threads` → `agendas`, `ThreadRisk` → `AgendaRisk`(`agendaId`), 요약 요청 `threadIds` → `agendaIds`. **미룸이 없어져 `deferredRepeatedly` 신호 · `deferCount` · `lastDeferNote` · 기준의 `deferCount` 가 빠진다** |
 | 리포트 (`report.md`) | 지난 7일 '정해진 것' = `decidedAt` 이 기간 안인 안건. '미뤄진 것' 은 빠진다. 그 밖 `thread` 이름은 `agenda` 로. 근거 칩 `[[agenda:ID]]` |
 | 테스트 기준 바뀜 (`test.md`) | 닿는 안건의 '결정 변경' = `agenda_history` 에서 `decision` 칸이 있거나 `state` 가 `decided` 로 바뀐 줄. `basis_seq` 는 그 줄들의 `seq` 최댓값. `changedEntryIds` → **`changedAgendaIds: string[]`**(basis 뒤로 결정이 바뀐 안건, 처음 바뀐 순). 화면은 그 안건의 지금 결정내용을 보인다 |
@@ -161,7 +171,7 @@ export interface AgendaPatch {   // PATCH — 보낸 필드만
 
 - **등록의 결정 시각 · 판** — 빈 안건(대기 · 결정내용 없음)에서 바뀐 것으로 본다. `decided` 로 등록하면 `decidedAt = createdAt` · 판 1, 결정내용만 적어도 판 1. 회의록 반영으로 만든 안건도 같다(`services/agenda.py` 의 `apply_fields` 하나)
 - **공백** — 제목은 앞뒤 공백을 떼고 저장한다. 결정내용은 **보낸 그대로** 저장하고 판을 올릴지만 뗀 값으로 견준다(공백만 바꿔도 이력의 `decision` 칸은 남는다). 회의록 반영의 결정내용은 앞뒤 공백을 떼고 넣는다
-- **PATCH 의 422** — `title` · `description` · `decision` · `state` 에 `null`, 세 값 밖의 `state`. 서버가 정하는 `creatorId` · `decidedAt` · `decisionRev` 와 걷은 `options` · `ccIds` · `parentAgendaId` 는 실어 와도 버린다(등록도 같다). 담당자 · 파트 검사는 그대로(`AGENDA_OWNER_NOT_FOUND` · `PART_NOT_FOUND` · `PART_ARCHIVED`)
+- **PATCH 의 422** — `title` · `description` · `decision` · `state` 에 `null`, 세 값 밖의 `state`. 서버가 정하는 `creatorId` · `decidedAt` · `decisionRev` 와 걷은 `options` · `parentAgendaId` 는 실어 와도 버린다(등록도 같다). ~~`ccIds`~~ 는 2026-11-05 부터 받는다(`cc.md`). 담당자 · 파트 검사는 그대로(`AGENDA_OWNER_NOT_FOUND` · `PART_NOT_FOUND` · `PART_ARCHIVED`)
 - **걷은 경로** — `/api/agendas/{id}/entries…` · `…/items…` · 옛 `/api/threads…` 는 404(경로가 없다)
 - **변경 이력** — 등록(손 · 회의록 반영)은 `created` 한 줄뿐이다. 결정내용 · 상태를 같이 적어 등록해도 칸으로 나누지 않는다
 - **이행 2** — '항목이 하나' 는 지우지 않은 항목 수, 이름은 앞뒤 공백을 떼고 견준다. `refine` 의 세부(`entry_detail`)도 그 `refine` 줄 밑에 `- ` 줄로 붙인다. 지운 안건도 같은 규칙으로 채운다(안 보일 뿐)

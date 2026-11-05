@@ -265,8 +265,12 @@ async def get_agenda(session: AsyncSession, project_id: str, agenda_id: str) -> 
         )
         .order_by(Task.seq)
     )
+    out = to_agenda(agenda)
+    names = await session.execute(select(Member.id, Member.name).where(Member.id.in_(out.cc_ids)))
+    name_of = dict(names.tuples().all())
     return AgendaDoc(
-        agenda=to_agenda(agenda),
+        agenda=out,
+        cc_names=[name_of[member_id] for member_id in out.cc_ids if member_id in name_of],
         tasks=[
             LinkedTask(id=id_, key=key, title=title, status=status)
             for id_, key, title, status in tasks.all()

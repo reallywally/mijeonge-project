@@ -10,12 +10,13 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Identity,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_id
 from app.models.task import HISTORY_CHANGES
@@ -68,6 +69,34 @@ class TestCase(Base):
     basis_seq: Mapped[int | None] = mapped_column(BigInteger)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    # 참조 — 알아야 하는 사람. 권한 · 신호와 무관하다 (docs/api/cc.md). 순서가 뜻을 갖는다
+    cc: Mapped[list["TestCc"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="TestCc.sort_order",
+        lazy="selectin",
+    )
+
+
+class TestCc(Base):
+    """참조 한 사람 (docs/api/cc.md). 안건의 `AgendaCc` 와 같은 모양."""
+
+    __test__ = False
+    __tablename__ = "test_cc"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["test_id", "project_id"],
+            ["test_case.id", "test_case.project_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    test_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # FK 는 위의 복합 FK 하나뿐이다
+    project_id: Mapped[str] = mapped_column(String(36))
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    member_id: Mapped[str] = mapped_column(ForeignKey("member.id"), primary_key=True)
+    sort_order: Mapped[int] = mapped_column(Integer)
 
 
 class TestRef(Base):

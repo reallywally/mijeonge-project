@@ -6,6 +6,7 @@ import { canDeleteAgenda, canEditAgenda } from '@/lib/access'
 import { BLANK_DECISION, firstLine, nextDecisionMarks } from '@/lib/agenda'
 import { kstToday, monthDay, nowIso } from '@/lib/date'
 import { change, agendaPatchChanges } from '@/lib/history'
+import { uniqueIds } from '@/lib/member'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useCheckStore } from '@/stores/check'
@@ -112,6 +113,7 @@ export const useAgendaStore = defineStore('agenda', () => {
       state: input.state ?? ('queued' as AgendaState),
       dueDate: input.dueDate || null,
       ownerId: input.ownerId ?? null,
+      ccIds: uniqueIds(input.ccIds ?? []),
       /* 안 보내면 공통 — 작업과 달리 따를 상위가 없다 */
       partId: input.partId ?? null,
     }
@@ -126,6 +128,7 @@ export const useAgendaStore = defineStore('agenda', () => {
       }
     }
     if (data.rejectOwner(clean.ownerId, 'AGENDA_OWNER_NOT_FOUND')) return null
+    if (data.rejectCc(clean.ccIds, 'AGENDA_CC_NOT_FOUND')) return null
     if (data.rejectPart(clean.partId)) return null
     const id = data.nextId('nt')
     const now = nowIso()
@@ -154,6 +157,7 @@ export const useAgendaStore = defineStore('agenda', () => {
     if (patch.title !== undefined && !patch.title.trim()) return false
     if (rejectEdit(canEdit(agenda))) return false
     if (data.rejectOwner(patch.ownerId, 'AGENDA_OWNER_NOT_FOUND', agenda.ownerId)) return false
+    if (data.rejectCc(patch.ccIds, 'AGENDA_CC_NOT_FOUND', agenda.ccIds)) return false
     if (data.rejectPart(patch.partId, agenda.partId)) return false
     const clean: AgendaPatch = {}
     if (patch.title !== undefined) clean.title = patch.title.trim()
@@ -162,6 +166,7 @@ export const useAgendaStore = defineStore('agenda', () => {
     if (patch.state !== undefined) clean.state = patch.state
     if (patch.dueDate !== undefined) clean.dueDate = patch.dueDate || null
     if (patch.ownerId !== undefined) clean.ownerId = patch.ownerId
+    if (patch.ccIds !== undefined) clean.ccIds = uniqueIds(patch.ccIds)
     if (patch.partId !== undefined) clean.partId = patch.partId
     /* 이력은 고치기 전 값과 견준다 */
     logMock(agendaId, agendaPatchChanges(agenda, clean))

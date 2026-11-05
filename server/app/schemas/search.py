@@ -54,6 +54,8 @@ class AgendaDoc(Schema):
 
     agenda: AgendaOut
     tasks: list[LinkedTask]
+    # 참조의 이름 — `agenda.ccIds` 순. 챗봇이 id 대신 이름으로 말하게 (docs/api/cc.md)
+    cc_names: list[str]
 
 
 class TaskDoc(Schema):

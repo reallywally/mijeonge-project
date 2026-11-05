@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Check, Clock } from 'lucide-vue-next'
+import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { periodProblem, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from '@/lib/task'
-import { useDataStore } from '@/stores/data'
 import type { ParentChoice, TaskPriority, TaskStatus } from '@/types/domain'
 
 /* 작업의 속성 — 작업 상세와 작업 추가의 오른쪽 칸. 값은 부모가 들고, 여기는 보여 주고 고친 값을 올린다.
@@ -38,10 +38,6 @@ const priority = defineModel<TaskPriority>('priority', { required: true })
 const parentId = defineModel<string | null>('parentId', { required: true })
 const partId = defineModel<string | null>('partId', { required: true })
 
-const data = useDataStore()
-const NONE = 'none'
-
-const ownerName = computed(() => data.memberName(ownerId.value))
 const periodHint = computed(() => periodProblem(start.value, due.value))
 
 /* 날짜는 다 고른 뒤(change)에만 올린다 — 글자를 치는 중의 반쪽 날짜를 올리지 않게 */
@@ -98,31 +94,12 @@ const ghost = computed(() =>
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">담당자</dt>
         <dd class="min-w-0 grow">
-          <Select
-            :model-value="ownerId ?? NONE"
+          <OwnerSelect
+            v-model="ownerId"
+            label="담당자"
+            :trigger-class="ghost"
             :disabled="readonly"
-            @update:model-value="(v) => (ownerId = v === NONE ? null : String(v))"
-          >
-            <SelectTrigger :class="ghost" aria-label="담당자">
-              <span class="flex min-w-0 items-center gap-2">
-                <span
-                  class="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-secondary text-[10px]"
-                  :class="ownerName ? '' : 'text-muted-foreground'"
-                >
-                  {{ ownerName ? ownerName.charAt(0) : '–' }}
-                </span>
-                <span class="truncate" :class="ownerName ? '' : 'text-muted-foreground'">
-                  {{ ownerName ?? '미정' }}
-                </span>
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem :value="NONE">미정 (담당자 없음)</SelectItem>
-              <SelectItem v-for="m in data.assignable" :key="m.id" :value="m.id">
-                {{ m.name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          />
         </dd>
       </div>
 

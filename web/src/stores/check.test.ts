@@ -114,7 +114,7 @@ describe('안건 상세의 [확인 요청]', () => {
     expect(t2.block).toBe('sent')
     expect([t2.current?.confirmed, t2.current?.rows.length]).toEqual([1, 3])
 
-    /* 연결 작업이 없으면 받을 사람이 없다 — 참조는 없어졌다 */
+    /* 연결 작업도 참조도 없으면 받을 사람이 없다 */
     expect(checks.forAgenda('t6')).toMatchObject({ recipientIds: [], block: 'no-recipients' })
   })
 
@@ -137,13 +137,13 @@ describe('안건 상세의 [확인 요청]', () => {
     expect(next.block).toBeNull()
     expect(next.current).toBeNull()
     expect(next.older.map((b) => b.decisionRev)).toEqual([1])
-    expect(next.recipientIds).toEqual(['u3'])
+    expect(next.recipientIds).toEqual(['u3', 'u2', 'u4'])
 
-    expect(await checks.send('t2')).toBe(1)
+    expect(await checks.send('t2')).toBe(3)
     const sent = checks.forAgenda('t2')!
     expect(sent.block).toBe('sent')
     expect(sent.current).toMatchObject({ decisionRev: 2, decision: 'PostgreSQL 로 바꾼다' })
-    expect(sent.current?.rows.map((c) => c.recipientId)).toEqual(['u3'])
+    expect(sent.current?.rows.map((c) => c.recipientId)).toEqual(['u3', 'u2', 'u4'])
   })
 
   it('결정에서 벗어나면 결정 전이다', async () => {

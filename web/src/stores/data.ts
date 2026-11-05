@@ -414,6 +414,24 @@ export const useDataStore = defineStore('data', () => {
   }
 
   /**
+   * 목업 갈래가 서버처럼 참조를 거른다 — 새로 더하는 사람은 고른 프로젝트의 활성 멤버여야 한다 (docs/api/cc.md).
+   * 이미 걸려 있던 사람(kept)은 빠진 사람이어도 그대로 둘 수 있다(API.md Q68, 담당자의 Q30 과 같다). 거절했으면 서버와 같은 코드 · detail 에 그 id 로 알리고 true
+   */
+  function rejectCc(ccIds: string[] | undefined, code: string, kept: string[] = []) {
+    if (!mock || !ccIds) return false
+    const bad = ccIds.find((id) => !kept.includes(id) && !assignable.value.some((m) => m.id === id))
+    if (bad === undefined) return false
+    toastError(
+      new ApiError(400, {
+        code,
+        message: '참조할 사람을 찾을 수 없습니다.',
+        detail: { ccIds: bad },
+      }),
+    )
+    return true
+  }
+
+  /**
    * 목업 갈래가 서버처럼 파트를 거른다 — 이 프로젝트의 파트가 아니면 PART_NOT_FOUND,
    * 새로 다는 파트가 보관이면 PART_ARCHIVED. 이미 달린 파트(kept)를 그대로 두는 것은 막지 않는다.
    * 거절했으면 서버와 같은 코드로 알리고 true
@@ -507,6 +525,7 @@ export const useDataStore = defineStore('data', () => {
     memberName,
     upsertMember,
     rejectOwner,
+    rejectCc,
     rejectPart,
     renameProject,
     grantMember,

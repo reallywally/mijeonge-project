@@ -50,6 +50,7 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'steps',
     'parentId',
     'ownerId',
+    'ccIds',
     'partId',
     'start',
     'due',
@@ -60,7 +61,8 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'agendaRef',
     'basis',
   ],
-  /* 2026-11-04 전 줄의 칸(options · ccIds · entry… · item…)은 화면이 모른다 — 그리지 않고 건너뛴다 (docs/api/agenda.md) */
+  /* 2026-11-04 전 줄의 칸(options · entry… · item…)은 화면이 모른다 — 그리지 않고 건너뛴다 (docs/api/agenda.md).
+     ccIds 는 2026-11-05 다시 들였다 — 옛 줄도 그대로 그린다 (docs/api/cc.md) */
   agenda: [
     'created',
     'deleted',
@@ -69,6 +71,7 @@ export const HISTORY_FIELDS: Record<HistoryKind, string[]> = {
     'decision',
     'state',
     'ownerId',
+    'ccIds',
     'partId',
     'dueDate',
   ],
@@ -93,9 +96,15 @@ export function orderChanges(changes: HistoryChange[], kind: HistoryKind): Histo
     .map((x) => x.c)
 }
 
+/** 배열 칸(ccIds)은 같은 것 · 같은 순서면 같다 */
+const sameValue = (a: Value, b: Value) =>
+  Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((x, i) => x === b[i])
+    : a === b
+
 /**
  * 고친 요청(next)이 지금 값(before)에서 바꾼 칸 — 보낸 칸 가운데 값이 달라진 것만, 칸 표 순서로.
- * 값이 글 · 수 · 참거짓 · null 인 칸만 본다(본문은 따로 — bodyChanged)
+ * 값이 글 · 수 · 참거짓 · null · id 배열인 칸만 본다(본문은 따로 — bodyChanged)
  */
 export function diffChanges(
   before: object,
@@ -109,7 +118,9 @@ export function diffChanges(
     if (raw === undefined || skip.includes(field)) continue
     const from = (b[field] ?? null) as Value
     const to = raw as Value
-    if (from !== to) out.push(change(field, from, to))
+    /* 배열은 떼어 낸 사본으로 — 스토어의 반응형 배열을 이력에 그대로 두지 않는다 */
+    const copy = (v: Value) => (Array.isArray(v) ? [...v] : v)
+    if (!sameValue(from, to)) out.push(change(field, copy(from), copy(to)))
   }
   return orderChanges(out, kind)
 }
@@ -220,6 +231,7 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
     testData: '테스트 데이터',
     parentId: '상위 테스트',
     ownerId: '담당자',
+    ccIds: '참조',
     partId: '파트',
     start: '시작 날짜',
     due: '기한',
@@ -233,6 +245,7 @@ const LABEL: Record<HistoryKind, Record<string, string>> = {
     decision: '결정내용',
     state: '상태',
     ownerId: '담당자',
+    ccIds: '참조',
     partId: '파트',
     dueDate: '기한',
   },
@@ -267,6 +280,10 @@ function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNam
       return v === null ? '없음' : name(names.member(str(v)))
     case 'partId':
       return v === null ? '공통' : name(names.part(str(v)))
+    case 'ccIds': {
+      const ids = Array.isArray(v) ? v : []
+      return ids.length === 0 ? '없음' : ids.map((id) => name(names.member(id))).join(', ')
+    }
     case 'relatedIds': {
       const ids = Array.isArray(v) ? v : []
       return ids.length === 0 ? '없음' : ids.map((id) => name(names.task(id))).join(', ')

@@ -38,6 +38,7 @@ function world(patch: Partial<Agenda> = {}, extra: Partial<MockWorld> = {}): Moc
     decision: '정했다',
     state: 'decided',
     ownerId: null,
+    ccIds: [],
     creatorId: null,
     dueDate: null,
     partId: null,
@@ -113,8 +114,11 @@ describe('목업 갈래', () => {
       taskAgendas: taskAgendaLinks,
     }))
     const made = await sendCheck('t2')
+    /* 작업 담당 u3, 참조 u2 · u4 */
     expect(made.map((c) => [c.decisionRev, c.decision, c.recipientId])).toEqual([
       [2, 'mysql 8.4 를 쓴다', 'u3'],
+      [2, 'mysql 8.4 를 쓴다', 'u2'],
+      [2, 'mysql 8.4 를 쓴다', 'u4'],
     ])
   })
 
@@ -123,7 +127,7 @@ describe('목업 갈래', () => {
     const open = await failure(sendCheck('t3'))
     expect([open.status, open.code]).toEqual([400, 'CHECK_AGENDA_NOT_DECIDED'])
 
-    /* 연결 작업이 없으면 받을 사람이 없다 — 참조는 없어졌다 */
+    /* 연결 작업도 참조도 없으면 받을 사람이 없다 */
     const none = await failure(sendCheck('t6'))
     expect([none.status, none.code]).toEqual([400, 'CHECK_NO_RECIPIENTS'])
   })
@@ -144,6 +148,18 @@ describe('목업 갈래', () => {
     const made = await sendCheck('nt1')
     expect(made.map((c) => c.recipientId)).toEqual(['u3', 'u2'])
     expect(made.every((c) => c.decisionRev === 1 && c.createdAt === made[0].createdAt)).toBe(true)
+  })
+
+  it('받는 사람 — 작업 담당자 다음에 참조(ccIds 순), 겹치면 처음 자리 · 나 · 비활성은 빠진다', async () => {
+    /* 작업 담당 u3 · u2, 참조 u4 · u2(겹침) · u1(나) · u5(비활성) · u0(비부여) */
+    provideMockWorld(() => world({ ccIds: ['u4', 'u2', 'u1', 'u5', 'u0'] }))
+    const made = await sendCheck('nt1')
+    expect(made.map((c) => c.recipientId)).toEqual(['u3', 'u2', 'u4'])
+  })
+
+  it('연결 작업이 없어도 참조가 있으면 보낸다', async () => {
+    provideMockWorld(() => world({ ccIds: ['u4'] }, { taskAgendas: taskAgendaLinks }))
+    expect((await sendCheck('nt1')).map((c) => c.recipientId)).toEqual(['u4'])
   })
 
   it('확인은 받은 사람만 — 남은 403, 두 번 해도 처음 시각 그대로', async () => {

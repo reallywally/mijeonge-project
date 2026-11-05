@@ -202,7 +202,7 @@ TOOLS: list[ToolSpec] = [
         "description": (
             "안건 하나를 읽는다 — 제목 · 배경(description) · 결정내용(decision) · "
             "상태(state) · 담당자(ownerId) · 기한(dueDate) · 파트(partId) · 결정된 시각(decidedAt) "
-            "+ 연결된 작업."
+            "+ 연결된 작업 + 참조(ccNames — 알아야 하는 사람의 이름, 권한과 무관)."
         ),
         "input_schema": {
             "type": "object",

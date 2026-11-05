@@ -361,9 +361,25 @@ describe('만드는 것', () => {
       state: 'decided',
       dueDate: null,
       ownerId: null,
+      ccIds: [],
       partId: null,
     })
     expect(data.allAgendas[0].id).toBe('srv-t')
+  })
+
+  it('안건 등록 · 고치기에 참조가 실린다 — 겹친 id 는 앞의 하나만', async () => {
+    const data = await booted()
+    const made = { ...data.allAgendas.find((t) => t.id === 't4')!, id: 'srv-t', ccIds: ['u2'] }
+    on('POST /api/projects/p1/agendas', () => json(made, 201))
+    await useAgendaStore().addAgenda({ title: '새 안건', ccIds: ['u2', 'u4', 'u2'] })
+    expect((calls.at(-1)!.body as { ccIds: string[] }).ccIds).toEqual(['u2', 'u4'])
+
+    const t3 = data.allAgendas.find((t) => t.id === 't3')!
+    on('PATCH /api/agendas/t3', (body) => json({ ...t3, ...(body as object) }))
+    useAgendaStore().updateAgenda('t3', { ccIds: ['u4', 'u1'] })
+    expect(calls.at(-1)!.body).toEqual({ ccIds: ['u4', 'u1'] })
+    await flush()
+    expect(data.allAgendas.find((t) => t.id === 't3')!.ccIds).toEqual(['u4', 'u1'])
   })
 
   it('프로젝트를 만들면 그 프로젝트로 옮겨 스냅샷을 받는다', async () => {

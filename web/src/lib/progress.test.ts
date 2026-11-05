@@ -52,6 +52,7 @@ function agenda(id: string, state: Agenda['state'], decidedAt: string | null = n
     dueDate: null,
     state,
     ownerId: null,
+    ccIds: [],
     partId: null,
     createdAt: '2026-09-01T00:00:00Z',
     decidedAt,

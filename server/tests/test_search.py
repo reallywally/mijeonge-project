@@ -100,7 +100,10 @@ async def test_tool_results_dump_as_camel_case_json(session: AsyncSession) -> No
     doc = (await search_service.get_agenda(session, "p1", "t1")).model_dump(
         mode="json", by_alias=True
     )
-    assert set(doc) == {"agenda", "tasks"}
+    assert set(doc) == {"agenda", "tasks", "ccNames"}
+    # 참조는 이름으로도 — ccIds 순 (docs/api/cc.md)
+    assert doc["agenda"]["ccIds"] == ["u1"]
+    assert doc["ccNames"] == ["김서연"]
     # 제목 · 설명 · 결정내용 · 상태 · 담당자 · 기한 · 파트 — 안건 모양 그대로
     assert doc["agenda"]["decision"] == "우분투 최신 버전으로 한다"
     assert doc["agenda"]["dueDate"] == "2026-09-12" and doc["agenda"]["partId"] == "pt1"

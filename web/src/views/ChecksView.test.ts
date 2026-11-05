@@ -135,8 +135,8 @@ describe('안건 칩 · 안건 상세', () => {
       'c3',
     ])
     expect($('[role="dialog"] [data-check-send]')).toBeNull()
-    /* 참조는 없어졌다 */
-    expect($$('[role="dialog"] [data-cc]')).toEqual([])
+    /* 속성 패널의 참조 칩 — 박지훈 · 정하늘 */
+    expect($$('[role="dialog"] [data-cc]').map((c) => c.dataset.cc)).toEqual(['u2', 'u4'])
   })
 
   it('받은 것의 [확인] 은 안건 상세에서도 된다', async () => {

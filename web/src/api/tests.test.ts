@@ -137,6 +137,33 @@ describe('목업 갈래 — 쓰기', () => {
     )
   })
 
+  it('참조 — 겹친 id 는 앞의 하나만, 활성 멤버가 아니면 400 TEST_CC_NOT_FOUND', async () => {
+    const made = await createTest('p1', { title: '참조', ccIds: ['u4', 'u2', 'u4'] })
+    expect(made.ccIds).toEqual(['u4', 'u2'])
+    expect((await createTest('p1', { title: '빈 참조' })).ccIds).toEqual([])
+
+    /* u5 는 비활성, u0 은 p1 에 부여되지 않았다 */
+    for (const id of ['u5', 'u0', '없음']) {
+      const bad = await failure(patchTest('tc2', { ccIds: ['u1', id] }))
+      expect([bad.status, bad.code, bad.detail]).toEqual([400, 'TEST_CC_NOT_FOUND', { ccIds: id }])
+    }
+    expect((await failure(createTest('p1', { title: 'a', ccIds: ['u5'] }))).code).toBe(
+      'TEST_CC_NOT_FOUND',
+    )
+    expect((await patchTest('tc2', { ccIds: ['u1', 'u1'] })).ccIds).toEqual(['u1'])
+  })
+
+  it('참조 — 이미 걸린 사람은 비활성 · 비부여여도 그대로 둘 수 있다(Q68), 새로 더하면 400', async () => {
+    const { mockDb } = await import('@/api/mockAuth')
+    mockDb().tests.find((t) => t.id === 'tc2')!.ccIds = ['u5', 'u3']
+    expect((await patchTest('tc2', { ccIds: ['u5', 'u3', 'u4'] })).ccIds).toEqual([
+      'u5',
+      'u3',
+      'u4',
+    ])
+    expect((await failure(patchTest('tc3', { ccIds: ['u5'] }))).code).toBe('TEST_CC_NOT_FOUND')
+  })
+
   it('상위 — 자기 · 자손은 고리라 막는다', async () => {
     expect((await failure(patchTest('tc1', { parentId: 'tc1' }))).code).toBe('TEST_PARENT_SELF')
     expect((await failure(patchTest('tc1', { parentId: 'tc3' }))).code).toBe(
@@ -175,6 +202,11 @@ describe('목업 갈래 — 쓰기', () => {
     await deleteTestRef('tc7', { kind: 'agenda', id: 't1' })
     await deleteTestRef('tc7', { kind: 'agenda', id: 't1' })
     expect((await fetchTest('tc7')).refs).toEqual([])
+  })
+
+  it('참조만 고치면 기준을 새로 찍지 않는다 — 기준 바뀜이 그대로 남고, 다른 칸을 고치면 풀린다', async () => {
+    expect((await patchTest('tc4', { ccIds: ['u1'] })).changedAgendaIds).toEqual(['t2'])
+    expect((await patchTest('tc4', { title: '다시 본 테스트' })).changedAgendaIds).toEqual([])
   })
 
   it('지우기 — 만든 사람 · 관리자만, 하위가 있으면 409', async () => {

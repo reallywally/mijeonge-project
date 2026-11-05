@@ -14,7 +14,16 @@ from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
-from app.models import Agenda, AgendaHistory, Project, Task, TaskAgendaLink, TestCase, TestRef
+from app.models import (
+    Agenda,
+    AgendaHistory,
+    Project,
+    Task,
+    TaskAgendaLink,
+    TestCase,
+    TestCc,
+    TestRef,
+)
 from app.models.base import new_id
 from app.schemas.risk import RiskSettings
 from app.schemas.test import (
@@ -267,6 +276,7 @@ async def _build(
                 start=row.start,
                 due=row.due,
                 owner_id=row.owner_id,
+                cc_ids=_cc_ids(row),
                 part_id=row.part_id,
                 # 묶음의 상태 · 신호는 화면이 하위에서 모은다
                 signals=(
@@ -341,6 +351,31 @@ async def _guard_owner(session: AsyncSession, project_id: str, owner_id: str | N
         )
 
 
+def _cc_ids(test: TestCase) -> list[str]:
+    return [cc.member_id for cc in test.cc]
+
+
+def _cc_rows(project_id: str, member_ids: list[str]) -> list[TestCc]:
+    return [
+        TestCc(project_id=project_id, member_id=member_id, sort_order=order)
+        for order, member_id in enumerate(member_ids)
+    ]
+
+
+async def _replace_cc(session: AsyncSession, test: TestCase, member_ids: list[str]) -> None:
+    """통째로 갈아끼운다 — 안건의 참조와 같다. 같은 사람 · 같은 순서면 손대지 않는다."""
+    keep = _cc_ids(test)
+    unique = await access.guard_cc(
+        session, test.project_id, member_ids, "TEST_CC_NOT_FOUND", keep=keep
+    )
+    if unique == keep:
+        return
+    # pk 가 (test_id, member_id) 라 옛 줄을 먼저 지워야 같은 사람을 다시 넣을 때 안 부딪힌다
+    test.cc = []
+    await session.flush()
+    test.cc = _cc_rows(test.project_id, unique)
+
+
 async def _guard_target(
     session: AsyncSession, project_id: str, kind: TestRefKind, target_id: str
 ) -> None:
@@ -413,6 +448,7 @@ async def create_test(
     _guard_period(payload.start, payload.due)
     await _guard_parent(session, project.id, None, payload.parent_id)
     await _guard_owner(session, project.id, payload.owner_id)
+    cc = await access.guard_cc(session, project.id, payload.cc_ids, "TEST_CC_NOT_FOUND")
     part_id = await _part_for_new(session, project.id, payload)
     refs = _unique_refs(payload.refs)
     if len(refs) > REFS_MAX:
@@ -440,6 +476,7 @@ async def create_test(
         part_id=part_id,
         created_by=actor_id,
         created_at=at,
+        cc=_cc_rows(project.id, cc),
     )
     session.add(test)
     await session.flush()
@@ -464,6 +501,7 @@ def _plan_fields(test: TestCase) -> list[tuple[str, object]]:
     return [
         ("parentId", test.parent_id),
         ("ownerId", test.owner_id),
+        ("ccIds", _cc_ids(test)),
         ("partId", test.part_id),
         ("start", test.start),
         ("due", test.due),
@@ -484,7 +522,8 @@ async def patch_test(
     texts_before = _text_fields(test)
     plan_before = _plan_fields(test)
     sent = payload.model_fields_set
-    changes = payload.model_dump(exclude_unset=True)
+    # 참조는 줄로 따로 간다 — 아래 setattr 로 칸에 넣지 않는다
+    changes = payload.model_dump(exclude_unset=True, exclude={"cc_ids"})
     _guard_period(changes.get("start", test.start), changes.get("due", test.due))
     if "parent_id" in changes:
         await _guard_parent(session, test.project_id, test.id, changes["parent_id"])
@@ -493,13 +532,16 @@ async def patch_test(
         await _guard_owner(session, test.project_id, changes["owner_id"])
     if "part_id" in changes and changes["part_id"] != test.part_id:
         await part_service.guard_part(session, test.project_id, changes["part_id"])
+    if "cc_ids" in sent:
+        await _replace_cc(session, test, payload.cc_ids)
     for field, value in changes.items():
         setattr(test, field, value)
     changed = _diff_fields(texts_before, _text_fields(test))
     changed += _diff_fields(plan_before, _plan_fields(test))
     history_service.record_test(session, test, changed, actor_id, now())
-    # 고쳤다는 것은 지금 기준으로 다시 봤다는 뜻이다
-    if sent:
+    # 고쳤다는 것은 지금 기준으로 다시 봤다는 뜻이다. 참조만 바꾼 것은 내용을 본 것이 아니라
+    # 기준 바뀜 신호를 지우지 않는다 (docs/api/cc.md '구현에서 메운 것')
+    if sent - {"cc_ids"}:
         test.basis_seq = await _current_basis(session, test.id)
     await session.commit()
     return await _one(session, test, today)

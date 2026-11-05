@@ -10,6 +10,8 @@
 > `options` · `ccIds` · `parentThreadId` 는 없어졌다. 정렬(`seq` 오름차순) · 거르기(지운 안건 · 지운 작업 빠짐)는 그대로다.
 > `null` 이 나갈 수 있는 `Agenda` 의 칸은 `ownerId` · `creatorId` · `dueDate` · `partId` · `decidedAt` · `minutesId`. 아래 옛 절의 `Thread` · `Entry` · `DecisionItem` 설명은 이 고침이 대신한다.
 
+> **2026-11-05 고침 (참조, `cc.md`)** — `Agenda` 에 **`ccIds: string[]`** 이 다시 실린다(담당자 바로 뒤, 고른 순서, 빈 값은 `[]` — `null` 아님). 위 '`ccIds` 는 없어졌다' 를 대신한다. 테스트(`TestCase`)의 `ccIds` 는 스냅샷이 아니라 테스트 목록 · 읽기 응답에 실린다(`test.md`).
+
 `GET /api/projects/{projectId}/snapshot`.
 **원본만 준다.** `ThreadRow` · `ThreadDetail` · `TaskRow` ·
 `TaskDetail` · `TaskThreadRow` 같은 계산된 타입은 담지 않는다 — 지금대로 프론트 스토어가 만든다.

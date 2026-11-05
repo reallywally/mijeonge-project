@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, new_id, trgm_index
 from app.models.task import HISTORY_CHANGES
@@ -81,6 +81,33 @@ class Agenda(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=FALSE)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_by: Mapped[str | None] = mapped_column(ForeignKey("member.id"))
+
+    # 참조 — 알아야 하는 사람. 권한 · 리스크와 무관하고 확인 요청이 받는 사람으로 쓴다
+    # (docs/api/cc.md · check.md). 프론트는 string[] 이라 순서가 뜻을 갖는다
+    cc: Mapped[list["AgendaCc"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="AgendaCc.sort_order",
+        lazy="selectin",
+    )
+
+
+class AgendaCc(Base):
+    """참조 한 사람 (docs/api/cc.md)."""
+
+    __tablename__ = "agenda_cc"
+    __table_args__ = (
+        # 안건과 같은 프로젝트여야 한다 (Q13 과 같은 방식). 안건을 지우면 같이 지운다
+        ForeignKeyConstraint(
+            ["agenda_id", "project_id"], ["agenda.id", "agenda.project_id"], ondelete="CASCADE"
+        ),
+    )
+
+    agenda_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # FK 는 위의 복합 FK 하나뿐이다
+    project_id: Mapped[str] = mapped_column(String(36))
+    # 멤버를 지우는 길이 없어 ON DELETE 를 두지 않는다
+    member_id: Mapped[str] = mapped_column(ForeignKey("member.id"), primary_key=True)
+    sort_order: Mapped[int] = mapped_column(Integer)
 
 
 class AgendaHistory(Base):

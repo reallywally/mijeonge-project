@@ -404,6 +404,7 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       decision,
       state: t.state,
       ownerId: t.ownerId,
+      ccIds: [],
       creatorId: me.id,
       dueDate: t.dueDate,
       partId: t.partId,

@@ -20,7 +20,7 @@ export interface CheckRecipientWorld {
 }
 
 /**
- * 받는 사람 — 연결된 작업의 담당자(작업 순).
+ * 받는 사람 — ① 연결된 작업의 담당자(작업 순) ② 안건의 참조(ccIds 순) (docs/api/cc.md).
  * 겹치면 처음 자리 하나, 누른 사람은 빼고, 활성 멤버가 아니면 조용히 건너뛴다
  */
 export function checkRecipients(w: CheckRecipientWorld): string[] {
@@ -31,7 +31,7 @@ export function checkRecipients(w: CheckRecipientWorld): string[] {
     .filter((t) => linked.has(t.id) && t.ownerId !== null)
     .map((t) => t.ownerId as string)
   const out: string[] = []
-  for (const id of owners) {
+  for (const id of [...owners, ...w.agenda.ccIds]) {
     if (id === w.senderId || out.includes(id) || !w.eligible(id)) continue
     out.push(id)
   }
@@ -55,7 +55,7 @@ export function checkBlock(
 export const CHECK_BLOCK_LABEL: Record<CheckBlock, string> = {
   'not-decided': '결정된 안건만 보낼 수 있어요',
   sent: '이 결정은 보냈어요',
-  'no-recipients': '받을 사람이 없어요 — 작업을 연결하고 담당자를 정하세요',
+  'no-recipients': '받을 사람이 없어요 — 연결 작업에 담당자를 정하거나 참조를 더하세요',
 }
 
 /** 한 번에 보낸 묶음 — 같은 결정 판으로 보낸 줄들 */

@@ -22,6 +22,7 @@ import TestGantt from '@/components/app/TestGantt.vue'
 import TestSignalChips from '@/components/app/TestSignalChips.vue'
 import TestStatusBadge from '@/components/app/TestStatusBadge.vue'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -80,10 +81,12 @@ function pickCard(key: TestNowKey) {
   if (view.value === 'gantt') router.push({ path: '/tests', query: { view: 'list' } })
 }
 
-/* 조회 조건 — 제목 · 담당자. 작업 목록과 같은 자리 */
+/* 조회 조건 — 제목 · 담당자 · 나를 참조. 작업 목록과 같은 자리 */
 const titleDraft = ref('')
 const query = ref('')
 const ownerFilter = ref<string>('all')
+/* 켜면 내가 참조(ccIds)에 있는 테스트만 */
+const ccMine = ref(false)
 const page = ref(1)
 const perPage = 10
 
@@ -93,11 +96,15 @@ function matchesOwner(row: TestRow) {
   return row.test.ownerId === ownerFilter.value
 }
 
+const matchesCc = (row: TestRow) =>
+  !ccMine.value || (data.currentMemberId !== null && row.test.ccIds.includes(data.currentMemberId))
+
 const filtered = computed(() =>
   testStore.visibleRows.filter(
     (r) =>
       r.test.title.includes(query.value) &&
       matchesOwner(r) &&
+      matchesCc(r) &&
       /* 카드는 돌리는 테스트(묶음이 아닌 것)를 센다 — 거를 때도 같다 */
       (card.value === null || (!r.isGroup && matchesNowCard(r, card.value))),
   ),
@@ -121,6 +128,7 @@ function resetAll() {
   titleDraft.value = ''
   query.value = ''
   ownerFilter.value = 'all'
+  ccMine.value = false
   card.value = null
   page.value = 1
 }
@@ -530,6 +538,15 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                   <SelectItem value="none">미정</SelectItem>
                 </SelectContent>
               </Select>
+              <label class="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm">
+                <Checkbox
+                  :model-value="ccMine"
+                  aria-label="나를 참조"
+                  data-cc-mine
+                  @update:model-value="(v) => ((ccMine = v === true), (page = 1))"
+                />
+                나를 참조
+              </label>
               <Button class="shrink-0" @click="search">
                 <Search class="size-4" />
                 조회

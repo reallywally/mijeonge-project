@@ -46,20 +46,23 @@ describe('결정 판', () => {
 })
 
 describe('받는 사람', () => {
-  it('연결 작업 담당자만, 작업 순 · 겹치면 처음 자리 하나 — 참조는 없어졌다', () => {
-    /* k4 · k22 둘 다 담당 u3 */
-    expect(recipients(agenda('t2'), 'u1')).toEqual(['u3'])
-    /* 연결 작업 없음 */
+  it('연결 작업 담당자(작업 순) 다음에 참조(ccIds 순) — 겹치면 처음 자리 하나', () => {
+    /* k4 · k22 둘 다 담당 u3, 참조 u2 · u4 */
+    expect(recipients(agenda('t2'), 'u1')).toEqual(['u3', 'u2', 'u4'])
+    /* 담당 u3 이 참조에도 있으면 작업 담당 자리 하나 */
+    expect(recipients({ ...agenda('t2'), ccIds: ['u4', 'u3'] }, 'u1')).toEqual(['u3', 'u4'])
+    /* 연결 작업도 참조도 없음 */
     expect(recipients(agenda('t6'), 'u1')).toEqual([])
   })
 
-  it('누른 사람은 빠진다 — t1 을 u3 이 누르면 아무도 없다', () => {
-    expect(recipients(agenda('t1'), 'u3')).toEqual([])
+  it('누른 사람은 빠진다 — t1(담당 u3 · 참조 u1)', () => {
+    expect(recipients(agenda('t1'), 'u3')).toEqual(['u1'])
     expect(recipients(agenda('t1'), 'u1')).toEqual(['u3'])
   })
 
-  it('활성 멤버가 아니면 조용히 건너뛴다', () => {
-    expect(recipients(agenda('t2'), 'u1', (id) => id !== 'u3')).toEqual([])
+  it('활성 멤버가 아니면 조용히 건너뛴다 — 참조도 같다', () => {
+    expect(recipients(agenda('t2'), 'u1', (id) => id !== 'u3')).toEqual(['u2', 'u4'])
+    expect(recipients(agenda('t2'), 'u1', (id) => id === 'u1')).toEqual([])
   })
 })
 

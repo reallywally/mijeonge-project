@@ -21,6 +21,19 @@ export function assignableMembers(members: Member[], projectMembers: ProjectMemb
   return members.filter((m) => m.active && granted.has(m.id))
 }
 
+/**
+ * 사람 찾기 — 이름(있으면 이메일도)에 적은 말이 들어 있는지. 대소문자는 가리지 않고, 한글은 그대로 견준다.
+ * 빈 말이면 모두 맞는다
+ */
+export function matchMember(member: Pick<Member, 'name'> & { email?: string }, query: string) {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return [member.name, member.email ?? ''].some((s) => s.toLowerCase().includes(q))
+}
+
+/** 참조(ccIds) — 겹친 id 는 앞의 하나만, 고른 순서 그대로 (docs/api/cc.md) */
+export const uniqueIds = (ids: string[]) => [...new Set(ids)]
+
 export const SYSTEM_ROLE_OPTIONS: { value: SystemRole; label: string }[] = [
   { value: 'user', label: '일반 사용자' },
   { value: 'admin', label: '시스템 관리자' },

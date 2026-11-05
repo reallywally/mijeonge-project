@@ -141,6 +141,8 @@ async def test_stamped_decision_stays_after_a_change(
         (1, "mysql 을 쓴다"),
         (1, "mysql 을 쓴다"),
         (2, "postgresql 로 바꾼다"),
+        (2, "postgresql 로 바꾼다"),
+        (2, "postgresql 로 바꾼다"),
     ]
 
 
@@ -167,7 +169,7 @@ async def test_one_batch_shares_rev_and_time(client: httpx.AsyncClient) -> None:
 
 
 async def test_recipients_are_task_owners_in_task_order(client: httpx.AsyncClient) -> None:
-    """작업 seq 순 담당자. 겹치면 처음 자리, 담당자 없는 작업은 건너뛴다. 참조는 없어졌다."""
+    """작업 seq 순 담당자. 겹치면 처음 자리, 담당자 없는 작업은 건너뛴다. t6 은 참조가 없다."""
     # 링크를 거는 순서와 상관없이 작업 seq 순이다 — k9(u4) · k13(u1) · k15(u2), k1 은 담당자 없음
     for task in ("k15", "k9", "k13", "k1", "k20"):
         await link(client, task, "t6")
@@ -177,13 +179,38 @@ async def test_recipients_are_task_owners_in_task_order(client: httpx.AsyncClien
 
 
 async def test_sender_is_left_out(client: httpx.AsyncClient, as_member: AsMember) -> None:
-    """t2 — 연결 작업 k4 · k22 담당 u3. 누른 사람은 받지 않는다."""
+    """t2 — 연결 작업 k4 · k22 담당 u3, 참조 u2 · u4. 누른 사람은 받지 않는다."""
     await link(client, "k13", "t2")
     u3 = await as_member("u3")
     await change(u3, "t2")
     res = await send(u3, "t2")
     assert res.status_code == 201
-    assert recipients(res) == ["u1"]
+    assert recipients(res) == ["u1", "u2", "u4"]
+
+
+async def test_recipients_are_task_owners_then_cc(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    """① 연결 작업 담당자(작업 seq 순) ② 참조(ccIds 순). 겹치면 처음 자리, 누른 사람은 빠진다."""
+    # t6 — 연결 작업 k9(u4) · k13(u1), 참조 u2 · u4(작업 담당과 겹침) · u3(누른 사람)
+    for task in ("k13", "k9"):
+        await link(client, task, "t6")
+    u1 = await as_member("u1")
+    res = await u1.patch("/api/agendas/t6", json={"ccIds": ["u2", "u4", "u3"]})
+    assert res.status_code == 200, res.text
+    u3 = await as_member("u3")
+    res = await send(u3, "t6")
+    assert res.status_code == 201
+    assert recipients(res) == ["u4", "u1", "u2"]
+
+
+async def test_cc_alone_is_enough(as_member: AsMember) -> None:
+    """연결 작업이 없어도 참조가 있으면 보낸다 — t6 은 연결 작업이 없다."""
+    u1 = await as_member("u1")
+    assert (await u1.patch("/api/agendas/t6", json={"ccIds": ["u4"]})).status_code == 200
+    res = await send(u1, "t6")
+    assert res.status_code == 201
+    assert recipients(res) == ["u4"]
 
 
 async def test_inactive_or_ungranted_are_skipped(
@@ -230,10 +257,10 @@ async def test_changed_decision_can_be_sent_again(as_member: AsMember) -> None:
     rev = await change(u1, "t2")
     res = await send(u1, "t2")
     assert res.status_code == 201
-    assert recipients(res) == ["u3"]
+    assert recipients(res) == ["u3", "u2", "u4"]
     rows = (await u1.get("/api/projects/p1/checks")).json()
     sent = [row["decisionRev"] for row in rows if row["agendaId"] == "t2"]
-    assert sent == [1, 1, 1, rev]
+    assert sent == [1, 1, 1, rev, rev, rev]
     assert rows[0]["confirmedAt"] is None
 
 
@@ -263,8 +290,9 @@ async def test_no_recipients_is_400(client: httpx.AsyncClient, as_member: AsMemb
     res = await send(u1, "t6")
     assert res.status_code == 400
     assert res.json()["code"] == "CHECK_NO_RECIPIENTS"
-    # 연결 작업 담당자가 나 하나뿐 — t1 은 k4(u3)
+    # 연결 작업 담당자가 나 하나뿐 — t1 은 k4(u3). 참조(u1)를 빼야 받을 사람이 없다
     u3 = await as_member("u3")
+    assert (await u3.patch("/api/agendas/t1", json={"ccIds": []})).status_code == 200
     await change(u3, "t1")
     res = await send(u3, "t1")
     assert res.status_code == 400

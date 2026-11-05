@@ -3,7 +3,7 @@ from pydantic import Field
 from app.schemas.base import Schema, Utc
 
 # bool 을 int 보다 앞에 둔다 — 검사 결과가 true/false 로 그대로 나가게.
-# list[str] 는 지난 연관 작업(`relatedIds`, Q61 → Q62 로 걷음) 줄을 읽을 때만
+# list[str] 는 참조(`ccIds`)와 지난 연관 작업(`relatedIds`, Q61 → Q62 로 걷음) 줄
 HistoryValue = bool | int | str | list[str] | None
 
 

@@ -9,6 +9,7 @@ import {
   clipText,
   EMPTY_BODY,
   diffChanges,
+  HISTORY_FIELDS,
   historyView,
   MISSING,
   mergesBody,
@@ -370,7 +371,7 @@ describe('안건 이력', () => {
     expect(ordered.map((c) => c.field)).toEqual(['title', 'decision', 'state', 'dueDate'])
   })
 
-  it('모르는 칸(지난 모델의 후보 · 참조 · 이력 줄 · 결정 항목)은 건너뛰고, 그것뿐인 줄은 뺀다', () => {
+  it('모르는 칸(지난 모델의 후보 · 이력 줄 · 결정 항목)은 건너뛰고, 그것뿐인 줄은 뺀다 — 참조는 그린다', () => {
     const row = (id: string, changes: ReturnType<typeof change>[]): HistoryEntry => ({
       id,
       changedAt: '2026-10-01T00:00:00Z',
@@ -382,7 +383,8 @@ describe('안건 이력', () => {
       'agenda',
       [
         row('a', [change('created', null, null)]),
-        row('b', [change('options', null, '우분투'), change('ccIds', [], ['u1'])]),
+        row('b', [change('options', null, '우분투')]),
+        row('e', [change('ccIds', [], ['u1'])]),
         row('c', [change('title', 'a', 'b'), change('entryText', 'x', 'y', 'decide')]),
         row('d', [change('itemCreated', null, '세션'), change('entryDeleted', 'x', null, 'defer')]),
       ],
@@ -390,7 +392,29 @@ describe('안건 이력', () => {
     )
     expect(view.map((e) => [e.id, e.changes.map((c) => c.field)])).toEqual([
       ['c', ['title']],
+      ['e', ['ccIds']],
       ['a', ['created']],
+    ])
+  })
+
+  it('참조 — 이름들로, 비면 없음, 칸 순서는 담당자 바로 뒤', () => {
+    const v = changeView('agenda', change('ccIds', ['u3'], ['u3', 'u1', 'u9']), names)
+    expect([v.label, v.from, v.to]).toEqual(['참조', '박지민', `박지민, 김철수, ${MISSING}`])
+    expect(changeView('test', change('ccIds', ['u1'], []), names)).toMatchObject({
+      label: '참조',
+      to: '없음',
+    })
+    for (const kind of ['agenda', 'test'] as const) {
+      const order = HISTORY_FIELDS[kind]
+      expect(order.indexOf('ccIds')).toBe(order.indexOf('ownerId') + 1)
+    }
+  })
+
+  it('참조 diff — 같은 사람 · 같은 순서면 안 남기고, 순서가 바뀌면 남긴다', () => {
+    const before = { ownerId: 'u1', ccIds: ['u2', 'u4'] }
+    expect(diffChanges(before, { ccIds: ['u2', 'u4'] }, 'agenda')).toEqual([])
+    expect(diffChanges(before, { ccIds: ['u4', 'u2'] }, 'agenda')).toEqual([
+      change('ccIds', ['u2', 'u4'], ['u4', 'u2']),
     ])
   })
 })

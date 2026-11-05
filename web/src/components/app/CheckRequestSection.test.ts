@@ -109,7 +109,8 @@ describe('[확인 요청]', () => {
     await mountDetail('t2')
 
     expect(sendButton()!.disabled).toBe(false)
-    expect($('[data-check-recipients]')!.textContent).toContain('받는 사람 1명')
+    /* 작업 담당 이도현 + 참조 박지훈 · 정하늘 */
+    expect($('[data-check-recipients]')!.textContent).toContain('받는 사람 3명')
     expect($('[data-check-older="1"]')).toBeNull()
     await click($('[data-check-older-toggle]'))
     expect($('[data-check-older="1"]')!.textContent).toContain('확인 1 / 3')

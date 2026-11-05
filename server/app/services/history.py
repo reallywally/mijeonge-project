@@ -30,6 +30,9 @@ def _value(value: object) -> HistoryValue:
         return value.isoformat()
     if value is None or isinstance(value, bool | int | str):
         return value
+    # 참조(ccIds)처럼 id 배열인 칸
+    if isinstance(value, list) and all(isinstance(each, str) for each in value):
+        return list(value)
     raise TypeError(f"이력에 남길 수 없는 값입니다: {type(value).__name__}")
 
 

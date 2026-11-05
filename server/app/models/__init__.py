@@ -1,4 +1,4 @@
-from app.models.agenda import Agenda, AgendaHistory
+from app.models.agenda import Agenda, AgendaCc, AgendaHistory
 from app.models.auth import AuthIdentity, AuthSession
 from app.models.base import Base, new_id
 from app.models.check import CheckRequest
@@ -15,7 +15,7 @@ from app.models.task import (
     TaskLine,
     TaskLog,
 )
-from app.models.test import TestCase, TestHistory, TestRef
+from app.models.test import TestCase, TestCc, TestHistory, TestRef
 
 __all__ = [
     "AuthIdentity",
@@ -37,9 +37,11 @@ __all__ = [
     "TaskLog",
     "TaskAgendaLink",
     "TestCase",
+    "TestCc",
     "TestHistory",
     "TestRef",
     "Agenda",
+    "AgendaCc",
     "AgendaHistory",
     "new_id",
 ]

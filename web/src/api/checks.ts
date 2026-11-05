@@ -49,7 +49,7 @@ const mock = {
       throw mockError(
         400,
         'CHECK_NO_RECIPIENTS',
-        '받을 사람이 없습니다. 작업을 연결하고 담당자를 정해 주세요.',
+        '받을 사람이 없습니다. 연결 작업에 담당자를 정하거나 참조를 더해 주세요.',
       )
 
     const createdAt = nowIso()

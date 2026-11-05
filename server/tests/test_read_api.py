@@ -27,6 +27,8 @@ AGENDA_KEYS = {
     "decision",
     "state",
     "ownerId",
+    # 참조 — 고른 순서, 빈 값은 [] (docs/api/cc.md)
+    "ccIds",
     # 등록한 사람 — 기록이 없던 지난 안건은 null
     "creatorId",
     "dueDate",

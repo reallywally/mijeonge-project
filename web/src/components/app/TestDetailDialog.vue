@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ChevronRight, Clock, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
 import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
+import CcField from '@/components/app/CcField.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import ParentTaskPicker from '@/components/app/ParentTaskPicker.vue'
@@ -61,6 +62,7 @@ const title = ref('')
 const content = ref('')
 const testData = ref('')
 const ownerId = ref<string | null>(null)
+const ccIds = ref<string[]>([])
 const partId = ref<string | null>(null)
 const parentId = ref<string | null>(null)
 const start = ref('')
@@ -87,6 +89,7 @@ function fill() {
     content.value = t.content
     testData.value = t.testData
     ownerId.value = t.ownerId
+    ccIds.value = [...t.ccIds]
     partId.value = t.partId
     parentId.value = t.parentId
     start.value = t.start ?? ''
@@ -97,6 +100,7 @@ function fill() {
     content.value = ''
     testData.value = ''
     ownerId.value = null
+    ccIds.value = []
     parentId.value = props.initialParentId ?? null
     partId.value = partForChild(parentId.value)
     start.value = ''
@@ -145,6 +149,11 @@ function commitText(key: TextKey) {
 
 watch(ownerId, (v) => {
   if (test.value && v !== test.value.ownerId) void testStore.patch(test.value.id, { ownerId: v })
+})
+/* 참조는 통째로 갈아끼운다 — 같은 사람 · 같은 순서면 보내지 않는다 */
+watch(ccIds, (v) => {
+  if (test.value && v.join() !== test.value.ccIds.join())
+    void testStore.patch(test.value.id, { ccIds: v })
 })
 watch(partId, (v) => {
   if (test.value && v !== test.value.partId) void testStore.patch(test.value.id, { partId: v })
@@ -238,6 +247,7 @@ async function create() {
     start: start.value || null,
     due: due.value || null,
     ownerId: ownerId.value,
+    ccIds: ccIds.value,
     partId: partId.value,
   })
   saving.value = false
@@ -453,6 +463,8 @@ const area =
                 <OwnerSelect v-model="ownerId" label="담당자" />
               </dd>
             </div>
+
+            <CcField v-model="ccIds" />
 
             <PartField v-model="partId" :trigger-class="ghost" />
 

@@ -70,10 +70,14 @@ async def test_seed_checks_point_at_the_first_decision(session: AsyncSession) ->
     for agenda_id in ("t1", "t2"):
         agenda = await session.get(Agenda, agenda_id)
         assert agenda is not None and agenda.decision_rev == 1
-    # 받는 사람 규칙은 연결 작업 담당자뿐이 됐다 — u2 · u4(c2 · c3)는 참조로 받았던 지난 기록이다
+    # 받는 사람 = 연결 작업 담당자(u3) 다음 참조(u2 · u4) — c1 ~ c3 과 같다 (docs/api/cc.md)
     t2 = await session.get(Agenda, "t2")
     assert t2 is not None
-    assert await recipients_of(session, t2, "u1") == ["u3"]
+    assert await recipients_of(session, t2, "u1") == ["u3", "u2", "u4"]
+    # c4 — 연결 작업 담당 u3 이 보낸 사람이라 빠지고 참조 u1 만
+    t1 = await session.get(Agenda, "t1")
+    assert t1 is not None
+    assert await recipients_of(session, t1, "u3") == ["u1"]
 
 
 async def test_seed_minutes_m1(session: AsyncSession) -> None:

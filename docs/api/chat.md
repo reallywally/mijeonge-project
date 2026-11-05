@@ -338,6 +338,7 @@ export interface TaskBatchResult {
 - **이름** — 도구 `search_threads` · `get_thread` → **`search_agendas` · `get_agenda`**(`tool` 이벤트의 `name` 도), 근거 표시 `[[thread:ID]]` → **`[[agenda:ID]]`**, `ChatRef.kind` 와 근거 칩의 `'thread'` → `'agenda'`. 저장된 지난 대화 · 리포트의 `[[thread:ID]]` 는 글이라 그대로 남는다 — **화면이 같은 칩으로 읽는다**
 - **검색** — `SearchResult` 는 `{ agendas: AgendaHit[], tasks: TaskHit[] }`. 안건은 **제목 · 배경 · 결정내용**에서 찾고 `matched` 는 `'title' | 'description' | 'decision'`(같은 점수면 이 순서). `AgendaHit.decision` 은 안건의 결정내용 그대로(없으면 `''`). 여러 줄 결정내용의 `snippet` 은 줄바꿈을 공백으로 편 한 줄이다
 - **`get_agenda` 결과** — `{ agenda: Agenda, tasks: LinkedTask[] }`. 제목 · 설명 · 결정내용 · 상태 · 담당자 · 기한 · 파트 · 결정 시각이 `agenda` 에, 연결 작업(id · key · 제목 · 상태, 작업 등록 순)이 `tasks` 에 있다. `items` · `entries` 는 없어졌다
+- **(2026-11-05, `cc.md`) `get_agenda` 결과에 참조** — `{ agenda, tasks, ccNames: string[] }`. `agenda.ccIds` 가 실리고, 그 사람들의 **이름**을 `ccNames` 에 같은 순서로 싣는다(챗봇이 id 대신 이름으로 말하게). 도구 설명에도 '참조(알아야 하는 사람, 권한과 무관)' 를 적었다. 리스크 도구 `get_decision_risks` 는 참조를 세지 않는다
 - **답하는 규칙** — 지금의 결정은 `agenda.decision` 글 그대로다. 결정내용이 있어도 `decided` 가 아니면 "아직 확정은 아니다" 고 같이 말한다. 미룬 횟수 · 마지막 미룸 사유는 없어졌다. 상태 이름은 우리말(대기 · 논의중 · 결정)로 쓴다
 - **리스크 신호** — `deferredRepeatedly` 는 없어졌다(`risk.md`)
 - 지금 도구 전체: `search_agendas` · `get_agenda` · `search_tasks` · `get_task` · `list_tasks` · `find_similar_tasks` · `get_decision_risks` · `list_members` · `propose_tasks`

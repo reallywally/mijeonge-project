@@ -50,6 +50,8 @@ class TestCaseOut(Schema):
     start: date | None
     due: date | None
     owner_id: str | None
+    # 참조 — 고른 순서, 빈 값은 [] (docs/api/cc.md)
+    cc_ids: list[str]
     part_id: str | None
     signals: list[TestSignal]
     # basis 뒤로 결정이 바뀐 닿는 안건 — 처음 바뀐 순 (docs/api/agenda.md)
@@ -70,6 +72,8 @@ class TestCreate(Schema):
     start: date | None = None
     due: date | None = None
     owner_id: str | None = None
+    # 겹치면 앞의 하나만 남긴다 — 서비스가 본다
+    cc_ids: list[str] = []
     # 안 보내면 상위 테스트의 파트를 따른다 — `model_fields_set` 으로 가른다
     part_id: str | None = None
 
@@ -88,6 +92,8 @@ class TestPatch(Schema):
     start: date | None = None
     due: date | None = None
     owner_id: str | None = None
+    # 통째로 갈아끼운다. 기본값만 '안 보냄' 표시라 null 은 422 다
+    cc_ids: list[str] = []
     part_id: str | None = None
 
 

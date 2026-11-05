@@ -6,8 +6,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { Select } from '@/components/ui/select'
+import MemberPicker from '@/components/app/MemberPicker.vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
+import CcField from '@/components/app/CcField.vue'
 import TasksView from './TasksView.vue'
 import TestsView from './TestsView.vue'
 import AgendaListView from './AgendaListView.vue'
@@ -282,6 +285,49 @@ describe('테스트 추가', () => {
       refs: [{ kind: 'task', id: 'k21' }],
     })
     expect(window.location.pathname).toBe(`/tests/${made.id}`)
+  })
+})
+
+describe('테스트 참조', () => {
+  const chips = () => $$('[data-cc-field] [data-cc]').map((c) => c.dataset.cc)
+
+  it('나를 참조를 켜면 내가 참조인 테스트만, 초기화하면 푼다', async () => {
+    const { w } = await mountAt('/tests?view=list', 'u3@inno-ax.com')
+    usePartStore().setScope('all')
+    await flushPromises()
+    const all = $$('[data-test-row]').length
+    /* 이도현(u3)은 tc2 의 참조 */
+    await w.find('[data-cc-mine]').trigger('click')
+    expect($$('[data-test-row]').map((r) => r.dataset.testRow)).toEqual(['tc2'])
+    await click(button('초기화'))
+    expect($$('[data-test-row]')).toHaveLength(all)
+  })
+
+  it('상세 — 담당자 아래 참조 칩, 더하고 빼면 바로 저장되고 이력이 남는다', async () => {
+    const { w } = await mountAt('/tests/tc2')
+    expect(chips()).toEqual(['u3'])
+    w.findComponent(CcField).findComponent(MemberPicker).vm.$emit('pick', 'u4')
+    await flushPromises()
+    expect(useTestStore().byId.tc2.ccIds).toEqual(['u3', 'u4'])
+    await click($('[data-cc="u3"] [data-cc-remove]'))
+    expect(useTestStore().byId.tc2.ccIds).toEqual(['u4'])
+    expect(chips()).toEqual(['u4'])
+
+    const { fetchTestHistory } = await import('@/api/history')
+    const rows = (await fetchTestHistory('tc2'))
+      .flatMap((e) => e.changes)
+      .filter((c) => c.field === 'ccIds')
+    expect(rows.map((c) => c.to)).toEqual([['u3', 'u4'], ['u4']])
+  })
+
+  it('추가 — 고른 참조가 실려 들어간다', async () => {
+    const { w } = await mountAt('/tests/new')
+    await type('textarea[aria-label="제목"]', '참조 붙인 테스트')
+    w.findComponent(CcField).findComponent(MemberPicker).vm.$emit('pick', 'u2')
+    await flushPromises()
+    await click(button('만들기'))
+    const made = useTestStore().tests.find((t) => t.title === '참조 붙인 테스트')!
+    expect(made.ccIds).toEqual(['u2'])
   })
 })
 

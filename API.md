@@ -21,7 +21,8 @@
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
 | `docs/api/part.md` | 파트 — 보기 범위(권한 아님) · 파트 관리 · 작업 · 안건의 `partId` |
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
-| `docs/api/check.md` | 확인 요청 — 결정된 안건에서 버튼 하나로 연결 작업 담당자에게 · 결정 판(`decisionRev`) 하나에 한 번 · 받은 것 / 보낸 것 · 배지. 2차 확인율 분석의 테두리. 참조(`ccIds`)는 2026-11-04 걷었다 |
+| `docs/api/check.md` | 확인 요청 — 결정된 안건에서 버튼 하나로 연결 작업 담당자 + 안건 참조에게 · 결정 판(`decisionRev`) 하나에 한 번 · 받은 것 / 보낸 것 · 배지. 2차 확인율 분석의 테두리 |
+| `docs/api/cc.md` | **참조(cc)** — 안건 · 테스트의 `ccIds`(알아야 하는 사람, 권한 · 리스크와 무관) · 검사 · 이력 · 확인 요청 받는 사람 (2026-11-05) |
 | `docs/api/minutes.md` | 회의록 — 게시판(쓰기 · 읽기 · 고치기 · 지우기) · 회의록 하나 → 새 안건 · 기존 안건 결정 갈아끼우기(`updates`, 2026-11-04) · 작업 초안(SSE) → 고른 것만 한 번에 등록, 출처 `minutesId`. 2단계 녹음 업로드의 테두리 |
 | `docs/api/task-flow.md` | 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕. 선행 작업은 걷었다(Q63) |
 | `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
@@ -93,6 +94,7 @@
 | ~~422~~ | ~~`ENTRY_ITEM_REQUIRED`~~ | 이력 줄 · 결정 항목을 걷어 안 나온다 (2026-11-04) |
 | ~~404~~ | ~~`ITEM_NOT_FOUND`~~ | 결정 항목을 걷어 안 나온다 (2026-11-04) |
 | ~~403~~ | ~~`FORBIDDEN`~~ | ~~결정 항목의 이름을 바꾸거나 지우려 할 때~~ — 결정 항목을 걷었다 (2026-11-04) |
+| 400 | `AGENDA_CC_NOT_FOUND` · `TEST_CC_NOT_FOUND` | 안건 · 테스트 등록 · 수정의 `ccIds` 에 **새로 더한** id 가 그 프로젝트의 활성 멤버가 아닐 때(이미 걸린 사람을 그대로 두는 수정은 통과, Q68). `detail` 은 `{ "ccIds": "<처음 걸린 id>" }` — `docs/api/cc.md` (2026-11-05) |
 | 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때 — **8단계부터는 그 프로젝트의 활성 멤버가 아닐 때**(이미 걸린 담당자를 그대로 두는 수정은 통과). `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
@@ -116,7 +118,7 @@
 | GET | `/api/projects` | 프로젝트 목록. 상단 프로젝트 선택이 쓴다. **빈 배열은 정상 상태다** — 404 가 아니다 (Q18). **지운 프로젝트는 빠지고, `active` → `planned` → `closed`**(그 안은 전과 같은 순서) | `Project[]` (Q9 로 `taskKeyPrefix`, 2026-11-02 `description` · `startDate` · `endDate` · `status` · `closedAt` 이 늘었다) | 연결 (2026-11-02 늘림 — 구현, 같은 날 `status` 에 `planned` 늘림 — 구현) |
 | POST | `/api/projects` | 프로젝트 등록. 빈 상태에서 앱을 여는 유일한 길이라 **읽기 API 와 같이 세운다** (Q18). `description` · `startDate` · `endDate` 는 선택 | `Project` · 201 | 연결 (2026-11-02 늘림 — 구현) |
 | GET | `/api/members` | 멤버 목록. 담당자 고르는 자리가 전부 쓴다. 전사 공통이라 스냅샷에 안 싣는다 (Q5 · Q6) | `Member[]` | 연결 |
-| GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다. **2026-11-04 `threads` → `agendas`, `taskThreadLinks` → `taskAgendaLinks`, `decisionItems` · `entries` 는 빠졌다**(`docs/api/agenda.md` '스냅샷') | `ProjectSnapshot` | 구현 (2026-11-04 고침) |
+| GET | `/api/projects/{projectId}/snapshot` | 그 프로젝트의 레코드 전부. `stores/data.ts` 를 그대로 채운다. **2026-11-04 `threads` → `agendas`, `taskThreadLinks` → `taskAgendaLinks`, `decisionItems` · `entries` 는 빠졌다**(`docs/api/agenda.md` '스냅샷'). 2026-11-05 `agendas` 에 `ccIds`(`cc.md`) | `ProjectSnapshot` | 구현 (2026-11-05 고침) |
 
 쓰기(3단계)는 스토어 함수 하나가 엔드포인트 하나다. 응답은 **바뀐 레코드**를 돌려준다.
 
@@ -129,8 +131,8 @@
 | PATCH | `/api/tasks/{taskId}/lines/{lineId}` | 본문 체크박스 켜고 끄기. 권한은 위 PATCH 와 같다 | `Task` | 연결 (2026-11-02 권한 — 구현) |
 | PUT · DELETE | `/api/tasks/{taskId}/agendas/{agendaId}` | 작업 ↔ 안건 링크 (멱등). 권한은 위 PATCH 와 같다(작업 쪽으로 본다). 2026-11-04 `/threads/` 에서 경로만 바꿈 | 링크 · 204 | 구현 (2026-11-04 고침) |
 | DELETE | `/api/tasks/{taskId}` | 작업 삭제 — **논리 삭제**(2026-11-02 하드 → 논리, 응답은 그대로). 서버가 `is_deleted` · `deleted_at` · `deleted_by` 를 찍고 이력에 `deleted` 줄을 남긴다. 본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 변경 이력 · 테스트 참조 태그는 DB 에 남지만 **어디서도 없는 것처럼** 나간다 — 스냅샷 `tasks` · `taskAgendaLinks`, 테스트 `refs`, 검색 · 챗봇 도구 · 리스크 · 리포트에서 빠지고, 그 작업으로 가는 경로(PATCH · 줄 · 링크 · 댓글 · 이력 · 다시 지우기)는 404 `TASK_NOT_FOUND`(댓글 id 경로는 `COMMENT_NOT_FOUND`), `parentId` 로 주면 400 `TASK_PARENT_NOT_FOUND`. 되살리는 API 는 없다. 작업 번호는 다시 쓰지 않는다. **생성자 · 프로젝트 관리자 · 시스템 관리자만**(담당자는 못 지운다) — 그 밖은 403 `FORBIDDEN`. **하위 작업(손자 이하 전부, 이미 지운 것 빼고)까지 줄기째 지운다** — 줄기의 작업마다 같은 시각으로 세 칸을 찍고 `deleted` 이력 줄을 남긴다(한 트랜잭션). 뿌리 · 후손 하나하나에 지울 권한이 있어야 하고, 하나라도 없으면 아무것도 안 지우고 403 `FORBIDDEN`(`지울 수 없는 하위 작업이 있습니다.`). 확인은 화면이 받는다. 없으면 404 `TASK_NOT_FOUND` (2026-11-02, 줄기째는 2026-11-05 — 전엔 409 `TASK_HAS_CHILDREN`) | 204 | 구현 |
-| POST | `/api/projects/{projectId}/agendas` | 안건 등록 — `AgendaInput`(`title` 필수 · `description` · `decision` · `state`(기본 `queued`) · `ownerId` · `dueDate` · `partId`). **`creatorId` 는 요청한 사람.** `decided` 로 등록하면 `decidedAt` = 등록 시각 · 판 1, 결정내용만 있어도 판 1. 변경 이력에 `created` (`docs/api/agenda.md`, 2026-11-04) | `Agenda` · 201 | 구현 (2026-11-04) |
-| PATCH | `/api/agendas/{agendaId}` | 안건 부분 수정 — `AgendaPatch`(`title` · `description` · `decision` · `state` · `ownerId` · `dueDate` · `partId`). **결정내용 · 상태도 여기서 바뀐다**(사람이 고른다). `decidedAt` · `decisionRev` 는 서버가 맞춘다(`agenda.md` '모양'). 네 글 칸의 `null` 은 422. **생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자만** — 그 밖은 403 `FORBIDDEN`. 바뀐 칸은 변경 이력에 (2026-11-04) | `Agenda` | 구현 (2026-11-04) |
+| POST | `/api/projects/{projectId}/agendas` | 안건 등록 — `AgendaInput`(`title` 필수 · `description` · `decision` · `state`(기본 `queued`) · `ownerId` · `ccIds`(기본 `[]`, 2026-11-05 `cc.md`) · `dueDate` · `partId`). **`creatorId` 는 요청한 사람.** `decided` 로 등록하면 `decidedAt` = 등록 시각 · 판 1, 결정내용만 있어도 판 1. 변경 이력에 `created` (`docs/api/agenda.md`, 2026-11-04) | `Agenda` · 201 | 구현 (2026-11-04, `ccIds` 2026-11-05) |
+| PATCH | `/api/agendas/{agendaId}` | 안건 부분 수정 — `AgendaPatch`(`title` · `description` · `decision` · `state` · `ownerId` · `ccIds`(통째로 갈아끼움, `null` 422 — 2026-11-05 `cc.md`) · `dueDate` · `partId`). **결정내용 · 상태도 여기서 바뀐다**(사람이 고른다). `decidedAt` · `decisionRev` 는 서버가 맞춘다(`agenda.md` '모양'). 네 글 칸의 `null` 은 422. **생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자만** — 그 밖은 403 `FORBIDDEN`. 바뀐 칸은 변경 이력에 (2026-11-04) | `Agenda` | 구현 (2026-11-04, `ccIds` 2026-11-05) |
 | ~~POST · PATCH · DELETE~~ | ~~`/api/threads/{threadId}/entries…` · `/api/threads/{threadId}/items…`~~ | **2026-11-04 걷었다** — 이력 줄 · 결정 항목이 없어졌다(`docs/api/agenda.md`). 결정은 위 PATCH 로만 바뀐다 | 404 | 걷음 |
 | DELETE | `/api/agendas/{agendaId}` | 안건 삭제 — **논리 삭제**(2026-11-02 규칙 그대로, 경로만 2026-11-04 바꿈). 링크 · 확인 요청 · 테스트 참조는 DB 에 남지만 **어디서도 없는 것처럼** 나가고, 그 안건으로 가는 경로는 404 `AGENDA_NOT_FOUND`(회의록 반영은 400). 생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자. 하위 안건이 없어 409 는 없다 | 204 | 구현 (2026-11-04) |
 | GET | `/api/tasks/{taskId}/comments` | 작업 댓글 목록 — **등록 순(`seq` 오름차순, 오래된 것 먼저)**. 없는 작업은 404 `TASK_NOT_FOUND` | `TaskComment[]` | 구현 |
@@ -189,7 +191,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/projects/{projectId}/checks` | 그 프로젝트의 확인 요청 전부(`seq` 오름차순). 받은 것 · 보낸 것 · 작업/안건별은 화면이 거른다 | `CheckRequest[]` | 구현 |
-| POST | `/api/agendas/{agendaId}/checks` | 보내기 — 본문 없음. 결정된 안건 · **지금 결정 판 하나에 한 번**. 받는 사람은 **연결 작업 담당자**(나 빼고). 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 결정 판 · 결정내용 · 부하를 찍는다 | `CheckRequest[]` · 201 | 구현 (2026-11-04 고침) |
+| POST | `/api/agendas/{agendaId}/checks` | 보내기 — 본문 없음. 결정된 안건 · **지금 결정 판 하나에 한 번**. 받는 사람은 **연결 작업 담당자(작업 seq 순) + 안건 참조(`ccIds` 순)**(겹치면 처음 자리, 나 빼고, 2026-11-05 `cc.md`). 사람 수만큼 줄을 한 트랜잭션으로, 줄마다 결정 판 · 결정내용 · 부하를 찍는다 | `CheckRequest[]` · 201 | 구현 (2026-11-04 고침) |
 | POST | `/api/checks/{checkId}/confirm` | 확인 — 받은 사람만(403 `FORBIDDEN`), 멱등 | `CheckRequest` | 구현 |
 | GET | `/api/checks/pending-count` | 헤더 배지 — 내 대기 수, 합과 프로젝트별 | `CheckPendingCount` | 구현 |
 
@@ -218,8 +220,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET · POST | `/api/projects/{projectId}/tests` | 목록(`seq` 순, 며칠째 · 신호 · 기준 바뀜까지 서버가 셈) · 추가 | `TestCase[]` · 201 `TestCase` | 구현 |
-| GET · PATCH · DELETE | `/api/tests/{testId}` | 읽기 · 고치기(단계는 목록째) · 지우기(만든 사람 · 관리자, 하위 있으면 409) | `TestCase` · 204 | 구현 |
+| GET · POST | `/api/projects/{projectId}/tests` | 목록(`seq` 순, 며칠째 · 신호 · 기준 바뀜까지 서버가 셈) · 추가. `ccIds`(참조, 2026-11-05 `cc.md`) | `TestCase[]` · 201 `TestCase` | 구현 |
+| GET · PATCH · DELETE | `/api/tests/{testId}` | 읽기 · 고치기(단계는 목록째, `ccIds` 는 통째로) · 지우기(만든 사람 · 관리자, 하위 있으면 409) | `TestCase` · 204 | 구현 |
 | POST | `/api/tests/{testId}/status` | 상태 바꾸기(실패 · 막힘은 메모, 덮어씀) | `TestCase` | 구현 |
 | PUT · DELETE | `/api/tests/{testId}/refs/{kind}/{refId}` | 작업 · 안건 태그 걸기 · 떼기(멱등). `kind` = `task` · `agenda`(2026-11-04 `thread` 에서) | `TestCase` · 204 | 구현 |
 | POST | `/api/tests/{testId}/basis` | "그대로 맞다" — 기준 바뀜을 지운다 | `TestCase` | 구현 |
@@ -232,12 +234,12 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | --- | --- | --- | --- | --- |
 | GET | `/api/tasks/{taskId}/history` | 작업의 변경 이력 — 등록 순(오래된 것 먼저), 요청 하나 = 한 줄 | `HistoryEntry[]` | 구현 |
 | GET | `/api/tests/{testId}/history` | 테스트의 변경 이력 — 같은 모양 | `HistoryEntry[]` | 구현 |
-| GET | `/api/agendas/{agendaId}/history` | 안건의 변경 이력 — 같은 모양, 칸은 `history.md` '칸 — 안건'(2026-11-04 고침: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 파트 · 기한). 없거나 지운 안건은 404 `AGENDA_NOT_FOUND` | `HistoryEntry[]` | 구현 (2026-11-04 고침) |
+| GET | `/api/agendas/{agendaId}/history` | 안건의 변경 이력 — 같은 모양, 칸은 `history.md` '칸 — 안건'(2026-11-04 고침: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 참조(2026-11-05) · 파트 · 기한). 없거나 지운 안건은 404 `AGENDA_NOT_FOUND` | `HistoryEntry[]` | 구현 (2026-11-04 고침) |
 
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q68).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q69).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

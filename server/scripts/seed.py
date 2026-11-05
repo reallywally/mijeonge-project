@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import engine, session_factory
 from app.models import (
     Agenda,
+    AgendaCc,
     AgendaHistory,
     AuthIdentity,
     AuthSession,
@@ -41,6 +42,7 @@ from app.models import (
     TaskLine,
     TaskLog,
     TestCase,
+    TestCc,
     TestHistory,
     TestRef,
 )
@@ -205,6 +207,11 @@ DECISIONS: dict[str, tuple[str, str, int, str]] = {
 }
 
 
+# 참조 — 목업(web/src/fixtures)과 값 · 순서까지 같다 (docs/api/cc.md '시드 · 목업'). 나머지는 []
+AGENDA_CC: dict[str, list[str]] = {"t1": ["u1"], "t2": ["u2", "u4"]}
+TEST_CC: dict[str, list[str]] = {"tc2": ["u3"]}
+
+
 def agenda(
     id_: str,
     title: str,
@@ -231,6 +238,10 @@ def agenda(
         due_date=d(due),
         part_id=AGENDA_PARTS.get(id_),
         created_at=at(created),
+        cc=[
+            AgendaCc(project_id=project, member_id=member_id, sort_order=order)
+            for order, member_id in enumerate(AGENDA_CC.get(id_, []))
+        ],
     )
 
 
@@ -906,6 +917,10 @@ def test_cases() -> list[TestCase]:
             basis_seq=row.basis,
             created_by=row.owner,
             created_at=at(TEST_CREATED),
+            cc=[
+                TestCc(project_id="p1", member_id=member_id, sort_order=order)
+                for order, member_id in enumerate(TEST_CC.get(f"tc{no}", []))
+            ],
         )
         for no, row in enumerate(SEED_TESTS, start=1)
     ]
@@ -965,6 +980,7 @@ async def clear(session: AsyncSession) -> None:
     for model in (
         TestHistory,
         TestRef,
+        TestCc,
         TestCase,
         ProjectReport,
         CheckRequest,
@@ -976,6 +992,7 @@ async def clear(session: AsyncSession) -> None:
         TaskLine,
         Task,
         AgendaHistory,
+        AgendaCc,
         Agenda,
         Minutes,
         PartMember,
