@@ -921,23 +921,22 @@ async def test_decision_risks_tool_round(session: AsyncSession) -> None:
     (result,) = tool_results(fake.calls[1])
     assert result["is_error"] is False
     report = json.loads(result["content"])
-    assert set(report) == {"asOf", "settings", "agendas", "tasks", "owners"}
+    # '안건과 어긋난 작업'(tasks)을 걷었다(2026-11-05)
+    assert set(report) == {"asOf", "settings", "agendas", "owners"}
     # 오늘은 프롬프트의 오늘과 같은 한국 시간이다
     assert report["asOf"] == today_kst().isoformat()
-    assert {"taskId": "k22", "signal": "decidedButBlocked"}.items() <= next(
-        t for t in report["tasks"] if t["taskId"] == "k22"
-    ).items()
     assert events[-1].type == "done"
 
 
 async def test_decision_risks_by_member(session: AsyncSession) -> None:
     await seed(session)
     whole = await risks(session, {})
-    mine = await risks(session, {"member_id": "u3"})
+    mine = await risks(session, {"member_id": "u1"})
 
-    assert mine["agendas"] == [t for t in whole["agendas"] if t["ownerId"] == "u3"]
-    assert mine["tasks"] == [t for t in whole["tasks"] if t["ownerId"] == "u3"]
-    assert any(t["taskId"] == "k22" for t in mine["tasks"])
+    assert mine["agendas"] == [t for t in whole["agendas"] if t["ownerId"] == "u1"]
+    assert mine["agendas"]
+    # 안건을 안 맡았어도 막힌 작업을 맡은 사람은 찾는다 — 걸러진 안건은 비어 있다
+    assert (await risks(session, {"member_id": "u3"}))["agendas"] == []
     # 사람별 표는 거르지 않는다
     assert mine["owners"] == whole["owners"]
 
@@ -948,15 +947,12 @@ async def test_decision_risks_by_part_id_or_name(session: AsyncSession) -> None:
     by_id = await risks(session, {"part_id": "pt1"})
 
     assert by_id["agendas"] == [t for t in whole["agendas"] if t["partId"] == "pt1"]
-    assert by_id["tasks"] == [t for t in whole["tasks"] if t["partId"] == "pt1"]
-    assert any(t["taskId"] == "k22" for t in by_id["tasks"])
     assert by_id["owners"] == whole["owners"]
     # 파트 목록 도구가 없어 Claude 는 이름을 넣는다 — 같은 결과다
     assert await risks(session, {"part_id": " 인프라 "}) == by_id
     # 둘 다 주면 둘 다 맞는 것만
     both = await risks(session, {"member_id": "u1", "part_id": "pt1"})
     assert all(t["ownerId"] == "u1" and t["partId"] == "pt1" for t in both["agendas"])
-    assert not any(t["taskId"] == "k22" for t in both["tasks"])
 
 
 @pytest.mark.parametrize(
@@ -985,7 +981,6 @@ async def test_decision_risks_cannot_switch_project(session: AsyncSession) -> No
     await seed(session)
     report = await risks(session, {"project_id": "p1"}, project="p2")
     assert not any(t["agendaId"] in {"t3", "t5"} for t in report["agendas"])
-    assert not any(t["taskId"] == "k22" for t in report["tasks"])
 
 
 def test_decision_risks_label() -> None:

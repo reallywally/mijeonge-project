@@ -25,9 +25,6 @@ from app.schemas.risk import (
     RiskAgendaState,
     RiskLevel,
     RiskSettings,
-    RiskTaskStatus,
-    TaskRisk,
-    TaskRiskSignal,
 )
 from app.services import project as project_service
 from app.services.access import live_agenda_ids, live_task_ids
@@ -45,15 +42,9 @@ SIGNAL_SCORES: dict[AgendaRiskSignal, int] = {
 }
 # 막는 일이 많을수록 위로 오되 그것만으로 다른 신호를 덮지 않는다
 IMPACT_CAP = 3
-TASK_SIGNAL_ORDER: tuple[TaskRiskSignal, ...] = (
-    "decidedButBlocked",
-    "blockedWithoutAgenda",
-    "dueBeforeDecision",
-)
 UNDECIDED = ("queued", "open")
 # DB 의 글자를 응답의 Literal 로 — 완료 · 결정은 여기까지 오기 전에 걸러진다
 UNDECIDED_STATE: dict[str, RiskAgendaState] = {"queued": "queued", "open": "open"}
-ACTIVE_STATUS: dict[str, RiskTaskStatus] = {"todo": "todo", "doing": "doing", "blocked": "blocked"}
 
 
 def default_settings() -> RiskSettings:
@@ -97,12 +88,9 @@ async def save_settings(
 @dataclass
 class _Task:
     id: str
-    key: str
-    title: str
     parent_id: str | None
     status: str
     owner_id: str | None
-    part_id: str | None
     due: date | None
     seq: int
 
@@ -192,12 +180,9 @@ async def _read(
     task_rows = await session.execute(
         select(
             Task.id,
-            Task.key,
-            Task.title,
             Task.parent_id,
             Task.status,
             Task.owner_id,
-            Task.part_id,
             Task.due,
             Task.seq,
         )
@@ -234,10 +219,8 @@ async def decision_risks(
     for task in tasks.values():
         if task.parent_id is not None:
             children[task.parent_id].append(task.id)
-    task_agendas: dict[str, list[str]] = defaultdict(list)
     for task_id, agenda_id in links:
         agendas[agenda_id].task_ids.append(task_id)
-        task_agendas[task_id].append(agenda_id)
 
     agenda_risks: list[tuple[AgendaRisk, int]] = []
     impacts: dict[str, set[str]] = {}
@@ -302,79 +285,8 @@ async def decision_risks(
         as_of=today,
         settings=rule,
         agendas=[risk for risk, _ in agenda_risks],
-        tasks=_task_risks(agendas, tasks, task_agendas, rule, today),
         owners=_owner_loads(agendas, tasks, impacts, today),
     )
-
-
-def _task_signal(
-    task: _Task, linked: list[_Agenda], rule: RiskSettings, today: date
-) -> tuple[TaskRiskSignal, list[str]] | None:
-    """앞의 신호 하나만 낸다 — decidedButBlocked → blockedWithoutAgenda → dueBeforeDecision."""
-    if task.status == "blocked":
-        if not linked:
-            return "blockedWithoutAgenda", []
-        if all(t.state == "decided" for t in linked):
-            return "decidedButBlocked", [t.id for t in linked]
-    due = task.due
-    if due is None:
-        return None
-    late = [
-        t.id
-        for t in linked
-        if t.state in UNDECIDED and _decision_late(t.due_date, due, rule, today)
-    ]
-    return ("dueBeforeDecision", late) if late else None
-
-
-def _decision_late(
-    decision_due: date | None, task_due: date, rule: RiskSettings, today: date
-) -> bool:
-    """결정이 작업 기한에 못 댄다. 안건 기한이 없으면 안건 쪽 decisionAfterTaskDue 와 같은 잣대 —
-    작업 기한이 dueSoonDays 안(이미 지난 것 포함)이면 늦은 것으로 본다."""
-    if decision_due is None:
-        return (task_due - today).days <= rule.due_soon_days
-    return decision_due > task_due or decision_due < today
-
-
-def _task_risks(
-    agendas: dict[str, _Agenda],
-    tasks: dict[str, _Task],
-    task_agendas: dict[str, list[str]],
-    rule: RiskSettings,
-    today: date,
-) -> list[TaskRisk]:
-    found: list[tuple[TaskRisk, int]] = []
-    for task in tasks.values():
-        if task.status == "done":
-            continue
-        linked = sorted((agendas[t] for t in task_agendas.get(task.id, ())), key=lambda t: t.seq)
-        hit = _task_signal(task, linked, rule, today)
-        if hit is None:
-            continue
-        signal, agenda_ids = hit
-        risk = TaskRisk(
-            task_id=task.id,
-            key=task.key,
-            title=task.title,
-            status=ACTIVE_STATUS[task.status],
-            owner_id=task.owner_id,
-            part_id=task.part_id,
-            due=task.due,
-            agenda_ids=agenda_ids,
-            signal=signal,
-        )
-        found.append((risk, task.seq))
-    # 기한 없는 것은 같은 신호 안에서 뒤로
-    found.sort(
-        key=lambda pair: (
-            TASK_SIGNAL_ORDER.index(pair[0].signal),
-            pair[0].due is None,
-            pair[0].due or date.min,
-            pair[1],
-        )
-    )
-    return [risk for risk, _ in found]
 
 
 def _owner_loads(
@@ -453,7 +365,6 @@ async def decision_risks_for(
     return report.model_copy(
         update={
             "agendas": [t for t in report.agendas if keep(t.owner_id, t.part_id)],
-            "tasks": [t for t in report.tasks if keep(t.owner_id, t.part_id)],
         }
     )
 
@@ -477,5 +388,5 @@ async def _member_in(
     """부여된 멤버이거나, 빠졌어도 이 프로젝트의 안건 · 작업을 아직 맡고 있는 사람."""
     if await session.get(ProjectMember, (project_id, member_id)) is not None:
         return True
-    owners = {t.owner_id for t in report.agendas} | {t.owner_id for t in report.tasks}
+    owners = {t.owner_id for t in report.agendas}
     return member_id in owners | {o.member_id for o in report.owners}

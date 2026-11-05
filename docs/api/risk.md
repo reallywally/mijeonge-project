@@ -8,6 +8,12 @@
 > 이력 줄(미룸)이 없어져 **`deferredRepeatedly` 신호 · `deferCount` · `lastDeferNote` · 기준의 `deferCount` 가 빠졌다**(기준은 넷).
 > '오래 멈춤' 의 '마지막 이력' 은 **안건 변경 이력(`agenda_history`)의 가장 늦은 줄**이다. 아래는 고친 뒤의 모양이다.
 
+> **2026-11-05 걷음 (사용자 요청)** — 리스크 메뉴의 **'안건과 어긋난 작업' 을 없앴다.** 응답의 `tasks` 키 · `TaskRisk` · `TaskRiskSignal`
+> (`decidedButBlocked` · `blockedWithoutAgenda` · `dueBeforeDecision`)과 그 계산, AI 요약 요청의 `taskIds`(실어 와도 버린다 — 다른 요청과 같은 관례),
+> 요약 답의 '바로 풀 수 있는 것' 칸, 챗봇 도구 결과의 `tasks` 가 빠졌다. **안건 리스크(`agendas`) · 사람별(`owners`) · 기준 넷은 그대로다** —
+> `owners.blockedTasks` 는 처음부터 '맡은 작업 중 막힘' 전부를 세어 어긋난 작업과 무관하다. 작업 어긋남 전용 기준값은 없었다(이행 없음).
+> 리포트의 작업 신호 `decidedButBlocked` 는 **리포트 것으로 남는다** — 정의는 `report.md` 로 옮겼다. 아래의 걷은 대목은 줄을 그어 남긴다.
+
 결정이 미뤄져 일이 막히는 것을 **막히기 전에** 보여 준다. `docs/agent-proposal.md` 의 '프로젝트 리스크 예측' 을
 이 제품에 맞게 바꾼 것이다 — 일정 예측이 아니라 **"어떤 안건이 안 정해져서 어떤 일이 멈췄나 · 멈출 건가"** 다.
 순서는 `server/PLAN.md` 10단계 · `web/PLAN.md` 11단계다.
@@ -43,8 +49,6 @@ export interface DecisionRiskReport {
   settings: RiskSettings
   /** 안 정해진(queued · open) 안건 중 신호가 하나라도 있는 것. score 내림차순 */
   agendas: AgendaRisk[]
-  /** 안건과 어긋난 작업 — 풀 수 있는데 막혀 있거나, 결정보다 기한이 먼저 오는 것 */
-  tasks: TaskRisk[]
   /** 사람별로 몰린 정도. 담당자 없음은 memberId null 한 줄로 */
   owners: OwnerLoad[]
 }
@@ -89,26 +93,7 @@ export interface AgendaRisk {
   level: 'high' | 'medium' | 'low'
 }
 
-export type TaskRiskSignal =
-  /** '막힘' 인데 걸린 안건이 전부 결정됐다 — 풀 수 있다 */
-  | 'decidedButBlocked'
-  /** '막힘' 인데 걸린 안건이 하나도 없다 — 왜 막혔는지 기록이 없다 */
-  | 'blockedWithoutAgenda'
-  /** 완료가 아닌데, 걸린 안 정해진 안건의 결정 기한이 이 작업의 기한보다 늦다 (또는 이미 지났다) */
-  | 'dueBeforeDecision'
-
-export interface TaskRisk {
-  taskId: string
-  key: string
-  title: string
-  status: 'todo' | 'doing' | 'blocked'
-  ownerId: string | null
-  partId: string | null
-  due: string | null
-  /** 이 신호의 근거가 된 안건들. blockedWithoutAgenda 면 [] */
-  agendaIds: string[]
-  signal: TaskRiskSignal
-}
+// TaskRiskSignal · TaskRisk — 2026-11-05 걷음('안건과 어긋난 작업')
 
 export interface OwnerLoad {
   /** null 은 '담당자 없음' */
@@ -117,7 +102,7 @@ export interface OwnerLoad {
   openAgendas: number
   /** 그중 기한을 넘긴 수 */
   overdueAgendas: number
-  /** 맡은 작업 중 '막힘' 수 */
+  /** 맡은 작업 중 '막힘' 수 — 걸린 안건과 상관없이 막힌 작업 전부 */
   blockedTasks: number
   /** 맡은 안건이 막고 있는 작업 수 (impactTaskCount 의 합, 중복 없이) — 이 사람이 정하면 풀리는 일의 양 */
   blockingImpact: number
@@ -141,8 +126,8 @@ export interface OwnerLoad {
 - 신호 점수(위 표)는 **바꾸지 않는다** — 바꿀 수 있는 것은 문턱값 넷뿐이다(2026-11-04 다섯 → 넷)
 - `overdue` 와 `dueSoon` 은 같이 안 나온다
 - 정렬: `score` 내림차순 → `overdueDays` 내림차순 → 등록 순(`seq`). 같은 데이터면 늘 같은 순서다
-- `tasks` 는 `decidedButBlocked` → `blockedWithoutAgenda` → `dueBeforeDecision` 순, 같은 신호 안에서는 기한 이른 순(없으면 뒤) → 등록 순.
-  한 작업에 신호가 여럿이면 이 순서로 **앞의 하나만** 낸다
+- ~~`tasks` 는 `decidedButBlocked` → `blockedWithoutAgenda` → `dueBeforeDecision` 순, 같은 신호 안에서는 기한 이른 순(없으면 뒤) → 등록 순.
+  한 작업에 신호가 여럿이면 이 순서로 **앞의 하나만** 낸다~~ (2026-11-05 걷음)
 - `owners` 는 `blockingImpact` 내림차순 → `overdueAgendas` 내림차순. 네 숫자가 다 0 인 사람은 안 낸다
 
 ## 기준 설정 — `RiskSettings`
@@ -174,7 +159,7 @@ export interface RiskSettings {
 
 위 규칙이 말하지 않은 자리를 이렇게 메웠다. 웹 목업(`fixtures/risks.ts`)의 셈과 같다.
 
-- `dueBeforeDecision` — 걸린 안 정해진 안건에 **결정 기한이 없으면** 안건 쪽 `decisionAfterTaskDue` 와 같은 잣대로 본다: 작업 기한이 `dueSoonDays` 안(이미 지난 것 포함)이면 낸다
+- ~~`dueBeforeDecision` — 걸린 안 정해진 안건에 **결정 기한이 없으면** 안건 쪽 `decisionAfterTaskDue` 와 같은 잣대로 본다: 작업 기한이 `dueSoonDays` 안(이미 지난 것 포함)이면 낸다~~ (2026-11-05 걷음)
 - `decisionAfterTaskDue` 의 '작업 기한이 `dueSoonDays` 안' 도 이미 지난 기한을 포함한다
 - `noDueDate` 의 '연결된 작업' 은 상태를 가리지 않는다(완료도 센다)
 - `owners` 는 `blockingImpact` → `overdueAgendas` 다음에 `memberId` 순, 담당자 없음(`null`)은 맨 뒤 — 같은 데이터면 늘 같은 순서
@@ -189,7 +174,7 @@ export interface RiskSettings {
 | --- | --- | --- |
 | 두 번 미룬 안건 | `t5`(이미 있다) | ~~`high` 7점 — 여러 번 미룸 · 멈춤 · 막는 중~~ → 2026-11-04 `medium` 5점 — 멈춤(35일) · 막는 중(`k18`) + 막힌 일 1 |
 | 기한 지난 안건 | `t3`(이미 있다, 기한 2026-09-30) | `medium` 4점 — 기한 지남 15일 · 멈춤(36일) |
-| 정해졌는데 막힘 | **`k22` `HW-22` '스테이징 DB 구성'** — 새 줄. 상위 `k4`, 막힘, 담당 u3, 2026-10-13 ~ 2026-10-20, 파트 `pt1`, `t2`(DB 결정, 결정됨)에 연결 | 작업 신호 `decidedButBlocked` |
+| 정해졌는데 막힘 | **`k22` `HW-22` '스테이징 DB 구성'** — 새 줄. 상위 `k4`, 막힘, 담당 u3, 2026-10-13 ~ 2026-10-20, 파트 `pt1`, `t2`(DB 결정, 결정됨)에 연결 | ~~작업 신호 `decidedButBlocked`~~ → 2026-11-05 리스크에는 안 나온다. `owners` 의 u3 `blockedTasks` 1 로만 센다(리포트의 `decidedButBlocked` 로는 그대로 나온다) |
 
 `k22` 가 늘어 p1 의 마지막 작업 번호가 22 다(다음 작업은 `HW-23`). 같은 점수 · 같은 `overdueDays` 는 등록 순이라 `t8` 이 `t9` 보다 앞이다.
 
@@ -197,16 +182,16 @@ export interface RiskSettings {
 
 - 왼쪽 메뉴 작업 · 안건 다음. 위에서 고른 프로젝트 안에서 돈다(작업 · 안건 화면과 같다)
 - 위: 기준 한 줄(`기한 임박 3일 · 미룸 2번 · 멈춤 7일 · high 6점 · medium 3점`) + **[기준 바꾸기]**(프로젝트 관리자 · 시스템 관리자에게만) + [새로 고침] + `asOf`
-- 본문 셋: **안건 리스크**(`agendas`, 등급 배지 · 신호 배지 · 막는 작업 수 · 기한 넘긴 날 · 담당자) · **안건과 어긋난 작업**(`tasks`) · **사람별**(`owners`)
+- 본문 둘: **안건 리스크**(`agendas`, 등급 배지 · 신호 배지 · 막는 작업 수 · 기한 넘긴 날 · 담당자) · **사람별**(`owners`). ~~안건과 어긋난 작업(`tasks`)~~ 은 2026-11-05 걷었다
 - 줄을 누르면 기존 안건 · 작업 상세 팝업
-- **[내 파트 | 전체]** 를 그대로 따른다 — 작업 · 안건 목록과 **같은 '내 파트' 규칙**(공통 · 내 파트 · 내 담당 · 내 작업에 링크된 안건, `docs/api/part.md`)으로 `agendas` · `tasks` 를 거른다. `partId` 만 보면 남의 파트 안건이 내 작업을 막는 줄이 빠진다. `owners` 는 거르지 않는다
+- **[내 파트 | 전체]** 를 그대로 따른다 — 작업 · 안건 목록과 **같은 '내 파트' 규칙**(공통 · 내 파트 · 내 담당 · 내 작업에 링크된 안건, `docs/api/part.md`)으로 `agendas` 를 거른다. `partId` 만 보면 남의 파트 안건이 내 작업을 막는 줄이 빠진다. `owners` 는 거르지 않는다
 
 ## 챗봇 도구 — `get_decision_risks`
 
 같은 서비스 함수를 챗봇 도구로 연다 (`docs/api/chat.md` 의 도구와 같은 자리).
 
 - 입력: `{ member_id?: string, part_id?: string }` — 주면 그 사람 · 파트의 것만 남긴다
-  (`agendas` 는 안건 담당자 · 파트, `tasks` 는 작업 담당자 · 파트, `owners` 는 그대로)
+  (`agendas` 는 안건 담당자 · 파트, `owners` 는 그대로. ~~`tasks` 는 작업 담당자 · 파트~~ 2026-11-05 걷음)
 - 출력: `DecisionRiskReport` JSON 그대로
 - 오늘은 `today_kst()` — 프롬프트의 오늘과 같은 기준
 - 없는 멤버 · 파트, 다른 프로젝트의 멤버 · 파트는 도구 오류 `멤버를 찾을 수 없습니다.` · `파트를 찾을 수 없습니다.` — 있는지조차 알리지 않는다.
@@ -220,10 +205,10 @@ export interface RiskSettings {
 - 프롬프트 규칙
   - "뭐가 위험해?" · "막힌 거 뭐 있어?" · "이번 주 뭐부터 정해야 해?" 같은 질문에 먼저 부른다
   - 답은 `high` 부터. 한 줄마다 **왜(신호) · 무엇이 막히나(작업 수) · 다음 할 일** 을 말하고 `[[agenda:ID]]` · `[[task:ID]]` 근거를 단다
-  - `decidedButBlocked` 는 "풀어도 된다" 고 말한다 — 직접 상태를 바꾸지 않는다 (쓰기 초안은 이 단계 밖)
+  - ~~`decidedButBlocked` 는 "풀어도 된다" 고 말한다~~ (2026-11-05 걷음) — 직접 상태를 바꾸지 않는다 (쓰기 초안은 이 단계 밖)
   - 점수 · 등급을 지어내거나 바꾸지 않는다. 숫자는 도구가 준 그대로
   - 신호 · 등급은 영어 키 대신 화면의 말로 — 기한 지남 · 기한 임박 · 여러 번 미룸 · 오래 멈춤 · 작업을 막는 중 · 작업 기한이 먼저 ·
-    담당자 없음 · 기한 없음 / 풀어도 됨 · 막힌 이유 없음 · 결정이 기한보다 늦음
+    담당자 없음 · 기한 없음 (~~풀어도 됨 · 막힌 이유 없음 · 결정이 기한보다 늦음~~ 2026-11-05 걷음)
 
 ## 못 보는 것 (알고 둔다)
 
@@ -252,7 +237,7 @@ export interface RiskSettings {
 ## AI 요약 — 합의 (2026-10-15)
 
 리스크 화면의 표는 '무엇이' 위험한지는 보여 주지만 '그래서 뭐부터 하나' 는 사람이 읽어 내야 한다.
-**[AI 요약]** 을 누르면 지금 화면에 보이는 리스크를 Claude 가 읽고 **먼저 정할 것 · 풀어도 되는 일 · 눈에 띄는 패턴** 을 짧게 정리한다.
+**[AI 요약]** 을 누르면 지금 화면에 보이는 리스크를 Claude 가 읽고 **먼저 정할 것 · 눈에 띄는 패턴** 을 짧게 정리한다(~~풀어도 되는 일~~ 2026-11-05 걷음).
 순서는 `server/PLAN.md` 10-4 · `web/PLAN.md` 11-3 이다.
 
 ### 정해 둔 것
@@ -261,7 +246,7 @@ export interface RiskSettings {
 | --- | --- | --- |
 | 부르는 때 | **사람이 [AI 요약] 을 누를 때만.** 화면에 들어올 때 저절로 부르지 않는다 | 실제 API 를 부르니 돈이 든다. 표만 보러 온 사람에게 비용을 물리지 않는다 |
 | 남기기 | **서버에 남기지 않는다.** 화면을 떠나거나 목록이 바뀌면 버린다 | 챗봇과 같은 판단(Q26). 리스크는 날마다 바뀌어 지난 요약은 틀린 말이 된다 |
-| 범위 | **화면에 지금 보이는 줄만** — 화면이 `agendaIds` · `taskIds` 를 보낸다 | '내 파트' 규칙을 서버가 한 벌 더 갖지 않는다. 보이는 것과 요약이 어긋나지 않는다 |
+| 범위 | **화면에 지금 보이는 줄만** — 화면이 `agendaIds` 를 보낸다(2026-11-05 `taskIds` 걷음) | '내 파트' 규칙을 서버가 한 벌 더 갖지 않는다. 보이는 것과 요약이 어긋나지 않는다 |
 | 계산 | 서버가 `decision_risks` 를 **다시 계산**하고 보낸 id 로 거른다. 화면이 보낸 숫자는 믿지 않는다 | 판정은 규칙이, 설명은 Claude 가 — 점수 · 등급을 Claude 가 정하지 않는다 |
 | 방식 | **도구 없이 한 번 부른다.** 서버가 근거(보고서 + 위쪽 안건의 배경 · 결정내용 · 연결 작업, 2026-11-04 전에는 배경 · 이력)를 미리 모아 넣는다 | 무엇을 읽을지가 정해져 있어 도구 루프가 필요 없다. 빠르고 싸다 |
 | 모델 | 챗봇과 같은 `chat_model` · `chat_effort` | 설정이 두 벌이 되지 않는다 |
@@ -276,21 +261,20 @@ export interface RiskSettings {
 export interface RiskSummaryInput {
   /** 화면에 보이는 안건 리스크 줄 — AgendaRisk.agendaId */
   agendaIds: string[]
-  /** 화면에 보이는 어긋난 작업 줄 — TaskRisk.taskId */
-  taskIds: string[]
+  // taskIds — 2026-11-05 걷음. 실어 와도 버린다(422 아님)
 }
 ```
 
-- 각 배열 0 ~ 100개 (넘으면 422 `VALIDATION_ERROR`). 키가 없으면 422
+- `agendaIds` 0 ~ 100개 (넘으면 422 `VALIDATION_ERROR`). 키가 없으면 422. 옛 `taskIds` 는 실어 와도 버린다(검사하지 않는다)
 - 보고서에 없는 id(다른 프로젝트 · 지금은 리스크가 아닌 것 · 지어낸 것)는 **조용히 버린다** — 화면이 보고서를 받은 뒤 데이터가 바뀌었을 수 있다
-- 거른 뒤 둘 다 비면 **Claude 를 부르지 않고** `delta` 한 번(`지금 짚을 리스크가 없습니다.`) + `done` 으로 끝낸다
+- 거른 뒤 비면 **Claude 를 부르지 않고** `delta` 한 번(`지금 짚을 리스크가 없습니다.`) + `done` 으로 끝낸다
 - 권한은 `GET .../risks` 와 같다(프로젝트 멤버, 아니면 404 `PROJECT_NOT_FOUND`)
 
 ### 서버가 Claude 에 넣는 것
 
 - 거른 `DecisionRiskReport`(`settings` · `asOf` 포함) — 담당자 id 는 **이름으로 바꿔** 넣는다
 - 점수 위쪽 안건 **5개까지**: 배경(`description`) · 결정내용(`decision`, 아직이면 `''`) · 연결된 작업(key · 제목 · 상태 · 기한 · 담당자 이름). ~~후보 · 이력 전부~~ 는 2026-11-04 걷었다
-- `tasks` 줄의 작업 제목 · 담당자 이름 · 근거 안건 제목
+- ~~`tasks` 줄의 작업 제목 · 담당자 이름 · 근거 안건 제목~~ (2026-11-05 걷음)
 
 ### 답의 모양 (시스템 프롬프트로 지킨다)
 
@@ -303,9 +287,6 @@ export interface RiskSummaryInput {
 1. [[agenda:ID]] — 왜(신호를 화면 말로) · 무엇이 막히나(작업 수 · [[task:ID]]) · 다음 할 일 · 누가
 2. …   (최대 3개, 점수 순)
 
-바로 풀 수 있는 것        (decidedButBlocked · blockedWithoutAgenda 가 있을 때만)
-- [[task:ID]] — 무엇을 하면 되는지
-
 눈에 띄는 점             (있을 때만, 1 ~ 2줄)
 - 한 사람에게 몰림 · 같은 미룸 사유 반복 · 대부분이 '오래 멈춤' 이면 기준(staleDays)이 회의 주기보다 짧을 수 있다 등
 ```
@@ -317,7 +298,7 @@ export interface RiskSummaryInput {
 
 ### 화면
 
-- 리스크 화면 맨 위, 기준 줄 아래 **'AI 요약' 카드**. 처음엔 [AI 요약] 버튼과 "보이는 안건 n · 작업 m건을 정리합니다" 한 줄
+- 리스크 화면 맨 위, 기준 줄 아래 **'AI 요약' 카드**. 처음엔 [AI 요약] 버튼과 "보이는 안건 n건을 정리합니다" 한 줄(2026-11-05 '작업 m건' 걷음)
 - 누르면 스트림을 받아 그린다(챗봇의 근거 칩 그대로 — 누르면 상세 팝업). 받는 중엔 [멈춤]
 - 다 받으면 "asOf 기준 · 보이는 n건" 과 [다시 요약]
 - **[새로 고침] · 기준 저장 · [내 파트 | 전체] 전환으로 보이는 줄이 바뀌면** 요약을 흐리게 하고 "목록이 바뀌었습니다 — [다시 요약]" 을 띄운다(자동으로 다시 부르지 않는다)

@@ -28,8 +28,8 @@ from tests.test_chat import FakeClient, Turn, parse_sse
 
 URL = "/api/projects/p1/risks/summary"
 TODAY = date(2026, 10, 15)
-# 시드 p1 의 그날 보고서: 안건 t5 t3 t8 t9 t4 t7, 작업 k22 k3 k13
-ALL = {"agendaIds": ["t5", "t3", "t8", "t9", "t4", "t7"], "taskIds": ["k22", "k3", "k13"]}
+# 시드 p1 의 그날 보고서: 안건 t5 t3 t8 t9 t4 t7
+ALL = {"agendaIds": ["t5", "t3", "t8", "t9", "t4", "t7"]}
 
 
 @pytest.fixture(autouse=True)
@@ -62,27 +62,35 @@ async def post(client: httpx.AsyncClient, body: dict[str, Any]) -> list[tuple[st
 
 
 async def test_keeps_only_report_rows_that_were_sent(client: httpx.AsyncClient) -> None:
-    """남의 프로젝트 id(t10 · x1) · 리스크가 아닌 id(t1 · k4) · 지어낸 id 는 조용히 버린다."""
+    """남의 프로젝트 id(t10) · 리스크가 아닌 id(t1) · 지어낸 id 는 조용히 버린다."""
     fake = FakeClient(Turn(texts=["요약"]))
     use(fake)
-    body = {"agendaIds": ["t3", "t10", "t1", "없는안건", "t5"], "taskIds": ["k4", "x1", "k22"]}
+    body = {"agendaIds": ["t3", "t10", "t1", "없는안건", "t5"]}
     events = await post(client, body)
     assert [name for name, _ in events] == ["delta", "done"]
 
     data = sent(fake)
     # 순서는 화면이 보낸 순서가 아니라 서버의 계산(점수 순)이다
     assert [t["id"] for t in data["report"]["agendas"]] == ["t5", "t3"]
-    assert [t["id"] for t in data["report"]["tasks"]] == ["k22"]
+    assert "tasks" not in data["report"]
     leaked = json.dumps(data, ensure_ascii=False)
     assert "t10" not in leaked and "이관 범위 확정" not in leaked and "현행 분석" not in leaked
-    assert "x1" not in leaked
+
+
+async def test_old_task_ids_are_ignored(client: httpx.AsyncClient) -> None:
+    """옛 `taskIds`(어긋난 작업, 2026-11-05 걷음)는 실어 와도 버린다 — 그것만으로는 안 부른다."""
+    fake = FakeClient(Turn(texts=["부르면 안 된다"]))
+    use(fake)
+    events = await post(client, {"agendaIds": [], "taskIds": ["k22", "k3"]})
+    assert fake.calls == []
+    assert [name for name, _ in events] == ["delta", "done"]
 
 
 async def test_numbers_come_from_the_server(client: httpx.AsyncClient) -> None:
     """화면이 숫자를 끼워 보내도 받지 않는다 — 점수 · 등급은 서버의 계산 그대로다."""
     fake = FakeClient(Turn(texts=["요약"]))
     use(fake)
-    await post(client, {"agendaIds": ["t5"], "taskIds": [], "score": 99, "level": "low"})
+    await post(client, {"agendaIds": ["t5"], "score": 99, "level": "low"})
     (t5,) = sent(fake)["report"]["agendas"]
     assert (t5["score"], t5["level"]) == (5, "medium")
     assert t5["signals"] == ["stale", "blocking"]
@@ -92,9 +100,9 @@ async def test_numbers_come_from_the_server(client: httpx.AsyncClient) -> None:
 @pytest.mark.parametrize(
     "body",
     [
-        {"agendaIds": [], "taskIds": []},
+        {"agendaIds": []},
         # 거른 뒤 빈 것도 같다 — 남의 것 · 리스크 아닌 것뿐
-        {"agendaIds": ["t10", "t1"], "taskIds": ["x1", "k4"]},
+        {"agendaIds": ["t10", "t1"]},
     ],
 )
 async def test_nothing_left_does_not_call_claude(
@@ -128,13 +136,7 @@ async def test_context_names_people_and_hides_their_ids(client: httpx.AsyncClien
     assert t5["blockedTasks"] == [k18]
     t4 = next(t for t in report["agendas"] if t["id"] == "t4")
     assert t4["owner"] == "담당자 없음"
-    k22 = report["tasks"][0]
-    assert (k22["key"], k22["title"], k22["owner"], k22["part"]) == (
-        "HW-22", "스테이징 DB 구성", "이도현", "인프라",
-    )  # fmt: skip
-    # 근거 안건은 이미 정해진 t2 라 보고서 밖에서 제목을 찾아 온다
-    assert [t["id"] for t in k22["agendas"]] == ["t2"]
-    assert k22["agendas"][0]["title"] not in ("", "알 수 없음")
+    assert set(report) == {"asOf", "settings", "agendas", "owners"}
     assert [o["member"] for o in report["owners"]] == [
         "정하늘", "김서연", "박지훈", "이도현", "담당자 없음",
     ]  # fmt: skip
@@ -185,15 +187,18 @@ async def test_one_call_without_tools_on_chat_settings(client: httpx.AsyncClient
     assert "tools" not in call and "tool_choice" not in call and "thinking" not in call
     assert "한화손보 차세대" in call["system"] and "2026-10-15 (목)" in call["system"]
     # 계약의 '답의 모양' 머리글 · 대응표가 프롬프트에 있다
-    heads = ("먼저 정할 것", "바로 풀 수 있는 것", "눈에 띄는 점", "decidedButBlocked 풀어도 됨")
+    heads = ("먼저 정할 것", "눈에 띄는 점", "noDueDate 기한 없음")
     assert all(line in call["system"] for line in heads)
+    # '안건과 어긋난 작업' 을 걷었다(2026-11-05)
+    for gone in ("report.tasks", "바로 풀 수 있는 것", "decidedButBlocked", "dueBeforeDecision"):
+        assert gone not in call["system"]
 
 
 # --- 스트림 ---------------------------------------------------------------------------
 
 
 async def test_refs_only_for_ids_that_were_given(client: httpx.AsyncClient) -> None:
-    """근거 칩은 본문에 나온 것 중 넣어 준 id 만 — 지어낸 id(t10)는 칩이 되지 않는다."""
+    """근거 칩은 넣어 준 id 만 — 지어낸 id(t10) · 넣지 않은 작업(k22)은 칩이 안 된다."""
     text = (
         "먼저 정할 것\n1. [[agenda:t5]] — [[task:k18]] 이 막힘 "
         "[[agenda:t10]] [[task:k22]] [[agenda:t5]]"
@@ -204,7 +209,6 @@ async def test_refs_only_for_ids_that_were_given(client: httpx.AsyncClient) -> N
     assert events[-1][1]["refs"] == [
         {"kind": "agenda", "id": "t5"},
         {"kind": "task", "id": "k18"},
-        {"kind": "task", "id": "k22"},
     ]
 
 
@@ -245,12 +249,10 @@ async def test_max_tokens_ends_with_a_note_and_done(client: httpx.AsyncClient) -
 @pytest.mark.parametrize(
     "body",
     [
-        {"agendaIds": ["t5"]},
         {"taskIds": []},
         {},
-        {"agendaIds": "t5", "taskIds": []},
-        {"agendaIds": [f"t{n}" for n in range(101)], "taskIds": []},
-        {"agendaIds": [], "taskIds": [f"k{n}" for n in range(101)]},
+        {"agendaIds": "t5"},
+        {"agendaIds": [f"t{n}" for n in range(101)]},
     ],
 )
 async def test_bad_input_is_422(client: httpx.AsyncClient, body: dict[str, Any]) -> None:
@@ -261,9 +263,9 @@ async def test_bad_input_is_422(client: httpx.AsyncClient, body: dict[str, Any])
     assert fake.calls == []
 
 
-async def test_hundred_each_is_fine(client: httpx.AsyncClient) -> None:
+async def test_hundred_is_fine(client: httpx.AsyncClient) -> None:
     use(FakeClient(Turn(texts=["요약"])))
-    body = {"agendaIds": ["t5"] * 100, "taskIds": ["k22"] * 100}
+    body = {"agendaIds": ["t5"] * 100}
     assert (await client.post(URL, json=body)).status_code == 200
 
 

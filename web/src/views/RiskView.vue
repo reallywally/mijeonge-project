@@ -9,7 +9,6 @@ import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import RiskSettingsDialog from '@/components/app/RiskSettingsDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
-import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +22,7 @@ import {
 } from '@/components/ui/table'
 import { canManageProject } from '@/lib/access'
 import { monthDay } from '@/lib/date'
-import { riskSettingsLine, TASK_SIGNAL_LABEL, AGENDA_SIGNAL_LABEL } from '@/lib/risk'
+import { riskSettingsLine, AGENDA_SIGNAL_LABEL } from '@/lib/risk'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { useRiskStore } from '@/stores/risk'
@@ -47,12 +46,11 @@ onBeforeUnmount(() => risk.resetSummary())
 const summaryLine = computed(() => {
   const s = risk.summary
   if (s && risk.summaryChanged) return '목록이 바뀌었습니다 —'
-  if (s?.status === 'streaming')
-    return `보이는 안건 ${s.agendaIds.length} · 작업 ${s.taskIds.length}건을 정리하는 중…`
-  if (s) return `${s.asOf} 기준 · 보이는 ${s.agendaIds.length + s.taskIds.length}건`
+  if (s?.status === 'streaming') return `보이는 안건 ${s.agendaIds.length}건을 정리하는 중…`
+  if (s) return `${s.asOf} 기준 · 보이는 ${s.agendaIds.length}건`
   if (risk.tooManyToSummarize) return '보이는 줄이 너무 많습니다 — 내 파트로 좁혀 주세요.'
   if (risk.visibleCount === 0) return '보이는 리스크가 없어 정리할 것이 없습니다.'
-  return `보이는 안건 ${risk.visibleIds.agendaIds.length} · 작업 ${risk.visibleIds.taskIds.length}건을 정리합니다`
+  return `보이는 안건 ${risk.visibleIds.agendaIds.length}건을 정리합니다`
 })
 
 const canEditSettings = computed(
@@ -65,13 +63,9 @@ const LEVEL_TONE: Record<RiskLevel, StatusTone> = {
   low: 'todo',
 }
 
-const dayLabel = (day: string | null) => (day ? monthDay(day) : '—')
-const agendaTitle = (agendaId: string) =>
-  data.allAgendas.find((t) => t.id === agendaId)?.title ?? agendaId
-
 const settingsOpen = ref(false)
 
-/* 줄을 누르면 기존 상세 팝업. 리스크 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 */
+/* 안건 줄 · 요약의 근거 칩을 누르면 기존 상세 팝업. 리스크 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 */
 const agendaDetailId = ref<string | null>(null)
 const taskDetailId = ref<string | null>(null)
 const agendaOpen = computed({
@@ -327,92 +321,6 @@ function openTask(id: string) {
                   <TableRow v-if="risk.agendas.length === 0" class="hover:bg-transparent">
                     <TableCell colspan="6" class="h-20 text-center text-sm text-muted-foreground">
                       눈에 띄는 안건 리스크가 없습니다.
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          </section>
-
-          <!-- 안건과 어긋난 작업 -->
-          <section class="flex flex-col gap-2.5" aria-label="안건과 어긋난 작업">
-            <div class="flex items-baseline gap-2">
-              <h2 class="text-base font-semibold">안건과 어긋난 작업</h2>
-              <span class="text-xs text-muted-foreground">{{ risk.tasks.length }}건</span>
-            </div>
-            <div
-              class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow class="bg-muted/60 hover:bg-muted/60">
-                    <TableHead class="h-10 w-[80px] text-xs font-medium text-muted-foreground"
-                      >ID</TableHead
-                    >
-                    <TableHead class="h-10 text-xs font-medium text-muted-foreground"
-                      >작업</TableHead
-                    >
-                    <TableHead class="h-10 w-[148px] text-xs font-medium text-muted-foreground"
-                      >신호</TableHead
-                    >
-                    <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
-                      >상태</TableHead
-                    >
-                    <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
-                      >담당자</TableHead
-                    >
-                    <TableHead class="h-10 w-[84px] text-xs font-medium text-muted-foreground"
-                      >기한</TableHead
-                    >
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow
-                    v-for="row in risk.tasks"
-                    :key="row.taskId"
-                    class="cursor-pointer"
-                    data-risk-task
-                    @click="openTask(row.taskId)"
-                  >
-                    <TableCell><IdCell :id="row.taskId" /></TableCell>
-                    <TableCell class="min-w-0 py-2.5">
-                      <div class="flex min-w-0 items-center gap-2.5">
-                        <span class="shrink-0 text-xs text-muted-foreground">{{ row.key }}</span>
-                        <button
-                          type="button"
-                          class="min-w-0 truncate text-left text-sm underline-offset-4 hover:underline"
-                        >
-                          {{ row.title }}
-                        </button>
-                        <PartChip :part-id="row.partId" />
-                      </div>
-                      <div
-                        v-if="row.agendaIds.length > 0"
-                        class="mt-1 truncate text-xs text-muted-foreground"
-                      >
-                        걸린 안건 · {{ row.agendaIds.map(agendaTitle).join(' · ') }}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        :variant="row.signal === 'decidedButBlocked' ? 'secondary' : 'outline'"
-                        class="whitespace-nowrap"
-                        >{{ TASK_SIGNAL_LABEL[row.signal] }}</Badge
-                      >
-                    </TableCell>
-                    <TableCell><TaskStatusBadge :status="row.status" /></TableCell>
-                    <TableCell
-                      class="text-sm"
-                      :class="row.ownerId ? '' : 'text-muted-foreground'"
-                      >{{ data.memberName(row.ownerId) ?? '미정' }}</TableCell
-                    >
-                    <TableCell class="text-sm text-muted-foreground">{{
-                      dayLabel(row.due)
-                    }}</TableCell>
-                  </TableRow>
-                  <TableRow v-if="risk.tasks.length === 0" class="hover:bg-transparent">
-                    <TableCell colspan="6" class="h-20 text-center text-sm text-muted-foreground">
-                      안건과 어긋난 작업이 없습니다.
                     </TableCell>
                   </TableRow>
                 </TableBody>

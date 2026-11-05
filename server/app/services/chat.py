@@ -94,15 +94,12 @@ SYSTEM_PROMPT = """\
 2. 답은 level 이 high 인 것부터 도구가 준 순서대로 말한다. 한 줄마다 왜(신호) ·
    무엇이 막히나(막힌 작업 · impactTaskCount) · 다음 할 일(누가 무엇을 정하면 되나)을 말하고
    [[agenda:ID]] · [[task:ID]] 근거를 단다. 담당자는 list_members 로 이름을 찾아 말한다
-3. tasks 의 decidedButBlocked 는 걸린 안건이 다 정해졌으니 "막힘을 풀어도 된다" 고 말한다.
-   너는 작업 상태를 바꾸지 못한다 — 화면에서 사람이 바꾼다고 말한다
-4. 점수 · 등급 · 날 수 같은 숫자는 도구가 준 그대로만 쓴다. 지어내거나 고쳐 매기지 않는다.
+3. 점수 · 등급 · 날 수 같은 숫자는 도구가 준 그대로만 쓴다. 지어내거나 고쳐 매기지 않는다.
    리스크가 하나도 없으면 없다고 말한다
-5. 신호는 영어 이름 대신 화면의 말로 쓴다 —
+4. 신호는 영어 이름 대신 화면의 말로 쓴다 —
    overdue 기한 지남 · dueSoon 기한 임박 · stale 오래 멈춤 ·
    blocking 작업을 막는 중 · decisionAfterTaskDue 작업 기한이 먼저 · noOwner 담당자 없음 ·
-   noDueDate 기한 없음 / decidedButBlocked 풀어도 됨 · blockedWithoutAgenda 막힌 이유 없음 ·
-   dueBeforeDecision 결정이 기한보다 늦음. 등급은 high 높음 · medium 중간 · low 낮음
+   noDueDate 기한 없음. 등급은 high 높음 · medium 중간 · low 낮음
 
 ## 답하는 규칙
 1. 안건의 결정은 get_agenda 의 agenda.decision(결정내용) 글이 지금의 결정이다.
@@ -279,9 +276,9 @@ TOOLS: list[ToolSpec] = [
         "description": (
             "안 정해진 안건이 막는(막을) 일을 규칙으로 계산한 결정 리스크 보고서를 준다. "
             "agendas: 위험한 안건(score 내림차순, level high/medium/low, signals, "
-            "blockedTaskIds · impactTaskCount), tasks: 안건과 어긋난 작업(signal 하나), "
+            "blockedTaskIds · impactTaskCount), "
             "owners: 사람별로 몰린 정도(memberId null 은 담당자 없음), settings: 쓴 기준. "
-            "member_id 를 주면 그 사람이 맡은 안건 · 작업만, part_id 를 주면 그 파트의 것만 남긴다"
+            "member_id 를 주면 그 사람이 맡은 안건만, part_id 를 주면 그 파트의 것만 남긴다"
             "(owners 는 그대로). 사람 이름으로 물으면 list_members 로 id 를 먼저 찾는다. "
             "part_id 에는 파트 이름(예: '인프라')을 그대로 넣어도 된다."
         ),

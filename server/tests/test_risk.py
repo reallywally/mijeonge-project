@@ -147,11 +147,8 @@ async def test_seed_report_as_of_2026_10_15(db: AsyncSession) -> None:
     t5 = body["agendas"][0]
     assert t5["blockedTaskIds"] == ["k18"] and t5["impactTaskCount"] == 1
     assert "deferCount" not in t5 and "lastDeferNote" not in t5
-    assert [(t["taskId"], t["signal"], t["agendaIds"]) for t in body["tasks"]] == [
-        ("k22", "decidedButBlocked", ["t2"]),
-        ("k3", "dueBeforeDecision", ["t9"]),
-        ("k13", "dueBeforeDecision", ["t8"]),
-    ]
+    # '안건과 어긋난 작업' 을 걷었다(2026-11-05)
+    assert "tasks" not in body
     assert body["owners"] == [
         {"memberId": "u4", "openAgendas": 2, "overdueAgendas": 0, "blockedTasks": 1,
          "blockingImpact": 1},
@@ -168,14 +165,13 @@ async def test_seed_report_as_of_2026_10_15(db: AsyncSession) -> None:
 
 async def test_project_without_records_is_empty(db: AsyncSession) -> None:
     body = await report(db)
-    assert body.agendas == [] and body.tasks == [] and body.owners == []
+    assert body.agendas == [] and body.owners == []
 
 
 async def test_other_project_does_not_leak(db: AsyncSession) -> None:
     """p2 의 보고서에는 p2 의 것만 — p1 의 막힌 작업 · 안건이 안 섞인다."""
     body = await report(db, "p2")
     assert [t.agenda_id for t in body.agendas] == ["t10"]
-    assert body.tasks == []
     assert [(o.member_id, o.open_agendas, o.blocked_tasks) for o in body.owners] == [("u2", 1, 0)]
 
 
@@ -346,56 +342,6 @@ async def test_order_is_score_then_overdue_days_then_seq(db: AsyncSession) -> No
     ]
 
 
-# --- 작업 신호 ------------------------------------------------------------------------
-
-
-async def test_task_signals_and_order(db: AsyncSession) -> None:
-    await add_agenda(db, "done", state="decided")
-    await add_agenda(db, "open", due=day(10))
-    # 정해졌는데 막힘 — 기한 없는 것은 같은 신호 안에서 뒤로
-    await add_task(db, "dbb_nodue", status="blocked")
-    await add_task(db, "dbb_due", status="blocked", due=day(20))
-    await link(db, "dbb_nodue", "done")
-    await link(db, "dbb_due", "done")
-    # 막혔는데 걸린 안건이 없다
-    await add_task(db, "bare", status="blocked")
-    # 안건 기한(10일 뒤)이 작업 기한(5일 뒤)보다 늦다
-    await add_task(db, "early", status="doing", due=day(5))
-    await link(db, "early", "open")
-    # 안 정해진 안건이 하나라도 걸리면 '정해졌는데 막힘' 이 아니다
-    await add_task(db, "mixed", status="blocked", due=day(30))
-    await link(db, "mixed", "done")
-    await link(db, "mixed", "open")
-    # 완료는 안 본다
-    await add_task(db, "fin", status="done", due=day(1))
-    await link(db, "fin", "open")
-
-    rows = [(t.task_id, t.signal, t.agenda_ids) for t in (await report(db)).tasks]
-    assert rows == [
-        ("dbb_due", "decidedButBlocked", ["done"]),
-        ("dbb_nodue", "decidedButBlocked", ["done"]),
-        ("bare", "blockedWithoutAgenda", []),
-        ("early", "dueBeforeDecision", ["open"]),
-    ]
-
-
-async def test_due_before_decision_when_decision_already_overdue(db: AsyncSession) -> None:
-    await add_agenda(db, "late", due=day(-2))
-    await add_task(db, "q1", due=day(30))
-    await link(db, "q1", "late")
-    rows = [(t.task_id, t.signal) for t in (await report(db)).tasks]
-    assert rows == [("q1", "dueBeforeDecision")]
-
-
-async def test_one_signal_per_task_first_wins(db: AsyncSession) -> None:
-    """막혀 있고 기한도 먼저 오지만, 안 정해진 안건이 걸려 있으면 dueBeforeDecision 하나만."""
-    await add_agenda(db, "open", due=day(10))
-    await add_task(db, "q1", status="blocked", due=day(1))
-    await link(db, "q1", "open")
-    rows = [(t.task_id, t.signal) for t in (await report(db)).tasks]
-    assert rows == [("q1", "dueBeforeDecision")]
-
-
 # --- 사람별 --------------------------------------------------------------------------
 
 
@@ -471,15 +417,12 @@ async def test_risks_shape(client: httpx.AsyncClient) -> None:
     res = await client.get("/api/projects/p1/risks")
     assert res.status_code == 200
     body: dict[str, Any] = res.json()
-    assert set(body) == {"asOf", "settings", "agendas", "tasks", "owners"}
+    assert set(body) == {"asOf", "settings", "agendas", "owners"}
     assert body["asOf"] == today_kst().isoformat()
     assert set(body["agendas"][0]) == {
         "agendaId", "title", "state", "ownerId", "partId", "dueDate", "overdueDays",
         "idleDays", "blockedTaskIds", "waitingTaskIds",
         "impactTaskCount", "nearestTaskDue", "signals", "score", "level",
-    }  # fmt: skip
-    assert set(body["tasks"][0]) == {
-        "taskId", "key", "title", "status", "ownerId", "partId", "due", "agendaIds", "signal",
     }  # fmt: skip
     assert set(body["owners"][0]) == {
         "memberId", "openAgendas", "overdueAgendas", "blockedTasks", "blockingImpact",
@@ -595,4 +538,4 @@ async def test_report_on_postgres(pg_session: AsyncSession) -> None:
     """sqlite 만으로는 진짜 쿼리를 못 믿는다 — 시드 보고서가 같은지 Postgres 에서 한 번 본다."""
     body = await risk_service.decision_risks(pg_session, "p1", today=TODAY)
     assert [t.agenda_id for t in body.agendas] == ["t5", "t3", "t8", "t9", "t4", "t7"]
-    assert [t.task_id for t in body.tasks] == ["k22", "k3", "k13"]
+    assert [o.member_id for o in body.owners] == ["u4", "u1", "u2", "u3", None]

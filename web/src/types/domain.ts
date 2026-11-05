@@ -560,18 +560,14 @@ export interface DecisionRiskReport {
   settings: RiskSettings
   /** 안 정해진 안건 중 신호가 하나라도 있는 것. score 내림차순 */
   agendas: AgendaRisk[]
-  /** 안건과 어긋난 작업 */
-  tasks: TaskRisk[]
   /** 사람별로 몰린 정도. 담당자 없음은 memberId null 한 줄 */
   owners: OwnerLoad[]
 }
 
-/** AI 요약에 보내는 것 — 화면에 지금 보이는 줄의 id. 각 0 ~ 100개 (docs/api/risk.md 'AI 요약') */
+/** AI 요약에 보내는 것 — 화면에 지금 보이는 줄의 id. 0 ~ 100개 (docs/api/risk.md 'AI 요약') */
 export interface RiskSummaryInput {
   /** 화면에 보이는 안건 리스크 줄 — AgendaRisk.agendaId */
   agendaIds: string[]
-  /** 화면에 보이는 어긋난 작업 줄 — TaskRisk.taskId */
-  taskIds: string[]
 }
 
 export type AgendaRiskSignal =
@@ -600,21 +596,6 @@ export interface AgendaRisk {
   signals: AgendaRiskSignal[]
   score: number
   level: RiskLevel
-}
-
-export type TaskRiskSignal = 'decidedButBlocked' | 'blockedWithoutAgenda' | 'dueBeforeDecision'
-
-export interface TaskRisk {
-  taskId: string
-  key: string
-  title: string
-  status: 'todo' | 'doing' | 'blocked'
-  ownerId: string | null
-  partId: string | null
-  due: string | null
-  /** 이 신호의 근거가 된 안건들. blockedWithoutAgenda 면 [] */
-  agendaIds: string[]
-  signal: TaskRiskSignal
 }
 
 export interface OwnerLoad {

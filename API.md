@@ -180,9 +180,9 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 안건과 어긋난 작업 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 | `DecisionRiskReport` | 구현 |
+| GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 (2026-11-05 '안건과 어긋난 작업'(`tasks`)을 걷음) | `DecisionRiskReport` | 구현 |
 | GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 넷 — 2026-11-04 미룸 문턱을 걷음) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 네 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 |
-| POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`agendaIds` · `taskIds`, 2026-11-04 `threadIds` 에서)을 Claude 가 읽고 먼저 정할 것 · 바로 풀 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 |
+| POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 안건 리스크 줄(`agendaIds`, 2026-11-04 `threadIds` 에서 · 2026-11-05 `taskIds` 걷음 — 실어 와도 버린다)을 Claude 가 읽고 먼저 정할 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 |
 
 확인 요청(`server/PLAN.md` 11단계 · `web/PLAN.md` 12단계). 모양은 `docs/api/check.md` 다. 기획은 `docs/check-request-proposal.md`, 결정은 Q38 ~ Q44. 2026-11-04 결정 판(`decisionRev`)으로 고침(`check.md`).
 

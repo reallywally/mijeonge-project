@@ -14,7 +14,7 @@ import type {
   RiskSummaryInput,
 } from '@/types/domain'
 
-/** AI 요약에 실을 수 있는 id 수 — 배열마다 (docs/api/risk.md 'AI 요약') */
+/** AI 요약에 실을 수 있는 안건 id 수 (docs/api/risk.md 'AI 요약') */
 export const MAX_RISK_SUMMARY_IDS = 100
 
 /* 결정 병목 리스크 (docs/api/risk.md). 읽기는 프로젝트 멤버 누구나, 기준 바꾸기는 프로젝트 관리자 · 시스템 관리자.
@@ -31,7 +31,7 @@ const mock = {
     requireProject(requireMe(), projectId)
     const settings = settingsOf(projectId)
     const fixed = riskReports[projectId]
-    if (!fixed) return { asOf: RISK_AS_OF, settings, agendas: [], tasks: [], owners: [] }
+    if (!fixed) return { asOf: RISK_AS_OF, settings, agendas: [], owners: [] }
     const report = structuredClone(fixed)
     return {
       ...report,
@@ -64,18 +64,12 @@ const mock = {
   },
   /** 서버처럼 다시 계산한 보고서를 보낸 id 로 거르고(모르는 id 는 버린다) 정해 둔 문구를 만든다 */
   summary(projectId: string, input: RiskSummaryInput): { text: string; refs: ChatRef[] } {
-    if (
-      !Array.isArray(input.agendaIds) ||
-      !Array.isArray(input.taskIds) ||
-      input.agendaIds.length > MAX_RISK_SUMMARY_IDS ||
-      input.taskIds.length > MAX_RISK_SUMMARY_IDS
-    )
+    if (!Array.isArray(input.agendaIds) || input.agendaIds.length > MAX_RISK_SUMMARY_IDS)
       throw mockError(422, 'VALIDATION_ERROR', '입력값이 올바르지 않습니다.')
     const report = mock.report(projectId)
     const agendas = report.agendas.filter((t) => input.agendaIds.includes(t.agendaId))
-    const tasks = report.tasks.filter((t) => input.taskIds.includes(t.taskId))
     const text = mockRiskSummary(
-      { ...report, agendas, tasks },
+      { ...report, agendas },
       (memberId) => (memberId && memberOf(memberId)?.name) || '담당자 없음',
     )
     return { text, refs: collectRefs(text) }
@@ -118,7 +112,7 @@ export async function* streamRiskSummary(
   input: RiskSummaryInput,
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
-  const body: RiskSummaryInput = { agendaIds: [...input.agendaIds], taskIds: [...input.taskIds] }
+  const body: RiskSummaryInput = { agendaIds: [...input.agendaIds] }
   if (isMockMode()) yield* settle(mockSummaryEvents(projectId, body, signal))
   else yield* settle(postSse(`/projects/${id(projectId)}/risks/summary`, body, signal))
 }

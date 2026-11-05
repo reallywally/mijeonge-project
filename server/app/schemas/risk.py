@@ -15,10 +15,8 @@ AgendaRiskSignal = Literal[
     "noOwner",
     "noDueDate",
 ]
-TaskRiskSignal = Literal["decidedButBlocked", "blockedWithoutAgenda", "dueBeforeDecision"]
 RiskLevel = Literal["high", "medium", "low"]
 RiskAgendaState = Literal["queued", "open"]
-RiskTaskStatus = Literal["todo", "doing", "blocked"]
 
 
 def _bounded(column: str) -> object:
@@ -58,18 +56,6 @@ class AgendaRisk(Schema):
     level: RiskLevel
 
 
-class TaskRisk(Schema):
-    task_id: str
-    key: str
-    title: str
-    status: RiskTaskStatus
-    owner_id: str | None
-    part_id: str | None
-    due: date | None
-    agenda_ids: list[str]
-    signal: TaskRiskSignal
-
-
 class OwnerLoad(Schema):
     # null 은 '담당자 없음'
     member_id: str | None
@@ -83,7 +69,6 @@ class DecisionRiskReport(Schema):
     as_of: date
     settings: RiskSettings
     agendas: list[AgendaRisk]
-    tasks: list[TaskRisk]
     owners: list[OwnerLoad]
 
 
@@ -92,7 +77,9 @@ SUMMARY_IDS_MAX = 100
 
 
 class RiskSummaryInput(Schema):
-    """POST .../risks/summary. 화면에 지금 보이는 줄 — 키는 둘 다 있어야 한다(빈 배열은 된다)."""
+    """POST .../risks/summary. 화면에 지금 보이는 안건 줄 — 키는 있어야 한다(빈 배열은 된다).
+
+    옛 `taskIds`(안건과 어긋난 작업, 2026-11-05 걷음)는 실어 와도 버린다.
+    """
 
     agenda_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)
-    task_ids: list[str] = Field(max_length=SUMMARY_IDS_MAX)

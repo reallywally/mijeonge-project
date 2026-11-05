@@ -201,7 +201,7 @@ async def test_not_started(db: AsyncSession, start: str | None, due: str | None,
 
 
 async def test_decided_but_blocked(db: AsyncSession) -> None:
-    """막힘인데 걸린 안건이 전부 결정됨 — risk.md 의 계산을 그대로 쓴다."""
+    """막힘인데 걸린 안건이 전부 결정됨 — 리스크의 '어긋난 작업' 을 걷어(2026-11-05) 여기서 센다."""
     db.add(
         Agenda(
             id="h1",
@@ -219,6 +219,29 @@ async def test_decided_but_blocked(db: AsyncSession) -> None:
     assert signals(found, "a") == ["decidedButBlocked"]
     assert attention(found)["a"].weight.agenda_count == 1
     assert attention(found)["a"].score == 3
+
+
+async def test_decided_but_blocked_needs_every_agenda_decided(db: AsyncSession) -> None:
+    """안 정해진 안건이 하나라도 걸려 있거나, 걸린 안건이 없으면 아니다."""
+    for agenda_id, state in (("h1", "decided"), ("h2", "open")):
+        db.add(
+            Agenda(
+                id=agenda_id,
+                project_id=P,
+                title="안건",
+                state=state,
+                owner_id=None,
+                created_at=at("2026-10-01T00:00:00Z"),
+            )
+        )
+    add_task(db, "mixed", "blocked", since="2026-10-19T00:00:00Z")
+    add_task(db, "bare", "blocked", since="2026-10-19T00:00:00Z")
+    await db.flush()
+    db.add(TaskAgendaLink(task_id="mixed", agenda_id="h1", project_id=P))
+    db.add(TaskAgendaLink(task_id="mixed", agenda_id="h2", project_id=P))
+    found = await facts(db)
+    assert "decidedButBlocked" not in signals(found, "mixed")
+    assert "decidedButBlocked" not in signals(found, "bare")
 
 
 async def test_backfill_is_at_least(db: AsyncSession) -> None:

@@ -226,7 +226,8 @@ async def test_snapshot_has_no_computed_types(snapshot: dict[str, Any]) -> None:
 RISK_SHAPES: dict[str, set[str]] = {
     # 미룸 문턱(deferCount)은 걷었다 — docs/api/agenda.md '따라 바뀌는 기능'
     "RiskSettings": {"dueSoonDays", "staleDays", "highScore", "mediumScore"},
-    "DecisionRiskReport": {"asOf", "settings", "agendas", "tasks", "owners"},
+    # '안건과 어긋난 작업'(tasks · TaskRisk)은 걷었다 — docs/api/risk.md (2026-11-05)
+    "DecisionRiskReport": {"asOf", "settings", "agendas", "owners"},
     "AgendaRisk": {
         "agendaId",
         "title",
@@ -243,17 +244,6 @@ RISK_SHAPES: dict[str, set[str]] = {
         "signals",
         "score",
         "level",
-    },
-    "TaskRisk": {
-        "taskId",
-        "key",
-        "title",
-        "status",
-        "ownerId",
-        "partId",
-        "due",
-        "agendaIds",
-        "signal",
     },
     "OwnerLoad": {
         "memberId",
@@ -272,11 +262,17 @@ def test_risk_shapes_do_not_drift_from_domain_ts(name: str) -> None:
         assert set(FIELDS[name]) == RISK_SHAPES[name], f"domain.ts 의 {name} 이 risk.md 와 다르다"
 
 
+def test_removed_task_risk_is_gone_from_domain_ts() -> None:
+    """'안건과 어긋난 작업' 을 걷었다(2026-11-05) — 남아 있으면 화면이 옛 모양을 기다린다."""
+    assert "TaskRisk" not in FIELDS
+    assert "taskIds" not in FIELDS.get("RiskSummaryInput", {})
+
+
 async def test_risk_report_matches_contract(client: AsyncClient) -> None:
     body = (await client.get("/api/projects/p1/risks")).json()
     assert set(body) == RISK_SHAPES["DecisionRiskReport"]
     assert set(body["settings"]) == RISK_SHAPES["RiskSettings"]
-    for key, name in (("agendas", "AgendaRisk"), ("tasks", "TaskRisk"), ("owners", "OwnerLoad")):
+    for key, name in (("agendas", "AgendaRisk"), ("owners", "OwnerLoad")):
         assert body[key], f"{name} 을 볼 수 있는 줄이 시드에 없다"
         for row in body[key]:
             assert set(row) == RISK_SHAPES[name]

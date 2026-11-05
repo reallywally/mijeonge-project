@@ -77,7 +77,8 @@ export type TaskAttentionSignal =
   | 'overdue'
   /** 시작일이 지났는데 해야 할 일 · 또는 기한이 dueSoonDays 안인데 해야 할 일 */
   | 'notStarted'
-  /** 막힘인데 걸린 안건이 전부 결정됨 (risk.md 의 decidedButBlocked) */
+  /** 막힘인데 걸린 (지우지 않은) 안건이 하나 이상이고 전부 결정됨. 걸린 안건이 없으면 아니다 — 리포트가 직접 센다
+   *  (2026-11-05 리스크의 같은 이름 신호를 걷으며 정의를 여기로 옮겼다. 값 · 점수는 그대로) */
   | 'decidedButBlocked'
 
 export interface TaskAttention {

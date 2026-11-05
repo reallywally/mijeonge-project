@@ -212,6 +212,18 @@
 - [ ] 서버 모드로 시드 세 경우가 뜨는지, 기준을 바꾸면 등급이 바뀌는지 본다
 - [ ] 챗봇의 `get_decision_risks` 는 화면 변경이 없다 — `tool` 이벤트의 `label` 만 띄운다
 
+### 2026-11-05 고침 (사용자) — '안건과 어긋난 작업' 칸 걷음
+
+리스크 화면의 '안건과 어긋난 작업' 칸을 기능째 걷었다. 서버도 같이 보고서의 `tasks` · `TaskRisk` 와 AI 요약 요청의 `taskIds` 를 뺀다(`server/` 는 다른 에이전트).
+위 11-1 · 11-3 의 `tasks` · `taskIds` · 작업 신호 이름은 그 전 기록이다.
+
+- [x] `types/domain.ts` — `TaskRisk` · `TaskRiskSignal` · `DecisionRiskReport.tasks` · `RiskSummaryInput.taskIds` 지움
+- [x] `lib/risk.ts` 의 `TASK_SIGNAL_LABEL` · `api/risk.ts` 목업(빈 보고서 · 요약 거르기 · 422 검사 · 보내는 몸)· `stores/risk.ts`(`tasks` · 보이는 id · 상한 · '바뀜')에서 작업 몫을 뺌. 상한 100 은 안건 id 에만
+- [x] `RiskView.vue` — 칸 · 빈 문구 지움, 요약 줄은 "보이는 안건 n건을 정리합니다". 작업 상세 팝업은 요약의 작업 칩용으로 남김
+- [x] `fixtures/risks.ts` — `tasks` 지움, `mockRiskSummary` 의 "안건과 어긋난 작업 N건" 총평 · '바로 풀 수 있는 것' 칸을 뺌(안건이 없으면 빈 한 줄). 근거 작업 칩은 안건이 막는 · 기다리게 하는 작업으로만 남는다
+- [x] 사람별(`owners`)은 그대로 — `blockedTasks` 는 '맡은 작업 중 막힘 수' 라 어긋난 작업을 세던 값이 아니다. 안건 리스크도 그대로. 리포트의 `isDecidedButBlocked` 는 자기 판정이라 그대로
+- [x] 테스트 — 칸이 없음 · 보내는 몸이 `{ agendaIds }` 뿐 · 작업 칩을 누르면 작업 상세 (`views/RiskView.test.ts` · `stores/risk.test.ts` · `api/risk.test.ts`)
+
 **커밋** — ① 목업 화면 ② 서버 붙이기 ③ AI 요약
 
 ## 12단계 · 확인 요청 — 작업 · 안건의 [확인 요청] · '확인 요청' 메뉴

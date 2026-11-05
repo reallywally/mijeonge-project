@@ -312,10 +312,10 @@ export interface TaskBatchResult {
 
 | 도구 | 하는 일 | 화면 라벨 |
 | --- | --- | --- |
-| `get_decision_risks` | `GET .../risks` 와 같은 계산(`DecisionRiskReport`). `member_id` · `part_id` 를 주면 `threads` · `tasks` 를 그 사람 · 파트로 거른다(`owners` 는 그대로). `part_id` 에는 파트 이름도 넣을 수 있다 | 결정 리스크 보는 중 |
+| `get_decision_risks` | `GET .../risks` 와 같은 계산(`DecisionRiskReport`). `member_id` · `part_id` 를 주면 `agendas` 를 그 사람 · 파트로 거른다(`owners` 는 그대로, 2026-11-05 `tasks` 걷음). `part_id` 에는 파트 이름도 넣을 수 있다 | 결정 리스크 보는 중 |
 
 - 답하는 규칙: 리스크 · 막힘 · 우선순위 질문에 먼저 부르고, `high` 부터 왜 · 무엇이 막히나 · 다음 할 일을 근거 표시와 함께 말한다.
-  '풀어도 됨'(`decidedButBlocked`)은 풀어도 된다고 말하되 바꾸지 않는다. 숫자는 도구가 준 그대로, 신호는 화면의 말로
+  상태 · 담당자는 바꾸지 않고 권하기만 한다. 숫자는 도구가 준 그대로, 신호는 화면의 말로 (2026-11-05 '풀어도 됨' 등 작업 신호는 리스크에서 걷었다)
 - 지금 도구 전체: `search_threads` · `get_thread` · `search_tasks` · `get_task` · `list_tasks` · `find_similar_tasks` ·
   `get_decision_risks` · `list_members` · `propose_tasks`
 

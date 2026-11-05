@@ -116,41 +116,6 @@ const p1: MockRiskReport = {
       level: 'low',
     },
   ],
-  tasks: [
-    {
-      taskId: 'k22',
-      key: 'HW-22',
-      title: '스테이징 DB 구성',
-      status: 'blocked',
-      ownerId: 'u3',
-      partId: 'pt1',
-      due: '2026-10-20',
-      agendaIds: ['t2'],
-      signal: 'decidedButBlocked',
-    },
-    {
-      taskId: 'k3',
-      key: 'HW-3',
-      title: '프로그램 설계',
-      status: 'doing',
-      ownerId: 'u2',
-      partId: null,
-      due: '2026-09-22',
-      agendaIds: ['t9'],
-      signal: 'dueBeforeDecision',
-    },
-    {
-      taskId: 'k13',
-      key: 'HW-13',
-      title: '모델링',
-      status: 'todo',
-      ownerId: 'u1',
-      partId: 'pt2',
-      due: '2026-09-30',
-      agendaIds: ['t8'],
-      signal: 'dueBeforeDecision',
-    },
-  ],
   owners: [
     { memberId: 'u4', openAgendas: 2, overdueAgendas: 0, blockedTasks: 1, blockingImpact: 1 },
     { memberId: 'u1', openAgendas: 2, overdueAgendas: 1, blockedTasks: 0, blockingImpact: 0 },
@@ -181,7 +146,6 @@ const p2: MockRiskReport = {
       level: 'low',
     },
   ],
-  tasks: [],
   owners: [
     { memberId: 'u2', openAgendas: 1, overdueAgendas: 0, blockedTasks: 0, blockingImpact: 0 },
   ],
@@ -192,54 +156,38 @@ export const riskReports: Record<string, MockRiskReport> = { p1, p2 }
 
 export const RISK_AS_OF = '2026-10-15'
 
-/** 거른 뒤 둘 다 비면 서버가 Claude 를 부르지 않고 내는 한 줄 (docs/api/risk.md 'AI 요약') */
+/** 거른 뒤 비면 서버가 Claude 를 부르지 않고 내는 한 줄 (docs/api/risk.md 'AI 요약') */
 export const RISK_SUMMARY_EMPTY = '지금 짚을 리스크가 없습니다.'
 
 /**
  * 목업 AI 요약 — 계약의 '답의 모양' 칸 순서를 지킨 고정 문구. 받은 보고서(보이는 줄로 거른 것)의 숫자 · 신호만 옮긴다.
- * 근거는 그 보고서의 안건 · 작업 id 로 단다 — 화면이 칩으로 바꾼다
+ * 근거는 그 보고서의 안건 id 와 그 안건이 막는 작업 id 로 단다 — 화면이 칩으로 바꾼다
  */
 export function mockRiskSummary(
   report: Omit<DecisionRiskReport, 'owners'>,
   nameOf: (memberId: string | null) => string,
 ): string {
-  const { agendas, tasks, settings } = report
-  if (agendas.length === 0 && tasks.length === 0) return RISK_SUMMARY_EMPTY
-
-  const out: string[] = []
+  const { agendas, settings } = report
   const top = agendas[0]
-  out.push(
-    top
-      ? `한 줄 총평 — 지금 가장 큰 병목은 [[agenda:${top.agendaId}]] 입니다(${top.score}점 · ${top.level}).`
-      : `한 줄 총평 — 안 정해진 안건 리스크는 없고, 안건과 어긋난 작업 ${tasks.length}건이 있습니다.`,
-  )
+  if (!top) return RISK_SUMMARY_EMPTY
 
-  if (agendas.length > 0) {
-    out.push('', '먼저 정할 것')
-    agendas.slice(0, 3).forEach((t, i) => {
-      const why = t.signals.map((s) => AGENDA_SIGNAL_LABEL[s]).join(' · ')
-      const waiting = [...t.blockedTaskIds, ...t.waitingTaskIds]
-      const blocks =
-        waiting.length > 0
-          ? `작업 ${waiting.length}건(${waiting.map((id) => `[[task:${id}]]`).join(' ')})이 기다립니다`
-          : '막힌 작업은 아직 없습니다'
-      const next = '다음 회의에 올려 결정내용을 적는다'
-      out.push(
-        `${i + 1}. [[agenda:${t.agendaId}]] — ${why} · ${blocks} · ${next} · ${nameOf(t.ownerId)}`,
-      )
-    })
-  }
-
-  const loose = tasks.filter((t) => t.signal !== 'dueBeforeDecision')
-  if (loose.length > 0) {
-    out.push('', '바로 풀 수 있는 것')
-    for (const t of loose)
-      out.push(
-        t.signal === 'decidedButBlocked'
-          ? `- [[task:${t.taskId}]] — 근거 안건이 정해졌으니 막힘을 풀고 진행 중으로 돌린다 · ${nameOf(t.ownerId)}`
-          : `- [[task:${t.taskId}]] — 막힌 이유를 안건으로 올리거나 상태를 되돌린다 · ${nameOf(t.ownerId)}`,
-      )
-  }
+  const out: string[] = [
+    `한 줄 총평 — 지금 가장 큰 병목은 [[agenda:${top.agendaId}]] 입니다(${top.score}점 · ${top.level}).`,
+    '',
+    '먼저 정할 것',
+  ]
+  agendas.slice(0, 3).forEach((t, i) => {
+    const why = t.signals.map((s) => AGENDA_SIGNAL_LABEL[s]).join(' · ')
+    const waiting = [...t.blockedTaskIds, ...t.waitingTaskIds]
+    const blocks =
+      waiting.length > 0
+        ? `작업 ${waiting.length}건(${waiting.map((id) => `[[task:${id}]]`).join(' ')})이 기다립니다`
+        : '막힌 작업은 아직 없습니다'
+    const next = '다음 회의에 올려 결정내용을 적는다'
+    out.push(
+      `${i + 1}. [[agenda:${t.agendaId}]] — ${why} · ${blocks} · ${next} · ${nameOf(t.ownerId)}`,
+    )
+  })
 
   const stale = agendas.filter((t) => t.signals.includes('stale')).length
   if (agendas.length > 1 && stale * 2 > agendas.length) {

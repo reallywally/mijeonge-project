@@ -15,9 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.llm import Finished, LLMError, LLMProvider
-from app.models import Agenda, Member, Part, Task, TaskAgendaLink
+from app.models import Member, Part, Task, TaskAgendaLink
 from app.schemas.chat import ChatEvent, DeltaEvent, DoneEvent, ErrorEvent
-from app.schemas.risk import AgendaRisk, DecisionRiskReport, RiskSummaryInput, TaskRisk
+from app.schemas.risk import AgendaRisk, DecisionRiskReport, RiskSummaryInput
 from app.services import risk as risk_service
 from app.services import search as search_service
 from app.services.chat import TRUNCATED, WEEKDAYS, extract_refs
@@ -43,7 +43,6 @@ SYSTEM_PROMPT = """\
   staleDays 오래 멈춤 날 수 · highScore · mediumScore 등급 문턱)
 - report.agendas: 위험한 안건(점수 내림차순). blockedTasks 는 이 안건 때문에 막힌 작업,
   waitingTasks 는 결정을 기다리는 작업, impactTaskCount 는 막힌 작업과 그 하위 작업 수
-- report.tasks: 안건과 어긋난 작업(signal 하나). agendas 는 근거 안건
 - report.owners: 사람별 몰림(프로젝트 전체)
 - details: 점수 위쪽 안건의 배경(description) · 지금까지 적힌 결정내용(decision, 없으면 '') ·
   연결된 작업
@@ -57,18 +56,11 @@ SYSTEM_PROMPT = """\
 1. [[agenda:ID]] — 왜(신호를 화면 말로) · 무엇이 막히나(작업 수 · [[task:ID]]) · 다음 할 일 · 누가
 2. … (최대 3개, report.agendas 순서대로)
 
-바로 풀 수 있는 것
-- [[task:ID]] — 무엇을 하면 되는지
-
 눈에 띄는 점
 - 한 사람에게 몰림 · 같은 까닭으로 막힌 작업이 여럿 ·
   대부분이 '오래 멈춤' 이면 기준(staleDays)이 회의 주기보다 짧을 수 있다 등
 
 - '먼저 정할 것' 은 report.agendas 가 있을 때만 쓴다
-- '바로 풀 수 있는 것' 은 report.tasks 에
-  decidedButBlocked · blockedWithoutAgenda 가 있을 때만 쓴다.
-  decidedButBlocked 는 걸린 안건이 다 정해졌으니 막힘을 풀어도 된다,
-  blockedWithoutAgenda 는 막힌 이유(안건)가 안 걸려 있으니 이유를 적거나 안건을 걸라고 권한다
 - '눈에 띄는 점' 은 데이터에서 실제로 보일 때만 1 ~ 2줄 쓴다
 - 해당 없는 칸은 머리글까지 통째로 뺀다. 전체 800자 안팎
 
@@ -77,8 +69,7 @@ SYSTEM_PROMPT = """\
 2. 신호는 영어 이름 대신 화면의 말로 쓴다 —
    overdue 기한 지남 · dueSoon 기한 임박 · stale 오래 멈춤 ·
    blocking 작업을 막는 중 · decisionAfterTaskDue 작업 기한이 먼저 · noOwner 담당자 없음 ·
-   noDueDate 기한 없음 / decidedButBlocked 풀어도 됨 · blockedWithoutAgenda 막힌 이유 없음 ·
-   dueBeforeDecision 결정이 기한보다 늦음. 등급은 high 높음 · medium 중간 · low 낮음
+   noDueDate 기한 없음. 등급은 high 높음 · medium 중간 · low 낮음
 3. '다음 할 일' 은 배경 · 결정내용에서 근거를 찾는다 — 배경에 "정보보안팀 확인이 먼저" 라면
    "보안팀 의견을 받아 다음 회의에 올린다" 처럼.
    근거가 없으면 짐작하지 말고 담당자가 정하라고만 쓴다
@@ -103,7 +94,7 @@ class SummaryContext:
 async def build_context(
     session: AsyncSession, project_id: str, picked: RiskSummaryInput, *, today: date
 ) -> SummaryContext | None:
-    """보고서를 다시 계산해 화면이 보낸 줄로 거른다. 거른 뒤 둘 다 비면 None — Claude 를 안 부른다.
+    """보고서를 다시 계산해 화면이 보낸 줄로 거른다. 거른 뒤 비면 None — Claude 를 안 부른다.
 
     화면이 보낸 숫자는 받지도 않는다 — id 만 받아 서버의 계산으로 다시 고른다.
     """
@@ -111,12 +102,10 @@ async def build_context(
         report = await risk_service.decision_risks(session, project_id, today=today)
         # 모르는 id(다른 프로젝트 · 이제는 리스크가 아닌 것 · 지어낸 것)는 조용히 버린다
         want_agendas = set(picked.agenda_ids)
-        want_tasks = set(picked.task_ids)
         agendas = [t for t in report.agendas if t.agenda_id in want_agendas]
-        tasks = [t for t in report.tasks if t.task_id in want_tasks]
-        if not agendas and not tasks:
+        if not agendas:
             return None
-        return await _collect(session, project_id, report, agendas, tasks)
+        return await _collect(session, project_id, report, agendas)
     finally:
         # 읽기만 한다 — Claude 가 답하는 동안 트랜잭션을 붙잡지 않는다
         await session.rollback()
@@ -127,7 +116,6 @@ async def _collect(
     project_id: str,
     report: DecisionRiskReport,
     agendas: list[AgendaRisk],
-    tasks: list[TaskRisk],
 ) -> SummaryContext:
     docs = [
         await search_service.get_agenda(session, project_id, t.agenda_id)
@@ -137,18 +125,12 @@ async def _collect(
     # 막힌 · 기다리는 작업을 키 · 제목으로 보이려고 — 이 프로젝트 안에서만 찾는다
     task_ids = {i for t in agendas for i in (*t.blocked_task_ids, *t.waiting_task_ids)}
     briefs = await _tasks_by_id(session, project_id, task_ids)
-    agenda_titles = {t.agenda_id: t.title for t in report.agendas}
-    agenda_titles |= {doc.agenda.id: doc.agenda.title for doc in docs}
-    # tasks 줄의 근거 안건은 이미 정해진 것일 수 있어 보고서 밖에서도 찾는다
-    missing = {i for t in tasks for i in t.agenda_ids} - agenda_titles.keys()
-    agenda_titles |= await _agenda_titles(session, project_id, missing)
 
     member_ids: set[str | None] = {t.owner_id for t in agendas}
-    member_ids |= {t.owner_id for t in tasks}
     member_ids |= {o.member_id for o in report.owners}
     member_ids |= {row["owner_id"] for rows in linked.values() for row in rows}
     names = await _names(session, Member, member_ids)
-    parts = await _names(session, Part, {t.part_id for t in agendas} | {t.part_id for t in tasks})
+    parts = await _names(session, Part, {t.part_id for t in agendas})
 
     def who(member_id: str | None) -> str:
         return NO_OWNER if member_id is None else names.get(member_id, UNKNOWN)
@@ -187,22 +169,6 @@ async def _collect(
                 }
                 for t in agendas
             ],
-            "tasks": [
-                {
-                    "id": t.task_id,
-                    "key": t.key,
-                    "title": t.title,
-                    "status": t.status,
-                    "owner": who(t.owner_id),
-                    "part": part(t.part_id),
-                    "due": day(t.due),
-                    "signal": t.signal,
-                    "agendas": [
-                        {"id": i, "title": agenda_titles.get(i, UNKNOWN)} for i in t.agenda_ids
-                    ],
-                }
-                for t in tasks
-            ],
             "owners": [
                 {
                     "member": who(o.member_id),
@@ -235,9 +201,8 @@ async def _collect(
             for doc in docs
         ],
     }
-    cited_tasks = {t.task_id for t in tasks} | task_ids
-    cited_tasks |= {row["id"] for rows in linked.values() for row in rows}
-    cited_agendas = {t.agenda_id for t in agendas} | {i for t in tasks for i in t.agenda_ids}
+    cited_tasks = task_ids | {row["id"] for rows in linked.values() for row in rows}
+    cited_agendas = {t.agenda_id for t in agendas}
     return SummaryContext(payload=payload, agenda_ids=cited_agendas, task_ids=cited_tasks)
 
 
@@ -291,21 +256,6 @@ async def _tasks_by_id(
         )
     )
     return {row.id: (row.key, row.title) for row in rows}
-
-
-async def _agenda_titles(
-    session: AsyncSession, project_id: str, agenda_ids: set[str]
-) -> dict[str, str]:
-    if not agenda_ids:
-        return {}
-    rows = await session.execute(
-        select(Agenda.id, Agenda.title).where(
-            Agenda.project_id == project_id,
-            Agenda.id.in_(agenda_ids),
-            Agenda.is_deleted.is_(False),
-        )
-    )
-    return {row.id: row.title for row in rows}
 
 
 async def _names(

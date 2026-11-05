@@ -40,12 +40,9 @@ export const useRiskStore = defineStore('risk', () => {
     report.value && reportProjectId.value === data.currentProjectId ? report.value : null,
   )
 
-  /* [내 파트 | 전체] 를 작업 · 안건 화면과 같은 규칙으로 따른다. 사람별(owners)은 거르지 않는다 */
+  /* [내 파트 | 전체] 를 안건 화면과 같은 규칙으로 따른다. 사람별(owners)은 거르지 않는다 */
   const agendas = computed(() =>
     (current.value?.agendas ?? []).filter((t) => partStore.showsAgenda(t.agendaId)),
-  )
-  const tasks = computed(() =>
-    (current.value?.tasks ?? []).filter((t) => partStore.showsTask(t.taskId)),
   )
   const owners = computed(() => current.value?.owners ?? [])
 
@@ -100,18 +97,11 @@ export const useRiskStore = defineStore('risk', () => {
   /** 지금 화면에 보이는 줄 — '내 파트' 로 거른 결과 그대로. 이것을 보낸다 */
   const visibleIds = computed<RiskSummaryInput>(() => ({
     agendaIds: agendas.value.map((t) => t.agendaId),
-    taskIds: tasks.value.map((t) => t.taskId),
   }))
-  const visibleCount = computed(
-    () => visibleIds.value.agendaIds.length + visibleIds.value.taskIds.length,
-  )
+  const visibleCount = computed(() => visibleIds.value.agendaIds.length)
   const summarizing = computed(() => summary.value?.status === 'streaming')
   /** 보이는 줄이 0건이거나 계약의 상한을 넘으면 부르지 않는다 */
-  const tooManyToSummarize = computed(
-    () =>
-      visibleIds.value.agendaIds.length > api.MAX_RISK_SUMMARY_IDS ||
-      visibleIds.value.taskIds.length > api.MAX_RISK_SUMMARY_IDS,
-  )
+  const tooManyToSummarize = computed(() => visibleCount.value > api.MAX_RISK_SUMMARY_IDS)
   const canSummarize = computed(
     () =>
       current.value !== null &&
@@ -122,11 +112,7 @@ export const useRiskStore = defineStore('risk', () => {
   /** 요약할 때 보낸 줄과 지금 보이는 줄이 다르다 — 요약을 흐리게 하고 다시 요약을 권한다. 저절로 다시 부르지 않는다 */
   const summaryChanged = computed(() => {
     const s = summary.value
-    if (!s) return false
-    return (
-      !sameIds(s.agendaIds, visibleIds.value.agendaIds) ||
-      !sameIds(s.taskIds, visibleIds.value.taskIds)
-    )
+    return s ? !sameIds(s.agendaIds, visibleIds.value.agendaIds) : false
   })
 
   /** 지금 보이는 줄을 요약한다. 받은 데까지 그대로 그린다 */
@@ -135,10 +121,7 @@ export const useRiskStore = defineStore('risk', () => {
     summaryController?.abort()
     const mine = new AbortController()
     summaryController = mine
-    const input: RiskSummaryInput = {
-      agendaIds: [...visibleIds.value.agendaIds],
-      taskIds: [...visibleIds.value.taskIds],
-    }
+    const input: RiskSummaryInput = { agendaIds: [...visibleIds.value.agendaIds] }
     summary.value = { ...input, asOf: current.value.asOf, text: '', status: 'streaming', error: '' }
     const target = summary.value
 
@@ -194,7 +177,6 @@ export const useRiskStore = defineStore('risk', () => {
     loading,
     error,
     agendas,
-    tasks,
     owners,
     load,
     saveSettings,

@@ -1,4 +1,4 @@
-import type { RiskSettings, TaskRiskSignal, AgendaRiskSignal } from '@/types/domain'
+import type { RiskSettings, AgendaRiskSignal } from '@/types/domain'
 
 /* 결정 병목 리스크의 화면 말과 기준 검사 (docs/api/risk.md). 계산은 서버 몫이라 여기 없다 */
 
@@ -56,10 +56,4 @@ export const AGENDA_SIGNAL_LABEL: Record<AgendaRiskSignal, string> = {
   decisionAfterTaskDue: '작업 기한이 먼저',
   noOwner: '담당자 없음',
   noDueDate: '기한 없음',
-}
-
-export const TASK_SIGNAL_LABEL: Record<TaskRiskSignal, string> = {
-  decidedButBlocked: '풀어도 됨',
-  blockedWithoutAgenda: '막힌 이유 없음',
-  dueBeforeDecision: '결정이 기한보다 늦음',
 }

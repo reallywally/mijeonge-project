@@ -414,7 +414,7 @@ def tasks() -> list[Task]:
             task(
                 "k21", "HW-21", "개발자 계정 배포", "k4", "todo", "u1", "2026-09-12", "2026-09-15"
             ),
-            # 결정 병목 리스크 — DB 는 이미 정해졌는데(t2) 막힘을 안 풀어 둔 작업(decidedButBlocked)
+            # DB 는 이미 정해졌는데(t2) 막힘을 안 풀어 둔 작업 — 리포트의 decidedButBlocked
             task(
                 "k22",
                 "HW-22",

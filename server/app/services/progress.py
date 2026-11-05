@@ -154,6 +154,34 @@ async def _agenda_counts(session: AsyncSession, project_id: str) -> dict[str, in
     return dict(rows.tuples().all())
 
 
+async def _decided_but_blocked(
+    session: AsyncSession, project_id: str, tasks: dict[str, _Task]
+) -> set[str]:
+    """막힘인데 걸린 안건이 하나 이상이고 전부 결정된 작업.
+
+    리스크 보고서의 `tasks` 가 내던 신호였다 — 그것을 걷어서(2026-11-05) 여기서 직접 센다.
+    """
+    rows = await session.execute(
+        select(TaskAgendaLink.task_id, Agenda.state)
+        .join(Agenda, Agenda.id == TaskAgendaLink.agenda_id)
+        .where(
+            TaskAgendaLink.project_id == project_id,
+            TaskAgendaLink.task_id.in_(live_task_ids()),
+            Agenda.is_deleted.is_(False),
+        )
+    )
+    states: dict[str, list[str]] = defaultdict(list)
+    for task_id, state in rows.tuples():
+        states[task_id].append(state)
+    return {
+        task_id
+        for task_id, found in states.items()
+        if task_id in tasks
+        and tasks[task_id].status == "blocked"
+        and all(state == "decided" for state in found)
+    }
+
+
 async def _period_logs(
     session: AsyncSession, project_id: str, start: date, end: date
 ) -> tuple[set[str], set[str]]:
@@ -274,7 +302,7 @@ async def progress_with_risks(
     completed, started = await _period_logs(session, project_id, start, today)
     decided = await _period_decisions(session, project_id, start, today)
     previous = await _previous(session, project_id)
-    decided_but_blocked = {t.task_id for t in risks.tasks if t.signal == "decidedButBlocked"}
+    decided_but_blocked = await _decided_but_blocked(session, project_id, tasks)
 
     counts = {status: 0 for status in ("todo", "doing", "blocked", "done")}
     for task in tasks.values():

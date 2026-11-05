@@ -49,11 +49,10 @@ describe('보고서 받기', () => {
       'low',
       'low',
     ])
-    expect(ids(risk.tasks, 'taskId')).toEqual(['k22', 'k3', 'k13'])
     expect(ids(risk.owners, 'memberId')).toEqual(['u4', 'u1', 'u2', 'u3', null])
   })
 
-  it('내 파트면 agendas · tasks 만 거르고 owners 는 그대로다', async () => {
+  it('내 파트면 agendas 만 거르고 owners 는 그대로다', async () => {
     await signedIn('u3@inno-ax.com')
     const risk = useRiskStore()
     const part = usePartStore()
@@ -61,12 +60,10 @@ describe('보고서 받기', () => {
 
     expect(part.scope).toBe('mine')
     expect(ids(risk.agendas, 'agendaId')).toEqual(['t9', 't4'])
-    expect(ids(risk.tasks, 'taskId')).toEqual(['k22', 'k3'])
     expect(risk.owners).toHaveLength(5)
 
     part.setScope('all')
     expect(risk.agendas).toHaveLength(6)
-    expect(risk.tasks).toHaveLength(3)
   })
 
   it('다른 프로젝트로 옮기면 옛 보고서를 그리지 않는다', async () => {
@@ -155,7 +152,7 @@ describe('AI 요약', () => {
 
     const done = risk.summarize()
     expect(spy.mock.calls[0][0]).toBe('p1')
-    expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
+    expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'] })
     expect(risk.summarizing).toBe(true)
     expect(risk.canSummarize).toBe(false)
 
@@ -165,7 +162,6 @@ describe('AI 요약', () => {
       status: 'done',
       asOf: '2026-10-15',
       agendaIds: ['t9', 't4'],
-      taskIds: ['k22', 'k3'],
     })
     expect(risk.summary?.text).toContain('먼저 정할 것')
     expect(risk.summary?.text).toContain('[[agenda:t9]]')

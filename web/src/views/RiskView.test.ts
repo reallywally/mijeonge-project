@@ -45,8 +45,7 @@ async function click(el: Element | undefined | null) {
   await flushPromises()
 }
 
-const rows = (kind: 'agenda' | 'task' | 'owner') =>
-  document.body.querySelectorAll(`[data-risk-${kind}]`)
+const rows = (kind: 'agenda' | 'owner') => document.body.querySelectorAll(`[data-risk-${kind}]`)
 const button = (text: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
 const scopeButton = (key: 'mine' | 'all') =>
@@ -74,14 +73,16 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('표 셋', () => {
-  it('프로젝트 관리자(u1)는 전체로 열린다 — 안건 6 · 작업 3 · 사람 5, 기준 한 줄과 신호 말', async () => {
+describe('표 둘', () => {
+  it('프로젝트 관리자(u1)는 전체로 열린다 — 안건 6 · 사람 5, 기준 한 줄과 신호 말', async () => {
     await signedIn('u1@inno-ax.com')
     const w = await mountRisks()
 
     expect(rows('agenda')).toHaveLength(6)
-    expect(rows('task')).toHaveLength(3)
     expect(rows('owner')).toHaveLength(5)
+    /* '안건과 어긋난 작업' 칸은 2026-11-05 걷었다 */
+    expect(w.text()).not.toContain('안건과 어긋난 작업')
+    expect(document.body.querySelector('[data-risk-task]')).toBeNull()
     expect(w.find('[data-risk-settings]').text()).toBe(
       '기한 임박 3일 · 멈춤 7일 · high 6점 · medium 3점',
     )
@@ -93,10 +94,6 @@ describe('표 셋', () => {
     expect(first).toContain('작업을 막는 중')
     expect(first).toContain('medium')
     expect(rows('agenda')[1]!.textContent).toContain('15일')
-    expect(rows('task')[0]!.textContent).toContain('풀어도 됨')
-    expect(rows('task')[0]!.textContent).toContain('DB 결정')
-    expect(rows('task')[1]!.textContent).toContain('결정이 기한보다 늦음')
-    expect(rows('task')[1]!.textContent).toContain('공통 코드 체계 확정')
     expect(rows('owner')[4]!.textContent).toContain('담당자 없음')
   })
 
@@ -106,12 +103,10 @@ describe('표 셋', () => {
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
     expect(rows('agenda')).toHaveLength(2)
-    expect(rows('task')).toHaveLength(2)
     expect(rows('owner')).toHaveLength(5)
 
     await click(scopeButton('all'))
     expect(rows('agenda')).toHaveLength(6)
-    expect(rows('task')).toHaveLength(3)
   })
 
   it('[새로 고침] 은 다시 받는다', async () => {
@@ -134,14 +129,6 @@ describe('줄을 누르면 상세', () => {
 
     await click(rows('agenda')[1])
     expect(dialog()?.textContent).toContain('사내망에서 외부 모델 호출 허용 범위')
-  })
-
-  it('작업 줄은 작업 상세', async () => {
-    await signedIn('u1@inno-ax.com')
-    await mountRisks()
-
-    await click(rows('task')[0])
-    expect(dialog()?.textContent).toContain('스테이징 DB 구성')
   })
 })
 
@@ -225,12 +212,12 @@ describe('AI 요약', () => {
     await mountRisks()
 
     expect(spy).not.toHaveBeenCalled()
-    expect(line()).toBe('보이는 안건 2 · 작업 2건을 정리합니다')
+    expect(line()).toBe('보이는 안건 2건을 정리합니다')
 
     await click(button('AI 요약'))
     expect(spy).toHaveBeenCalledTimes(1)
-    expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'], taskIds: ['k22', 'k3'] })
-    expect(line()).toBe('2026-10-15 기준 · 보이는 4건')
+    expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'] })
+    expect(line()).toBe('2026-10-15 기준 · 보이는 2건')
     expect(button('다시 요약')).toBeTruthy()
     expect(card()?.textContent).toContain('가 병목입니다.')
   })
@@ -254,6 +241,16 @@ describe('AI 요약', () => {
     )
   })
 
+  it('작업 칩을 누르면 작업 상세', async () => {
+    await signedIn('u3@inno-ax.com')
+    answerWith()
+    await mountRisks()
+    await click(button('AI 요약'))
+
+    await click(card()?.querySelector('[data-ref-task="k3"]'))
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('프로그램 설계')
+  })
+
   it('[내 파트 | 전체] 를 바꾸면 흐리게 하고 다시 요약을 권한다 — 저절로 부르지 않는다', async () => {
     await signedIn('u3@inno-ax.com')
     const spy = answerWith()
@@ -269,7 +266,6 @@ describe('AI 요약', () => {
     expect(spy).toHaveBeenCalledTimes(2)
     expect(spy.mock.calls[1][1]).toEqual({
       agendaIds: ['t5', 't3', 't8', 't9', 't4', 't7'],
-      taskIds: ['k22', 'k3', 'k13'],
     })
     expect(card()?.querySelector('[data-summary-changed]')).toBeNull()
   })

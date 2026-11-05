@@ -101,7 +101,7 @@ export interface ProgressInput {
   riskyAgendaIds: string[]
 }
 
-/** 막힘인데 걸린 안건이 있고 전부 결정됨 — risk.md 의 decidedButBlocked 와 같은 판정 */
+/** 막힘인데 걸린 안건이 있고 전부 결정됨 — report.md 의 decidedButBlocked(서버 services/progress.py 와 같은 판정) */
 export function isDecidedButBlocked(task: Task, linked: Agenda[]) {
   return (
     task.status === 'blocked' && linked.length > 0 && linked.every((t) => t.state === 'decided')

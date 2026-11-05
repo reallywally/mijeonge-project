@@ -181,6 +181,11 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 
 **커밋** — ① 기준 · 계산 + API ② 챗봇 도구 ③ 시드 · 평가 ④ AI 요약
 
+### 2026-11-05 고침 — '안건과 어긋난 작업' 걷음
+
+- [x] `TaskRisk` · `TaskRiskSignal` · 보고서 `tasks` · 그 계산(`_task_signal` · `_task_risks`) 걷음. 요약 요청 `taskIds` 걷음(실어 와도 버린다) · 요약 지시문 · 챗봇 도구 설명 · 프롬프트의 작업 신호 걷음
+- [x] 리포트 `decidedButBlocked` 는 `services/progress.py` 가 직접 센다(전엔 리스크 `tasks` 에서 빌렸다). 기준 · 이행 · 시드 값 변화 없음
+
 **다음 (이 단계 밖)** — `task_log`(작업 상태 변경 이력)를 세워 `blockedDays` 를 더하고, 같은 계산으로 주간 결정 리포트(`agent-proposal.md` 7번)를 만든다.
 
 ## 11단계 · 확인 요청 — 작업 · 안건에 붙는 '확인해 주세요'
