@@ -157,12 +157,10 @@ export const useTaskStore = defineStore('task', () => {
     hideDone.value ? hiddenDoneIds(visibleRows.value.map((r) => r.task)) : new Set(),
   )
   /* 내 작업만 — 간트만 따른다. 내가 등록했거나 담당인 작업과, 트리가 끊기지 않게 그 조상(흐리게)을 남긴다.
-     처음은 꺼짐이고 바꾼 값은 브라우저에 기억한다. 보기만 거른다 */
-  const MINE_ONLY_KEY = 'innoflow.tasks.mineOnly'
-  const mineOnly = ref(recall(MINE_ONLY_KEY) === 'on')
+     늘 꺼진 채로 시작하고 바꾼 값은 기억하지 않는다(새로 열면 다시 꺼짐). 보기만 거른다 */
+  const mineOnly = ref(false)
   function setMineOnly(on: boolean) {
     mineOnly.value = on
-    remember(MINE_ONLY_KEY, on ? 'on' : 'off')
   }
   const isMine = (task: Task) =>
     auth.me !== null && (task.creatorId === auth.me.id || task.ownerId === auth.me.id)

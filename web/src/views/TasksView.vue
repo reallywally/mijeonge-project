@@ -12,6 +12,7 @@ import {
   Search,
   SquareKanban,
 } from 'lucide-vue-next'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import AppShell from '@/components/app/AppShell.vue'
 import HideDoneToggle from '@/components/app/HideDoneToggle.vue'
 import MineOnlyToggle from '@/components/app/MineOnlyToggle.vue'
@@ -184,6 +185,15 @@ const detailOpen = computed({
   get: () => detailId.value !== null,
   set: (open: boolean) => {
     if (!open) router.push({ path: '/tasks', query: viewQuery.value })
+  },
+})
+
+/* 작업 상세에서 연 안건 — 작업 상세 위에 겹쳐 띄우고, 닫으면 작업 상세로 돌아온다(안건 목록으로 가지 않는다) */
+const agendaDetailId = ref<string | null>(null)
+const agendaOpen = computed({
+  get: () => agendaDetailId.value !== null,
+  set: (open: boolean) => {
+    if (!open) agendaDetailId.value = null
   },
 })
 
@@ -708,8 +718,10 @@ function bulkOwner(value: string) {
       v-model:open="detailOpen"
       :task-id="detailId"
       @open-task="openTask"
-      @open-agenda="(id) => router.push(`/agendas/${id}`)"
+      @open-agenda="(id) => (agendaDetailId = id)"
     />
+
+    <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
 
     <TaskCreateDialog
       v-model:open="createOpen"

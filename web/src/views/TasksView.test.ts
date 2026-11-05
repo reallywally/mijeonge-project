@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
 import { resetMockAuth } from '@/api/mockAuth'
+import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
+import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import { Select } from '@/components/ui/select'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
@@ -701,7 +703,7 @@ describe('간트차트 탭', () => {
 describe('내 작업만 (간트)', () => {
   beforeEach(() => localStorage.clear())
 
-  it('간트에만 서고, 켜면 내가 등록 · 담당한 작업과 그 상위만 남는다 — 바꾼 값은 기억한다', async () => {
+  it('간트에만 서고, 켜면 내가 등록 · 담당한 작업과 그 상위만 남는다 — 바꾼 값은 기억하지 않는다', async () => {
     const w = await mountView('/tasks')
     const taskStore = useTaskStore()
     const toggle = w.find('[data-mine-only]')
@@ -720,7 +722,7 @@ describe('내 작업만 (간트)', () => {
     /* 내 것이 아닌 상위는 흐리게(context) 선다 */
     for (const t of chart.parsed)
       expect(Boolean(t.context)).toBe(taskStore.isMineContext(String(t.id)))
-    expect(localStorage.getItem('innoflow.tasks.mineOnly')).toBe('on')
+    expect(localStorage.getItem('innoflow.tasks.mineOnly')).toBeNull()
 
     await w.vm.$router.push('/tasks?view=list')
     await flushPromises()
@@ -876,5 +878,25 @@ describe('고치기 권한 — 목록 · 칸반 · 간트', () => {
     expect(taskStore.rows.find((r) => r.task.id === 'k21')!.task.status).toBe('todo')
     taskStore.setStatus('k3', 'done')
     expect(taskStore.rows.find((r) => r.task.id === 'k3')!.task.status).toBe('done')
+  })
+})
+
+describe('작업 상세에서 연 안건', () => {
+  it('작업 상세 위에 겹쳐 열리고, 닫으면 안건 목록으로 가지 않고 작업 상세에 남는다', async () => {
+    const w = await mountView('/tasks/l1')
+    const router = w.vm.$router
+    const agenda = () => w.findComponent(AgendaDetailDialog)
+    expect(agenda().props('open')).toBe(false)
+
+    w.findComponent(TaskDetailDialog).vm.$emit('open-agenda', 't2')
+    await flushPromises()
+    expect(agenda().props('open')).toBe(true)
+    expect(agenda().props('agendaId')).toBe('t2')
+    expect(router.currentRoute.value.path).toBe('/tasks/l1')
+
+    agenda().vm.$emit('update:open', false)
+    await flushPromises()
+    expect(agenda().props('open')).toBe(false)
+    expect(router.currentRoute.value.path).toBe('/tasks/l1')
   })
 })
