@@ -244,10 +244,14 @@ function centerToday(g: GanttStatic) {
 }
 
 /* 처음 한 번만 가운데로 맞춘다 — 스냅샷이 늦게 오면 빈 줄로 한 번, 채워져서 한 번 그려진다.
-   그 뒤의 다시 그리기(고침 · 끌기)는 보던 자리를 지킨다 */
+   그 뒤의 다시 그리기(고침 · 끌기 · 다시 받기)는 보던 자리를 지킨다. 자리는 픽셀이 아니라 **날짜**로 기억한다 —
+   다시 그리면 눈금 범위(applyRange)가 바뀌거나 스크롤이 처음으로 돌아갈 수 있어, 픽셀로 두면 오늘이 옆으로 밀린다
+   (테스트 메뉴에 다시 들어오면 받아 둔 줄로 가운데를 맞춘 뒤 새로 받은 줄로 한 번 더 그린다) */
 let centered = false
 
 function draw(g: GanttStatic, items: GanttItem[]) {
+  const kept = centered ? g.getScrollState() : null
+  const keptDate = kept ? g.dateFromPos(kept.x) : null
   g.clearAll()
   /* dhtmlx 는 받은 객체를 그대로 쥐고 고친다(옮긴 줄의 parent 등) — 사본을 줘야 같은 items 로
      다시 그릴 때 원래 자리로 돌아온다 */
@@ -257,6 +261,8 @@ function draw(g: GanttStatic, items: GanttItem[]) {
   if (!centered && items.length > 0) {
     centerToday(g)
     centered = true
+  } else if (kept && keptDate) {
+    g.scrollTo(Math.max(0, g.posFromDate(keptDate)), kept.y)
   }
 }
 

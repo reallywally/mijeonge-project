@@ -51,6 +51,12 @@ const chart = vi.hoisted(() => ({
     return Math.round(d.getTime() / 86_400_000) * 26
   },
   scrollTo() {},
+  getScrollState() {
+    return { x: 0, y: 0 }
+  },
+  dateFromPos(x: number) {
+    return new Date((x / 26) * 86_400_000)
+  },
   getTask(id: string) {
     return chart.dragged[id]
   },
@@ -718,7 +724,9 @@ describe('내 작업만 (간트)', () => {
     expect(chart.parsed.map((t) => t.id).sort()).toEqual(
       taskStore.shownRows.map((r) => r.task.id).sort(),
     )
-    expect(w.find('[data-mine-count]').text()).toBe(`등록 · 담당 ${taskStore.mineShownCount}건`)
+    expect(w.find('[data-mine-count]').attributes('title')).toBe(
+      `등록 · 담당 ${taskStore.mineShownCount}건`,
+    )
     /* 내 것이 아닌 상위는 흐리게(context) 선다 */
     for (const t of chart.parsed)
       expect(Boolean(t.context)).toBe(taskStore.isMineContext(String(t.id)))
@@ -737,11 +745,11 @@ describe('완료 숨기기 (Q64)', () => {
   const toggle = (w: Awaited<ReturnType<typeof mountView>>) => w.find('[data-hide-done]')
   const hiddenNote = (w: Awaited<ReturnType<typeof mountView>>) => w.find('[data-hidden-done]')
 
-  it('처음은 켜짐 — 목록에서 완료 셋이 숨고 그 수를 적는다', async () => {
+  it('처음은 켜짐 — 목록에서 완료 셋이 숨고, 그 수는 옆에 적지 않고 가리킬 때(title) 보인다', async () => {
     const w = await mountView()
     expect(toggle(w).attributes('data-state')).toBe('checked')
     expect(w.text()).toContain('총 19건 중 1–10건')
-    expect(hiddenNote(w).text()).toBe('완료 3건 숨김')
+    expect(hiddenNote(w).attributes('title')).toBe('완료 3건 숨김')
     /* 상태 칩의 수 · 간트의 'N / 22 완료' 같은 집계는 숨긴 것도 센다 */
     const chips = w.findAll('button').map((b) => b.text())
     expect(chips.some((t) => t.startsWith('완료') && t.endsWith('3'))).toBe(true)
@@ -751,7 +759,7 @@ describe('완료 숨기기 (Q64)', () => {
     const w = await mountView('/tasks')
     expect(chart.parsed).toHaveLength(19)
     expect(chart.parsed.some((t) => t.key === 'HW-8')).toBe(false)
-    expect(hiddenNote(w).text()).toBe('완료 3건 숨김')
+    expect(hiddenNote(w).attributes('title')).toBe('완료 3건 숨김')
     expect(w.text()).toContain('3 / 22 완료')
   })
 
@@ -770,7 +778,7 @@ describe('완료 숨기기 (Q64)', () => {
     await toggle(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('총 22건 중 1–10건')
-    expect(hiddenNote(w).exists()).toBe(false)
+    expect(hiddenNote(w).attributes('title')).toBeUndefined()
     expect(localStorage.getItem('innoflow.tasks.hideDone')).toBe('off')
 
     /* 새로 열어도(스토어를 새로 세워도) 꺼진 채다 */
@@ -786,7 +794,8 @@ describe('완료 숨기기 (Q64)', () => {
     await doneChip.trigger('click')
     expect(w.findAll('tbody tr')).toHaveLength(3)
     expect(toggle(w).attributes('disabled')).toBeDefined()
-    expect(hiddenNote(w).exists()).toBe(false)
+    /* 가리키면 숨긴 수 대신 안 먹는 이유가 보인다 */
+    expect(hiddenNote(w).attributes('title')).not.toContain('숨김')
   })
 
   it('칸반에는 없다 — 완료 칸이 따로 있다', async () => {

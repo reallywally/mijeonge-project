@@ -9,7 +9,7 @@ import type { TestRow } from '@/types/domain'
 /* 테스트 간트차트 — 작업 간트와 같은 껍데기(GanttChart)에 묶음 트리를 그린다. 막대는 테스트 기간이고,
    끌어 놓으면 PATCH 로 기간을 바꾼다. 줄의 + 는 그 묶음 아래 테스트를 만든다 */
 const props = defineProps<{
-  /** 거른 줄 — 비우면 [내 파트 | 전체] 로 거른 것 전부 */
+  /** 거른 줄 — 비우면 [내 파트 | 전체] · 내 테스트만으로 거른 것 전부 */
   rows?: TestRow[]
 }>()
 const emit = defineEmits<{
@@ -19,8 +19,10 @@ const emit = defineEmits<{
 
 const testStore = useTestStore()
 
-const shown = computed(() => props.rows ?? testStore.visibleRows)
-const items = computed(() => toTestGanttItems(shown.value, testStatusLabel, testStore.isContext))
+const shown = computed(() => props.rows ?? testStore.ganttRows)
+const items = computed(() =>
+  toTestGanttItems(shown.value, testStatusLabel, testStore.isGanttContext),
+)
 const period = computed(() => periodRangeLabel(shown.value.map((r) => r.test)))
 </script>
 

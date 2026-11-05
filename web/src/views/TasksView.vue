@@ -397,7 +397,13 @@ function bulkOwner(value: string) {
           view === 'list' && doneChosen ? '상태로 완료를 골라 완료 작업도 보입니다' : undefined
         "
       />
-      <MineOnlyToggle v-if="view === 'gantt'" />
+      <MineOnlyToggle
+        v-if="view === 'gantt'"
+        :model-value="taskStore.mineOnly"
+        label="내 작업만"
+        :count-title="`등록 · 담당 ${taskStore.mineShownCount}건`"
+        @update:model-value="taskStore.setMineOnly"
+      />
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>

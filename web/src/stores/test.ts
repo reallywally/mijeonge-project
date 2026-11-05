@@ -164,6 +164,42 @@ export const useTestStore = defineStore('test', () => {
     scoped.value ? allRows.value.filter((r) => shows(r.test.id)) : allRows.value,
   )
 
+  /* 내 테스트만 — 간트만 따른다. 내가 담당이거나 참조에 든 테스트와, 트리가 끊기지 않게 그 조상(흐리게)을 남긴다.
+     작업 간트의 '내 작업만' 과 같이 늘 꺼진 채로 시작하고 바꾼 값은 기억하지 않는다. 보기만 거른다 */
+  const mineOnly = ref(false)
+  function setMineOnly(on: boolean) {
+    mineOnly.value = on
+  }
+  const isMine = (t: TestCase) => {
+    const me = data.currentMemberId
+    return me !== null && (t.ownerId === me || t.ccIds.includes(me))
+  }
+  /** 내 테스트만일 때 내 것이 아닌데 조상이라 남은 테스트 — 간트가 흐리게 그린다 */
+  const mineContextIds = computed<Set<string>>(() => {
+    if (!mineOnly.value) return new Set()
+    const shown = new Map(visibleRows.value.map((r) => [r.test.id, r.test]))
+    const context = new Set<string>()
+    for (const r of visibleRows.value) {
+      if (!isMine(r.test)) continue
+      let at = r.test.parentId
+      while (at && shown.has(at) && !context.has(at)) {
+        if (!isMine(shown.get(at)!)) context.add(at)
+        at = shown.get(at)!.parentId
+      }
+    }
+    return context
+  })
+  /** 간트가 그리는 줄 — 내 테스트만이면 내 것과 그 조상만 */
+  const ganttRows = computed<TestRow[]>(() =>
+    mineOnly.value
+      ? visibleRows.value.filter((r) => isMine(r.test) || mineContextIds.value.has(r.test.id))
+      : visibleRows.value,
+  )
+  /** 내 테스트만일 때 간트에 선 내 테스트 수 — 조상은 빼고 센다 */
+  const mineShownCount = computed(() => ganttRows.value.filter((r) => isMine(r.test)).length)
+  /** 간트에서 흐리게 그릴 줄 — '내 파트' 의 길잇기 조상이거나 '내 테스트만' 의 조상 */
+  const isGanttContext = (testId: string) => isContext(testId) || mineContextIds.value.has(testId)
+
   /* '지금' 은 돌리는 테스트(묶음이 아닌 것)만 센다 — 묶음까지 세면 같은 테스트가 두 번 든다.
      길을 잇느라 선 조상은 내 일이 아니라 뺀다 */
   const leafRows = computed(() =>
@@ -396,6 +432,11 @@ export const useTestStore = defineStore('test', () => {
     allRows,
     visibleRows,
     isContext,
+    mineOnly,
+    setMineOnly,
+    ganttRows,
+    mineShownCount,
+    isGanttContext,
     nowCounts,
     testingNow,
     attention,

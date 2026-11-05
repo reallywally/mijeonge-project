@@ -125,7 +125,7 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
     const w = await mountAt('/tasks?view=list&part=pt1')
     /* 인프라 5건 중 완료(HW-19) 하나가 숨는다 */
     expect(w.text()).toContain('총 4건')
-    expect(w.find('[data-hidden-done]').text()).toBe('완료 1건 숨김')
+    expect(w.find('[data-hidden-done]').attributes('title')).toBe('완료 1건 숨김')
   })
 
   it('시스템 관리자는 속한 파트가 없어 전환이 없다', async () => {

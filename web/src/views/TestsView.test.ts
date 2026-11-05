@@ -30,6 +30,7 @@ const chart = vi.hoisted(() => ({
     status: string
     late?: boolean
     unscheduled?: boolean
+    context?: boolean
   }[],
   dragged: {} as Record<string, { start_date: Date; end_date: Date }>,
   attachEvent(name: string, fn: (...args: unknown[]) => unknown) {
@@ -51,6 +52,12 @@ const chart = vi.hoisted(() => ({
     return Math.round(d.getTime() / 86_400_000) * 26
   },
   scrollTo() {},
+  getScrollState() {
+    return { x: 0, y: 0 }
+  },
+  dateFromPos(x: number) {
+    return new Date((x / 26) * 86_400_000)
+  },
   getTask(id: string) {
     return chart.dragged[id]
   },
@@ -354,6 +361,30 @@ describe('테스트 간트', () => {
     chart.events.onAfterTaskDrag('tc8')
     await flushPromises()
     expect(useTestStore().byId.tc8).toMatchObject({ start: '2026-10-14', due: '2026-10-16' })
+  })
+
+  it('내 테스트만 — 켜면 내가 담당 · 참조인 테스트와 그 상위(흐리게)만, 목록에는 서지 않는다', async () => {
+    const { w } = await mountAt('/tests', 'u3@inno-ax.com')
+    usePartStore().setScope('all')
+    await flushPromises()
+    const toggle = w.find('[data-mine-only]')
+    expect(toggle.attributes('data-state')).toBe('unchecked')
+    expect(chart.parsed).toHaveLength(8)
+
+    await toggle.trigger('click')
+    await flushPromises()
+    /* 이도현(u3) — tc5 · tc6 담당, tc2 참조. tc1 은 tc2 의 상위라 흐리게 선다 */
+    expect(chart.parsed.map((t) => t.id).sort()).toEqual(['tc1', 'tc2', 'tc5', 'tc6'])
+    expect(chart.parsed.filter((t) => t.context).map((t) => t.id)).toEqual(['tc1'])
+    expect(w.find('[data-mine-count]').attributes('title')).toBe('담당 · 참조 3건')
+
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(chart.parsed).toHaveLength(8)
+
+    await w.vm.$router.push('/tests?view=list')
+    await flushPromises()
+    expect(w.find('[data-mine-only]').exists()).toBe(false)
   })
 
   it("줄의 '+' 는 그 묶음 아래로 추가 팝업을 연다", async () => {

@@ -9,6 +9,7 @@ import TaskGantt from './TaskGantt.vue'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
+import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 
 /* dhtmlx 는 컨테이너의 실제 높이를 재서 보이는 줄만 그린다. jsdom 은 모든 크기가 0 이라
@@ -106,6 +107,26 @@ describe('간트차트', () => {
     /* 보이는 타임라인 = 1200 - 그리드 562. 오늘 칸의 가운데가 그 가운데에 선다 */
     const visible = 1200 - chart.config.grid_width
     expect(chart.getScrollState().x).toBe(chart.posFromDate(today) + day / 2 - visible / 2)
+    spy.mockRestore()
+  })
+
+  it('다시 그려도(다시 받기 · 눈금 범위가 바뀌어도) 보던 날짜를 지킨다 — 오늘이 옆으로 밀리지 않는다', async () => {
+    const spy = vi.spyOn(Gantt, 'getGanttInstance')
+    await mountGantt()
+    const chart = spy.mock.results[0].value as GanttStatic
+    const leftDay = () => chart.dateFromPos(chart.getScrollState().x).toDateString()
+    const before = leftDay()
+
+    /* 맨 앞 작업을 두 달 당겨 눈금 시작이 앞으로 늘어난 줄을 새로 받는다 — 픽셀로 지키면 오늘이 오른쪽으로 밀린다 */
+    const data = useDataStore()
+    const first = [...data.allTasks]
+      .filter((t) => t.start)
+      .sort((a, b) => a.start!.localeCompare(b.start!))[0]!
+    data.allTasks = data.allTasks.map((t) =>
+      t.id === first.id ? { ...t, start: '2026-06-01' } : { ...t },
+    )
+    await flushPromises()
+    expect(leftDay()).toBe(before)
     spy.mockRestore()
   })
 

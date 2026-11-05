@@ -15,6 +15,7 @@ import {
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import IdCell from '@/components/app/IdCell.vue'
+import MineOnlyToggle from '@/components/app/MineOnlyToggle.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TestDetailDialog from '@/components/app/TestDetailDialog.vue'
@@ -271,6 +272,13 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
         간트차트
       </RouterLink>
       <div class="grow" />
+      <MineOnlyToggle
+        v-if="view === 'gantt'"
+        :model-value="testStore.mineOnly"
+        label="내 테스트만"
+        :count-title="`담당 · 참조 ${testStore.mineShownCount}건`"
+        @update:model-value="testStore.setMineOnly"
+      />
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <Button v-else size="sm" @click="openCreate()">
