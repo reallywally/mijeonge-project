@@ -8,9 +8,10 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Member
+from app.models import Member, Task, TaskHistory
 from app.services import chat as chat_service
 from tests.conftest import AsMember
 from tests.test_contract_types import contract_keys
@@ -471,19 +472,108 @@ async def test_who_can_delete_a_task(client: httpx.AsyncClient, as_member: AsMem
         assert (await client.patch(f"/api/tasks/{gone}", json={})).status_code == 404
 
 
-async def test_task_with_children_is_409(client: httpx.AsyncClient, as_member: AsMember) -> None:
-    # 권한이 먼저다 — 못 지우는 사람에게는 하위가 있는지보다 403 이 나간다
-    assert (await (await as_member("u2")).delete("/api/tasks/k1")).status_code == 403
-    res = await client.delete("/api/tasks/k1")
-    assert res.status_code == 409
-    assert res.json() == {
-        "code": "TASK_HAS_CHILDREN",
-        "message": "하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮기세요.",
-    }
-    # 하위를 다 지우면 지워진다 — k12 밑의 k13 하나
-    assert (await client.delete("/api/tasks/k12")).status_code == 409
-    assert (await client.delete("/api/tasks/k13")).status_code == 204
+async def _child_of(c: httpx.AsyncClient, parent_id: str | None, title: str) -> str:
+    res = await c.post("/api/projects/p1/tasks", json={"title": title, "parentId": parent_id})
+    assert res.status_code == 201, res.json()
+    task_id: str = res.json()["id"]
+    return task_id
+
+
+async def _deleted_rows(session: AsyncSession, ids: list[str]) -> dict[str, Any]:
+    session.expire_all()
+    rows = (await session.scalars(select(Task).where(Task.id.in_(ids)))).all()
+    return {row.id: (row.is_deleted, row.deleted_at, row.deleted_by) for row in rows}
+
+
+async def _delete_lines(session: AsyncSession, task_id: str) -> int:
+    lines = (await session.scalars(select(TaskHistory).where(TaskHistory.task_id == task_id))).all()
+    return sum(1 for line in lines if line.changes[0]["field"] == "deleted")
+
+
+async def test_delete_takes_the_whole_subtree(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    """하위 작업은 손자 이하까지 줄기째 지운다 (2026-11-05).
+
+    같은 시각 · 같은 사람으로 찍고, 줄마다 '삭제' 이력이 남는다.
+    """
+    u2 = await as_member("u2")
+    root = await _child_of(u2, None, "뿌리")
+    child = await _child_of(u2, root, "자식")
+    grand = await _child_of(u2, child, "손자")
+    great = await _child_of(u2, grand, "증손")
+    sibling = await _child_of(u2, child, "손자 둘")
+    outside = await _child_of(u2, None, "남의 줄기")
+    family = [root, child, grand, great, sibling]
+
+    assert (await u2.delete(f"/api/tasks/{root}")).status_code == 204
+
+    rows = await _deleted_rows(session, [*family, outside])
+    assert rows[outside] == (False, None, None)
+    stamps = {rows[i] for i in family}
+    assert len(stamps) == 1
+    is_deleted, deleted_at, deleted_by = stamps.pop()
+    assert is_deleted is True and deleted_at is not None and deleted_by == "u2"
+    for task_id in family:
+        assert await _delete_lines(session, task_id) == 1, task_id
+        res = await client.patch(f"/api/tasks/{task_id}", json={})
+        assert res.status_code == 404 and res.json()["code"] == "TASK_NOT_FOUND"
+    snap = {t["id"] for t in (await client.get("/api/projects/p1/snapshot")).json()["tasks"]}
+    assert outside in snap and not snap & set(family)
+
+
+async def test_delete_is_403_if_any_descendant_is_not_mine(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    """줄기 중 하나라도 못 지우면 아무것도 안 지운다 — 권한은 뿌리 · 후손 하나씩 본다."""
+    u2, u3 = await as_member("u2"), await as_member("u3")
+    root = await _child_of(u2, None, "뿌리")
+    child = await _child_of(u2, root, "자식")
+    theirs = await _child_of(u3, child, "u3 의 손자")  # 하위 작업 등록은 아무나 한다
+    family = [root, child, theirs]
+
+    res = await u2.delete(f"/api/tasks/{root}")
+    assert res.status_code == 403
+    assert res.json() == {"code": "FORBIDDEN", "message": "지울 수 없는 하위 작업이 있습니다."}
+    rows = await _deleted_rows(session, family)
+    assert all(rows[i] == (False, None, None) for i in family)
+    assert [await _delete_lines(session, i) for i in family] == [0, 0, 0]
+    # 뿌리를 못 지우면 하위를 보기 전에 그냥 403
+    res = await u3.delete(f"/api/tasks/{root}")
+    assert res.json() == {"code": "FORBIDDEN", "message": "권한이 없습니다."}
+    # 관리자는 남의 것까지 지운다
+    assert (await (await as_member("u1")).delete(f"/api/tasks/{root}")).status_code == 204
+    rows = await _deleted_rows(session, family)
+    assert all(rows[i][0] is True and rows[i][2] == "u1" for i in family)
+
+
+async def test_delete_leaves_already_deleted_descendants_alone(
+    client: httpx.AsyncClient, session: AsyncSession, as_member: AsMember
+) -> None:
+    """먼저 지운 후손은 다시 찍지 않는다 — 시각 · 사람 · '삭제' 줄이 처음 그대로다.
+
+    남이 만든 후손이라도 이미 지웠으면 권한을 묻지 않는다.
+    """
+    u2, u3 = await as_member("u2"), await as_member("u3")
+    root = await _child_of(u2, None, "뿌리")
+    kept = await _child_of(u2, root, "남는 자식")
+    theirs = await _child_of(u3, root, "u3 의 자식")
+    assert (await u3.delete(f"/api/tasks/{theirs}")).status_code == 204
+    before = (await _deleted_rows(session, [theirs]))[theirs]
+    assert before[0] is True and before[2] == "u3"
+
+    assert (await u2.delete(f"/api/tasks/{root}")).status_code == 204
+    rows = await _deleted_rows(session, [root, kept, theirs])
+    assert rows[theirs] == before
+    assert await _delete_lines(session, theirs) == 1
+    assert rows[root][2] == rows[kept][2] == "u2"
+
+
+async def test_seed_tree_goes_in_one_delete(client: httpx.AsyncClient) -> None:
+    """예전엔 409 `TASK_HAS_CHILDREN` 이던 k1 · k12 도 이제 한 번에 지워진다."""
     assert (await client.delete("/api/tasks/k12")).status_code == 204
+    assert (await client.patch("/api/tasks/k13", json={})).status_code == 404
+    assert (await client.delete("/api/tasks/k1")).status_code == 204
 
 
 # --- 안건 — 고치기 · 지우기 (docs/api/auth.md '안건') -----------------------------------------

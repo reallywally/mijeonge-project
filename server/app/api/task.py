@@ -55,7 +55,7 @@ async def move_task(
 
 @router.delete("/tasks/{task_id}", status_code=204)
 async def delete_task(task_id: str, scope: ProjectScope, session: Session) -> None:
-    """생성자 · 프로젝트 관리자 · 시스템 관리자만. 하위 작업이 있으면 409."""
+    """생성자 · 프로젝트 관리자 · 시스템 관리자만. 하위 작업까지 줄기째 지운다."""
     await task_service.delete_task(session, task_id, scope)
 
 

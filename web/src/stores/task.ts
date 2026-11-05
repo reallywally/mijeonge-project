@@ -12,6 +12,7 @@ import { recall, remember } from '@/lib/storage'
 import {
   MAX_TASK_DEPTH,
   TASK_DEPTH_MESSAGE,
+  descendantsOf,
   hiddenDoneIds,
   moveProblem,
   nextTaskOrder,
@@ -647,17 +648,26 @@ export const useTaskStore = defineStore('task', () => {
     )
   }
 
+  /** 지우면 같이 지워질 후손 — 손자 이하까지, 트리 순서로 */
+  const descendants = (taskId: string) => descendantsOf(data.allTasks, taskId)
+  /** 줄기째 지울 수 있나 — 루트와 모든 후손을 다 지울 수 있어야 한다(서버도 하나라도 못 지우면 403) */
+  const canDeleteTree = (task: Task) =>
+    canDelete(task) && descendants(task.id).every((t) => canDelete(t))
+
   /**
-   * 지운다 — 본문 · 댓글 · 안건 연결 · 테스트 태그는 서버가 같이 걷는다. 하위 작업이 있으면 409 TASK_HAS_CHILDREN.
+   * 지운다 — 루트와 모든 후손을 줄기째. 본문 · 댓글 · 안건 연결 · 테스트 태그는 서버가 같이 걷는다.
    * 실패하면 ApiError 를 던진다 — 이유를 확인 다이얼로그에 띄우는 것은 화면 몫이다
    */
   async function deleteTask(taskId: string) {
     await api.deleteTask(taskId)
+    const gone = new Set([taskId, ...descendants(taskId).map((t) => t.id)])
     /* 모아 두던 본문이 지운 작업에 늦게 날아가지 않게 */
-    clearTimeout(bodyTimers.get(taskId))
-    bodyTimers.delete(taskId)
-    data.allTasks = data.allTasks.filter((t) => t.id !== taskId)
-    data.taskAgendas = data.taskAgendas.filter((l) => l.taskId !== taskId)
+    for (const id of gone) {
+      clearTimeout(bodyTimers.get(id))
+      bodyTimers.delete(id)
+    }
+    data.allTasks = data.allTasks.filter((t) => !gone.has(t.id))
+    data.taskAgendas = data.taskAgendas.filter((l) => !gone.has(l.taskId))
     /* 테스트의 태그도 서버에서 빠졌다 — 받아 둔 목록이 있으면 다시 받는다 */
     if (testStore.loaded) void testStore.load()
   }
@@ -697,6 +707,8 @@ export const useTaskStore = defineStore('task', () => {
     tasksOfAgenda,
     canEdit,
     canDelete,
+    canDeleteTree,
+    descendants,
     deleteTask,
     setStatus,
     setOwner,

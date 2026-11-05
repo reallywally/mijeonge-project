@@ -170,11 +170,22 @@ describe('지우기 — 목업 갈래', () => {
     await expect(deleteTask('k18')).resolves.toBeUndefined()
   })
 
-  it('하위 작업이 있으면 409 TASK_HAS_CHILDREN — 관리자여도', async () => {
+  it('하위가 있으면 후손까지 줄기째 지운다 — 작업마다 이력 삭제 줄', async () => {
     as('u1')
+    await expect(deleteTask('k5')).resolves.toBeUndefined()
+    for (const id of ['k5', 'k6', 'k7', 'k8', 'k13', 'k18'])
+      expect(mockDb().taskHistory[id]?.at(-1)?.changes).toEqual([
+        { field: 'deleted', from: null, to: null, subject: '' },
+      ])
+  })
+
+  it('못 지우는 후손이 하나라도 있으면 403 FORBIDDEN 이고 아무것도 안 지운다', async () => {
+    /* HW-4 는 박지훈(u2)이 등록했지만 하위 HW-19 ~ 22 는 아니다 */
+    as('u2')
     const error = await deleteTask('k4').catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ApiError)
-    expect(error).toMatchObject({ status: 409, code: 'TASK_HAS_CHILDREN' })
+    expect(error).toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    expect(mockDb().taskHistory.k4?.some((h) => h.changes[0].field === 'deleted')).toBeFalsy()
   })
 
   it('못 보는 프로젝트 · 없는 작업은 404 TASK_NOT_FOUND', async () => {
@@ -183,14 +194,14 @@ describe('지우기 — 목업 갈래', () => {
     await expect(deleteTask('nope')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
   })
 
-  it('지우면 댓글 · 테스트 태그 · 이력이 같이 사라진다', async () => {
+  it('지우면 댓글 · 테스트 태그 · 삭제 이력 줄', async () => {
     as('u1')
     const tagged = () =>
       mockDb().tests.filter((t) => t.refs.some((r) => r.kind === 'task' && r.id === 'k21'))
     expect(tagged().length).toBeGreaterThan(0)
     await deleteTask('k21')
     expect(tagged()).toHaveLength(0)
-    expect(mockDb().taskHistory.k21).toBeUndefined()
+    expect(mockDb().taskHistory.k21.at(-1)!.changes[0].field).toBe('deleted')
     expect(await fetchTaskComments('k21')).toEqual([])
 
     await deleteTask('k18')
@@ -332,14 +343,9 @@ describe('한 번에 등록 — 서버 갈래', () => {
     expect(fake.mock.calls[0][1]).toMatchObject({ method: 'POST', body: JSON.stringify(move) })
   })
 
-  it('409 TASK_HAS_CHILDREN 은 그대로 ApiError 다', async () => {
-    serve(() =>
-      json(409, { code: 'TASK_HAS_CHILDREN', message: '하위 작업이 있어 지울 수 없습니다.' }),
-    )
-    await expect(deleteTask('k4')).rejects.toMatchObject({
-      status: 409,
-      code: 'TASK_HAS_CHILDREN',
-    })
+  it('403 FORBIDDEN(못 지우는 후손) 은 그대로 ApiError 다', async () => {
+    serve(() => json(403, { code: 'FORBIDDEN', message: '권한이 없습니다.' }))
+    await expect(deleteTask('k4')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
   })
 
   it('실패는 본문의 code · detail 그대로 ApiError 다', async () => {

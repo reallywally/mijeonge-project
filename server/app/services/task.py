@@ -815,28 +815,45 @@ async def unlink_agenda(session: AsyncSession, task_id: str, agenda_id: str, sco
     await session.commit()
 
 
-async def delete_task(session: AsyncSession, task_id: str, scope: Scope) -> None:
-    """논리 삭제 — `is_deleted` · `deleted_at` · `deleted_by` 를 찍고 이력에 '삭제' 줄을 남긴다.
+async def _live_descendants(session: AsyncSession, task_id: str) -> list[Task]:
+    """지우지 않은 후손 전부 — 단마다 쿼리 하나. 지운 작업 밑으로는 내려가지 않는다."""
+    found: list[Task] = []
+    seen = {task_id}
+    frontier = [task_id]
+    while frontier:
+        children = [
+            child
+            for child in (
+                await session.scalars(
+                    select(Task).where(Task.parent_id.in_(frontier), Task.is_deleted.is_(False))
+                )
+            ).all()
+            if child.id not in seen  # 망가진 고리에서 멈춘다
+        ]
+        seen.update(child.id for child in children)
+        found.extend(children)
+        frontier = [child.id for child in children]
+    return found
 
-    본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조는 그대로 두고 읽는 쪽이 거른다.
-    하위 작업이 남아 있으면 지우지 않는다 — 한 번 누름에 줄기째 사라지면 되돌릴 길이 없다.
-    작업 번호는 그대로 쥐고 있어 다시 나가지 않는다(`project.last_task_no`).
+
+async def delete_task(session: AsyncSession, task_id: str, scope: Scope) -> None:
+    """논리 삭제 — 하위 작업(지운 것 빼고 손자 이하 전부)까지 줄기째 지운다 (2026-11-05).
+
+    지우는 작업마다 `is_deleted` · `deleted_at` · `deleted_by` 를 같은 시각으로 찍고 이력에
+    '삭제' 줄을 남긴다. 본문 줄 · 댓글 · 안건 링크 · 상태 기록 · 이력 · 테스트 참조는 그대로
+    두고 읽는 쪽이 거른다. 줄기 중 하나라도 지울 권한이 없으면 아무것도 안 지운다 — 반쯤
+    지운 줄기는 상위 없는 하위를 남긴다. 작업 번호는 다시 나가지 않는다(`project.last_task_no`).
     """
     task = await load_task(session, task_id)
     if not access.can_delete_task(scope, task):
         raise access.forbidden()
-    child = await session.scalar(
-        select(Task.id).where(Task.parent_id == task.id, Task.is_deleted.is_(False)).limit(1)
-    )
-    if child is not None:
-        raise ApiError(
-            409,
-            "TASK_HAS_CHILDREN",
-            "하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮기세요.",
-        )
+    descendants = await _live_descendants(session, task.id)
+    if not all(access.can_delete_task(scope, child) for child in descendants):
+        raise access.forbidden("지울 수 없는 하위 작업이 있습니다.")
     at = now()
-    task.is_deleted = True
-    task.deleted_at = at
-    task.deleted_by = scope.actor.id
-    history_service.record_task(session, task, history_service.deleted(), scope.actor.id, at)
+    for target in (task, *descendants):
+        target.is_deleted = True
+        target.deleted_at = at
+        target.deleted_by = scope.actor.id
+        history_service.record_task(session, target, history_service.deleted(), scope.actor.id, at)
     await session.commit()

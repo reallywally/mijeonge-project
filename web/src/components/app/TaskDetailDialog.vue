@@ -175,9 +175,16 @@ const subPct = computed(() => {
   return Math.round((d.doneChildCount / d.children.length) * 100)
 })
 
-/* 지우기 — 확인을 받고 지운다. 하위 작업이 있으면 못 지운다(서버 409 TASK_HAS_CHILDREN).
-   그사이 다른 사람이 하위를 달아 409 가 오면 이유를 띄우고 스냅샷을 다시 받아 하위를 보인다 */
-const hasChildren = computed(() => (detail.value?.children.length ?? 0) > 0)
+/* 지우기 — 확인을 받고 루트와 모든 후손을 줄기째 지운다. 후손 가운데 못 지우는 것이 있으면 버튼을 막는다.
+   그사이 못 지우는 하위가 달려 403 이 오면 이유를 띄우고 스냅샷을 다시 받아 하위를 보인다 */
+const descendants = computed(() => (props.taskId ? taskStore.descendants(props.taskId) : []))
+const blockedByDescendant = computed(() =>
+  detail.value ? !taskStore.canDeleteTree(detail.value.task) : false,
+)
+/* 확인 다이얼로그에 늘어놓는 하위 — 많으면 앞의 몇 개만 두고 '외 N개' */
+const SHOWN_DESCENDANTS = 5
+const shownDescendants = computed(() => descendants.value.slice(0, SHOWN_DESCENDANTS))
+const moreDescendants = computed(() => descendants.value.length - shownDescendants.value.length)
 
 function askDelete() {
   deleteError.value = ''
@@ -194,8 +201,8 @@ async function removeTask() {
     confirmOpen.value = false
     open.value = false
   } catch (e) {
-    if (e instanceof ApiError && e.code === 'TASK_HAS_CHILDREN') {
-      deleteError.value = e.message
+    if (e instanceof ApiError && e.status === 403) {
+      deleteError.value = '지울 권한이 없는 하위 작업이 있어 지우지 못했습니다.'
       void data.reloadSnapshot()
     } else {
       confirmOpen.value = false
@@ -450,15 +457,19 @@ function onAgendaCreated(id: string) {
                 variant="ghost"
                 size="sm"
                 class="self-start text-destructive hover:text-destructive"
-                :disabled="hasChildren"
+                :disabled="blockedByDescendant"
                 data-task-delete
                 @click="askDelete"
               >
                 <Trash2 class="size-3.5" />
                 작업 지우기
               </Button>
-              <p v-if="hasChildren" class="px-0.5 text-xs text-muted-foreground" data-delete-reason>
-                하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮겨 주세요.
+              <p
+                v-if="blockedByDescendant"
+                class="px-0.5 text-xs text-muted-foreground"
+                data-delete-reason
+              >
+                지울 수 없는 하위 작업이 있어 지울 수 없습니다.
               </p>
             </div>
           </template>
@@ -470,9 +481,30 @@ function onAgendaCreated(id: string) {
           <DialogHeader>
             <DialogTitle>{{ detail.task.key }} 작업을 지울까요?</DialogTitle>
             <DialogDescription class="text-pretty">
-              본문 · 댓글 · 안건 연결도 함께 지워지고 되돌릴 수 없습니다.
+              <template v-if="descendants.length">
+                <strong class="font-medium text-destructive" data-delete-descendant-count>
+                  하위 작업 {{ descendants.length }}개도 함께 지워집니다.
+                </strong>
+                본문 · 댓글 · 안건 연결까지 모두 지워지고 되돌릴 수 없습니다.
+              </template>
+              <template v-else
+                >본문 · 댓글 · 안건 연결도 함께 지워지고 되돌릴 수 없습니다.</template
+              >
             </DialogDescription>
           </DialogHeader>
+          <ul
+            v-if="descendants.length"
+            class="flex flex-col gap-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm"
+            data-delete-descendants
+          >
+            <li v-for="t in shownDescendants" :key="t.id" class="flex min-w-0 gap-2">
+              <span class="shrink-0 text-muted-foreground tabular-nums">{{ t.key }}</span>
+              <span class="truncate">{{ t.title }}</span>
+            </li>
+            <li v-if="moreDescendants > 0" class="text-muted-foreground" data-delete-more>
+              외 {{ moreDescendants }}개
+            </li>
+          </ul>
           <p v-if="deleteError" class="text-sm text-destructive" data-delete-error>
             {{ deleteError }}
           </p>
@@ -485,7 +517,7 @@ function onAgendaCreated(id: string) {
               @click="removeTask"
             >
               <Loader2 v-if="deleting" class="animate-spin" />
-              지우기
+              {{ descendants.length ? '하위까지 지우기' : '지우기' }}
             </Button>
           </DialogFooter>
         </DialogContent>

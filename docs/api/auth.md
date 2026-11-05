@@ -197,7 +197,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | `POST /api/tasks/{taskId}/comments` | **`authorId` 를 받지 않는다** — 작성자는 로그인한 사람이다. 보내도 무시한다 |
 | `PATCH` · `DELETE /api/comments/{commentId}` | 고치기는 **작성자만**, 지우기는 작성자 · 그 프로젝트 관리자 · 시스템 관리자. 그 밖은 403 `FORBIDDEN` |
 | 작업 고치기 — `PATCH /api/tasks/{taskId}` · `PATCH …/lines/{lineId}` · `PUT` · `DELETE …/agendas/{agendaId}` | **생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02). 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 작업으로 본다 — 담당자는 남에게 넘길 수 있고, 남은 자기를 담당자로 넣을 수 없다. 하위 작업 등록(`parentId`)은 상위를 고치는 것이 아니라 권한을 안 본다. 댓글 · 확인 요청 규칙은 그대로 |
-| 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. 권한을 먼저 보고 그다음 하위 작업(409 `TASK_HAS_CHILDREN`, 지운 하위는 세지 않는다)을 본다. 지우기는 논리 삭제다 — 지운 작업은 없는 작업과 같은 404 로 간다 (`API.md` 엔드포인트 표) |
+| 작업 지우기 — `DELETE /api/tasks/{taskId}` | **생성자 · 그 프로젝트 관리자 · 시스템 관리자** — 담당자는 못 지운다 (2026-11-02). 그 밖은 403 `FORBIDDEN`. **하위 작업(손자 이하, 이미 지운 것 빼고)까지 줄기째 지운다** (2026-11-05) — 뿌리를 먼저 보고(못 지우면 `권한이 없습니다.`), 그다음 후손 하나하나를 같은 규칙으로 본다. 하나라도 못 지우면 아무것도 안 지우고 403 `FORBIDDEN`(`지울 수 없는 하위 작업이 있습니다.`). ~~하위가 있으면 409 `TASK_HAS_CHILDREN`~~ 은 없어졌다. 지우기는 논리 삭제다 — 지운 작업은 없는 작업과 같은 404 로 간다 (`API.md` 엔드포인트 표) |
 | 안건 고치기 · 지우기 — `PATCH` · `DELETE /api/agendas/{agendaId}` (2026-11-04 `/api/threads/…` 에서) | **생성자(`Agenda.creatorId`) · 담당자 · 그 프로젝트 관리자 · 시스템 관리자** (2026-11-02) — 작업과 달리 **담당자도 지운다**. 그 밖은 403 `FORBIDDEN`. 담당자를 바꾸는 수정은 **바꾸기 전** 안건으로 본다(작업과 같다). **결정내용 · 상태를 바꾸는 것도 PATCH 라 같은 넷만 된다**(2026-11-04) — 회의록 반영의 `updates` 도 같다(403 `FORBIDDEN`, `detail` 은 `updates.N.agendaId`). 지우기는 논리 삭제다 — 지운 안건은 없는 안건과 같은 404 로 간다(그 아래 경로 · 그 안건의 확인 요청 id 경로까지). ~~떼어낸 하위 안건 409 `THREAD_HAS_CHILDREN`~~ 은 하위 안건을 걷어 없어졌다 |
 | ~~이력 줄 고치기 · 지우기 — `PATCH` · `DELETE /api/threads/{threadId}/entries/{entryId}`~~ | **2026-11-04 걷음** — 이력 줄(`Entry`)이 없어졌다(`agenda.md`). 옛 규칙: 그 줄 생성자 · 안건 생성자 · 안건 담당자 · 관리자 |
 | ~~결정 항목 — `/api/threads/{threadId}/items[/{itemId}]`~~ | **2026-11-04 걷음** — 결정 항목이 없어졌다 |
@@ -213,7 +213,7 @@ closedAt: string | null      // ISO 8601 UTC · Z. closed 로 바뀐 시각
 | 401 | `INVALID_CREDENTIALS` | 로그인 실패 (이유를 가르지 않는다) |
 | 400 | `INVALID_CREDENTIALS` | 내 비밀번호 바꾸기에서 현재 비밀번호가 틀림 |
 | 403 | `FORBIDDEN` | 로그인은 했지만 권한이 모자람 |
-| 409 | `TASK_HAS_CHILDREN` | 하위 작업이 있는 작업을 지움 (2026-11-02) |
+| ~~409~~ | ~~`TASK_HAS_CHILDREN`~~ | 하위 작업이 있는 작업을 지움 (2026-11-02) — 줄기째 지워 안 나온다 (2026-11-05) |
 | ~~409~~ | ~~`THREAD_HAS_CHILDREN`~~ | 떼어낸 하위 안건이 있는 안건을 지움 (2026-11-02) — 하위 안건을 걷어 안 나온다 (2026-11-04) |
 | 429 | `TOO_MANY_ATTEMPTS` | 로그인 시도가 IP 당 분당 10회를 넘음 |
 | 404 | `MEMBER_NOT_FOUND` | 없는 멤버 |

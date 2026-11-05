@@ -41,8 +41,8 @@ class Scope:
         return self.actor.is_admin or self.role == "admin"
 
 
-def forbidden() -> ApiError:
-    return ApiError(403, "FORBIDDEN", "권한이 없습니다.")
+def forbidden(message: str = "권한이 없습니다.") -> ApiError:
+    return ApiError(403, "FORBIDDEN", message)
 
 
 # 경로 이름 → (원래 없을 때의 코드, 메시지). 프로젝트를 품은 레코드는 전부 여기 있어야 한다

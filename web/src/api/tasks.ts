@@ -10,6 +10,7 @@ import { change } from '@/lib/history'
 import { inheritedPartId } from '@/lib/part'
 import {
   batchDepthProblems,
+  descendantsOf,
   moveProblem,
   nextTaskOrder,
   placeTask,
@@ -41,28 +42,30 @@ export const linkTaskAgenda = (taskId: string, agendaId: string) =>
 export const unlinkTaskAgenda = (taskId: string, agendaId: string) =>
   request<void>('DELETE', `/tasks/${id(taskId)}/agendas/${id(agendaId)}`)
 
-/* 목업 갈래 — 작업 · 안건 연결은 데이터 스토어가 들고 있어 거기서 걷는다(스토어가 응답 뒤에 뺀다).
-   여기서는 서버처럼 권한 · 하위 작업을 보고, 목업 서버가 따로 든 댓글 · 테스트 태그 · 이력을 정리한다 */
+/* 목업 갈래 — 작업 · 안건 연결은 데이터 스토어가 들고 있어 거기서 걷는다(스토어가 응답 뒤에 줄기째 뺀다).
+   여기서는 서버처럼 루트와 모든 후손의 권한을 보고(하나라도 못 지우면 아무것도 안 지운다),
+   목업 서버가 따로 든 댓글 · 테스트 태그를 걷고 작업마다 이력 '삭제' 줄을 남긴다 */
 function mockDelete(taskId: string) {
   const me = requireMe()
   const world = mockWorld()
   const task = world.tasks.find((t) => t.id === taskId)
   if (!task || !canSeeProject(me, task.projectId))
     throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
-  if (!canDeleteTask(me, task, task.projectId)) throw forbidden()
-  if (world.tasks.some((t) => t.parentId === taskId))
-    throw mockError(
-      409,
-      'TASK_HAS_CHILDREN',
-      '하위 작업이 있어 지울 수 없습니다. 하위 작업을 먼저 지우거나 옮겨 주세요.',
-    )
-  forgetMockCommentsOf(taskId)
+  const doomed = [task, ...descendantsOf(world.tasks, taskId)]
+  if (!doomed.every((t) => canDeleteTask(me, t, t.projectId))) throw forbidden()
+  const ids = new Set(doomed.map((t) => t.id))
   const db = mockDb()
-  for (const t of db.tests) t.refs = t.refs.filter((r) => !(r.kind === 'task' && r.id === taskId))
-  delete db.taskHistory[taskId]
+  for (const t of db.tests) t.refs = t.refs.filter((r) => !(r.kind === 'task' && ids.has(r.id)))
+  for (const id of ids) {
+    forgetMockCommentsOf(id)
+    recordMockHistory('task', id, [change('deleted', null, null)])
+  }
 }
 
-/** 지우기 — 본문 · 댓글 · 안건 연결 · 테스트 태그가 같이 사라진다. 하위 작업이 있으면 409 TASK_HAS_CHILDREN */
+/**
+ * 지우기 — 루트와 모든 후손을 줄기째 논리 삭제한다. 본문 · 댓글 · 안건 연결 · 테스트 태그도 같이 사라진다.
+ * 루트 · 후손 가운데 하나라도 지울 권한이 없으면 403 FORBIDDEN 이고 아무것도 안 지운다
+ */
 export const deleteTask = (taskId: string) =>
   isMockMode() ? later(() => mockDelete(taskId)) : request<void>('DELETE', `/tasks/${id(taskId)}`)
 

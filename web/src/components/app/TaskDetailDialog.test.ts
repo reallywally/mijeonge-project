@@ -181,10 +181,64 @@ describe('작업 상세 — 지우기', () => {
     expect($('[data-task-readonly]')).toBeNull()
   })
 
-  it('하위 작업이 있으면 버튼이 꺼지고 이유가 선다', async () => {
+  it('하위가 있어도 버튼은 켜지고, 확인에 지워질 하위 수 · 키 · 제목과 외 N개가 선다', async () => {
+    await mountDetail('k5')
+    expect(deleteButton()!.disabled).toBe(false)
+    expect($('[data-delete-reason]')).toBeNull()
+    deleteButton()!.click()
+    await flushPromises()
+    /* HW-5 아래 손자까지 13개 — 앞의 5개만 늘어놓는다 */
+    expect($('[data-delete-descendant-count]')!.textContent).toContain(
+      '하위 작업 13개도 함께 지워집니다.',
+    )
+    const listed = $$('[data-delete-descendants] li').map((li) =>
+      li.children.length
+        ? [...li.children].map((c) => c.textContent!.trim()).join(' ')
+        : li.textContent!.trim(),
+    )
+    expect(listed).toEqual([
+      'HW-6 AI Biz',
+      'HW-7 가상비서',
+      'HW-8 tool01',
+      'HW-9 tool02',
+      'HW-10 tool03',
+      '외 8개',
+    ])
+    expect($('[data-delete-confirm]')!.textContent).toContain('하위까지 지우기')
+  })
+
+  it('하위가 없으면 하위 문구 없이 그냥 지우기', async () => {
+    await mountDetail('k21')
+    deleteButton()!.click()
+    await flushPromises()
+    expect($('[data-delete-descendants]')).toBeNull()
+    expect($('[data-delete-descendant-count]')).toBeNull()
+    expect($('[data-delete-confirm]')!.textContent!.trim()).toBe('지우기')
+  })
+
+  it('확인하면 후손까지 스토어에서 빠진다', async () => {
+    const data = useDataStore()
+    const w = await mountDetail('k4')
+    deleteButton()!.click()
+    await flushPromises()
+    expect($('[data-delete-descendant-count]')!.textContent).toContain('하위 작업 4개도')
+    $('[data-delete-confirm]')!.click()
+    await flushPromises()
+    expect(data.allTasks.filter((t) => ['k4', 'k19', 'k20', 'k21', 'k22'].includes(t.id))).toEqual(
+      [],
+    )
+    expect(w.emitted('update:open')?.at(-1)).toEqual([false])
+  })
+
+  it('못 지우는 후손이 있으면 버튼이 꺼지고 이유가 선다', async () => {
+    /* HW-4 는 박지훈(u2)이 등록했지만 하위는 아니다 */
+    resetMockAuth()
+    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
     await mountDetail('k4')
     expect(deleteButton()!.disabled).toBe(true)
-    expect($('[data-delete-reason]')!.textContent).toContain('하위 작업이 있어 지울 수 없습니다')
+    expect($('[data-delete-reason]')!.textContent).toContain(
+      '지울 수 없는 하위 작업이 있어 지울 수 없습니다',
+    )
   })
 
   it('확인을 받고 지우면 스토어에서 빠지고 팝업이 닫힌다 — 안건 연결도 같이', async () => {
@@ -216,22 +270,28 @@ describe('작업 상세 — 지우기', () => {
     expect(useDataStore().allTasks.some((t) => t.id === 'k21')).toBe(true)
   })
 
-  it('그사이 하위가 생겨 409 가 오면 이유를 띄우고 지우지 않는다', async () => {
+  it('그사이 못 지우는 하위가 생겨 403 이 오면 이유를 띄우고 지우지 않는다', async () => {
+    /* 이도현(u3)은 HW-20 을 등록했다 */
+    resetMockAuth()
+    await useAuthStore().login('u3@inno-ax.com', MOCK_PASSWORD)
     const data = useDataStore()
-    const w = await mountDetail('k21')
+    const reload = vi.spyOn(data, 'reloadSnapshot').mockResolvedValue()
+    const w = await mountDetail('k20')
     deleteButton()!.click()
     await flushPromises()
     /* 확인을 띄운 뒤 다른 사람이 밑에 하위를 달았다 */
     data.allTasks.push({
-      ...data.allTasks.find((t) => t.id === 'k21')!,
+      ...data.allTasks.find((t) => t.id === 'k20')!,
       id: 'k99',
       key: 'HW-99',
-      parentId: 'k21',
+      parentId: 'k20',
+      creatorId: 'u1',
     })
     $('[data-delete-confirm]')!.click()
     await flushPromises()
-    expect($('[data-delete-error]')!.textContent).toContain('하위 작업이 있어 지울 수 없습니다')
-    expect(data.allTasks.some((t) => t.id === 'k21')).toBe(true)
+    expect($('[data-delete-error]')!.textContent).toContain('지울 권한이 없는 하위 작업')
+    expect(data.allTasks.some((t) => t.id === 'k20')).toBe(true)
+    expect(reload).toHaveBeenCalled()
     expect(w.emitted('update:open')).toBeUndefined()
     expect(toastError).not.toHaveBeenCalled()
   })

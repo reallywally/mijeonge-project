@@ -127,6 +127,35 @@ export function subtreeHeights(tasks: TaskNode[]): Record<string, number> {
 }
 
 /**
+ * 줄기째 지울 때 같이 지워지는 후손 — 손자 이하까지, 트리 순서(형제는 order · 등록순)로.
+ * 루트는 빼고 낸다. 고리가 있어도 멈춘다. 목업 서버와 스토어가 같이 쓴다
+ */
+export function descendantsOf<T extends Pick<Task, 'id' | 'parentId' | 'order'>>(
+  tasks: T[],
+  rootId: string,
+): T[] {
+  const at = new Map(tasks.map((t, i) => [t.id, i]))
+  const kids = new Map<string, T[]>()
+  for (const t of tasks)
+    if (t.parentId) (kids.get(t.parentId) ?? kids.set(t.parentId, []).get(t.parentId)!).push(t)
+  const out: T[] = []
+  const seen = new Set([rootId])
+  const walk = (id: string) => {
+    const under = (kids.get(id) ?? []).sort(
+      (a, b) => a.order - b.order || at.get(a.id)! - at.get(b.id)!,
+    )
+    for (const t of under) {
+      if (seen.has(t.id)) continue
+      seen.add(t.id)
+      out.push(t)
+      walk(t.id)
+    }
+  }
+  walk(rootId)
+  return out
+}
+
+/**
  * 완료 숨기기에서 숨는 작업 — 완료인데 아직 안 끝난 하위가 하나도 없는 것.
  * 안 끝난 작업의 조상은 완료여도 남겨 트리가 끊기지 않게 한다
  */

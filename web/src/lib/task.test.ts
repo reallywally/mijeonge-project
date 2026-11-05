@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { tasks } from '@/fixtures'
 import {
+  descendantsOf,
   batchDepthProblems,
   hiddenDoneIds,
   MAX_TASK_DEPTH,
@@ -113,6 +114,37 @@ describe('작업 계층 깊이 (Q64)', () => {
     expect(
       batchDepthProblems([d('t1', null), d('t2', 't1'), d('t3', 't2'), d('t4', 't3')], {}),
     ).toEqual({})
+  })
+})
+
+describe('줄기째 지울 후손', () => {
+  const node = (id: string, parentId: string | null, order = 0) => ({ id, parentId, order })
+
+  it('손자 이하까지 트리 순서로, 루트는 빼고', () => {
+    expect(descendantsOf(tasks, 'k4').map((t) => t.key)).toEqual([
+      'HW-19',
+      'HW-20',
+      'HW-21',
+      'HW-22',
+    ])
+    expect(descendantsOf(tasks, 'k6').map((t) => t.id)).toEqual([
+      'k7',
+      'k8',
+      'k9',
+      'k10',
+      'k11',
+      'k12',
+      'k13',
+      'k14',
+      'k15',
+      'k16',
+    ])
+    expect(descendantsOf(tasks, 'k21')).toEqual([])
+  })
+
+  it('형제는 order 로 세우고, 고리가 있어도 멈춘다', () => {
+    const list = [node('a', 'c'), node('b', 'a', 1), node('c', 'a', 0)]
+    expect(descendantsOf(list, 'a').map((t) => t.id)).toEqual(['c', 'b'])
   })
 })
 

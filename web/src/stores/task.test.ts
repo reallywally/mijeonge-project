@@ -387,16 +387,46 @@ describe('고치기 · 지우기 권한', () => {
     expect(task.canDelete(k18)).toBe(false)
   })
 
-  it('지우면 작업과 그 안건 연결을 뺀다. 하위가 있으면 ApiError 409 를 던지고 남긴다', async () => {
+  it('지우면 작업과 그 안건 연결을 뺀다 — 하위가 있으면 후손까지 줄기째', async () => {
     const task = useTaskStore()
     const data = useDataStore()
-    await expect(task.deleteTask('k4')).rejects.toMatchObject({ code: 'TASK_HAS_CHILDREN' })
-    expect(data.allTasks.some((t) => t.id === 'k4')).toBe(true)
-
     await task.deleteTask('k22')
     expect(data.allTasks.some((t) => t.id === 'k22')).toBe(false)
     expect(data.taskAgendas.some((l) => l.taskId === 'k22')).toBe(false)
     expect(task.taskDetail('k4')!.children.map((c) => c.task.key)).not.toContain('HW-22')
+
+    expect(task.descendants('k5').map((t) => t.key)).toEqual([
+      'HW-6',
+      'HW-7',
+      'HW-8',
+      'HW-9',
+      'HW-10',
+      'HW-11',
+      'HW-12',
+      'HW-13',
+      'HW-14',
+      'HW-15',
+      'HW-16',
+      'HW-17',
+      'HW-18',
+    ])
+    await task.deleteTask('k5')
+    const gone = ['k5', 'k6', 'k7', 'k8', 'k12', 'k13', 'k17', 'k18']
+    expect(data.allTasks.filter((t) => gone.includes(t.id))).toEqual([])
+    expect(data.taskAgendas.some((l) => gone.includes(l.taskId))).toBe(false)
+    /* 간트 · 목록 · 칸반이 보는 줄에서도 바로 빠진다 */
+    expect(task.rows.some((r) => gone.includes(r.task.id))).toBe(false)
+  })
+
+  it('못 지우는 후손이 있으면 줄기째 못 지운다 — 403 을 던지고 남긴다', async () => {
+    await asU2()
+    const task = useTaskStore()
+    const data = useDataStore()
+    const k4 = data.allTasks.find((t) => t.id === 'k4')!
+    expect(task.canDelete(k4)).toBe(true)
+    expect(task.canDeleteTree(k4)).toBe(false)
+    await expect(task.deleteTask('k4')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    expect(data.allTasks.filter((t) => ['k4', 'k19', 'k22'].includes(t.id))).toHaveLength(3)
   })
 })
 
