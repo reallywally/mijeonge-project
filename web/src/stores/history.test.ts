@@ -59,11 +59,11 @@ describe('목업 작업 쓰기의 이력', () => {
   it('안건 링크는 새로 걸 때 · 있던 것을 뗄 때만', async () => {
     const tasks = useTaskStore()
     tasks.linkAgenda('k4', 't1')
-    tasks.linkAgenda('k3', 't1')
-    tasks.unlinkAgenda('k3', 't1')
-    tasks.unlinkAgenda('k3', 't1')
+    tasks.linkAgenda('k1', 't1')
+    tasks.unlinkAgenda('k1', 't1')
+    tasks.unlinkAgenda('k1', 't1')
     expect(await lines('k4')).toEqual([])
-    expect((await lines('k3')).map((e) => e.changes)).toEqual([
+    expect((await lines('k1')).map((e) => e.changes)).toEqual([
       [change('agenda', null, 't1')],
       [change('agenda', 't1', null)],
     ])

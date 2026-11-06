@@ -19,7 +19,7 @@ from app.models import (
     Part,
     Project,
     ProjectMember,
-    ProjectReport,
+    RiskAnalysis,
     Task,
     TaskComment,
     TestCase,
@@ -55,9 +55,9 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "part_id": ("PART_NOT_FOUND", "파트를 찾을 수 없습니다."),
     "check_id": ("CHECK_NOT_FOUND", "확인 요청을 찾을 수 없습니다."),
     "minutes_id": ("MINUTES_NOT_FOUND", "회의록을 찾을 수 없습니다."),
-    "report_id": ("REPORT_NOT_FOUND", "리포트를 찾을 수 없습니다."),
     "test_id": ("TEST_NOT_FOUND", "테스트를 찾을 수 없습니다."),
     "test_comment_id": ("TEST_COMMENT_NOT_FOUND", "조치 내역을 찾을 수 없습니다."),
+    "analysis_id": ("RISK_ANALYSIS_NOT_FOUND", "저장한 분석을 찾을 수 없습니다."),
 }
 
 
@@ -99,8 +99,6 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             )
         case "minutes_id":
             stmt = select(Minutes.project_id).where(Minutes.id == value)
-        case "report_id":
-            stmt = select(ProjectReport.project_id).where(ProjectReport.id == value)
         case "test_id":
             stmt = select(TestCase.project_id).where(TestCase.id == value)
         case "comment_id":
@@ -115,6 +113,11 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
                 select(TestCase.project_id)
                 .join(TestComment, TestComment.test_id == TestCase.id)
                 .where(TestComment.id == value)
+            )
+        case "analysis_id":
+            # 임시 분석(저장 전)은 돌린 사람에게도 경로로는 없는 것이다 — 저장 API 만 id 로 받는다
+            stmt = select(RiskAnalysis.project_id).where(
+                RiskAnalysis.id == value, RiskAnalysis.saved_at.is_not(None)
             )
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")

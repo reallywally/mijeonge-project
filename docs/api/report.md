@@ -1,5 +1,7 @@
 # 프로젝트 진행 리포트 — 합의 (2026-10-20)
 
+> **2026-11-06 걷음 — `risk-analysis.md`.** 고도화한 AI 리스크 분석과 하는 일이 겹쳐 메뉴 · 화면 · API · 목업 · 시드를 걷고 `project_report` 를 지웠다(리비전 `0037_risk_analysis`, 저장된 리포트는 버림). 리포트만의 장점(저장 · 지난 것 대비)은 저장한 AI 리스크 분석으로 옮겼다. `/api/projects/{projectId}/reports…` · `/api/reports/{reportId}` 는 404, `REPORT_*` 코드는 없다. **아래 본문은 기록이다.**
+
 > 기획은 `docs/agent-proposal.md` 7번 '리포팅 · 의사결정' — 처음엔 '주간 결정 리포트' 였고, **프로젝트 전체 진행**으로 넓혔다. 결정은 `docs/api/decisions.md` Q49 ~ Q51.
 > 바탕은 `docs/api/task-flow.md`(작업 상태 기록)와 `docs/api/risk.md`(결정 병목 계산).
 > 선행 작업은 2026-10-28 걷었다(Q63) — 신호 `waitingOnPredecessor` · `lateBlocker` 와 `waitingOnTaskIds` · `blockingTaskIds` 는 그 전에 만든 리포트에만 있다('구현에서 메운 것' 의 '지난 리포트 읽기').

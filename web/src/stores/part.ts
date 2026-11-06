@@ -3,7 +3,13 @@ import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { gradeOf } from '@/lib/access'
 import { toastError } from '@/lib/notify'
-import { defaultPartScope, partChoices, sortParts, visibleInMyParts } from '@/lib/part'
+import {
+  defaultPartScope,
+  ownsOrSharesPart,
+  partChoices,
+  sortParts,
+  visibleInMyParts,
+} from '@/lib/part'
 import type { PartScope, PartScopeResult } from '@/lib/part'
 import { recall, remember } from '@/lib/storage'
 import { useAuthStore } from '@/stores/auth'
@@ -89,6 +95,9 @@ export const usePartStore = defineStore('part', () => {
 
   const showsTask = (taskId: string) => visible.value?.taskIds.has(taskId) ?? true
   const showsAgenda = (agendaId: string) => visible.value?.agendaIds.has(agendaId) ?? true
+  /** 파트 · 담당자만으로 가린다 — 조상으로 끌려 서는 것은 세지 않는다. 리스크 줄처럼 계층 없이 놓는 것이 쓴다 */
+  const showsOwned = (r: { partId: string | null; ownerId: string | null }) =>
+    scope.value === 'all' || ownsOrSharesPart(r, data.currentMemberId, myPartIds.value)
   /** 보이는 작업의 조상이라 선 것 — 흐리게 그린다 */
   const isContextTask = (taskId: string) => visible.value?.contextTaskIds.has(taskId) ?? false
 
@@ -171,6 +180,7 @@ export const usePartStore = defineStore('part', () => {
     visible,
     showsTask,
     showsAgenda,
+    showsOwned,
     isContextTask,
     choicesFor,
     partForChildOf,

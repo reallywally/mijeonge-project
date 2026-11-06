@@ -97,15 +97,20 @@ SYSTEM_PROMPT = """\
    물으면 get_decision_risks 를 먼저 부른다.
    사람을 콕 집었으면 list_members 로 id 를 찾아 member_id 에,
    파트를 콕 집었으면 그 이름을 part_id 에 넣는다
-2. 답은 level 이 high 인 것부터 도구가 준 순서대로 말한다. 한 줄마다 왜(신호) ·
+2. 답은 level 이 high 인 것부터 도구가 준 순서대로 말한다(안건 · 작업 · 테스트를 섞어도 된다).
+   한 줄마다 왜(신호) ·
    무엇이 막히나(막힌 작업 · impactTaskCount) · 다음 할 일(누가 무엇을 정하면 되나)을 말하고
    [[agenda:ID]] · [[task:ID]] 근거를 단다. 담당자는 list_members 로 이름을 찾아 말한다
 3. 점수 · 등급 · 날 수 같은 숫자는 도구가 준 그대로만 쓴다. 지어내거나 고쳐 매기지 않는다.
    리스크가 하나도 없으면 없다고 말한다
 4. 신호는 영어 이름 대신 화면의 말로 쓴다 —
-   overdue 기한 지남 · dueSoon 기한 임박 · stale 오래 멈춤 ·
+   안건: overdue 기한 지남 · dueSoon 기한 임박 · stale 오래 멈춤 ·
    blocking 작업을 막는 중 · decisionAfterTaskDue 작업 기한이 먼저 · noOwner 담당자 없음 ·
-   noDueDate 기한 없음. 등급은 high 높음 · medium 중간 · low 낮음
+   noDueDate 기한 없음. 작업 · 테스트는 도구가 준 signalLabels 그대로 —
+   작업: 기한 넘김 · 오래 막힘 · 오래 걸림 · 기한 거듭 미룸 · 시작 안 함 · 내용 자주 바뀜 ·
+   담당자 자주 바뀜, 테스트: 기간 지남 · 실패 그대로 · 오래 막힘 · 기준 바뀜 · 오래 걸림 ·
+   결과 뒤집힘 · 기한 거듭 미룸 · 시작 안 함. 등급은 high 높음 · medium 중간 · low 낮음
+5. 작업 · 테스트 리스크를 말할 때는 [[task:ID]] · [[test:ID]] 근거를 달고 키(HW-12 · HW-T3)로 부른다
 
 ## 답하는 규칙
 1. 안건의 결정은 get_agenda 의 agenda.decision(결정내용) 글이 지금의 결정이다.
@@ -300,11 +305,16 @@ TOOLS: list[ToolSpec] = [
     {
         "name": "get_decision_risks",
         "description": (
-            "안 정해진 안건이 막는(막을) 일을 규칙으로 계산한 결정 리스크 보고서를 준다. "
+            "안 정해진 안건이 막는(막을) 일과 작업 · 테스트의 지연 · 흔들림을 규칙으로 계산한 "
+            "리스크 보고서를 준다. "
             "agendas: 위험한 안건(score 내림차순, level high/medium/low, signals, "
             "blockedTaskIds · impactTaskCount), "
-            "owners: 사람별로 몰린 정도(memberId null 은 담당자 없음), settings: 쓴 기준. "
-            "member_id 를 주면 그 사람이 맡은 안건만, part_id 를 주면 그 파트의 것만 남긴다"
+            "tasks: 위험한 작업(key · title · owner · part 이름, signalLabels 신호의 화면 말, "
+            "overdueDays · statusDays · slipCount · dueFlow · openAgendaIds), "
+            "tests: 위험한 테스트(key · title · owner · part, signalLabels, flips · refs), "
+            "owners: 사람별로 몰린 정도(memberId null 은 담당자 없음, riskyTasks · riskyTests 는 "
+            "맡은 작업 · 테스트 중 높음 · 중간 수), settings: 쓴 기준. "
+            "member_id 를 주면 그 사람이 맡은 것만, part_id 를 주면 그 파트의 것만 남긴다"
             "(owners 는 그대로). 사람 이름으로 물으면 list_members 로 id 를 먼저 찾는다. "
             "part_id 에는 파트 이름(예: '인프라')을 그대로 넣어도 된다."
         ),
@@ -471,7 +481,9 @@ async def run_tool(
                 report = await risk_service.decision_risks_for(
                     session, project_id, today=today_kst(), member_id=g.member_id, part=g.part_id
                 )
-                return report.model_dump_json(by_alias=True), False
+                # 작업 · 테스트 줄에는 담당자 · 파트 이름과 신호의 화면 말을 단다
+                payload = await risk_service.tool_payload(session, report)
+                return json.dumps(payload, ensure_ascii=False), False
             case "list_members":
                 # 담당자 후보는 그 프로젝트의 활성 멤버뿐이다 (docs/api/auth.md)
                 members = await project_service.list_members(session, assignable_in=project_id)

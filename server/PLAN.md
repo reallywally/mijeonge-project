@@ -186,6 +186,33 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 - [x] `TaskRisk` · `TaskRiskSignal` · 보고서 `tasks` · 그 계산(`_task_signal` · `_task_risks`) 걷음. 요약 요청 `taskIds` 걷음(실어 와도 버린다) · 요약 지시문 · 챗봇 도구 설명 · 프롬프트의 작업 신호 걷음
 - [x] 리포트 `decidedButBlocked` 는 `services/progress.py` 가 직접 센다(전엔 리스크 `tasks` 에서 빌렸다). 기준 · 이행 · 시드 값 변화 없음
 
+### 2026-11-06 — AI 리스크 분석 근거 넓히기
+
+- [x] `services/risk_summary.py` — 근거 안건 5 → 8, 안건마다 `history` · `meetings` · 연결 작업 `progress` · `recentComments` · 문제 테스트(`tests`) · `ownerLoad`. 종류마다 한 번에 읽는다(N+1 없음). 테스트 상태 · 신호는 `services/test.py` 의 `build_tests` 를 같이 쓴다. 프롬프트에 새 근거 · `[[test:ID]]`, `done.refs` 에 실은 테스트 id
+- [x] 검사 — 8개 상한 · 기한 미룬 횟수 · 흐름 · 담당자 바뀐 횟수 · 이력 10줄 · 회의록 · 체크리스트 · 며칠째 · 댓글 3개 · 200자 · 실패 · 막힘 · 기준 바뀜만 · 테스트 5개 · 지운 작업 빠짐 · 담당자 부담 · 프롬프트 · 테스트 칩
+- [x] 이력 줄을 남긴 회의록까지 세기 — 리비전 `0036_agenda_history_minutes`(`agenda_history.minutes_id`, Q69 닫힘). 회의록 [등록] 이 이력 줄에 달고 지우기가 비운다. 지난 줄은 안 채움 · API 로는 안 나감. 검사(`test_minutes` 출처 · 지우기, `test_risk_summary` 회의 수 · 최근 5편). 개발 DB 에 `alembic upgrade head` 적용
+
+### 2026-11-06 — 저장한 AI 리스크 분석 · 리포트 걷기
+
+계약은 `../docs/api/risk-analysis.md`(사용자 결정). 리포트(14단계)는 하는 일이 겹쳐 걷는다.
+
+- [x] 리비전 `0037_risk_analysis` — `risk_analysis`(project cascade · `created_by` → member SET NULL · `refs` · `facts` jsonb · `(project_id, seq)` unique · `(saved_at, created_at)` 인덱스) · `project.last_analysis_no`(게시판 번호 카운터) · `project_report` drop. downgrade 는 빈 `project_report` 를 0016 모양으로. sqlite 검사(`test_risk_analysis` 의 리비전 검사 · `test_schema`). 개발 DB 에 `alembic upgrade head` 적용(저장된 리포트는 버림 — 사용자 허락)
+- [x] `POST .../risks/summary` — Claude 답을 끝까지 받으면(길이 상한 포함) 임시 줄을 넣고 `done.analysisId`. 넣을 때 24시간 넘은 임시 줄을 지움. Claude 를 안 부른 것 · error · 끊김은 남기지 않음. `facts`(스냅샷 · `compare`)는 `build_context` 가 계산, `compare` 를 Claude 근거 · 프롬프트에 더함(안건은 id 없이 제목으로)
+- [x] 게시판 다섯 — `api/risk_analysis.py` · `services/risk_analysis.py` · `schemas/risk_analysis.py` · `models/risk_analysis.py`. `require_scope` 의 `analysis_id` 갈래(저장한 것만, 404 `RISK_ANALYSIS_NOT_FOUND`) · 저장 409 `RISK_ANALYSIS_ALREADY_SAVED` · 제목 고치기는 작성자만 · 지우기는 작성자 · 관리자
+- [x] 리포트 걷기 — `api` · `services` · `models` · `schemas` 의 `report.py`, 라우터 · `require_scope` 의 `report_id`, `api/chat.py` 의 `ReportEvent`, 시드 `clear` · conftest, `tests/test_report.py` · 계약 검사의 리포트 모양. `services/progress.py` 는 `kst_day` 만 남김(테스트 · 리스크 분석이 씀)
+- [x] 검사 — `tests/test_risk_analysis.py`(임시 숨김 · `done.analysisId` 유무 · 끊긴 글 · 스냅샷 · 24h 정리 · 저장 흐름 · 409 · 남의 임시 · 24h 지남 · 다른 프로젝트 · 제목 1 ~ 100 · 번호 재사용 없음 · 게시판 순서 · 쪽 · compare 계산 · Claude 의 compare · 권한 · 바깥 사람 · 지운 프로젝트 · 리포트 경로 404 · domain.ts 모양 · 리비전)
+
+### 2026-11-06 — 작업 · 테스트 리스크 · 대시보드
+
+계약은 `../docs/api/risk-dashboard.md`(사용자 요청). 판정은 규칙, 설명은 Claude — 안건 리스크 셈은 그대로.
+
+- [x] 리비전 `0038_risk_churn` — `risk_setting.churn_days` · `churn_count` · `slip_count`(server_default 14 · 5 · 2 + 범위 CHECK, batch). 기본값은 `config.py` 의 `risk_churn_*`. 기준 읽기 · 쓰기를 `services/risk_settings.py` 로 떼어 냈다(리스크가 테스트 신호를 다시 쓰니 `test.py` ↔ `risk.py` import 고리를 끊으려고 — `risk.py` 가 그대로 다시 내보낸다). 개발 DB 에 `alembic upgrade head` 적용(시드는 안 돌림)
+- [x] `services/risk.py` — `_task_risks`(작업 일곱 신호, `statusDays` 는 `status_since_map`) · `_test_risks`(`test.build_tests` 의 신호 + `flaky` · `dueSlipped`, 묶음 빼고) · 이력 셈 `_churns`(작업 · 테스트 이력을 한 번에) · 점수 가산 · 정렬 · `OwnerLoad.riskyTasks` · `riskyTests` · `decision_risks_for` 가 세 종류를 거름 · 챗봇용 `tool_payload`(이름 · 신호의 화면 말). 쿼리 수는 줄 수와 무관
+- [x] AI 분석(`services/risk_summary.py`) — `taskIds` · `testIds`, `report.tasks` · `tests` · `taskDetails` · `testDetails`(위쪽 각 6), 프롬프트 새 답 모양, `done.refs` 에 보낸 작업 · 테스트 줄. 저장(`services/risk_analysis.py` · `schemas/risk_analysis.py`) — `facts.tasks` · `tests`, `compare` 의 `{kind, id}`, 옛 모양(문자열 · `agendaId` · 기준 넷)은 그대로 읽어 냄, `taskCount` · `testCount` · `highCount` 세 종류 합
+- [x] 챗봇 `get_decision_risks` 설명 · 프롬프트 대응표에 작업 · 테스트 신호
+- [x] 시드 — 흔들림 시연 이력(`TASK_CHURN` · `TEST_CHURN`: HW-21 · HW-3 · HW-22 · HW-T3 · HW-T2). 2026-10-15 셈은 `risk-dashboard.md` '구현에서 메운 것 (서버)' 의 표
+- [x] 검사 — `test_risk.py`(시드 표 · 신호마다 경계 · 점수 가산 · 정렬 · 창 경계 · 사람별 · 기준 일곱 PUT · 422 · 쿼리 수) · `test_risk_summary.py`(세 배열 · 비면 안 부름 · 근거 · 칩 · 422 상한) · `test_risk_analysis.py`(스냅샷 · `{kind,id}` 비교 · 옛 분석 읽기 · 리비전 0038) · `test_chat.py`(도구 결과 · 거르기 · 설명) · `test_contract_types.py`(domain.ts 대조)
+
 **다음 (이 단계 밖)** — `task_log`(작업 상태 변경 이력)를 세워 `blockedDays` 를 더하고, 같은 계산으로 주간 결정 리포트(`agent-proposal.md` 7번)를 만든다.
 
 ## 11단계 · 확인 요청 — 작업 · 안건에 붙는 '확인해 주세요'
@@ -296,6 +323,8 @@ API 와 챗봇 도구가 같은 계산을 쓴다. 계약은 `../docs/api/risk.md
 - [ ] 평가 — 실제 키로 제안을 돌려 근거가 약한 것이 섞이는지 본다. 7-3 평가셋 옆에 둔다
 
 ## 14단계 · 프로젝트 진행 리포트 — 지난 7일을 규칙으로 세고 Claude 가 손쓸 것을 쓴다
+
+> **2026-11-06 걷음** — 저장한 AI 리스크 분석(10단계 '2026-11-06 — 저장한 AI 리스크 분석 · 리포트 걷기')으로 옮겼다. 아래는 기록이다.
 
 계약은 `../docs/api/report.md`(합의 2026-10-20 · Q49 ~ Q51 닫힘), 화면은 `../web/PLAN.md` 15단계다.
 바탕은 13단계(선행 작업 · 상태 기록)와 10단계(결정 병목 계산 · AI 요약의 틀)다.
@@ -420,11 +449,11 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 7 AI 챗봇 | 계약 **합의** (2026-10-11) — `docs/api/chat.md` · Q25 ~ Q28 닫힘. **7-1 검색 끝남** (2026-10-11) — 리비전 `0006_search_trgm` · `GET .../search` 구현 · Postgres 검사는 컨테이너가 있을 때만(Q27). **7-2 채팅 끝남** (2026-10-11) — `POST .../chat` SSE · 도구 루프 · 제한 · 가짜 클라이언트 검사 33개. **작업 초안 끝남** (2026-10-12) — `list_members` · `propose_tasks` 도구 · `proposal` 이벤트 · `ChatMessage.proposal` · `POST .../tasks/batch`(한 트랜잭션). 다음은 7-3 평가셋 |
 | 8 인증과 권한 | **끝남** (2026-10-13) — 리비전 `0008_auth` · 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 · 이미 있는 API 의 경계. Q29 ~ Q31 닫힘 |
 | 9 파트 | **끝남** (2026-10-14) — 리비전 `0009_part` · 파트 쓰기 넷 · 작업 · 안건의 `partId` · 스냅샷 `parts` · `partMembers` · 시드 pt1 ~ pt3. Q32(보관 파트 상속) 열림 |
-| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 |
+| 10 결정 병목 리스크 | 계약 **합의** (2026-10-15) — `docs/api/risk.md` · Q33 ~ Q35 닫힘(기준은 프로젝트마다 · 화면은 '리스크' 메뉴). **10-1 기준 · 계산 끝남** (2026-10-15) — 리비전 `0011_risk_setting` · `GET · PUT .../risk-settings` · `GET .../risks` · `services/risk.py` 의 `decision_risks` · 시드 `k22`(정해졌는데 막힘). API.md 두 줄 `구현`. **10-2 챗봇 도구 끝남** (2026-10-15) — `get_decision_risks`(`member_id` · `part_id` — 파트는 이름도 받는다) · 라벨 · 프롬프트 규칙 · `services/risk.py` 의 `decision_risks_for`. **10-4 AI 요약 끝남** (2026-10-15) — `POST .../risks/summary` SSE · `services/risk_summary.py` · 도구 없이 한 번 · 챗봇과 제한기 공유 · 가짜 클라이언트 검사 25개. API.md 그 줄 `구현`. 다음은 10-3 평가 **2026-11-06 작업 · 테스트 리스크 · 대시보드 끝남** — `docs/api/risk-dashboard.md` · 리비전 `0038_risk_churn` · 기준 일곱 · `tasks` · `tests` · `riskyTasks` · `riskyTests` · AI 분석 세 종류 · 저장한 분석 `{kind, id}` 비교 · 챗봇 도구 |
 | 11 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **11-1 끝남** (2026-10-16) — 리비전 `0012_check_request` · 네 경로 · `services/check.py`(보낼 때 부하 찍기, 기한 임박은 오늘(KST) + 3일 고정) · `require_scope` 의 `check_id` 갈래 · 시드 `c1` ~ `c4` · `tests/test_check.py`. API.md 네 줄 `구현`. **2026-10-19 고침 끝남** — 결정 알림으로 좁힘 · 참조(`thread_cc`) · 리비전 `0013_check_on_decision`. 2차(확인율 분석)는 기록이 쌓인 뒤 |
 | 12 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘. **12-1 끝남** (2026-10-19) — `POST .../minutes/draft`(SSE · `propose_minutes`, 챗봇 루프 재사용) · `POST .../minutes/apply`(한 트랜잭션) · 검사 함수 하나를 둘이 같이 씀 · 마이그레이션 없음. API.md 두 줄 `구현`. **2026-10-20 고침 끝남** (Q48) — 게시판(`minutes` · CRUD) · draft/apply 를 `/api/minutes/{id}/…` 로 · 출처 `minutesId` · 요약 저장 · 리비전 `0014_minutes` · 시드 `m1`. API.md 네 줄 `구현 (2026-10-20 고침)`. 다음은 평가 |
 | 13 선행 작업 · 작업 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **13-1 끝남** (2026-10-20) — 리비전 `0015_task_flow`(backfill 포함) · 선행 PUT · DELETE · 검사 함수 하나 · `task_log` 를 모든 길에서 · `Task.statusChangedAt` · `statusSinceBackfill` · AI 제안(JSON, 리스크 요약 틀 재사용) · 시드 · `scripts/demo_task_log.py`. API.md 두 줄 `구현`. 다음은 14 리포트 |
-| 14 프로젝트 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
+| 14 프로젝트 진행 리포트 | **걷음** (2026-11-06) — 저장한 AI 리스크 분석(`docs/api/risk-analysis.md`, 10단계 '저장한 AI 리스크 분석')으로 옮김. 리비전 `0037_risk_analysis` 가 `project_report` 를 지운다. 아래는 기록. 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **14-1 끝남** (2026-10-20) — 리비전 `0016_project_report` · `services/progress.py`(ProgressFacts) · 리포트 넷(만들기는 SSE, 다 받았을 때만 저장) · Claude 는 리스크 요약 틀 재사용. API.md 두 줄 `구현`. 다음은 평가 |
 | 15 LLM 공급자 분리 | **1차 ~ 3차 끝남** (2026-10-22) — `app/llm` 의 `LLMProvider` · `AnthropicProvider` · `OpenAICompatProvider`, AI 를 부르는 서비스 다섯을 모두 옮김. `LLM_PROVIDER` 로 Claude · GPT · Groq 를 고른다. 동작 · 계약은 그대로. 다음은 실제 키로 평가 |
 | 16 테스트 | 계약 **합의** (2026-10-27) — `docs/api/test.md` · Q53 ~ Q58 닫힘. **16-1 끝남** (2026-10-27) — 리비전 `0017_test_case` · 엔드포인트 아홉 · `services/test.py`(며칠째 · 신호 여섯 · 기준 바뀜, 리스크 기준 그대로) · `require_scope` 의 `test_id` 갈래 · 시드 HW-T1 ~ T8(목업과 같은 줄) · `tests/test_test.py`. 다음은 API.md `구현` 표시와 2단계(AI) |
 | 17 변경 이력 | 계약 **합의** (2026-10-27) — `docs/api/history.md` · Q59 닫힘. **17-1 끝남** (2026-10-27) — 리비전 `0019_history`(backfill 포함) · `services/history.py` 한 곳에서 남김 · 작업 · 테스트의 쓰기 길 전부 · GET 둘 · 시드 등록 줄 + 시연 둘 · `tests/test_history.py`. API.md 두 줄 `구현`. 개발 DB 올리기는 사람이 |

@@ -530,8 +530,8 @@ export type ChatEvent =
     }
   /** 작업 초안. 한 답에 많아야 하나, done 보다 먼저 온다 */
   | { type: 'proposal'; proposal: TaskProposal }
-  /** 끝. 답에 실제로 나온 근거만 모은다 */
-  | { type: 'done'; refs: ChatRef[] }
+  /** 끝. 답에 실제로 나온 근거만 모은다. analysisId 는 리스크 AI 분석만 — 저장할 수 있는 임시 분석 (docs/api/risk-analysis.md) */
+  | { type: 'done'; refs: ChatRef[]; analysisId?: string }
   /** 스트림이 열린 뒤의 실패. 이것이 오면 done 은 안 온다 */
   | { type: 'error'; code: string; message: string }
 
@@ -557,7 +557,7 @@ export interface ChatLine {
 
 /* 결정 병목 리스크 — 계산은 서버가 하고 화면은 받아 그린다 (docs/api/risk.md · Q35) */
 
-/** 리스크를 가르는 문턱값 넷 — 프로젝트마다 둔다. PUT 은 네 값을 통째로 보낸다 */
+/** 리스크를 가르는 문턱값 일곱 — 프로젝트마다 둔다. PUT 은 일곱 값을 통째로 보낸다 (risk-dashboard.md '기준') */
 export interface RiskSettings {
   /** 결정 기한이 이 날 수 안이면 '기한 임박'. 1 ~ 30, 기본 3 */
   dueSoonDays: number
@@ -567,6 +567,12 @@ export interface RiskSettings {
   highScore: number
   /** 점수가 이 값 이상이면 medium. 1 ~ 29, 기본 3 */
   mediumScore: number
+  /** 흔들림을 세는 최근 날 수. 1 ~ 90, 기본 14 */
+  churnDays: number
+  /** 이 기간 안 내용 변경이 이 수 이상이면 '내용 자주 바뀜'. 2 ~ 50, 기본 5 */
+  churnCount: number
+  /** 기한을 이 수 이상 뒤로 미루면 '기한 거듭 미룸'. 1 ~ 10, 기본 2 */
+  slipCount: number
 }
 
 export interface DecisionRiskReport {
@@ -576,15 +582,26 @@ export interface DecisionRiskReport {
   settings: RiskSettings
   /** 안 정해진 안건 중 신호가 하나라도 있는 것. score 내림차순 */
   agendas: AgendaRisk[]
+  /** 지우지 않은 · 완료 아닌 작업 중 신호가 있는 것. score 순 (2026-11-06) */
+  tasks: TaskRisk[]
+  /** 묶음이 아닌 테스트 중 신호가 있는 것. score 순 (2026-11-06) */
+  tests: TestRisk[]
   /** 사람별로 몰린 정도. 담당자 없음은 memberId null 한 줄 */
   owners: OwnerLoad[]
 }
 
-/** AI 요약에 보내는 것 — 화면에 지금 보이는 줄의 id. 0 ~ 100개 (docs/api/risk.md 'AI 요약') */
+/** AI 리스크 분석에 보내는 것 — 대시보드에 지금 보이는 줄의 id. 종류마다 0 ~ 100개 (risk-dashboard.md) */
 export interface RiskSummaryInput {
-  /** 화면에 보이는 안건 리스크 줄 — AgendaRisk.agendaId */
+  /** 보이는 안건 리스크 줄 — AgendaRisk.agendaId */
   agendaIds: string[]
+  /** 보이는 작업 리스크 줄 — TaskRisk.taskId */
+  taskIds: string[]
+  /** 보이는 테스트 리스크 줄 — TestRisk.testId */
+  testIds: string[]
 }
+
+/** 리스크 줄의 종류 — 대시보드 목록 · 저장한 분석의 비교가 같이 쓴다 */
+export type RiskKind = 'agenda' | 'task' | 'test'
 
 export type AgendaRiskSignal =
   'overdue' | 'dueSoon' | 'stale' | 'blocking' | 'decisionAfterTaskDue' | 'noOwner' | 'noDueDate'
@@ -622,6 +639,192 @@ export interface OwnerLoad {
   blockedTasks: number
   /** 이 사람이 정하면 풀리는 일의 양 (impactTaskCount 의 합, 중복 없이) */
   blockingImpact: number
+  /** 맡은 작업 · 테스트 중 리스크 high · medium 수 (2026-11-06) */
+  riskyTasks: number
+  riskyTests: number
+}
+
+/* 작업 · 테스트 리스크 — 작업 자체의 지연 · 흔들림 (docs/api/risk-dashboard.md). 2026-11-05 에 걷은 '안건과 어긋난 작업' 과 다르다 */
+
+export type TaskRiskSignal =
+  | 'overdue'
+  | 'longBlocked'
+  | 'longRunning'
+  | 'dueSlipped'
+  | 'notStarted'
+  | 'contentChurn'
+  | 'ownerChurn'
+
+export interface TaskRisk {
+  taskId: string
+  /** HW-12 */
+  key: string
+  title: string
+  status: 'todo' | 'doing' | 'blocked'
+  ownerId: string | null
+  partId: string | null
+  start: string | null
+  due: string | null
+  /** 안 넘겼으면 0 */
+  overdueDays: number
+  /** 지금 상태가 된 날부터 오늘까지 */
+  statusDays: number
+  /** due − start + 1 (둘 다 있을 때) */
+  plannedDays: number | null
+  /** 뒤로 미룬 횟수와 흐름(첫 옛 값 → … → 지금) — 미룬 적 없으면 0 · [] */
+  slipCount: number
+  dueFlow: string[]
+  /** 최근 churnDays 안의 내용(title · body) 변경 줄 수 · 담당자 변경 줄 수 */
+  contentChanges: number
+  ownerChanges: number
+  /** 걸린 안건 중 안 정해진 것 — 설명용(점수에는 안 든다) */
+  openAgendaIds: string[]
+  /** 계약 표 순서 */
+  signals: TaskRiskSignal[]
+  score: number
+  level: RiskLevel
+}
+
+export type TestRiskSignal =
+  | 'overdue'
+  | 'failedIdle'
+  | 'longBlocked'
+  | 'basisChanged'
+  | 'longRunning'
+  | 'flaky'
+  | 'dueSlipped'
+  | 'notStarted'
+
+export interface TestRisk {
+  testId: string
+  /** HW-T3 */
+  key: string
+  title: string
+  status: TestStatus
+  ownerId: string | null
+  partId: string | null
+  due: string | null
+  overdueDays: number
+  statusDays: number
+  slipCount: number
+  /** 최근 churnDays 안의 pass ↔ fail 뒤집힘 수 */
+  flips: number
+  /** 이 테스트가 태그한 작업 · 안건 — 설명용 */
+  refs: TestRef[]
+  signals: TestRiskSignal[]
+  score: number
+  level: RiskLevel
+}
+
+/* 저장한 AI 리스크 분석 — [저장] 을 눌러 제목을 붙인 분석. 글 · 스냅샷은 기록이라 고치지 않는다 (docs/api/risk-analysis.md) */
+
+/** 분석 때의 안건 리스크 한 줄 — 그때 값이다. 지금 값이 아니다 */
+export interface RiskAnalysisAgenda {
+  agendaId: string
+  /** 안건 키가 있으면 */
+  key: string | null
+  title: string
+  level: RiskLevel
+  score: number
+  /** AgendaRisk 의 신호 이름 그대로 — 모르는 이름이 와도 버리지 않는다 */
+  signals: string[]
+  ownerName: string | null
+}
+
+/** 분석 때의 작업 리스크 한 줄 (2026-11-06) */
+export interface RiskAnalysisTask {
+  taskId: string
+  key: string
+  title: string
+  level: RiskLevel
+  score: number
+  /** TaskRisk 의 신호 이름 그대로 */
+  signals: string[]
+  ownerName: string | null
+}
+
+/** 분석 때의 테스트 리스크 한 줄 (2026-11-06) */
+export interface RiskAnalysisTest {
+  testId: string
+  key: string
+  title: string
+  level: RiskLevel
+  score: number
+  /** TestRisk 의 신호 이름 그대로 */
+  signals: string[]
+  ownerName: string | null
+}
+
+/** 비교의 한 줄 — 종류를 단다 (2026-11-06). 옛 분석의 문자열(= 안건 id)은 api 가 이 모양으로 읽어 온다 */
+export interface RiskCompareRef {
+  kind: RiskKind
+  id: string
+}
+
+/** 바로 앞 저장 분석 대비 — 분석을 돌린 때 기준이라 저장 순서가 바뀌어도 다시 세지 않는다 */
+export interface RiskAnalysisCompare {
+  previousId: string
+  previousTitle: string
+  previousSavedAt: string
+  /** 이번에 새로 들어온 줄 */
+  added: RiskCompareRef[]
+  /** 앞에 있었는데 이번에 없는 줄 (풀렸거나 범위 밖) */
+  removed: RiskCompareRef[]
+  /** 둘 다 있는 줄 — 등급이 바뀌었으면 levelFrom ≠ levelTo */
+  kept: (RiskCompareRef & { levelFrom: string; levelTo: string })[]
+}
+
+export interface RiskAnalysisFacts {
+  /** 분석 때의 리스크 보고서 asOf · 기준 */
+  asOf: string
+  settings: RiskSettings
+  /** 분석에 넣은 안건 리스크 줄 — 점수 순 */
+  agendas: RiskAnalysisAgenda[]
+  /** 분석에 넣은 작업 · 테스트 리스크 줄 — 옛 분석은 [] (2026-11-06) */
+  tasks: RiskAnalysisTask[]
+  tests: RiskAnalysisTest[]
+  /** 앞 저장 분석이 없으면 null */
+  compare: RiskAnalysisCompare | null
+}
+
+/** 게시판 한 줄 */
+export interface RiskAnalysisListItem {
+  id: string
+  /** 분석한 프로젝트 — 상세 주소로 바로 들어와도 그 프로젝트로 옮긴다 (Q70) */
+  projectId: string
+  /** 게시판 번호 — 프로젝트 안에서 1 부터, 지워도 다시 쓰지 않는다 */
+  seq: number
+  title: string
+  /** 분석을 돌린 사람 = 작성자. 계정을 지웠으면 null */
+  createdBy: string | null
+  createdAt: string
+  savedAt: string
+  /** facts.agendas 길이 */
+  agendaCount: number
+  /** facts.tasks · facts.tests 길이 — 옛 줄은 0 (2026-11-06) */
+  taskCount: number
+  testCount: number
+  /** 세 종류 중 high 의 합 */
+  highCount: number
+}
+
+export interface RiskAnalysis extends RiskAnalysisListItem {
+  body: string
+  refs: ChatRef[]
+  facts: RiskAnalysisFacts
+  titleEditedAt: string | null
+}
+
+/** GET .../risk-analyses — seq 내림차순 */
+export interface RiskAnalysisPage {
+  items: RiskAnalysisListItem[]
+  total: number
+}
+
+/** POST .../risk-analyses — 내가 돌린 임시 분석에 제목을 붙여 올린다 */
+export interface RiskAnalysisSaveInput {
+  analysisId: string
+  title: string
 }
 
 /* 확인 요청 — 결정된 안건의 '이 결정 확인해 주세요' 버튼 하나. 쪽지가 아니다 (docs/api/check.md) */
@@ -760,129 +963,6 @@ export interface MinutesApplyResult {
   agendaIdByTempId: Record<string, string>
   taskIdByTempId: Record<string, string>
 }
-
-/* 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산하고(facts) Claude 가 손쓸 것을 쓴다. 저장한다 (docs/api/report.md) */
-
-export interface ProgressFacts {
-  /** 기간 — 둘 다 YYYY-MM-DD, KST. periodEnd 가 만든 날 */
-  periodStart: string
-  periodEnd: string
-  settings: RiskSettings
-
-  progress: {
-    /** 지금 상태별 작업 수 */
-    todo: number
-    doing: number
-    blocked: number
-    done: number
-    /** done / 전체, 소수 셋째 자리에서 반올림. 작업이 없으면 0 */
-    doneRate: number
-    /** 기간 안에 완료가 된 작업 (task_log) */
-    completedTaskIds: string[]
-    /** 기간 안에 진행 중이 된 작업 */
-    startedTaskIds: string[]
-    /** 기간 안에 등록된 작업 */
-    createdTaskIds: string[]
-  }
-
-  /** 바로 앞 리포트 — 없으면 null */
-  previous: { reportId: string; periodEnd: string; doneRate: number; blocked: number } | null
-
-  decisions: {
-    /** decidedAt 이 기간 안인 안건 */
-    decidedAgendaIds: string[]
-    /** 지금 리스크 high · medium 안건 — DecisionRiskReport.agendas 에서, 점수 순 10개까지 */
-    riskyAgendaIds: string[]
-  }
-
-  /** 손쓸 작업. 한 작업에 신호가 여럿이면 다 싣는다 */
-  attention: TaskAttention[]
-
-  /** 사람별 — 담당 작업이 하나라도 있는 사람만, 담당자 없음은 memberId null */
-  people: PersonProgress[]
-}
-
-export type TaskAttentionSignal =
-  /* 선행 작업은 2026-10-28 걷었다(Q63) — 아래 둘은 지난 리포트의 facts 에만 남는다. 새 리포트는 내지 않는다 */
-  /** 기다리는 선행 작업이 안 끝났고 시작일이 가깝거나 지났다 — 지난 리포트에만 */
-  | 'waitingOnPredecessor'
-  /** 이 작업을 기다리는 작업이 있는데 이 작업이 늦다 — 지난 리포트에만 */
-  | 'lateBlocker'
-  /** 진행 중인 날 수가 계획(start ~ due)의 1.5배를 넘음. 계획이 없으면 staleDays 를 넘음 */
-  | 'longRunning'
-  /** 막힘인 날 수가 staleDays 를 넘음 */
-  | 'longBlocked'
-  /** 기한이 지났는데 완료가 아님 */
-  | 'overdue'
-  /** 시작일이 지났는데 해야 할 일 · 또는 기한이 dueSoonDays 안인데 해야 할 일 */
-  | 'notStarted'
-  /** 막힘인데 걸린 안건이 전부 결정됨 (risk.md 의 decidedButBlocked) */
-  | 'decidedButBlocked'
-
-export interface TaskAttention {
-  taskId: string
-  signals: TaskAttentionSignal[]
-  /** 지금 상태가 된 뒤 지난 날 수 (task_log). backfill 이면 '적어도' */
-  statusDays: number
-  statusSinceBackfill: boolean
-  /** start ~ due 의 날 수. 둘 중 하나라도 없으면 null */
-  plannedDays: number | null
-  /** 기다리는 안 끝난 선행 작업 — 선행 작업은 2026-10-28 걷었다(Q63). 지난 리포트에만 */
-  waitingOnTaskIds?: string[]
-  /** 이 작업을 기다리는 안 끝난 작업 — 지난 리포트에만 (Q63) */
-  blockingTaskIds?: string[]
-  /** 무게 — Claude 가 '어려운가' 를 판단하는 재료 */
-  weight: {
-    /** 완료 아닌 하위 작업 수 (자손 전부) */
-    openChildren: number
-    /** 본문 체크리스트 중 안 끝난 줄 · 전체 줄 */
-    openLines: number
-    totalLines: number
-    /** 걸린 안건 수 */
-    agendaCount: number
-    priority: 'low' | 'normal' | 'high'
-  }
-  score: number
-}
-
-export interface PersonProgress {
-  memberId: string | null
-  doing: number
-  blocked: number
-  overdue: number
-  /** 기간 안에 끝낸 작업 수 */
-  completed: number
-  /** 이 사람 작업 중 attention 에 든 것 */
-  attentionTaskIds: string[]
-}
-
-/** 리포트 목록 한 줄 */
-export interface ReportItem {
-  id: string
-  projectId: string
-  periodStart: string
-  periodEnd: string
-  createdBy: string
-  createdAt: string
-  /** 목록에 찍을 숫자 — facts 에서 */
-  doneRate: number
-  attentionCount: number
-}
-
-export interface Report extends ReportItem {
-  facts: ProgressFacts
-  body: string
-}
-
-/** 만드는 스트림 */
-export type ReportEvent =
-  /** 계산이 끝났다 — 화면이 숫자 카드를 먼저 그린다 */
-  | { type: 'facts'; facts: ProgressFacts }
-  /** 글 조각 */
-  | { type: 'delta'; text: string }
-  /** 저장까지 끝. refs 는 본문의 근거 중 넣어 준 id 만 */
-  | { type: 'done'; report: ReportItem; refs: ChatRef[] }
-  | { type: 'error'; code: string; message: string }
 
 /* ── 테스트 (docs/api/test.md) — 작업과 따로 둔다. 스냅샷에 싣지 않고 프로젝트 단위로 받는다 ── */
 

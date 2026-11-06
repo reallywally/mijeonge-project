@@ -274,7 +274,7 @@ DELETED_PATHS = [
     ("GET", "/api/projects/p1/search?q=OS", None, "PROJECT_NOT_FOUND"),
     ("GET", "/api/projects/p1/members", None, "PROJECT_NOT_FOUND"),
     ("POST", "/api/projects/p1/tasks", {"title": "몰래"}, "PROJECT_NOT_FOUND"),
-    ("GET", "/api/projects/p1/reports", None, "PROJECT_NOT_FOUND"),
+    ("GET", "/api/projects/p1/risk-analyses", None, "PROJECT_NOT_FOUND"),
     ("PATCH", "/api/tasks/k4", {"title": "몰래"}, "TASK_NOT_FOUND"),
     ("GET", "/api/tasks/k4/comments", None, "TASK_NOT_FOUND"),
     ("PATCH", "/api/agendas/t1", {"title": "몰래"}, "AGENDA_NOT_FOUND"),

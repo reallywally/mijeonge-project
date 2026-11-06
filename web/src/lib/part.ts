@@ -35,10 +35,17 @@ export interface PartScopeResult {
  *   경로를 잇느라 선 조상(③)의 링크는 끌어오지 않는다 — 조상은 맥락일 뿐 내 일이 아니라서,
  *   남의 파트 묶음 아래 작업 하나를 맡았다고 그 파트의 결정이 다 딸려 오면 노이즈를 줄이는 뜻이 없어진다
  */
+/** '내 파트' 에 제 발로 서는가 — 공통이거나 내 파트이거나 내가 담당. 조상으로 끌려 서는 것은 따로 */
+export const ownsOrSharesPart = (
+  r: { partId: string | null; ownerId: string | null },
+  memberId: string | null,
+  myPartIds: ReadonlySet<string>,
+) => r.partId === null || myPartIds.has(r.partId) || (memberId !== null && r.ownerId === memberId)
+
 export function visibleInMyParts(input: PartScopeInput): PartScopeResult {
   const { memberId, myPartIds } = input
   const ownsOrShares = (r: { partId: string | null; ownerId: string | null }) =>
-    r.partId === null || myPartIds.has(r.partId) || (memberId !== null && r.ownerId === memberId)
+    ownsOrSharesPart(r, memberId, myPartIds)
 
   const byId = new Map(input.tasks.map((t) => [t.id, t]))
   const taskIds = new Set<string>()

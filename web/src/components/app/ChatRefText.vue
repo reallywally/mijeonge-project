@@ -12,7 +12,7 @@ import type { ChatRef } from '@/types/domain'
 
 /* AI 가 낸 답 본문. v-html 로 그리지 않는다 — 근거 표시는 칩으로 바꾼다.
    markdown 이면(챗봇) 굵게 · 목록 · 제목 · 코드 몇 가지를 lib/markdown 으로 조각내 Vue 로 직접 그린다.
-   아니면(리포트 · 리스크 요약 — 프롬프트가 마크다운을 쓰지 말라고 한다) 줄바꿈만 살린다.
+   아니면(리스크 분석 — 프롬프트가 마크다운을 쓰지 말라고 한다) 줄바꿈만 살린다.
    스냅샷(지금 프로젝트)에 없는 id 는 그리지 않는다 — 지어낸 id 를 보이지 않는다 (docs/api/chat.md) */
 const props = defineProps<{ text: string; markdown?: boolean }>()
 const emit = defineEmits<{

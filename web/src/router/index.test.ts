@@ -18,6 +18,7 @@ vi.mock('@/views/AdminMembersView.vue', () => ({ default: { template: '<div />' 
 vi.mock('@/views/ProjectSettingsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/ProjectPartsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/RiskView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/RiskAnalysisView.vue', () => ({ default: { template: '<div />' } }))
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -218,5 +219,20 @@ describe('/admin 첫 화면', () => {
   it('관리 권한이 하나도 없으면 업무 화면으로 간다', async () => {
     await router.push('/admin')
     expect(path()).toBe('/tasks')
+  })
+})
+
+describe('리포트 걷음 (2026-11-06)', () => {
+  it('옛 리포트 주소는 저장한 분석 게시판으로 — 목록 · 상세 둘 다', async () => {
+    await router.push('/reports')
+    expect(path()).toBe('/risks?tab=saved')
+    await router.push('/tasks')
+    await router.push('/reports/rp1')
+    expect(path()).toBe('/risks?tab=saved')
+    expect(router.currentRoute.value.name).toBe('risks')
+  })
+
+  it('저장한 분석 상세는 /risks/analyses/:analysisId', () => {
+    expect(router.resolve('/risks/analyses/ra1').name).toBe('risk-analysis')
   })
 })

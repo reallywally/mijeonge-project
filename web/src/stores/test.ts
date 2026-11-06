@@ -283,7 +283,7 @@ export const useTestStore = defineStore('test', () => {
       .map((t) => ({ id: t.id, key: t.key, label: fullPath(t) }))
   }
 
-  /** 지우기는 만든 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 회의록 · 리포트와 같은 경계 */
+  /** 지우기는 만든 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 회의록 · 저장한 리스크 분석과 같은 경계 */
   const canRemove = (t: TestCase) =>
     canDeleteComment(auth.me, { authorId: t.createdBy ?? '' }, t.projectId)
 

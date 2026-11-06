@@ -38,11 +38,10 @@ from app.schemas.test import (
     TestSignal,
     TestStatusInput,
 )
-from app.services import access
+from app.services import access, risk_settings
 from app.services import history as history_service
 from app.services import part as part_service
 from app.services import project as project_service
-from app.services import risk as risk_service
 from app.services.access import Scope
 from app.services.progress import kst_day
 from app.time import now
@@ -309,7 +308,7 @@ async def _build(
 ) -> list[TestCaseOut]:
     """응답 모양으로 — 몇 개를 넘기든 select 수는 같다."""
     ids = [row.id for row in rows]
-    rule = await risk_service.load_settings(session, project_id)
+    rule = await risk_settings.load_settings(session, project_id)
     refs = await _refs(session, ids)
     links = await _links(
         session, {ref.target_id for each in refs.values() for ref in each if ref.kind == "task"}
@@ -356,6 +355,13 @@ async def _build(
             )
         )
     return built
+
+
+async def build_tests(
+    session: AsyncSession, project_id: str, rows: list[TestCase], *, today: date
+) -> list[TestCaseOut]:
+    """신호까지 붙은 모양 — 리스크 AI 분석이 같은 셈을 쓰게(한 벌 더 두지 않는다)."""
+    return await _build(session, project_id, rows, today)
 
 
 async def _one(session: AsyncSession, row: TestCase, today: date) -> TestCaseOut:

@@ -5,8 +5,8 @@ from app.models.check import CheckRequest
 from app.models.minutes import Minutes
 from app.models.part import Part, PartMember
 from app.models.project import Member, MemberAvatar, Project, ProjectMember
-from app.models.report import ProjectReport
 from app.models.risk import RiskSetting
+from app.models.risk_analysis import RiskAnalysis
 from app.models.task import (
     Task,
     TaskAgendaLink,
@@ -29,7 +29,7 @@ __all__ = [
     "PartMember",
     "Project",
     "ProjectMember",
-    "ProjectReport",
+    "RiskAnalysis",
     "RiskSetting",
     "Task",
     "TaskComment",

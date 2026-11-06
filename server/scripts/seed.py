@@ -33,7 +33,7 @@ from app.models import (
     PartMember,
     Project,
     ProjectMember,
-    ProjectReport,
+    RiskAnalysis,
     RiskSetting,
     Task,
     TaskAgendaLink,
@@ -572,10 +572,49 @@ def agenda_histories() -> list[AgendaHistory]:
     return rows
 
 
+def _change(field: str, before: str | None, after: str | None) -> dict[str, str | None]:
+    return {"field": field, "from": before, "to": after, "subject": ""}
+
+
+# 리스크의 흔들림 시연 — risk-dashboard.md '구현에서 메운 것 (서버)'. (작업, 바꾼 사람, 시각, 칸)
+# 목업 web/src/fixtures 가 같은 셈이 되게 맞춘다. 마지막 값은 지금 칸 값과 같다
+TASK_CHURN: list[tuple[str, str, str, list[dict[str, str | None]]]] = [
+    # HW-21 기한을 두 번 뒤로 미룸(09-13 → 09-14 → 09-15) — '기한 거듭 미룸'
+    ("k21", "u1", "2026-09-08T03:00:00Z", [_change("due", "2026-09-13", "2026-09-14")]),
+    ("k21", "u1", "2026-09-12T03:00:00Z", [_change("due", "2026-09-14", "2026-09-15")]),
+    # HW-3 담당자가 최근 두 번 바뀜(u1 → u4 → u2) — '담당자 자주 바뀜'
+    ("k3", "u1", "2026-10-06T03:00:00Z", [_change("ownerId", "u1", "u4")]),
+    ("k3", "u4", "2026-10-09T03:00:00Z", [_change("ownerId", "u4", "u2")]),
+    # HW-22 제목 · 본문을 최근 다섯 번 고침 — '내용 자주 바뀜'
+    (
+        "k22",
+        "u3",
+        "2026-10-02T03:00:00Z",
+        [_change("title", "스테이징 DB", "스테이징 DB 구성(임시)")],
+    ),
+    ("k22", "u3", "2026-10-05T03:00:00Z", [_change("body", None, "☐ 스테이징 서버 신청")]),
+    (
+        "k22",
+        "u3",
+        "2026-10-08T03:00:00Z",
+        [_change("title", "스테이징 DB 구성(임시)", "스테이징 DB · 백업 구성")],
+    ),
+    ("k22", "u3", "2026-10-11T03:00:00Z", [_change("body", "☐ 스테이징 서버 신청", None)]),
+    (
+        "k22",
+        "u3",
+        "2026-10-14T03:00:00Z",
+        [_change("title", "스테이징 DB · 백업 구성", "스테이징 DB 구성")],
+    ),
+]
+
+
 def task_histories() -> list[TaskHistory]:
-    """작업마다 '등록' 한 줄(등록 시각 · 등록한 사람) + k20 의 상태 바뀜 하나.
+    """작업마다 '등록' 한 줄(등록 시각 · 등록한 사람) + k20 의 상태 바뀜 하나
+    + 흔들림 시연(TASK_CHURN).
 
     k20 의 줄은 task_log 시연 줄(DEMO_STATUS_CHANGES)과 같은 때 · 같은 사람이다.
+    흔들림 줄의 id 는 `th-<작업 id>-c<번호>` 다.
     """
     rows = [
         TaskHistory(
@@ -600,6 +639,18 @@ def task_histories() -> list[TaskHistory]:
             backfilled=False,
         )
     )
+    rows += [
+        TaskHistory(
+            id=f"th-{task_id}-c{no}",
+            project_id="p1",
+            task_id=task_id,
+            changed_by=by,
+            changed_at=at(changed_at),
+            changes=changes,
+            backfilled=False,
+        )
+        for no, (task_id, by, changed_at, changes) in enumerate(TASK_CHURN, start=1)
+    ]
     return rows
 
 
@@ -931,8 +982,32 @@ def test_cases() -> list[TestCase]:
 T7 = SEED_TESTS[6]
 
 
+# 리스크의 흔들림 시연 — (테스트, 바꾼 사람, 시각, 칸). 마지막 값은 지금 칸 값과 같다
+TEST_CHURN: list[tuple[str, str, str, list[dict[str, str | None]]]] = [
+    # HW-T3 기한을 두 번 뒤로 미룸(10-06 → 10-07 → 10-08) — '기한 거듭 미룸'
+    ("tc3", "u2", "2026-10-01T03:00:00Z", [_change("due", "2026-10-06", "2026-10-07")]),
+    ("tc3", "u2", "2026-10-02T03:00:00Z", [_change("due", "2026-10-07", "2026-10-08")]),
+    # HW-T2 결과가 성공 ↔ 실패로 두 번 뒤집힘 — 지금 성공이어도 '결과 뒤집힘'
+    ("tc2", "u2", noon("2026-10-06"), [_change("status", "draft", "testing")]),
+    ("tc2", "u2", noon("2026-10-07"), [_change("status", "testing", "pass")]),
+    (
+        "tc2",
+        "u2",
+        noon("2026-10-08"),
+        [_change("status", "pass", "fail"), _change("resultNote", None, "잠금 해제 뒤 튕김")],
+    ),
+    (
+        "tc2",
+        "u2",
+        noon("2026-10-10"),
+        [_change("status", "fail", "pass"), _change("resultNote", "잠금 해제 뒤 튕김", None)],
+    ),
+]
+
+
 def test_histories() -> list[TestHistory]:
-    """테스트마다 '등록' 한 줄(등록 시각 · 만든 사람) + HW-T7 의 testing → fail 하나."""
+    """테스트마다 '등록' 한 줄(등록 시각 · 만든 사람) + HW-T7 의 testing → fail 하나
+    + 흔들림 시연(TEST_CHURN, id 는 `sh-<테스트 id>-c<번호>`)."""
     rows = [
         TestHistory(
             id=f"sh-tc{no}-1",
@@ -959,6 +1034,18 @@ def test_histories() -> list[TestHistory]:
             backfilled=False,
         )
     )
+    rows += [
+        TestHistory(
+            id=f"sh-{test_id}-c{no}",
+            project_id="p1",
+            test_id=test_id,
+            changed_by=by,
+            changed_at=at(changed_at),
+            changes=changes,
+            backfilled=False,
+        )
+        for no, (test_id, by, changed_at, changes) in enumerate(TEST_CHURN, start=1)
+    ]
     return rows
 
 
@@ -984,7 +1071,7 @@ async def clear(session: AsyncSession) -> None:
         TestRef,
         TestCc,
         TestCase,
-        ProjectReport,
+        RiskAnalysis,
         CheckRequest,
         RiskSetting,
         TaskComment,

@@ -145,7 +145,7 @@ export const useTaskStore = defineStore('task', () => {
   )
 
   /* 완료 숨기기 — 목록 · 간트가 같이 따른다(칸반은 완료 칸이 따로 있어 안 따른다). 처음은 켜짐이고
-     바꾼 값은 브라우저에 기억한다. 보기만 거른다 — 아래 수 · 리포트 · 진척률은 숨긴 것도 센다 (Q64) */
+     바꾼 값은 브라우저에 기억한다. 보기만 거른다 — 아래 수 · 진척률은 숨긴 것도 센다 (Q64) */
   const HIDE_DONE_KEY = 'innoflow.tasks.hideDone'
   const hideDone = ref(recall(HIDE_DONE_KEY) !== 'off')
   function setHideDone(on: boolean) {

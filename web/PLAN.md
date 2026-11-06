@@ -381,6 +381,8 @@
 
 ## 15단계 · 프로젝트 진행 리포트 — '리포트' 메뉴
 
+> **2026-11-06 걷음** — 저장한 AI 리스크 분석(29단계, `../docs/api/risk-analysis.md`)이 잇는다. 아래는 기록이다. 메뉴 · 화면 · 스토어 · api · 목업 · 타입 · `lib/progress.ts` 를 테스트째 지웠고 `/reports` · `/reports/:reportId` 는 `/risks?tab=saved` 로 보낸다
+
 [리포트 만들기] 를 누르면 지난 7일을 규칙으로 세고(`ProgressFacts`) Claude 가 '먼저 손쓸 것' 을 근거와 함께 쓴다. 저장해 목록에 쌓고 지난 리포트와 견준다.
 계약은 `../docs/api/report.md`(합의 2026-10-20 · Q49 ~ Q51 닫힘), 바탕은 14단계(선행 · 상태 기록)와 11단계(리스크 기준 · 근거 칩), 서버 쪽은 `../server/PLAN.md` 14단계다.
 
@@ -707,6 +709,67 @@
 - [x] `ui/popover` · `MemberPicker` · `OwnerSelect` · `CcField` · `TaskPropertyPanel` · `AgendaPropertyPanel` · `lib/member`(`matchMember`)
 - [x] 검사 — `MemberPicker.test.ts`(포커스 · 걸러짐 · ↓ Enter · 없음 · 미정 · 참조 열린 채 계속) · `AgendaListView.test.ts`(다이얼로그 안에서 포커스 · 찾아 Enter · Esc 는 목록만) · `TestsView.test.ts`(참조 흘려 넣기를 `MemberPicker` 로)
 
+## 29단계 · 저장한 AI 리스크 분석 — 리스크 화면의 '저장한 분석' 탭
+
+[AI 리스크 분석] 결과를 사람이 [저장] 을 눌러 제목을 붙여 남기고, 리스크 화면의 '저장한 분석' 게시판에서 다시 본다.
+계약은 `../docs/api/risk-analysis.md`(2026-11-06, 사용자 결정 — 화면 쪽 메운 것은 그 끝 '구현에서 메운 것 (화면)'), 분석 자체는 11-3 그대로다. 리포트(15단계)를 걷는다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 자리 | `/risks` 위 줄의 탭 `[지금 리스크 \| 저장한 분석 N]`(`?tab=saved`, `router.push`) · 상세 `/risks/analyses/:analysisId`(`RiskAnalysisView`) | 계약 '화면'. 확인 요청 화면의 탭 모양을 그대로 |
+| 저장 | 끝난 분석의 `done.analysisId` 를 `stores/risk` 의 `summary.analysisId` 로 들고, [저장] → `RiskAnalysisTitleDialog`(제목 고치기와 같이 씀) → `stores/riskAnalysis.save` → `summary.savedId` | 서버가 남긴 임시 분석에 제목만 붙인다 — 글을 다시 보내지 않는다 |
+| 오류 | 404 → '오래된 분석이라 저장할 수 없습니다. 다시 분석해 주세요.'(창 안), 409 → '저장됨' 으로, 422 → `detail.title` | 계약 '화면' · 오류 코드 |
+| 게시판 | `RiskAnalysisBoard` — 받는 것은 리스크 화면이 들어올 때 · 프로젝트를 바꿀 때(탭 N 을 띄우려고), 50개씩 `offset` 으로 잇는다 | 계약 기본 limit 50 |
+| 상세 | 근거 칩은 `ChatRefText`(지금 분석 카드와 같은 부품), 표 · 대비는 저장한 스냅샷 그대로. 신호 말은 `lib/risk` `signalLabel`(= `AGENDA_SIGNAL_LABEL`, 모르는 이름은 글자 그대로) | 기록이라 다시 계산하지 않는다 |
+| 권한 | [제목 고치기] 작성자만(`canEditComment`), [지우기] 작성자 · 프로젝트 관리자 · 시스템 관리자(`canDeleteComment`) — 버튼 숨김과 목업 403 이 같은 함수 | 회의록 · 댓글과 같은 경계 |
+
+### 29-1 목업 (서버 갈래도 계약대로 붙임)
+
+- [x] `domain.ts` — `RiskAnalysisAgenda` · `RiskAnalysisCompare` · `RiskAnalysisFacts` · `RiskAnalysisListItem` · `RiskAnalysis` · `RiskAnalysisPage` · `RiskAnalysisSaveInput`, `ChatEvent` 의 `done.analysisId?`. 리포트 타입 걷음
+- [x] `api/riskAnalyses.ts` — 게시판 · 저장 · 상세 · 제목 고치기 · 지우기, 목업은 `mockDb().riskAnalyses`(임시 포함) · 프로젝트별 번호(`riskAnalysisNo`, 지운 번호 안 씀) · 404/409/422/403. `api/risk.ts` 목업 요약이 끝까지 흐르면 `mockCreateRiskDraft` 로 임시 줄을 넣고 `done.analysisId` 를 싣는다. `api/chat.ts` `toChatEvent` 가 서버 `done.analysisId` 를 읽는다
+- [x] `fixtures/riskAnalyses.ts` — p1 에 둘(`ra1` 김서연 · compare null, `ra2` 이도현 · `ra1` 대비)
+- [x] `stores/riskAnalysis.ts` — 게시판 · [더 보기] · byId · 저장 · 제목 고치기 · 지우기 · 권한. 로그아웃에 비운다(`session.ts`). `stores/risk.ts` — `summary.analysisId` · `savedId` · `markSummarySaved`
+- [x] 화면 — `RiskView`(탭 · [저장] · '저장됨 · [보기]'), `RiskAnalysisBoard`, `RiskAnalysisTitleDialog`, `RiskAnalysisView`
+- [x] 리포트 걷기 — `AppShell` 메뉴 '리포트', `ReportsView` · `ReportDetailView` · `ReportFactsCards` · `ReportAttentionTable` · `stores/report` · `api/reports` · `fixtures/reports` · `lib/progress`(리포트만 썼다) 와 그 테스트. `/reports` · `/reports/:reportId` → `/risks?tab=saved`
+- [x] 검사 — `api/riskAnalyses.test.ts`(게시판 순서 · 페이징 · 임시 안 보임 · 저장 404/409/422 · 24시간 · 고치기 403 · 지우기 권한 · 번호 다시 안 씀 · 서버 경로) · `api/risk.test.ts`(목업 `done.analysisId` · 서버 `done.analysisId` 읽기) · `views/RiskView.test.ts`(탭 · 뒤로 가기 · 게시판 · 빈 상태 · [더 보기] · [저장] 흐름 · 흐려져도 저장 · 404 문구) · `views/RiskAnalysisView.test.ts`(머리 · 칩 · 그때의 리스크 · 대비 · 권한 버튼 · 제목 고치기 · 지우기) · `router/index.test.ts`(redirect)
+
+### 29-2 서버에 붙이기 (서버 `구현` 뒤)
+
+- [ ] 서버 모드로 분석 → [저장] → 게시판 · 상세, 두 번째 분석의 '지난 분석 대비', 다른 계정의 [제목 고치기] 403 · [지우기] 403 을 본다
+- [ ] Q70(상세에 `projectId`) 답이 오면 다른 프로젝트의 분석 주소로 들어올 때 그 프로젝트로 옮긴다
+
+## 30단계 · 리스크 대시보드 — 작업 · 테스트 리스크
+
+리스크가 안건만 보던 것을 **작업 · 테스트의 오래 지연 · 자주 흔들림**까지 넓히고, '지금 리스크' 탭을 대시보드로 바꾼다.
+계약은 `../docs/api/risk-dashboard.md`(2026-11-06, 사용자 요청 — 화면 쪽 메운 것은 그 끝 '구현에서 메운 것 (화면)'). 판정은 서버 규칙 그대로, 화면은 세고 거르고 섞기만 한다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 모양 | 위에서부터 숫자 카드(안건 · 작업 · 테스트 · 지연) → 신호별 막대 \| AI 리스크 분석 → 섞은 리스크 목록 | 계약 '화면' |
+| 거르기 | `stores/risk` 의 `filter`(종류 · 등급 여럿 · 신호 여럿) 하나 — 카드 · 막대 · 목록 위 필터 줄이 같이 쓴다. 다시 누르면 푼다. 프로젝트를 바꾸면 푼다 | 보이는 줄이 곧 AI 분석에 보내는 줄이라 한 곳에 |
+| 보이는 줄 | `[내 파트 \| 전체]` + 목록 거르기를 지난 것(30줄 [더 보기] 로 접힌 줄도 든다) — `visibleIds` 가 세 종류 id 를 낸다 | 접힘은 화면 길이일 뿐이라 |
+| 내 파트 | 안건은 안건 화면 규칙(`showsAgenda`), 작업 · 테스트는 파트 · 담당자만(`partStore.showsOwned` — 조상으로 끌려 서는 것 빼고) | 리스크 줄은 계층 없이 한 줄씩이라 |
+| 막대 | 신호 이름이 같으면 종류를 넘어 한 막대(말은 '기한 넘김' 처럼 하나로), 종류별 마디. 흔들림 넷(기한 거듭 미룸 · 내용 · 담당자 자주 바뀜 · 결과 뒤집힘)은 머리를 따로. 길이는 두 묶음 통틀어 가장 긴 것 기준 | 차트 라이브러리 없이 칸 너비로 |
+| 색 | 등급은 `StatusPill` 톤(high = blocked · medium = warn · low = todo), 종류는 새 토큰 `--kind-agenda` · `--kind-task` · `--kind-test`(밝은 · 어두운 둘) | 상태 색과 겹치지 않게 |
+
+### 30-1 목업 (서버 갈래도 계약대로 붙임)
+
+- [x] `domain.ts` — `TaskRisk` · `TestRisk` · `TaskRiskSignal` · `TestRiskSignal` · `RiskKind` · `DecisionRiskReport.tasks · tests` · `OwnerLoad.riskyTasks · riskyTests` · `RiskSettings` 일곱 · `RiskSummaryInput.taskIds · testIds` · `RiskAnalysisTask · Test` · `RiskCompareRef`(compare 는 `{ kind, id }`) · `RiskAnalysisListItem.taskCount · testCount`
+- [x] `lib/risk.ts` — 기준 일곱(묶음 지연 · 흔들림 · 등급) · 종류별 신호 말 · 줄 만들기(핵심 숫자) · 섞기 · 거르기 · 카드 · 막대 · 옛 compare / facts 읽기(`readCompare` · `readFacts`)
+- [x] `api/risk.ts` — 목업 보고서의 작업 · 테스트 등급도 지금 기준으로, 요약은 세 배열(각 100 상한, 빠지면 []), 서버 응답의 빈 칸은 빈 값으로(`readReport`). PUT 은 일곱 값만. `api/riskAnalyses.ts` — 임시 분석에 작업 · 테스트 스냅샷 · `{ kind, id }` 비교, 서버 응답도 옛 모양을 읽어 맞춘다
+- [x] `fixtures/risks.ts` — 서버 시드 표(`risk-dashboard.md` '시드 p1') 그대로: 작업 19 · 테스트 5 줄(p1), 작업 2 줄(p2), 사람별 두 칸. 흔들림 근거도 시드와 같은 `fixtures/history.ts` 시연 줄(k21 기한 두 번 · k3 담당 두 번 · k22 제목 · 본문 다섯 번 · tc3 기한 두 번 · tc2 뒤집힘 두 번). 목업 요약은 세 종류 섞어 '먼저 손쓸 것' 4개 + '흔들리는 일'. 저장 분석 `ra2` 는 세 종류(`ra1` 은 옛 모양 그대로)
+- [x] 화면 — `RiskStatCards` · `RiskSignalBars` · `RiskTable` · `RiskKindBadge` 를 `RiskView` 에, 테스트 상세 팝업 · 근거 `[[test:ID]]` 칩. `RiskSettingsDialog` 묶음 셋. `RiskAnalysisView` 의 '그때의 리스크' · '지난 분석 대비' 세 종류(종류 배지), `RiskAnalysisBoard` '높음 n / 전체 m' 세 종류 합(가리키면 종류별)
+- [x] 검사 — `lib/risk.test.ts`(기준 일곱 · 핵심 숫자 · 신호 말 · 섞기 · 거르기 · 카드 · 막대 · 옛 compare) · `stores/risk.test.ts`(세 종류 · 내 파트 · 모든 신호 · 카드 · 막대 · 거르기 · 보내는 id · 기준 422) · `api/risk.test.ts`(세 배열 · 상한 · 흔들리는 일) · `api/riskAnalyses.test.ts`(세 종류 수 · 비교 · 옛 모양 읽기 — 목업 · 서버) · `views/RiskView.test.ts`(카드 · 막대 · 거르기 · [더 보기] · 세 상세 · 보내는 id · 기준 흔들림 셋) · `views/RiskAnalysisView.test.ts`(섞은 스냅샷 · 종류 단 대비 · 옛 대비 · 옛 분석)
+
+### 30-2 서버에 붙이기 (서버 `구현` 뒤)
+
+- [x] 서버 시드 셈(`risk-dashboard.md` '시드 p1')에 목업 줄 · 흔들림 시연 줄 · 저장 분석 `ra2` 를 맞췄다(2026-11-06) — 처음 넣었던 k16 기한 10/17 · k16 · k17 · tc4 · tc8 시연 줄은 되돌림. 셈 규칙(churnDays 경계 · 줄 수 · +1 · 테스트 시작 안 함 · 성공 테스트 · 사람별 정렬)도 서버 표와 같다
+- [ ] 서버 모드로 대시보드 · 기준 일곱 저장 · 세 종류 AI 분석 · 저장한 분석(옛 분석의 대비가 그대로 읽히는지)을 본다
+
 ---
 
 ## 진행 상황
@@ -728,7 +791,7 @@
 | 12 확인 요청 | 계약 **합의** (2026-10-16) — `docs/api/check.md` · Q38 ~ Q41 닫힘. **12-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-16) · **2026-10-19 고침 끝남**(Q42 ~ Q44, 결정 알림 · 참조) — 12-2 는 서버 `구현` 뒤 |
 | 13 회의록 | 계약 **합의** (2026-10-19) — `docs/api/minutes.md` · Q45 · Q46 닫힘 · Q47(녹음) 보류. **13-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-19) · **2026-10-20 고침 끝남**(Q48, 게시판 · 저장된 회의록에서 AI 정리 · 출처 `minutesId`). 13-2 는 서버로 한 번 돌려 보기 |
 | 14 선행 작업 · 상태 기록 | 계약 **합의** (2026-10-20) — `docs/api/task-flow.md` · Q49 · Q50 닫힘. **14-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-20) · **2026-10-28 선행 작업 걷음**(Q63, 상태 기록만 남음) — 14-2 는 서버로 한 번 돌려 보기 |
-| 15 진행 리포트 | 계약 **합의** (2026-10-20) — `docs/api/report.md` · Q49 ~ Q51 닫힘. **15-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-20) — 15-2 는 서버로 한 번 돌려 보기 |
+| 15 진행 리포트 | **걷음** (2026-11-06) — 29단계 저장한 AI 리스크 분석이 잇는다. 옛 기록: 계약 합의 2026-10-20(`docs/api/report.md` · Q49 ~ Q51), 15-1 목업 · 서버 갈래 끝남 |
 | 16 테스트 | 계약 **합의** (2026-10-27) — `docs/api/test.md` · Q53 ~ Q58 닫힘. **16-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-27, AI 없이) · **2026-10-27 고침 끝남**(성공 · 실패 버튼 + 상태 고르기, 레벨 걷음) — 16-2 는 서버로 한 번 돌려 보기 · AI 넷은 계약 뒤 |
 | 17 변경 이력 | 계약 `docs/api/history.md` · Q59 닫힘 (2026-10-27). **17-1 목업 끝남 · 서버 갈래 계약대로 붙임** (2026-10-27) — 17-2 는 서버 `구현` 뒤 한 번 돌려 보기 |
 | 18 프로젝트 관리 늘리기 | **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-02) — 설명 · 기간 · 상태(준비 · 진행 · 종료, 정보 칸에서 고름) · 삭제(시스템 관리자) · 목록 · 고르기의 상태 표시. 한눈 정보는 걷음 |
@@ -742,6 +805,8 @@
 | 26 챗봇 테스트 언급 | 계약 `docs/api/chat.md` '테스트 언급 `@HW-T3`' (2026-11-05) — **목업으로 끝남 · 서버 갈래는 글자로만 오가 그대로** (2026-11-05). `@` 목록에 작업 · 테스트를 한 줄로(`lib/mention` `mentionItems` — 작업 먼저, 테스트 줄에 '테스트' 표시 · 테스트 상태 이름), 창을 열면 `testStore.ensure`, 근거 `[[test:ID]]` 칩 → `/tests/:id`(없는 id 는 안 그림), 목업 답 하나 · 검사(`mention.test.ts` · `chat.test.ts` · `ChatWidget.test.ts`) |
 | 27 나에게 할당 | 화면만 (2026-11-05, 사용자 요청) — 작업 · 안건 · 테스트 속성 패널(상세 · 등록)의 담당자 칸 오른쪽에 **[나에게 할당]**(`OwnerSelect` `selfAssign`). 내가 그 프로젝트의 활성 멤버이고 아직 내가 담당이 아니며 칸이 막히지 않았을 때만 선다. 누르면 담당자를 고른 것과 같다(같은 저장 길). 회의록 검토의 담당자 칸에는 두지 않았다 |
 | 28 마이페이지 · 프로필 사진 | 계약 `docs/api/me.md` (2026-11-06, 사용자 결정) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-06). `/me`(프로필 96px 동그라미 · [사진 올리기 · 바꾸기] · [사진 지우기] · 이름 · 이메일 · 시스템 역할 읽기 · 내 프로젝트와 역할(관리자 · 멤버) · 페이지 안 비밀번호 바꾸기 — 창과 같은 `PasswordChangeForm`), 내 이름 메뉴에 '마이페이지'. 사진은 화면이 줄인다(`lib/avatar` — 가운데 정사각형 256×256 → webp, 안 되면 jpeg). 사람 동그라미를 `MemberAvatar` 하나로(사진 · 첫 글자 · 안 열리면 첫 글자) — 사람 칩 · 담당자 칸 · 고르기 목록 · 참조 칩 · 칸반 카드 · 내 메뉴 · 이력 · 댓글 · 사용자 관리. 간트 담당자 열은 20px 동그라미(글자 위에 사진을 덮음, 글자 속 스크립트 없음) + 이름, 열 84 → 112 · 그리드 528 → 556(제목 열 296 그대로). 사용자 관리에 [사진 지우기](한 번 더 묻고) |
+| 29 저장한 AI 리스크 분석 | 계약 `docs/api/risk-analysis.md` (2026-11-06, 사용자 결정) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-06). 리스크 화면 탭 `[지금 리스크 \| 저장한 분석 N]`(`?tab=saved`) · AI 리스크 분석 카드의 [저장] → 제목 창 → '저장됨 · [보기]' · 게시판(50개씩 [더 보기]) · 상세 `/risks/analyses/:analysisId`(글 · 근거 칩 · 지난 분석 대비 · 그때의 리스크 · 제목 고치기 · 지우기). 리포트(15단계) 걷음. Q70(상세에 `projectId`) 열림 |
+| 30 리스크 대시보드 | 계약 `docs/api/risk-dashboard.md` (2026-11-06, 사용자 요청) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-06). 작업 · 테스트 리스크(지연 · 흔들림)를 더하고 '지금 리스크' 탭을 대시보드로 — 숫자 카드 · 신호별 쌓은 막대 · AI 리스크 분석(세 종류 id) · 섞은 목록(종류 · 등급 · 신호 거르기, 30줄 [더 보기]). 기준 일곱(흔들림 셋). 저장한 분석도 세 종류. 목업은 서버 시드 표에 맞춤(30-2 첫 줄 닫힘) |
 
 ## 아직 안 정한 것
 

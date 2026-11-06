@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     risk_stale_days: int = 7
     risk_high_score: int = 6
     risk_medium_score: int = 3
+    # 흔들림 기준 (docs/api/risk-dashboard.md '기준')
+    risk_churn_days: int = 14
+    risk_churn_count: int = 5
+    risk_slip_count: int = 2
 
 
 settings = Settings()

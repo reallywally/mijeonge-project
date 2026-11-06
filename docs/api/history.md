@@ -147,6 +147,7 @@ export interface HistoryEntry {
 - 이행 전 줄의 칸(`options` · `entryText` · `entryNote` · `entryDeleted` · `itemCreated` · `itemTitle` · `itemDeleted`)은 DB 에 그대로다 — 화면은 모르는 칸을 건너뛴다. 옛 `ccIds` 줄은 같은 모양(id 배열)이라 2026-11-05 부터 다시 그린다
 - 등록 때 같이 고른 참조는 `created` 한 칸에 든다(따로 `ccIds` 칸을 남기지 않는다)
 - 화면 칸 이름: 제목 · 설명 · 결정내용 · 상태 · 담당자 · 참조 · 파트 · 기한
+- **회의록 출처(2026-11-06, `API.md` Q69 → `decisions.md`)** — 회의록 [등록] 이 남긴 줄(새 안건의 `created` · 갈아끼우기)에는 DB 의 `agenda_history.minutes_id` 에 그 회의록이 붙는다. 회의록을 지우면 `null`. **`HistoryEntry` 로는 내보내지 않는다** — 계약(`domain.ts`)에 칸이 없고, 지금은 AI 리스크 분석(`risk.md` '근거 넓히기')만 읽는다. 2026-11-06 전의 줄은 비어 있다(채우지 않았다)
 
 ### ~~칸 — 안건 (`thread_history`, 2026-11-02)~~ — 옛 표 (2026-11-04 전)
 

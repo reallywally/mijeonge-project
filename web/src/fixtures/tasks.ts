@@ -19,7 +19,7 @@ const PART_OF: Record<string, string> = {
   k18: 'pt3',
 }
 
-/* 상태 기록 — docs/api/task-flow.md '시드 · 목업'. 둘은 리포트 시연용으로 오래 둔다:
+/* 상태 기록 — docs/api/task-flow.md '시드 · 목업'. 둘은 상태 기록 시연용으로 오래 둔다:
    k20 은 계획이 사흘(9/10 ~ 9/12)인데 10/8 부터 진행 중, k22 는 10/13 부터 막힘.
    그 밖은 작업의 start(없으면 등록 시각)에 지금 상태가 됐다고 본다 */
 const STATUS_SINCE: Record<string, string> = {

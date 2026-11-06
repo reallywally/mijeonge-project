@@ -207,6 +207,7 @@ minutes
 index (project_id, seq)
 
 thread.minutes_id · entry.minutes_id · task.minutes_id   → minutes(id) ON DELETE SET NULL, null 가능
+  (2026-11-04 안건 간소화 뒤: agenda.minutes_id · task.minutes_id · agenda_history.minutes_id(2026-11-06, 리비전 0036))
 ```
 
 - `minutes_id` 는 같은 프로젝트의 회의록만 가리킨다 — `apply` 가 늘 그 회의록의 프로젝트에서 만들므로 어긋날 길이 없다(복합 FK 는 두지 않는다. `SET NULL` 이 `project_id` 까지 비우려 들어서)
@@ -315,6 +316,7 @@ export interface MinutesApplyResult {
 ```
 
 - 만든 안건 · 이력(새 안건의 것 · 기존 안건의 것 모두) · 작업에 **`minutesId` = 그 회의록**. 기존 안건 자체에는 붙이지 않는다
+  - 2026-11-06 — 안건 간소화(11-04) 뒤 이력은 `agenda_history` 줄이다. 그 줄의 출처는 DB 칸(`agenda_history.minutes_id`)에만 두고 API 로는 내보내지 않는다(`history.md` · Q69). 11-04 ~ 11-06 사이에 남은 줄 · 그 전 줄은 비어 있다
 - 만드는 순서: 새 안건(`queued`, 파트는 공통 `null`) → 그 이력 → 기존 안건의 이력 → 작업(`todo`, 본문 `[]`, `key` 배열 순 발번) → 작업 ↔ 안건 링크
 - 이력은 `itemTitle` 로 결정 항목을 찾거나 만들어 단다(위 `ProposedEntryBody`). 새로 만든 항목은 안건 끝에 붙고 변경 이력에 `itemCreated` 가 남는다(등록한 사람 = 요청한 사람)
 - 이력이 상태를 바꾸는 규칙은 `POST /api/threads/{threadId}/entries` 와 같다 — 항목이 전부 정해지면 `decided`, 아니면 줄이 있으니 `open`(2026-11-03). 그래서 정해진 안건에 새 이름의 결정이 오면 새 항목이 생겨 `open` 으로 돌아갈 수 있다(`updatedThreads` 에 실린다)

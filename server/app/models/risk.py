@@ -1,17 +1,22 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.config import settings
 from app.models.base import Base
 from app.time import now
 
-# 문턱값 넷의 범위 (docs/api/risk.md '기준 설정'). 스키마와 CHECK 가 같은 값을 본다
+# 문턱값 일곱의 범위 (risk.md '기준 설정' · risk-dashboard.md '기준').
+# 스키마와 CHECK 가 같은 값을 본다
 RISK_RANGES: dict[str, tuple[int, int]] = {
     "due_soon_days": (1, 30),
     "stale_days": (1, 90),
     "high_score": (2, 30),
     "medium_score": (1, 29),
+    "churn_days": (1, 90),
+    "churn_count": (2, 50),
+    "slip_count": (1, 10),
 }
 
 
@@ -35,4 +40,14 @@ class RiskSetting(Base):
     stale_days: Mapped[int] = mapped_column(Integer)
     high_score: Mapped[int] = mapped_column(Integer)
     medium_score: Mapped[int] = mapped_column(Integer)
+    # 흔들림 기준(2026-11-06) — 이행 전 줄이 기본값을 갖게 server_default 를 둔다
+    churn_days: Mapped[int] = mapped_column(
+        Integer, server_default=text(str(settings.risk_churn_days))
+    )
+    churn_count: Mapped[int] = mapped_column(
+        Integer, server_default=text(str(settings.risk_churn_count))
+    )
+    slip_count: Mapped[int] = mapped_column(
+        Integer, server_default=text(str(settings.risk_slip_count))
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

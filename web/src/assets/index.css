@@ -40,6 +40,10 @@
   --status-done: oklch(0.6 0.15 155);
   --status-blocked: oklch(0.6 0.21 25);
   --status-warn: oklch(0.72 0.15 70);
+  /* 리스크 줄의 종류 — 대시보드의 쌓은 막대 · 종류 배지. 상태 색과 겹치지 않는 세 색 */
+  --kind-agenda: oklch(0.56 0.16 300);
+  --kind-task: oklch(0.56 0.15 245);
+  --kind-test: oklch(0.6 0.1 185);
 }
 
 .dark {
@@ -75,6 +79,9 @@
   --status-done: oklch(0.7 0.14 155);
   --status-blocked: oklch(0.68 0.19 25);
   --status-warn: oklch(0.78 0.14 70);
+  --kind-agenda: oklch(0.72 0.14 300);
+  --kind-task: oklch(0.72 0.13 245);
+  --kind-test: oklch(0.74 0.1 185);
 }
 
 @theme inline {
@@ -107,6 +114,9 @@
   --color-status-done: var(--status-done);
   --color-status-blocked: var(--status-blocked);
   --color-status-warn: var(--status-warn);
+  --color-kind-agenda: var(--kind-agenda);
+  --color-kind-task: var(--kind-task);
+  --color-kind-test: var(--kind-test);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

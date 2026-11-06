@@ -10,7 +10,7 @@
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -1070,22 +1070,30 @@ async def test_decision_risks_tool_round(session: AsyncSession) -> None:
     (result,) = tool_results(fake.calls[1])
     assert result["is_error"] is False
     report = json.loads(result["content"])
-    # '안건과 어긋난 작업'(tasks)을 걷었다(2026-11-05)
-    assert set(report) == {"asOf", "settings", "agendas", "owners"}
+    # 작업 · 테스트 리스크가 실린다(2026-11-06, risk-dashboard.md)
+    assert set(report) == {"asOf", "settings", "agendas", "tasks", "tests", "owners"}
     # 오늘은 프롬프트의 오늘과 같은 한국 시간이다
     assert report["asOf"] == today_kst().isoformat()
     assert events[-1].type == "done"
 
 
-async def test_decision_risks_by_member(session: AsyncSession) -> None:
+async def test_decision_risks_by_member(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(chat_service, "today_kst", lambda: date(2026, 10, 15))
     await seed(session)
     whole = await risks(session, {})
     mine = await risks(session, {"member_id": "u1"})
 
     assert mine["agendas"] == [t for t in whole["agendas"] if t["ownerId"] == "u1"]
     assert mine["agendas"]
+    # 작업 · 테스트도 담당자로 거른다
+    assert mine["tasks"] == [t for t in whole["tasks"] if t["ownerId"] == "u1"]
+    assert {t["taskId"] for t in mine["tasks"]} == {"k21", "k13"}
+    assert [t["testId"] for t in mine["tests"]] == ["tc7"]
     # 안건을 안 맡았어도 막힌 작업을 맡은 사람은 찾는다 — 걸러진 안건은 비어 있다
-    assert (await risks(session, {"member_id": "u3"}))["agendas"] == []
+    u3 = await risks(session, {"member_id": "u3"})
+    assert u3["agendas"] == [] and {t["taskId"] for t in u3["tasks"]} == {"k20", "k4", "k22"}
     # 사람별 표는 거르지 않는다
     assert mine["owners"] == whole["owners"]
 
@@ -1096,6 +1104,9 @@ async def test_decision_risks_by_part_id_or_name(session: AsyncSession) -> None:
     by_id = await risks(session, {"part_id": "pt1"})
 
     assert by_id["agendas"] == [t for t in whole["agendas"] if t["partId"] == "pt1"]
+    assert by_id["tasks"] == [t for t in whole["tasks"] if t["partId"] == "pt1"]
+    assert by_id["tests"] == [t for t in whole["tests"] if t["partId"] == "pt1"]
+    assert by_id["tests"] and all(t["part"] == "인프라" for t in by_id["tests"])
     assert by_id["owners"] == whole["owners"]
     # 파트 목록 도구가 없어 Claude 는 이름을 넣는다 — 같은 결과다
     assert await risks(session, {"part_id": " 인프라 "}) == by_id
@@ -1130,6 +1141,35 @@ async def test_decision_risks_cannot_switch_project(session: AsyncSession) -> No
     await seed(session)
     report = await risks(session, {"project_id": "p1"}, project="p2")
     assert not any(t["agendaId"] in {"t3", "t5"} for t in report["agendas"])
+
+
+async def test_decision_risks_names_work_rows(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """작업 · 테스트 줄에는 담당자 · 파트 이름과 신호의 화면 말을 단다 — id 는 칩 때문에 남긴다."""
+    # 시드의 흔들림(HW-T2 의 뒤집힘)은 최근 14일 창에 들어야 보인다
+    monkeypatch.setattr(chat_service, "today_kst", lambda: date(2026, 10, 15))
+    await seed(session)
+    report = await risks(session, {})
+    k21 = next(t for t in report["tasks"] if t["taskId"] == "k21")
+    assert (k21["owner"], k21["signalLabels"]) == ("김서연", ["기한 넘김", "기한 거듭 미룸"])
+    assert k21["ownerId"] == "u1" and k21["key"] == "HW-21"
+    k1 = next(t for t in report["tasks"] if t["taskId"] == "k1")
+    assert (k1["owner"], k1["part"]) == ("담당자 없음", "공통")
+    tc2 = next(t for t in report["tests"] if t["testId"] == "tc2")
+    assert (tc2["signalLabels"], tc2["flips"]) == (["결과 뒤집힘"], 2)
+    tc3 = next(t for t in report["tests"] if t["testId"] == "tc3")
+    assert tc3["signalLabels"] == ["기간 지남", "오래 걸림", "기한 거듭 미룸"]
+    assert {"riskyTasks", "riskyTests"} <= set(report["owners"][0])
+
+
+def test_decision_risks_tool_describes_work_rows() -> None:
+    (tool,) = [t for t in chat_service.TOOLS if t["name"] == "get_decision_risks"]
+    for word in ("tasks", "tests", "signalLabels", "riskyTasks"):
+        assert word in str(tool["description"])
+    prompt = chat_service.SYSTEM_PROMPT
+    for word in ("기한 거듭 미룸", "결과 뒤집힘", "담당자 자주 바뀜", "[[test:ID]]"):
+        assert word in prompt
 
 
 def test_decision_risks_label() -> None:

@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api import test as route
 from app.models import Agenda, Member, Task, TestRef
 from app.models import TestCase as Case
-from app.schemas.risk import RiskSettings
 from app.services import test as service
+from app.services.risk_settings import default_settings
 from scripts.seed import SEED_TESTS
 from tests.conftest import AsMember, decide
 
@@ -576,7 +576,7 @@ def case(
     return row, service.status_days(row, TODAY)
 
 
-RULE = RiskSettings(due_soon_days=3, defer_count=2, stale_days=7, high_score=6, medium_score=3)
+RULE = default_settings()
 
 
 def signals_of(row: Case, days: int, changed: bool = False) -> list[str]:
@@ -637,7 +637,7 @@ def test_signals_follow_the_table_order() -> None:
 async def test_thresholds_follow_the_project_risk_settings(client: httpx.AsyncClient) -> None:
     res = await client.put(
         "/api/projects/p1/risk-settings",
-        json={"dueSoonDays": 3, "deferCount": 2, "staleDays": 13, "highScore": 6, "mediumScore": 3},
+        json=default_settings().model_dump(by_alias=True) | {"staleDays": 13},
     )
     assert res.status_code == 200
     rows = await rows_by_key(client)

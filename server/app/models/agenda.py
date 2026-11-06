@@ -131,3 +131,8 @@ class AgendaHistory(Base):
     seq: Mapped[int] = mapped_column(BigInteger, Identity(), unique=True)
     changes: Mapped[list[dict[str, object]]] = mapped_column(HISTORY_CHANGES)
     backfilled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=FALSE)
+    # 회의록 [등록] 이 남긴 줄이면 그 회의록 — 'AI 리스크 분석' 이 다룬 회의를 센다 (API.md Q69).
+    # 회의록을 지우면 줄은 남고 출처만 빈다. 2026-11-06 전의 줄은 비어 있다(채우지 않았다)
+    minutes_id: Mapped[str | None] = mapped_column(
+        ForeignKey("minutes.id", ondelete="SET NULL"), index=True
+    )

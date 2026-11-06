@@ -37,7 +37,10 @@ async def summarize_risks(
     llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
-    """[AI 요약]. 챗봇과 같은 클라이언트 · 분당 제한 · SSE 다. 스트림 전 실패는 JSON 이다."""
+    """[AI 리스크 분석]. 챗봇과 같은 클라이언트 · 분당 제한 · SSE 다. 스트림 전 실패는 JSON 이다.
+
+    답을 끝까지 받으면 임시 분석으로 남기고 done 에 `analysisId` 를 싣는다 (risk-analysis.md).
+    """
     ready = ready_llm(request, llm, limiter)
     # 이름은 먼저 떠 둔다 — 근거를 모은 뒤 rollback 이 ORM 객체를 만료시킨다
     project_name = (await project_service.load_project(session, scope.project_id)).name
@@ -45,7 +48,17 @@ async def summarize_risks(
     context = await risk_summary.build_context(session, scope.project_id, payload, today=today)
     if context is None:
         return sse_response(risk_summary.nothing())
-    return sse_response(risk_summary.summarize(ready, project_name, context, today=today))
+    return sse_response(
+        risk_summary.summarize(
+            ready,
+            project_name,
+            context,
+            today=today,
+            session=session,
+            project_id=scope.project_id,
+            actor_id=scope.actor.id,
+        )
+    )
 
 
 @router.get("/projects/{project_id}/risk-settings")

@@ -28,6 +28,45 @@ taskHistory.k20.push({
   changes: [{ field: 'status', from: 'todo', to: 'doing', subject: '' }],
 })
 
+/*
+ * 리스크의 흔들림 시연 — 서버 시드(scripts/seed.py 의 TASK_CHURN · TEST_CHURN, docs/api/risk-dashboard.md
+ * '시드 p1') 그대로. 시각은 UTC 03:00 = KST 정오. 오늘 2026-10-15 · 흔들림 14일 기준.
+ * k21 기한을 두 번 뒤로(기한 거듭 미룸) · k3 담당자를 두 번(담당자 자주 바뀜) · k22 제목 · 본문을 다섯 번(내용 자주 바뀜)
+ */
+type Change = [field: string, from: string | null, to: string | null]
+const line = (id: string, day: string, by: string | null, changes: Change[]): HistoryEntry => ({
+  id,
+  changedAt: `${day}T03:00:00Z`,
+  changedBy: by,
+  backfilled: false,
+  changes: changes.map(([field, from, to]) => ({ field, from, to, subject: '' })),
+})
+const churn = (
+  history: Record<string, HistoryEntry[]>,
+  prefix: string,
+  id: string,
+  rows: [day: string, by: string, changes: Change[]][],
+) =>
+  rows.forEach(([day, by, changes], i) =>
+    history[id].push(line(`${prefix}-${id}-c${i + 1}`, day, by, changes)),
+  )
+
+churn(taskHistory, 'th', 'k21', [
+  ['2026-09-08', 'u1', [['due', '2026-09-13', '2026-09-14']]],
+  ['2026-09-12', 'u1', [['due', '2026-09-14', '2026-09-15']]],
+])
+churn(taskHistory, 'th', 'k3', [
+  ['2026-10-06', 'u1', [['ownerId', 'u1', 'u4']]],
+  ['2026-10-09', 'u4', [['ownerId', 'u4', 'u2']]],
+])
+churn(taskHistory, 'th', 'k22', [
+  ['2026-10-02', 'u3', [['title', '스테이징 DB', '스테이징 DB 구성(임시)']]],
+  ['2026-10-05', 'u3', [['body', null, '☐ 스테이징 서버 신청']]],
+  ['2026-10-08', 'u3', [['title', '스테이징 DB 구성(임시)', '스테이징 DB · 백업 구성']]],
+  ['2026-10-11', 'u3', [['body', '☐ 스테이징 서버 신청', null]]],
+  ['2026-10-14', 'u3', [['title', '스테이징 DB · 백업 구성', '스테이징 DB 구성']]],
+])
+
 export const testHistory: Record<string, HistoryEntry[]> = Object.fromEntries(
   testCases.map((t) => [t.id, [created('sh', t.id, t.createdAt, t.createdBy)]]),
 )
@@ -67,3 +106,29 @@ for (const [agendaId, at, by] of backfilledDecision) {
     changes: [{ field: 'decision', from: '', to: decision, subject: '' }],
   })
 }
+
+/* 테스트 흔들림 시연 — 서버 시드 그대로. tc3 기한을 두 번 뒤로(기한 거듭 미룸), tc2 는 성공 ↔ 실패를 두 번 뒤집음(결과 뒤집힘) */
+churn(testHistory, 'sh', 'tc3', [
+  ['2026-10-01', 'u2', [['due', '2026-10-06', '2026-10-07']]],
+  ['2026-10-02', 'u2', [['due', '2026-10-07', '2026-10-08']]],
+])
+churn(testHistory, 'sh', 'tc2', [
+  ['2026-10-06', 'u2', [['status', 'draft', 'testing']]],
+  ['2026-10-07', 'u2', [['status', 'testing', 'pass']]],
+  [
+    '2026-10-08',
+    'u2',
+    [
+      ['status', 'pass', 'fail'],
+      ['resultNote', null, '잠금 해제 뒤 튕김'],
+    ],
+  ],
+  [
+    '2026-10-10',
+    'u2',
+    [
+      ['status', 'fail', 'pass'],
+      ['resultNote', '잠금 해제 뒤 튕김', null],
+    ],
+  ],
+])

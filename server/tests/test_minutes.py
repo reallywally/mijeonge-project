@@ -138,6 +138,7 @@ async def counts(session: AsyncSession) -> tuple[int, int, int, int]:
 
 async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncSession) -> None:
     before = await counts(session)
+    before_seq = await session.scalar(select(func.max(AgendaHistory.seq))) or 0
     res = await client.post(APPLY, json=FULL)
     assert res.status_code == 201, res.text
     out = res.json()
@@ -197,6 +198,16 @@ async def test_apply_creates_in_order(client: httpx.AsyncClient, session: AsyncS
         row["id"] for key in ("agendas", "tasks") for row in snap[key] if row["minutesId"] == "m1"
     }
     assert sourced == {row["id"] for row in [*out["agendas"], *tasks]}
+    # 이력 줄의 출처(Q69) — 새 안건의 '등록' 줄 · 기존 안건의 갈아끼우기 줄 모두 그 회의록.
+    # 응답(HistoryEntry)에는 나가지 않는다 — DB 에만 둔다
+    touched = [n1["id"], n2["id"], "t4", "t7"]
+    lines = (
+        await session.scalars(select(AgendaHistory).where(AgendaHistory.seq > before_seq))
+    ).all()
+    assert sorted(line.agenda_id for line in lines) == sorted(touched)
+    assert all(line.minutes_id == "m1" for line in lines)
+    history = (await client.get("/api/agendas/t4/history")).json()
+    assert "minutesId" not in history[-1]
 
 
 async def test_update_leaves_the_same_history_as_patch(client: httpx.AsyncClient) -> None:
@@ -760,6 +771,11 @@ async def test_delete_keeps_what_came_out(
     rows = {row["id"]: row for key in ("agendas", "tasks") for row in snap[key]}
     assert made <= set(rows)
     assert all(rows[row_id]["minutesId"] is None for row_id in made)
+    # 이력 줄도 남고 출처만 빈다
+    sourced = await session.scalar(
+        select(func.count()).select_from(AgendaHistory).where(AgendaHistory.minutes_id == "m1")
+    )
+    assert sourced == 0
 
     res = await client.get("/api/minutes/m1")
     assert res.status_code == 404 and res.json()["code"] == "MINUTES_NOT_FOUND"

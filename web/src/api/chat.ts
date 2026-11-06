@@ -207,8 +207,13 @@ export function toChatEvent({ event, data }: SseMessage, status = 200): ChatEven
       const proposal = toProposal(body.proposal)
       if (proposal) return { type: 'proposal', proposal }
     }
-    if (event === 'done')
-      return { type: 'done', refs: Array.isArray(body.refs) ? (body.refs as ChatRef[]) : [] }
+    if (event === 'done') {
+      const refs = Array.isArray(body.refs) ? (body.refs as ChatRef[]) : []
+      /* analysisId 는 리스크 AI 분석의 done 에만 — 저장할 수 있는 임시 분석 (docs/api/risk-analysis.md) */
+      return typeof body.analysisId === 'string'
+        ? { type: 'done', refs, analysisId: body.analysisId }
+        : { type: 'done', refs }
+    }
     if (event === 'error' && typeof body.code === 'string' && typeof body.message === 'string')
       return { type: 'error', code: body.code, message: body.message }
   }

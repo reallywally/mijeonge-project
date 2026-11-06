@@ -149,10 +149,13 @@ def record_agenda(
     changes: list[Change],
     actor_id: str | None,
     at: datetime,
+    *,
+    minutes_id: str | None = None,
 ) -> None:
     """안건 이력 한 줄. 칸이 없으면 아무것도 안 한다. 커밋하지 않는다.
 
     결정이 언제 어떻게 바뀌었는지는 이 줄이 유일한 기록이다 (docs/api/agenda.md).
+    `minutes_id` 는 회의록 [등록] 이 남긴 줄의 출처다 (API.md Q69).
     """
     if not changes:
         return
@@ -165,6 +168,7 @@ def record_agenda(
             changed_at=at,
             changes=changes,
             backfilled=False,
+            minutes_id=minutes_id,
         )
     )
 

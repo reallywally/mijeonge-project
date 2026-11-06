@@ -154,15 +154,13 @@ const router = createRouter({
       component: () => import('@/views/RiskView.vue'),
     },
     {
-      path: '/reports',
-      name: 'reports',
-      component: () => import('@/views/ReportsView.vue'),
+      path: '/risks/analyses/:analysisId',
+      name: 'risk-analysis',
+      component: () => import('@/views/RiskAnalysisView.vue'),
     },
-    {
-      path: '/reports/:reportId',
-      name: 'report',
-      component: () => import('@/views/ReportDetailView.vue'),
-    },
+    /* 리포트는 2026-11-06 걷었다 — 저장한 AI 리스크 분석이 그 자리를 잇는다(docs/api/risk-analysis.md). 걸어 둔 링크는 게시판으로 */
+    { path: '/reports', redirect: { path: '/risks', query: { tab: 'saved' } } },
+    { path: '/reports/:reportId', redirect: { path: '/risks', query: { tab: 'saved' } } },
     {
       path: '/checks',
       name: 'checks',

@@ -151,8 +151,10 @@ describe('목업 갈래 — 테스트 쓰기의 칸 규칙', () => {
   })
 
   it('PATCH 는 바뀐 칸만 — 같은 값만 보내면 줄이 없고, 테스트 내용은 글 값으로', async () => {
+    /* tc2 에는 시드의 결과 뒤집힘 시연 줄이 있다 — 같은 값이면 늘지 않는 것만 본다 */
+    const seeded = (await fetchTestHistory('tc2')).length
     await patchTest('tc2', { title: '올바른 계정으로 로그인' })
-    expect(await fetchTestHistory('tc2')).toHaveLength(1)
+    expect(await fetchTestHistory('tc2')).toHaveLength(seeded)
 
     const before = testCases.find((t) => t.id === 'tc2')!.content
     await patchTest('tc2', {

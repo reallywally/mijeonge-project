@@ -13,8 +13,8 @@ from app.api import (
     minutes,
     part,
     project,
-    report,
     risk,
+    risk_analysis,
     search,
     task,
     test,
@@ -55,7 +55,7 @@ for scoped in (
     risk.router,
     check.router,
     minutes.router,
-    report.router,
+    risk_analysis.router,
     test.router,
     history.router,
 ):

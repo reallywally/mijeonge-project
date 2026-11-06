@@ -126,7 +126,8 @@ async def test_patch_writes_changed_fields_in_table_order(client: httpx.AsyncCli
     )
     assert res.status_code == 200, res.json()
     rows = await history(client, "tasks/k21")
-    assert len(rows) == 2
+    # 등록 + 시드의 기한 미룸 둘(리스크 흔들림 시연, risk-dashboard.md) + 이번 줄
+    assert len(rows) == 4
     assert rows[-1]["changedBy"] == ADMIN
     assert rows[-1]["changes"] == [
         ch("title", "개발자 계정 배포", "개발자 계정 배포 2"),

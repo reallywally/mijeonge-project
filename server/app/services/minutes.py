@@ -12,7 +12,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Agenda, Minutes, Project, Task, new_id
+from app.models import Agenda, AgendaHistory, Minutes, Project, Task, new_id
 from app.schemas.minutes import (
     MINUTES_AGENDAS_MAX,
     MINUTES_TASKS_MAX,
@@ -112,7 +112,7 @@ async def delete_minutes(session: AsyncSession, minutes_id: str, scope: Scope) -
     if minutes.author_id != scope.actor.id and not scope.can_manage:
         raise forbidden()
     # FK 의 ON DELETE SET NULL 과 같은 일을 먼저 한다 — 세션에 올라 있는 줄도 같이 비게
-    for model in (Agenda, Task):
+    for model in (Agenda, AgendaHistory, Task):
         await session.execute(
             update(model).where(model.minutes_id == minutes.id).values(minutes_id=None)
         )
@@ -368,7 +368,12 @@ async def _insert(
     # 등록과 같이 '등록' 이력 한 줄 — 안건이 먼저 들어가야 이력의 복합 FK 가 선다
     for agenda in created_agendas:
         history_service.record_agenda(
-            session, agenda, history_service.created(), actor_id, created_at
+            session,
+            agenda,
+            history_service.created(),
+            actor_id,
+            created_at,
+            minutes_id=minutes_id,
         )
 
     updated: list[Agenda] = []
@@ -381,7 +386,7 @@ async def _insert(
             agenda, agenda_service.Fields(decision=proposed.decision, state=proposed.state), at
         )
         changes = agenda_service.changes_since(agenda, before)
-        history_service.record_agenda(session, agenda, changes, actor_id, at)
+        history_service.record_agenda(session, agenda, changes, actor_id, at, minutes_id=minutes_id)
         if changes:
             updated.append(agenda)
 

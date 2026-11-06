@@ -40,7 +40,7 @@ async function as(email: string) {
 describe('목업 갈래 — 시드', () => {
   beforeEach(async () => {
     await as('u2@inno-ax.com')
-    /* 계약의 검사 날 — 리스크 · 리포트와 같다 */
+    /* 계약의 검사 날 — 리스크와 같다 */
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-15T03:00:00Z'))
   })

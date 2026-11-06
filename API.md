@@ -21,11 +21,13 @@
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
 | `docs/api/part.md` | 파트 — 보기 범위(권한 아님) · 파트 관리 · 작업 · 안건의 `partId` |
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
+| `docs/api/risk-dashboard.md` | **리스크 — 작업 · 테스트까지 · 대시보드** — 작업 리스크(`TaskRisk`) · 테스트 리스크(`TestRisk`)의 지연 · 흔들림 신호 · 점수, 기준 일곱(흔들림 셋), AI 리스크 분석 · 저장한 분석이 세 종류를 함께, '지금 리스크' 탭을 대시보드로 (2026-11-06) |
+| `docs/api/risk-analysis.md` | **저장한 AI 리스크 분석** — 분석이 끝나면 임시로 남고 [저장] 으로 제목을 붙여 '저장한 분석' 게시판에 · 그때의 리스크 스냅샷 · 지난 저장 분석 대비. 리포트를 걷고 이리로 (2026-11-06) |
 | `docs/api/check.md` | 확인 요청 — 결정된 안건에서 버튼 하나로 연결 작업 담당자 + 안건 참조에게 · 결정 판(`decisionRev`) 하나에 한 번 · 받은 것 / 보낸 것 · 배지. 2차 확인율 분석의 테두리 |
 | `docs/api/cc.md` | **참조(cc)** — 안건 · 테스트의 `ccIds`(알아야 하는 사람, 권한 · 리스크와 무관) · 검사 · 이력 · 확인 요청 받는 사람 (2026-11-05) |
 | `docs/api/minutes.md` | 회의록 — 게시판(쓰기 · 읽기 · 고치기 · 지우기) · 회의록 하나 → 새 안건 · 기존 안건 결정 갈아끼우기(`updates`, 2026-11-04) · 작업 초안(SSE) → 고른 것만 한 번에 등록, 출처 `minutesId`. 2단계 녹음 업로드의 테두리 |
 | `docs/api/task-flow.md` | 작업 상태 기록(`task_log`, `Task.statusChangedAt`) — 리포트의 바탕. 선행 작업은 걷었다(Q63) |
-| `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
+| `docs/api/report.md` | ~~프로젝트 진행 리포트~~ — **2026-11-06 걷음**(`risk-analysis.md`). 기록으로 둔다 |
 | `docs/api/test.md` | 테스트 — 작업과 따로 두는 기능 · 시나리오 테스트(단계는 행동 ↔ 기대 결과 짝 · 상위 테스트 묶음 · 작업 · 안건 참조 태그) · 상태와 N일째 · 손쓸 테스트 신호 · 기준 바뀜. 1단계(AI 없이)의 계약, AI 는 테두리만 |
 | `docs/api/test-comment.md` | **테스트 조치 내역** — 테스트 상세의 상태 칸을 걷고 그 자리에 댓글 같은 조치 내역(`test_comment`), 실패 · 막힘 메모는 선택으로 (2026-11-05) |
 | `docs/api/me.md` | **마이페이지 · 프로필 사진** — `/me`(사진 · 내 정보 · 내 프로젝트 · 비밀번호), `member_avatar`, `Member` · `Me` 의 `avatarUrl`, 사람 동그라미를 사진으로 (2026-11-06) |
@@ -98,6 +100,9 @@
 | ~~403~~ | ~~`FORBIDDEN`~~ | ~~결정 항목의 이름을 바꾸거나 지우려 할 때~~ — 결정 항목을 걷었다 (2026-11-04) |
 | 400 | `AGENDA_CC_NOT_FOUND` · `TEST_CC_NOT_FOUND` | 안건 · 테스트 등록 · 수정의 `ccIds` 에 **새로 더한** id 가 그 프로젝트의 활성 멤버가 아닐 때(이미 걸린 사람을 그대로 두는 수정은 통과, Q68). `detail` 은 `{ "ccIds": "<처음 걸린 id>" }` — `docs/api/cc.md` (2026-11-05) |
 | 400 | `TASK_OWNER_NOT_FOUND` | 작업 등록(`POST .../tasks`) · 수정(`PATCH /api/tasks/{taskId}`) · 일괄 등록(`tasks/batch`)의 `ownerId` 가 없는 멤버일 때 — **8단계부터는 그 프로젝트의 활성 멤버가 아닐 때**(이미 걸린 담당자를 그대로 두는 수정은 통과). `detail` 은 단건이면 `{ "ownerId": … }`, 일괄이면 `{ "tasks.2.ownerId": "담당자를 찾을 수 없습니다." }` 처럼 자리를 짚는다 |
+| 404 | `RISK_ANALYSIS_NOT_FOUND` | 저장한 분석이 없을 때 — 임시 · 못 보는 프로젝트 것도 같다. 저장에서는 없거나 · 다른 프로젝트 · 남이 돌린 · 24시간 지난 임시 분석 (`docs/api/risk-analysis.md`, 2026-11-06) |
+| 409 | `RISK_ANALYSIS_ALREADY_SAVED` | 같은 임시 분석을 두 번 저장할 때 (2026-11-06) |
+| ~~404~~ | ~~`REPORT_NOT_FOUND`~~ | 리포트를 걷어 안 나온다 (2026-11-06) |
 
 챗봇의 `code` 는 아래와 같다 (합의 2026-10-11). 스트림이 열리기 **전**의 실패는 위와 같은 JSON 본문이고,
 열린 **뒤**의 실패는 `error` 이벤트에 같은 모양(`{ code, message }`)으로 실린다.
@@ -187,9 +192,11 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
-| GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · 사람별 몰림. 규칙 기반 점수, 한국 시간 오늘 기준 (2026-11-05 '안건과 어긋난 작업'(`tasks`)을 걷음) | `DecisionRiskReport` | 구현 |
-| GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 넷 — 2026-11-04 미룸 문턱을 걷음) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 네 값 통째로, 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 |
-| POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 안건 리스크 줄(`agendaIds`, 2026-11-04 `threadIds` 에서 · 2026-11-05 `taskIds` 걷음 — 실어 와도 버린다)을 Claude 가 읽고 먼저 정할 것 · 패턴을 정리한다. 버튼을 누를 때만, 남기지 않는다. **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 |
+| GET | `/api/projects/{projectId}/risks` | 안 정해진 안건이 막는(막을) 일 · **작업 · 테스트의 지연 · 흔들림**(`tasks` · `tests`, 2026-11-06 `docs/api/risk-dashboard.md`) · 사람별 몰림(`riskyTasks` · `riskyTests` 더함). 규칙 기반 점수, 한국 시간 오늘 기준 (2026-11-05 '안건과 어긋난 작업'(옛 `tasks`)을 걷음 — 새 `tasks` 는 다른 것) | `DecisionRiskReport` | 구현 (2026-11-06 고침) |
+| GET · PUT | `/api/projects/{projectId}/risk-settings` | 리스크 기준(문턱값 **일곱** — 2026-11-04 미룸 문턱을 걷음, 2026-11-06 흔들림 셋 `churnDays` · `churnCount` · `slipCount` 더함, 리비전 `0038_risk_churn`) 읽기 · 바꾸기. 바꾼 적 없으면 기본값. PUT 은 일곱 값 통째로(빠지면 422), 프로젝트 관리자 · 시스템 관리자만 | `RiskSettings` | 구현 (2026-11-06 고침) |
+| POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`agendaIds`, 2026-11-04 `threadIds` 에서 · 2026-11-05 `taskIds` 걷음 → **2026-11-06 `taskIds` · `testIds` 되살림**(작업 · 테스트 리스크 줄, 없으면 `[]`), 답의 모양 · 근거는 `docs/api/risk-dashboard.md`)을 Claude 가 읽고 먼저 정할 것 · 패턴을 정리한다. 버튼을 누를 때만. 답을 끝까지 받으면 **임시 분석으로 남기고 `done` 에 `analysisId`**(2026-11-06 — 전엔 남기지 않았다, `docs/api/risk-analysis.md`). **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 (2026-11-06 고침) |
+| GET · POST | `/api/projects/{projectId}/risk-analyses` | 저장한 분석 게시판(저장한 것만, `seq` 내림차순, `?limit=`(기본 50 · 최대 200) `&offset=`) · 저장(`{ analysisId, title }` — 내가 돌린 24시간 안의 임시 분석, 404 `RISK_ANALYSIS_NOT_FOUND` · 409 `RISK_ANALYSIS_ALREADY_SAVED`) (`docs/api/risk-analysis.md`) | `RiskAnalysisPage` · 201 `RiskAnalysis`(둘 다 `projectId` 를 싣는다, Q70) | 구현 |
+| GET · PATCH · DELETE | `/api/risk-analyses/{analysisId}` | 상세 · 제목 고치기(작성자만) · 지우기(작성자 · 프로젝트 관리자 · 시스템 관리자). 임시 · 없는 것 · 못 보는 프로젝트 것은 404 `RISK_ANALYSIS_NOT_FOUND` | `RiskAnalysis` · 204 | 구현 |
 
 확인 요청(`server/PLAN.md` 11단계 · `web/PLAN.md` 12단계). 모양은 `docs/api/check.md` 다. 기획은 `docs/check-request-proposal.md`, 결정은 Q38 ~ Q44. 2026-11-04 결정 판(`decisionRev`)으로 고침(`check.md`).
 
@@ -212,12 +219,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 작업 상태 기록(`server/PLAN.md` 13단계 · `web/PLAN.md` 14단계)은 따로 엔드포인트가 없다 — `Task.statusChangedAt` · `statusSinceBackfill` 로 실린다. 모양은 `docs/api/task-flow.md` 다. 결정은 Q50.
 선행 작업(`/api/tasks/{taskId}/dependencies/…` · `/api/projects/{projectId}/dependencies/suggest`)은 2026-10-28 걷었다(Q63, Q49 를 뒤집음) — 404 다.
 
-프로젝트 진행 리포트(왼쪽 메뉴 '리포트', `server/PLAN.md` 14단계 · `web/PLAN.md` 15단계). 모양은 `docs/api/report.md` 다. 결정은 Q49 ~ Q51.
-
-| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
-| --- | --- | --- | --- | --- |
-| GET · POST | `/api/projects/{projectId}/reports` | 목록 · 만들기(본문 없음 — 계산 → `facts` → Claude 글 스트림 → 다 받으면 저장) | `ReportItem[]` · `text/event-stream` (`ReportEvent`) | 구현 |
-| GET · DELETE | `/api/reports/{reportId}` | 읽기 · 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | `Report` · 204 | 구현 |
+프로젝트 진행 리포트(`docs/api/report.md`, Q49 ~ Q51)는 **2026-11-06 걷었다** — 저장한 AI 리스크 분석(`docs/api/risk-analysis.md`)으로 옮겼다.
+`/api/projects/{projectId}/reports…` · `/api/reports/{reportId}` 는 404 이고, `REPORT_*` 오류 코드도 없다. `project_report` 는 리비전 `0037_risk_analysis` 가 지웠다.
 
 ### 테스트
 
@@ -246,7 +249,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 ## 열린 질문
 
 한쪽이 혼자 못 정하는 것을 여기 쌓는다. **추측으로 메우지 않는다.**
-닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q69).
+닫히면 줄째로 `docs/api/decisions.md` 로 옮긴다 — 번호는 이어서 쓴다(다음은 Q71).
 
 | # | 누가 답하나 | 질문 | 답 | 상태 |
 | --- | --- | --- | --- | --- |

@@ -48,6 +48,10 @@ class Project(Base):
     next_test_no: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1", default=1
     )
+    # 마지막으로 써 버린 저장 분석 번호 — 지운 번호를 다시 쓰지 않게 작업 번호와 같은 수법
+    last_analysis_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
     description: Mapped[str | None] = mapped_column(Text)
     start_date: Mapped[date | None] = mapped_column(Date)
     end_date: Mapped[date | None] = mapped_column(Date)
