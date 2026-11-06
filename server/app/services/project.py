@@ -5,9 +5,10 @@ from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, not_found
-from app.models import Member, Project, new_id
+from app.models import Member, MemberAvatar, Project, new_id
 from app.schemas.project import MemberOut, ProjectCreate, ProjectOut, ProjectPatch
 from app.services import access
+from app.services import avatar as avatar_service
 from app.services.auth import Actor
 from app.time import now
 
@@ -35,13 +36,26 @@ async def list_projects(session: AsyncSession, actor: Actor) -> list[ProjectOut]
 
 async def list_members(session: AsyncSession, assignable_in: str | None = None) -> list[MemberOut]:
     """전사 멤버 — 비활성까지. `assignable_in` 을 주면 그 프로젝트의 활성 멤버(담당자 후보)만."""
-    stmt = select(Member).order_by(Member.id)
+    # 사진은 바뀐 시각만 바깥 조인한다 — 바이트는 읽지 않고, 멤버마다 따로 묻지 않는다
+    stmt = (
+        select(Member, MemberAvatar.updated_at)
+        .outerjoin(MemberAvatar, MemberAvatar.member_id == Member.id)
+        .order_by(Member.id)
+    )
     if assignable_in is not None:
         stmt = stmt.where(
             Member.id.in_(await access.active_project_members(session, assignable_in))
         )
-    rows = (await session.execute(stmt)).scalars().all()
-    return [MemberOut.model_validate(row) for row in rows]
+    rows = (await session.execute(stmt)).tuples().all()
+    return [
+        MemberOut(
+            id=member.id,
+            name=member.name,
+            active=member.active,
+            avatar_url=avatar_service.avatar_url(member.id, updated_at),
+        )
+        for member, updated_at in rows
+    ]
 
 
 async def load_project(session: AsyncSession, project_id: str) -> Project:

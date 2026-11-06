@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from app.api.deps import CurrentActor, ProjectAdmin, ProjectScope, Session, SystemAdmin
 from app.schemas.auth import ProjectMemberOut, ProjectMemberPut
 from app.schemas.project import MemberOut, ProjectCreate, ProjectOut, ProjectPatch
 from app.schemas.snapshot import SnapshotOut
+from app.services import avatar as avatar_service
 from app.services import member as member_service
 from app.services import project as project_service
 from app.services import snapshot as snapshot_service
@@ -21,6 +22,21 @@ async def list_projects(actor: CurrentActor, session: Session) -> list[ProjectOu
 @router.get("/members")
 async def list_members(session: Session) -> list[MemberOut]:
     return await project_service.list_members(session)
+
+
+@router.get("/members/{member_id}/avatar")
+async def get_avatar(member_id: str, session: Session) -> Response:
+    """로그인만 하면 누구나 — 멤버 이름처럼 전사 공통이다. 주소에 바뀐 시각(`v`)이 실려
+    사진이 바뀌면 주소가 바뀌므로 오래 캐시해도 된다."""
+    image = await avatar_service.load_avatar(session, member_id)
+    return Response(
+        content=image.data,
+        media_type=image.content_type,
+        headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/projects", status_code=201)

@@ -35,7 +35,8 @@ async function retry() {
     data.status === 'ready' &&
     data.allProjects.length === 0 &&
     !route.path.startsWith('/projects') &&
-    !route.path.startsWith('/admin')
+    !route.path.startsWith('/admin') &&
+    route.path !== '/me'
   )
     await router.replace(emptyProjectsHome(auth.me))
 }

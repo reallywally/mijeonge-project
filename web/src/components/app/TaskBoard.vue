@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ListTree, MessageSquare, Plus } from 'lucide-vue-next'
+import MemberAvatar from '@/components/app/MemberAvatar.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
+import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import type { TaskStatus } from '@/types/domain'
 
@@ -19,6 +21,7 @@ const emit = defineEmits<{
 }>()
 
 const taskStore = useTaskStore()
+const data = useDataStore()
 
 /* 칸 머리의 점 — 목록에서 제목 앞에 세우는 띠와 같은 색이다 */
 const dotClass: Record<TaskStatus, string> = {
@@ -120,12 +123,12 @@ const agendaTitles = (taskId: string) =>
             <span class="truncate text-xs text-muted-foreground">{{ row.pathLabel }}</span>
 
             <div class="flex items-center gap-2">
-              <span
-                class="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-primary"
-                :class="row.ownerName ? '' : 'text-muted-foreground'"
-              >
-                {{ row.ownerName ? row.ownerName.charAt(0) : '–' }}
-              </span>
+              <MemberAvatar
+                :name="row.ownerName"
+                :src="data.memberAvatar(row.task.ownerId)"
+                :size="24"
+                tone="brand"
+              />
               <span
                 class="truncate text-xs"
                 :class="row.undated ? 'text-destructive' : 'text-muted-foreground'"

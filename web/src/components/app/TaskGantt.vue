@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import GanttChart from '@/components/app/GanttChart.vue'
 import { rangeLabel, toGanttItems } from '@/lib/gantt'
 import { taskStatusLabel } from '@/lib/task'
+import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 
 const taskStore = useTaskStore()
 const partStore = usePartStore()
+const data = useDataStore()
 
 /* [내 파트 | 전체] 로 거르고 완료 숨기기를 뺀 것. 둘 다 보이는 작업의 조상은 세워 트리가 끊기지 않는다.
    4단 작업 줄은 + 를 숨긴다 — 그 밑은 5단이다. 고칠 권한이 없는 작업(작성자 · 담당자 · 관리자가 아님)은
@@ -27,6 +29,7 @@ const items = computed(() => {
     taskStore.shownRows,
     taskStatusLabel,
     (id) => partStore.isContextTask(id) || taskStore.isMineContext(id),
+    data.memberAvatar,
   ).map((item) => ({
     ...item,
     ...(taskStore.canAddChild(item.id) ? {} : { noAdd: true }),

@@ -386,6 +386,10 @@ export const useDataStore = defineStore('data', () => {
     return member ? memberLabel(member) : null
   }
 
+  /** 사람 동그라미의 사진 주소 — 없거나 모르는 사람이면 null */
+  const memberAvatar = (id: string | null) =>
+    (id ? allMembers.value.find((m) => m.id === id)?.avatarUrl : null) ?? null
+
   /** 담당자로 고를 수 있는 사람 — 고른 프로젝트의 활성 멤버만 */
   const assignable = computed(() =>
     assignableMembers(allMembers.value, projectMembers.value[currentProjectId.value] ?? []),
@@ -466,6 +470,12 @@ export const useDataStore = defineStore('data', () => {
     else allMembers.value.push(member)
   }
 
+  /** 사진을 걸거나 지운 것을 멤버 목록에 맞춘다 */
+  function setMemberAvatar(memberId: string, avatarUrl: string | null) {
+    const member = allMembers.value.find((m) => m.id === memberId)
+    if (member) member.avatarUrl = avatarUrl
+  }
+
   /** 로그아웃 — 다른 사람이 같은 브라우저로 들어올 수 있어 들고 있던 것을 다 버린다 */
   function clear() {
     allProjects.value = []
@@ -523,7 +533,9 @@ export const useDataStore = defineStore('data', () => {
     save,
     currentMemberId,
     memberName,
+    memberAvatar,
     upsertMember,
+    setMemberAvatar,
     rejectOwner,
     rejectCc,
     rejectPart,

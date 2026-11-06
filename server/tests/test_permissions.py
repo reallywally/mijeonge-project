@@ -234,7 +234,7 @@ async def test_members_list_carries_active(
     u4.active = False
     await session.commit()
     rows = {row["id"]: row for row in (await client.get("/api/members")).json()}
-    assert rows["u4"] == {"id": "u4", "name": "정하늘", "active": False}
+    assert rows["u4"] == {"id": "u4", "name": "정하늘", "active": False, "avatarUrl": None}
 
 
 # --- 담당자는 그 프로젝트의 활성 멤버 ------------------------------------------------

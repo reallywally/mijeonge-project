@@ -50,6 +50,9 @@ export const systemRoleLabel = (role: SystemRole) =>
 export const projectRoleLabel = (role: ProjectRole) =>
   PROJECT_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role
 
+/** 마이페이지의 '내 프로젝트' — 내 쪽에서 부르는 짧은 말 */
+export const myProjectRoleLabel = (role: ProjectRole) => (role === 'admin' ? '관리자' : '멤버')
+
 /** 비밀번호 규칙 — 10자 이상 · 200자 이하. 그 밖의 조합 규칙은 두지 않는다 */
 export const PASSWORD_MIN = 10
 export const PASSWORD_MAX = 200

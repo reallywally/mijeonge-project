@@ -57,6 +57,15 @@ class MeOut(Schema):
     system_role: SystemRole
     # 부여받은 프로젝트만 싣는다 — 시스템 관리자가 부여 없이 보는 프로젝트는 없다
     project_roles: dict[str, ProjectRole]
+    # 프로필 사진 주소 — 없으면 null (docs/api/me.md)
+    avatar_url: str | None
+
+
+class AvatarInput(Schema):
+    """`data:image/png|jpeg|webp;base64,…` — 쓰기는 JSON 만 받아 base64 로 싣는다.
+    길이를 여기서 막지 않는다 — 넘치면 422 가 아니라 AVATAR_TOO_LARGE 로 답해야 한다."""
+
+    data_url: str
 
 
 class MemberAccountOut(Schema):

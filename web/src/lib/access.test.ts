@@ -26,6 +26,7 @@ const me = (over: Partial<Me> = {}): Me => ({
   email: 'u2@inno-ax.com',
   systemRole: 'user',
   projectRoles: { p1: 'user' },
+  avatarUrl: null,
   ...over,
 })
 
@@ -180,9 +181,9 @@ describe('관리자 페이지', () => {
 
 describe('멤버', () => {
   const members = [
-    { id: 'u1', name: '김서연', active: true },
-    { id: 'u2', name: '박지훈', active: true },
-    { id: 'u5', name: '한예린', active: false },
+    { id: 'u1', name: '김서연', active: true, avatarUrl: null },
+    { id: 'u2', name: '박지훈', active: true, avatarUrl: null },
+    { id: 'u5', name: '한예린', active: false, avatarUrl: null },
   ]
 
   it('담당자 후보는 그 프로젝트에 부여된 활성 멤버만', () => {

@@ -4,7 +4,7 @@ from app.models.base import Base, new_id
 from app.models.check import CheckRequest
 from app.models.minutes import Minutes
 from app.models.part import Part, PartMember
-from app.models.project import Member, Project, ProjectMember
+from app.models.project import Member, MemberAvatar, Project, ProjectMember
 from app.models.report import ProjectReport
 from app.models.risk import RiskSetting
 from app.models.task import (
@@ -23,6 +23,7 @@ __all__ = [
     "Base",
     "CheckRequest",
     "Member",
+    "MemberAvatar",
     "Minutes",
     "Part",
     "PartMember",

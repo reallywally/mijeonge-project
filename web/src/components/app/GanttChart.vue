@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Gantt, escapeHTML } from 'dhtmlx-gantt'
 import type { GanttStatic, Task as GanttTask } from 'dhtmlx-gantt'
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
+import { avatarInitial, safeAvatarUrl } from '@/lib/avatar'
 import { dayToDate, isoDay, shiftDays } from '@/lib/date'
 import { endToDue, ganttRange, weekLabel } from '@/lib/gantt'
 import type { GanttItem } from '@/lib/gantt'
@@ -54,11 +55,16 @@ function statusCell(task: GanttTask) {
   return `<span class="tg-badge tg-badge-${item.status}"><i class="tg-dot"></i>${escapeHTML(item.statusLabel)}</span>`
 }
 
-/* 담당자는 이름 전체를 적는다 — 첫 글자만으로는 같은 성(김 · 이)이 구분되지 않는다. 넘치면 말줄임, 가리키면 전체 */
+/* 담당자는 동그라미(사진 또는 첫 글자) + 이름 전체 — 첫 글자만으로는 같은 성(김 · 이)이 구분되지 않는다.
+   넘치면 말줄임, 가리키면 전체. 사진은 첫 글자 위에 덮는다 — 안 열리면(404) alt 가 비어 아무것도 안 그려져
+   밑의 글자가 보인다. 그래서 onerror 같은 글자 속 스크립트가 없다. 주소는 safeAvatarUrl 이 거른 꼴만 싣는다 */
 function ownerCell(task: GanttTask) {
-  const name = asItem(task).ownerName
+  const item = asItem(task)
+  const name = item.ownerName
   if (!name) return '<span class="tg-owner tg-owner-none">–</span>'
-  return `<span class="tg-owner" title="${escapeHTML(name)}">${escapeHTML(name)}</span>`
+  const url = safeAvatarUrl(item.ownerAvatarUrl)
+  const photo = url ? `<img class="tg-avatar-img" src="${escapeHTML(url)}" alt="" />` : ''
+  return `<span class="tg-person"><span class="tg-avatar" aria-hidden="true">${escapeHTML(avatarInitial(name))}${photo}</span><span class="tg-owner" title="${escapeHTML(name)}">${escapeHTML(name)}</span></span>`
 }
 
 /* 주말 회색 띠와 오늘 세로선. dhtmlx v10 Community 에는 marker 플러그인이 없어
@@ -132,7 +138,8 @@ function setup(g: GanttStatic, el: HTMLElement) {
   g.config.scale_offset_minimal = false
   g.config.row_height = 34
   g.config.scale_height = 46
-  g.config.grid_width = 528
+  /* 제목 열(*)이 296 쯤 남게 — 상태 104 · 담당자 112 · + 44 */
+  g.config.grid_width = 556
   g.config.open_tree_initially = true
   /* 진척도 · 화살표는 모델에 없다 — 끌어서 만들 수 없게 막는다 */
   g.config.drag_links = false
@@ -151,7 +158,7 @@ function setup(g: GanttStatic, el: HTMLElement) {
       template: titleCell,
     },
     { name: 'status', label: '상태', width: 104, template: statusCell },
-    { name: 'owner', label: '담당자', width: 84, align: 'center', template: ownerCell },
+    { name: 'owner', label: '담당자', width: 112, template: ownerCell },
     { name: 'add', label: '', width: 44 },
   ]
   applyScale(g)
@@ -470,8 +477,43 @@ function showToday() {
   color: var(--muted-foreground);
 }
 
+/* 동그라미 20px + 이름 — 세 글자 이름이 다 보이는 너비(112)다 */
+.tg-root .tg-person {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tg-root .tg-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--brand-soft);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tg-root .tg-avatar-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  color: transparent;
+}
+
 .tg-root .tg-owner {
   display: block;
+  min-width: 0;
   overflow: hidden;
   font-size: 12px;
   text-overflow: ellipsis;

@@ -171,6 +171,7 @@ export function meOf(memberId: string): Me | null {
     name: member.name,
     email: account.email,
     systemRole: account.systemRole,
+    avatarUrl: member.avatarUrl ?? null,
     projectRoles: Object.fromEntries(
       db.grants
         .filter((g) => g.memberId === memberId && !db.deletedProjectIds.includes(g.projectId))

@@ -13,6 +13,8 @@ export interface Member {
   name: string
   /** 비활성 멤버는 담당자로 못 고르고, 이름 옆에 '(비활성)' 이 붙는다. 기록이 가리키므로 지우지 않는다 */
   active: boolean
+  /** 프로필 사진 주소 — 없으면 null. 서버가 `/api/members/{id}/avatar?v=<바뀐 시각>` 으로 만든다 (docs/api/me.md) */
+  avatarUrl: string | null
 }
 
 /* 로그인 · 권한 — docs/api/auth.md 의 모양 그대로. 권한 셋은 시스템 역할 × 프로젝트 역할의 조합이다 */
@@ -28,6 +30,13 @@ export interface Me {
   systemRole: SystemRole
   /** 내가 부여받은 프로젝트와 역할. 시스템 관리자도 부여받은 것만 실린다 */
   projectRoles: Record<string, ProjectRole>
+  avatarUrl: string | null
+}
+
+/** PUT /api/auth/me/avatar — 화면이 256×256 으로 줄여 base64 로 싣는다 */
+export interface AvatarInput {
+  /** data:image/png|jpeg|webp;base64,… */
+  dataUrl: string
 }
 
 /** 관리 화면용 — GET /api/admin/members */

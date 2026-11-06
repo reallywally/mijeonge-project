@@ -183,7 +183,7 @@ const authorName = (authorId: string | null) => data.memberName(authorId) ?? 'ì•
         class="group flex flex-col gap-1.5 border-b border-border py-2.5 first:pt-0 last:border-b-0"
       >
         <div class="flex items-center gap-2">
-          <PersonChip :name="authorName(c.authorId)" />
+          <PersonChip :name="authorName(c.authorId)" :src="data.memberAvatar(c.authorId)" />
           <time
             class="text-xs text-muted-foreground"
             :datetime="c.createdAt"

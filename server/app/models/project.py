@@ -9,6 +9,7 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     text,
@@ -77,6 +78,21 @@ class Member(Base):
     skills: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MemberAvatar(Base):
+    """프로필 사진 한 장 (docs/api/me.md). `member` 를 가볍게 두려고 뗀다 —
+    목록은 `updated_at` 만 조인해 주소를 만들고, 바이트는 사진 하나를 부를 때만 읽는다."""
+
+    __tablename__ = "member_avatar"
+
+    member_id: Mapped[str] = mapped_column(
+        ForeignKey("member.id", ondelete="CASCADE"), primary_key=True
+    )
+    content_type: Mapped[str] = mapped_column(String(32))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    # 주소의 `v` — 바꾸면 주소가 바뀌어 브라우저 캐시가 저절로 갈린다
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
 class ProjectMember(Base):

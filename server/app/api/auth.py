@@ -10,8 +10,9 @@ from app.api.deps import (
 )
 from app.config import settings
 from app.errors import ApiError
-from app.schemas.auth import LoginInput, MeOut, PasswordChange
+from app.schemas.auth import AvatarInput, LoginInput, MeOut, PasswordChange
 from app.services import auth as auth_service
+from app.services import avatar as avatar_service
 from app.services.auth import COOKIE
 from app.services.ratelimit import RateLimiter
 
@@ -68,3 +69,17 @@ async def change_password(payload: PasswordChange, actor: CurrentActor, session:
     await auth_service.change_password(
         session, actor, payload.current_password, payload.new_password
     )
+
+
+@router.put("/me/avatar")
+async def put_avatar(payload: AvatarInput, actor: CurrentActor, session: Session) -> MeOut:
+    """내 사진 걸기 · 바꾸기. 줄이는 것은 화면 몫이다 — 서버는 검사만 한다 (docs/api/me.md)."""
+    await avatar_service.put_avatar(session, actor.id, payload.data_url)
+    return await auth_service.me(session, actor.id)
+
+
+@router.delete("/me/avatar")
+async def delete_avatar(actor: CurrentActor, session: Session) -> MeOut:
+    """없어도 성공이다(멱등)."""
+    await avatar_service.delete_avatar(session, actor.id)
+    return await auth_service.me(session, actor.id)

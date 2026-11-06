@@ -48,7 +48,7 @@ const shown = (entryId: string, c: HistoryChangeView, text: string) =>
       class="flex flex-col gap-1 border-b border-border py-2 first:pt-0 last:border-b-0"
     >
       <div class="flex items-center gap-2">
-        <PersonChip v-if="e.who" :name="e.who" />
+        <PersonChip v-if="e.who" :name="e.who" :src="e.whoAvatarUrl" />
         <time
           class="text-xs text-muted-foreground"
           :datetime="e.changedAt"

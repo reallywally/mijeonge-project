@@ -159,8 +159,10 @@ def test_project_fields_do_not_drift_from_domain_ts() -> None:
 # 인증 · 파트가 늘린 모양 — docs/api/auth.md '새 응답 · 요청 모양' · docs/api/part.md '모양'.
 # 프론트가 domain.ts 에 더하는 중이라 아직 없는 필드가 있을 수 있다. 어긋나면 이 계약 쪽이 기준이다
 AUTH_SHAPES: dict[str, set[str]] = {
-    "Member": {"id", "name", "active"},
-    "Me": {"id", "name", "email", "systemRole", "projectRoles"},
+    # avatarUrl — docs/api/me.md (2026-11-06)
+    "Member": {"id", "name", "active", "avatarUrl"},
+    "Me": {"id", "name", "email", "systemRole", "projectRoles", "avatarUrl"},
+    "AvatarInput": {"dataUrl"},
     "MemberAccount": {
         "id",
         "no",

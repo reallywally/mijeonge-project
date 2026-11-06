@@ -175,6 +175,8 @@ export function mergesBody(last: HistoryEntry | undefined, by: string | null, no
 /** 지금의 이름을 찾는 길 — 못 찾으면 null(지웠거나 못 보는 것) */
 export interface HistoryNames {
   member: (id: string) => string | null
+  /** 사람의 프로필 사진 주소 — 주지 않으면 첫 글자만 */
+  avatar?: (id: string) => string | null
   part: (id: string) => string | null
   /** 작업 키(HW-4) */
   task: (id: string) => string | null
@@ -208,6 +210,8 @@ export interface HistoryEntryView {
   changedAt: string
   /** 바꾼 사람의 이름. 등록(이전 기록 없음) 줄은 사람 없이 null */
   who: string | null
+  /** 바꾼 사람의 프로필 사진 — 없으면 첫 글자 동그라미 */
+  whoAvatarUrl?: string | null
   changes: HistoryChangeView[]
 }
 
@@ -306,7 +310,7 @@ function valueText(kind: HistoryKind, field: string, v: Value, names: HistoryNam
 }
 
 /** 걸기 · 떼기 칸 — 걸기는 null → id, 떼기는 id → null */
-const LINK: Record<string, { noun: string; find: keyof HistoryNames }> = {
+const LINK: Record<string, { noun: string; find: Exclude<keyof HistoryNames, 'avatar'> }> = {
   agenda: { noun: '안건', find: 'agenda' },
   /* 선행 작업은 2026-10-28 걷었다(Q63) — 지난 이력 줄에만 */
   dependsOn: { noun: '선행 작업', find: 'task' },
@@ -400,6 +404,8 @@ export function historyView(
         : e.changedBy === null
           ? '알 수 없음'
           : (names.member(e.changedBy) ?? MISSING),
+      whoAvatarUrl:
+        e.backfilled || e.changedBy === null ? null : (names.avatar?.(e.changedBy) ?? null),
       changes: e.changes
         .filter((c) => shows(kind, c))
         .map((c) => changeView(kind, c, names, e.backfilled)),

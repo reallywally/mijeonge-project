@@ -377,7 +377,10 @@ const listLink = (path: '/tasks' | '/agendas') =>
                   :data-member-id="person.id"
                   class="flex h-11 items-center gap-2 border-b border-border px-3 last:border-b-0"
                 >
-                  <PersonChip :name="person.member ? memberLabel(person.member) : '알 수 없음'" />
+                  <PersonChip
+                    :name="person.member ? memberLabel(person.member) : '알 수 없음'"
+                    :src="person.member?.avatarUrl"
+                  />
                   <Badge v-if="projectRoleOf(person.id) === 'admin'" variant="outline"
                     >프로젝트 관리자</Badge
                   >
@@ -433,7 +436,7 @@ const listLink = (path: '/tasks' | '/agendas') =>
                         :aria-label="`${m.name} 고르기`"
                         @update:model-value="(v) => togglePick(m.id, v === true)"
                       />
-                      <PersonChip :name="m.name" />
+                      <PersonChip :name="m.name" :src="m.avatarUrl" />
                     </label>
                   </li>
                   <li

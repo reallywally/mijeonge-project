@@ -93,6 +93,40 @@ describe('간트차트', () => {
     )
   })
 
+  it('담당자 동그라미 — 사진이 없으면 첫 글자, 있으면 그 위에 사진을 덮는다', async () => {
+    const data = useDataStore()
+    const ownerId = data.allTasks.find((t) => t.id === 'k18')!.ownerId!
+    const name = data.memberName(ownerId)!
+
+    const w = await mountGantt()
+    const bare = w.get('.gantt_grid_data [data-task-id="k18"] .tg-avatar')
+    expect(bare.text()).toBe(name.charAt(0))
+    expect(bare.find('img').exists()).toBe(false)
+    w.unmount()
+
+    const photo = 'data:image/png;base64,iVBORw0KGgo='
+    data.setMemberAvatar(ownerId, photo)
+    const w2 = await mountGantt()
+    const avatar = w2.get('.gantt_grid_data [data-task-id="k18"] .tg-avatar')
+    /* 사진이 안 열려도 밑의 글자가 보이게 글자는 그대로 둔다 — 글자 속 스크립트(onerror) 없이 */
+    expect(avatar.text()).toBe(name.charAt(0))
+    const img = avatar.get('img.tg-avatar-img')
+    expect(img.attributes('src')).toBe(photo)
+    expect(img.attributes('alt')).toBe('')
+    expect(img.attributes('onerror')).toBeUndefined()
+    expect(w2.get('.gantt_grid_data [data-task-id="k18"] .tg-owner').text()).toBe(name)
+  })
+
+  it('거른 꼴이 아닌 사진 주소는 싣지 않는다', async () => {
+    const data = useDataStore()
+    const ownerId = data.allTasks.find((t) => t.id === 'k18')!.ownerId!
+    data.setMemberAvatar(ownerId, '" onerror="alert(1)')
+    const w = await mountGantt()
+    const avatar = w.get('.gantt_grid_data [data-task-id="k18"] .tg-avatar')
+    expect(avatar.find('img').exists()).toBe(false)
+    expect(document.body.innerHTML).not.toContain('alert(1)')
+  })
+
   it('주말에 회색 띠가 깔리고 오늘 칸에 표가 난다', async () => {
     const w = await mountGantt()
 
@@ -110,7 +144,7 @@ describe('간트차트', () => {
     const chart = spy.mock.results[0].value as GanttStatic
     const today = new Date(2026, 8, 22)
     const day = chart.posFromDate(new Date(2026, 8, 23)) - chart.posFromDate(today)
-    /* 보이는 타임라인 = 1200 - 그리드 528. 오늘 칸의 가운데가 그 가운데에 선다 */
+    /* 보이는 타임라인 = 1200 - 그리드 556. 오늘 칸의 가운데가 그 가운데에 선다 */
     const visible = 1200 - chart.config.grid_width
     expect(chart.getScrollState().x).toBe(chart.posFromDate(today) + day / 2 - visible / 2)
     spy.mockRestore()

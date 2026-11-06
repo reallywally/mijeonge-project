@@ -144,6 +144,28 @@ describe('사용자 관리 화면', () => {
     await click(bodyButton('저장'))
     expect(vi.mocked(toastError).mock.calls[0][0]).toMatchObject({ code: 'LAST_SYSTEM_ADMIN' })
   })
+
+  it('사진이 있는 사람만 [사진 지우기] — 한 번 더 묻고 지우면 멤버 목록에서도 걷힌다', async () => {
+    const photo = 'data:image/png;base64,iVBORw0KGgo='
+    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    await useAuthStore().uploadAvatar(photo)
+    await signedIn('admin@inno-ax.com', MOCK_ADMIN_PASSWORD)
+    const { w } = await mountAt('/admin/members')
+
+    const row = () => w.get('tr[data-member-id="u2"]')
+    expect(row().get('[data-avatar] img').attributes('src')).toBe(photo)
+    expect(w.findAll('[data-avatar-remove]')).toHaveLength(1)
+    expect(w.get('tr[data-member-id="u1"]').find('[data-avatar-remove]').exists()).toBe(false)
+
+    await row().get('[data-avatar-remove]').trigger('click')
+    await row().get('[data-avatar-remove-confirm]').trigger('click')
+    await flushPromises()
+    expect(useDataStore().memberAvatar('u2')).toBeNull()
+    expect(row().find('[data-avatar] img').exists()).toBe(false)
+    expect(row().get('[data-avatar]').text()).toBe('박')
+    expect(w.find('[data-avatar-remove]').exists()).toBe(false)
+    expect(toastError).not.toHaveBeenCalled()
+  })
 })
 
 describe('프로젝트 관리 화면', () => {

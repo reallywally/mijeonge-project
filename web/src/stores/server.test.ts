@@ -60,6 +60,7 @@ const me: Me = {
   name: '관리자',
   email: 'admin@inno-ax.com',
   systemRole: 'admin',
+  avatarUrl: null,
   projectRoles: {},
 }
 

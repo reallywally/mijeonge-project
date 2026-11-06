@@ -36,7 +36,13 @@ export const useAdminStore = defineStore('admin', () => {
     if (at >= 0) accounts.value[at] = account
     else accounts.value.push(account)
     accounts.value.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-    data.upsertMember({ id: account.id, name: account.name, active: account.active })
+    /* 사용자 관리의 모양(MemberAccount)에는 사진이 없다 — 멤버 목록에 있던 것을 지킨다 */
+    data.upsertMember({
+      id: account.id,
+      name: account.name,
+      active: account.active,
+      avatarUrl: data.memberAvatar(account.id),
+    })
     if (account.id === auth.me?.id) auth.rename(account.name)
   }
 
@@ -74,11 +80,24 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  /** 남의 사진 지우기 — 멤버 목록(과 나라면 나)에서도 걷는다 */
+  async function removeAvatar(memberId: string): Promise<boolean> {
+    try {
+      await api.adminRemoveAvatar(memberId)
+      data.setMemberAvatar(memberId, null)
+      if (memberId === auth.me?.id) auth.setAvatar(null)
+      return true
+    } catch (e) {
+      toastError(e)
+      return false
+    }
+  }
+
   function clear() {
     accounts.value = []
     status.value = 'idle'
     loadError.value = ''
   }
 
-  return { accounts, status, loadError, load, create, update, setPassword, clear }
+  return { accounts, status, loadError, load, create, update, setPassword, removeAvatar, clear }
 })

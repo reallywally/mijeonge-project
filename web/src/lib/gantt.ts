@@ -18,6 +18,8 @@ export interface GanttItem {
   status: string
   statusLabel: string
   ownerName: string | null
+  /** 담당자의 프로필 사진 — 없으면 첫 글자 동그라미 */
+  ownerAvatarUrl: string | null
   start_date?: Date
   end_date?: Date
   unscheduled?: boolean
@@ -61,6 +63,7 @@ export function toGanttItems(
   rows: TaskRow[],
   statusLabel: (s: TaskStatus) => string,
   isContext: (taskId: string) => boolean = () => false,
+  avatarOf: (memberId: string | null) => string | null = () => null,
 ): GanttItem[] {
   const ids = new Set(rows.map((r) => r.task.id))
   const parents = new Set(rows.map((r) => r.task.parentId).filter((id) => id !== null))
@@ -77,6 +80,7 @@ export function toGanttItems(
       status: task.status,
       statusLabel: statusLabel(task.status),
       ownerName: row.ownerName,
+      ownerAvatarUrl: avatarOf(task.ownerId),
       open: true,
       ...(isContext(task.id) ? { context: true } : {}),
       ...(parents.has(task.id) ? { type: 'project' as const } : {}),
@@ -102,6 +106,7 @@ export function toTestGanttItems(
   rows: TestRow[],
   statusLabel: (s: TestRow['status']) => string,
   isContext: (testId: string) => boolean = () => false,
+  avatarOf: (memberId: string | null) => string | null = () => null,
 ): GanttItem[] {
   const ids = new Set(rows.map((r) => r.test.id))
   const parents = new Set(rows.map((r) => r.test.parentId).filter((id) => id !== null))
@@ -137,6 +142,7 @@ export function toTestGanttItems(
       status: row.status,
       statusLabel: statusLabel(row.status),
       ownerName: row.ownerName,
+      ownerAvatarUrl: avatarOf(t.ownerId),
       open: true,
       ...(isContext(t.id) ? { context: true } : {}),
       ...(parents.has(t.id) ? { type: 'project' as const } : {}),

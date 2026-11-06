@@ -28,6 +28,7 @@
 | `docs/api/report.md` | 프로젝트 진행 리포트 — 지난 7일을 규칙으로 계산(`ProgressFacts`) · Claude 가 손쓸 것을 근거와 함께 · 저장 · 지난 리포트 대비 |
 | `docs/api/test.md` | 테스트 — 작업과 따로 두는 기능 · 시나리오 테스트(단계는 행동 ↔ 기대 결과 짝 · 상위 테스트 묶음 · 작업 · 안건 참조 태그) · 상태와 N일째 · 손쓸 테스트 신호 · 기준 바뀜. 1단계(AI 없이)의 계약, AI 는 테두리만 |
 | `docs/api/test-comment.md` | **테스트 조치 내역** — 테스트 상세의 상태 칸을 걷고 그 자리에 댓글 같은 조치 내역(`test_comment`), 실패 · 막힘 메모는 선택으로 (2026-11-05) |
+| `docs/api/me.md` | **마이페이지 · 프로필 사진** — `/me`(사진 · 내 정보 · 내 프로젝트 · 비밀번호), `member_avatar`, `Member` · `Me` 의 `avatarUrl`, 사람 동그라미를 사진으로 (2026-11-06) |
 | `docs/api/history.md` | 변경 이력 — 작업 · 테스트 · 안건(2026-11-02)을 누가 언제 무엇을 바꿨나(요청 하나 = 한 줄, 칸마다 전 · 후). 상세에서 보인다. `task_log` 와 따로 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
@@ -164,6 +165,9 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | GET · POST | `/api/admin/members` | 사용자 목록 · 등록 (시스템 관리자). 응답에 사람이 부르는 번호 `no`(2026-11-02) | `MemberAccount[]` · `MemberAccount` 201 | 구현 |
 | PATCH | `/api/admin/members/{memberId}` | 이름 · 이메일 · 시스템 역할 · 활성 (시스템 관리자) | `MemberAccount` | 구현 |
 | PUT | `/api/admin/members/{memberId}/password` | 비밀번호 새로 걸기 (시스템 관리자) | 204 | 구현 |
+| PUT · DELETE | `/api/auth/me/avatar` | 내 프로필 사진 걸기 · 바꾸기(`AvatarInput` — `{ dataUrl }`, png · jpeg · webp, 512 KB 까지) · 지우기(멱등). 400 `AVATAR_INVALID` · `AVATAR_TOO_LARGE` (`docs/api/me.md`, 2026-11-06) | `Me` | 구현 |
+| GET | `/api/members/{memberId}/avatar` | 프로필 사진 바이트 — 로그인만 하면 누구나, `Cache-Control: private, max-age=31536000, immutable`. 없으면 404 `AVATAR_NOT_FOUND`. 주소는 `Member` · `Me` 의 `avatarUrl`(`?v=` 바뀐 시각) | 이미지 | 구현 |
+| DELETE | `/api/admin/members/{memberId}/avatar` | 남의 프로필 사진 지우기 (시스템 관리자, 멱등 — 없는 멤버만 404 `MEMBER_NOT_FOUND`) | 204 | 구현 |
 | GET | `/api/projects/{projectId}/members` | 프로젝트에 부여된 사람 · 역할 | `ProjectMember[]` | 구현 |
 | PUT · DELETE | `/api/projects/{projectId}/members/{memberId}` | 부여 · 역할 변경 · 빼기 (프로젝트 관리자 · 시스템 관리자) | `ProjectMember` · 204 | 구현 |
 | PATCH | `/api/projects/{projectId}` | 프로젝트 정보 수정 — `name` · `description` · `startDate` · `endDate` · `status`(`planned` · `active` · `closed`), 보낸 필드만. 설명 · 날짜의 null 은 비우기 (프로젝트 관리자 · 시스템 관리자, `docs/api/auth.md` '프로젝트 관리') | `Project` | 구현 (2026-11-02 늘림) |

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import GanttChart from '@/components/app/GanttChart.vue'
 import { periodRangeLabel, toTestGanttItems } from '@/lib/gantt'
 import { testStatusLabel } from '@/lib/testcase'
+import { useDataStore } from '@/stores/data'
 import { useTestStore } from '@/stores/test'
 import type { TestRow } from '@/types/domain'
 
@@ -18,10 +19,11 @@ const emit = defineEmits<{
 }>()
 
 const testStore = useTestStore()
+const data = useDataStore()
 
 const shown = computed(() => props.rows ?? testStore.ganttRows)
 const items = computed(() =>
-  toTestGanttItems(shown.value, testStatusLabel, testStore.isGanttContext),
+  toTestGanttItems(shown.value, testStatusLabel, testStore.isGanttContext, data.memberAvatar),
 )
 const period = computed(() => periodRangeLabel(shown.value.map((r) => r.test)))
 </script>

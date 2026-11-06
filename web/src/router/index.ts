@@ -39,6 +39,12 @@ const router = createRouter({
       name: 'projects',
       component: () => import('@/views/ProjectsView.vue'),
     },
+    /* 마이페이지 — 프로젝트와 상관없이 늘 열린다 (docs/api/me.md) */
+    {
+      path: '/me',
+      name: 'me',
+      component: () => import('@/views/MyPageView.vue'),
+    },
     {
       path: '/projects/new',
       name: 'project-new',
@@ -210,7 +216,8 @@ router.beforeEach(async (to) => {
   if (!canOpen(auth.me, to.meta.access, projectId))
     return to.name === 'project-new' ? '/projects' : '/'
 
-  if (to.path.startsWith('/projects') || to.path.startsWith('/admin')) return true
+  if (to.path.startsWith('/projects') || to.path.startsWith('/admin') || to.path === '/me')
+    return true
   return data.allProjects.length > 0 ? true : emptyProjectsHome(auth.me)
 })
 

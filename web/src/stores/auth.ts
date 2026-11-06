@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
 import { isSystemAdmin } from '@/lib/access'
+import { useDataStore } from '@/stores/data'
 import { clearSession } from '@/stores/session'
 import type { Me, ProjectRole } from '@/types/domain'
 
@@ -49,6 +50,27 @@ export const useAuthStore = defineStore('auth', () => {
     await api.changePassword({ currentPassword, newPassword })
   }
 
+  /* 사진을 바꾸면 나와 멤버 목록의 내 줄을 같이 간다 — 사람 동그라미가 모두 그 자리에서 바뀐다 */
+  function applyAvatar(next: Me) {
+    me.value = next
+    useDataStore().setMemberAvatar(next.id, next.avatarUrl)
+  }
+
+  /** 256×256 으로 줄인 data URL 을 건다. 틀리면 ApiError 를 던진다 */
+  async function uploadAvatar(dataUrl: string) {
+    applyAvatar(await api.uploadMyAvatar(dataUrl))
+  }
+
+  /** 틀리면 ApiError 를 던진다 */
+  async function removeAvatar() {
+    applyAvatar(await api.removeMyAvatar())
+  }
+
+  /** 관리자가 내 사진을 지웠을 때 */
+  function setAvatar(avatarUrl: string | null) {
+    if (me.value) me.value = { ...me.value, avatarUrl }
+  }
+
   /** 프로젝트 멤버 화면에서 나의 역할을 바꾸거나 나를 뺐을 때 — 메뉴가 그 자리에서 맞춰진다 */
   function setProjectRole(projectId: string, role: ProjectRole | null) {
     if (!me.value) return
@@ -67,5 +89,18 @@ export const useAuthStore = defineStore('auth', () => {
     me.value = null
   }
 
-  return { me, systemAdmin, loadMe, login, logout, changePassword, setProjectRole, rename, clear }
+  return {
+    me,
+    systemAdmin,
+    loadMe,
+    login,
+    logout,
+    changePassword,
+    uploadAvatar,
+    removeAvatar,
+    setAvatar,
+    setProjectRole,
+    rename,
+    clear,
+  }
 })

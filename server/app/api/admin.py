@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import Session, require_system_admin
 from app.schemas.auth import MemberAccountCreate, MemberAccountOut, MemberAccountPatch, PasswordSet
+from app.services import avatar as avatar_service
 from app.services import member as member_service
 
 # 사용자 관리는 시스템 관리자만 — 라우터 전체에 건다
@@ -31,3 +32,10 @@ async def patch_member(
 async def set_password(member_id: str, payload: PasswordSet, session: Session) -> None:
     """잊었을 때 · 처음 로그인시킬 때. 그 사람의 세션을 모두 끊는다."""
     await member_service.set_password(session, member_id, payload.password)
+
+
+@router.delete("/members/{member_id}/avatar", status_code=204)
+async def delete_avatar(member_id: str, session: Session) -> None:
+    """부적절한 사진을 내린다. 올려 주지는 않는다. 사진이 없어도 204(멱등), 없는 멤버면 404."""
+    await member_service.load_member(session, member_id)
+    await avatar_service.delete_avatar(session, member_id)

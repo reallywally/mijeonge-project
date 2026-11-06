@@ -75,7 +75,7 @@ const mock = {
     const memberId = `mu${mockSeq}`
     const db = mockDb()
     db.memberNoSeq += 1
-    db.members.push({ id: memberId, name, active: true })
+    db.members.push({ id: memberId, name, active: true, avatarUrl: null })
     db.accounts.push({
       memberId,
       no: db.memberNoSeq,
@@ -128,6 +128,12 @@ const mock = {
     account.password = password
     endSessionsOf(memberId)
   },
+  removeAvatar(memberId: string) {
+    requireSystemAdmin()
+    const member = memberOf(memberId)
+    if (!member) throw notFound()
+    member.avatarUrl = null
+  },
 }
 
 /** 전체 멤버 — 비활성 포함, 이름 순 */
@@ -150,3 +156,9 @@ export const setMemberPassword = (memberId: string, password: string) =>
   isMockMode()
     ? later(() => mock.setPassword(memberId, password))
     : request<void>('PUT', `/admin/members/${id(memberId)}/password`, { password })
+
+/** 남의 사진 지우기(부적절한 사진) — 멱등. 올려 주지는 않는다 (docs/api/me.md) */
+export const adminRemoveAvatar = (memberId: string) =>
+  isMockMode()
+    ? later(() => mock.removeAvatar(memberId))
+    : request<void>('DELETE', `/admin/members/${id(memberId)}/avatar`)

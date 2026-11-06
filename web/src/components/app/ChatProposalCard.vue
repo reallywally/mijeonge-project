@@ -123,7 +123,11 @@ const registered = computed(() => {
             v-if="t.ownerId || t.start || t.due || t.priority !== 'normal'"
             class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
           >
-            <PersonChip v-if="data.memberName(t.ownerId)" :name="data.memberName(t.ownerId)!" />
+            <PersonChip
+              v-if="data.memberName(t.ownerId)"
+              :name="data.memberName(t.ownerId)!"
+              :src="data.memberAvatar(t.ownerId)"
+            />
             <span v-if="period(t)">{{ period(t) }}</span>
             <Badge v-if="t.priority !== 'normal'" variant="outline">
               우선순위 {{ taskPriorityLabel(t.priority) }}

@@ -50,6 +50,8 @@ class MemberOut(Schema):
     name: str
     # 고르는 자리에서 비활성 멤버를 빼고, 이름 옆에 '(비활성)' 을 찍는다
     active: bool
+    # 프로필 사진 주소 — 없으면 null (docs/api/me.md)
+    avatar_url: str | None
 
 
 class ProjectCreate(Schema):

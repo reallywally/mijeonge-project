@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Plus, X } from 'lucide-vue-next'
+import MemberAvatar from '@/components/app/MemberAvatar.vue'
 import MemberPicker from '@/components/app/MemberPicker.vue'
 import { useDataStore } from '@/stores/data'
 
@@ -19,6 +20,7 @@ const chips = computed(() =>
   ccIds.value.map((id) => ({
     id,
     name: data.memberName(id) ?? '알 수 없음',
+    avatarUrl: data.memberAvatar(id),
     stale: !eligible(id),
   })),
 )
@@ -39,11 +41,7 @@ const remove = (id: string) => (ccIds.value = ccIds.value.filter((x) => x !== id
         :class="[c.stale ? 'text-muted-foreground' : '', readonly ? 'pr-2' : 'pr-1']"
         :data-cc="c.id"
       >
-        <span
-          class="flex size-[18px] items-center justify-center rounded-full bg-background text-[10px] text-muted-foreground"
-        >
-          {{ c.name.charAt(0) }}
-        </span>
+        <MemberAvatar :name="c.name" :src="c.avatarUrl" :size="18" tone="inset" />
         {{ c.name }}
         <button
           v-if="!readonly"

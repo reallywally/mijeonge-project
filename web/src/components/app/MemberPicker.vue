@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { Check, ChevronDown } from 'lucide-vue-next'
+import MemberAvatar from '@/components/app/MemberAvatar.vue'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { matchMember } from '@/lib/member'
 import { cn } from '@/lib/utils'
@@ -38,15 +39,15 @@ const list = ref<HTMLElement | null>(null)
 
 const NONE_LABEL = '미정 (담당자 없음)'
 
-type Row = { id: string | null; name: string }
+type Row = { id: string | null; name: string; avatarUrl: string | null }
 const rows = computed<Row[]>(() => {
   const q = query.value.trim()
   const members = data.assignable
     .filter((m) => !props.exclude?.includes(m.id))
     .filter((m) => matchMember(m, q))
-    .map((m) => ({ id: m.id, name: m.name }))
+    .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl }))
   const none = props.allowNone && (!q || NONE_LABEL.includes(q))
-  return none ? [{ id: null, name: NONE_LABEL }, ...members] : members
+  return none ? [{ id: null, name: NONE_LABEL, avatarUrl: null }, ...members] : members
 })
 
 function onOpen(v: boolean) {
@@ -163,11 +164,7 @@ function onInput(e: Event) {
           @mousedown.prevent
           @click="pick(row)"
         >
-          <span
-            class="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground"
-          >
-            {{ row.id === null ? '–' : row.name.charAt(0) }}
-          </span>
+          <MemberAvatar :name="row.id === null ? null : row.name" :src="row.avatarUrl" :size="18" />
           <span class="min-w-0 grow truncate">{{ row.name }}</span>
           <Check
             v-if="!keepOpen && row.id === (selectedId ?? null)"

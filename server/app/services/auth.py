@@ -18,8 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.errors import ApiError
-from app.models import AuthIdentity, AuthSession, Member, Project, ProjectMember
+from app.models import AuthIdentity, AuthSession, Member, MemberAvatar, Project, ProjectMember
 from app.schemas.auth import MeOut
+from app.services.avatar import avatar_url
 from app.time import as_utc, now
 
 PASSWORD = "password"
@@ -163,9 +164,15 @@ async def login(session: AsyncSession, email: str, password: str) -> tuple[str, 
 
 
 async def me(session: AsyncSession, member_id: str) -> MeOut:
-    member = await session.get(Member, member_id)
-    if member is None or member.email is None:
+    found = await session.execute(
+        select(Member, MemberAvatar.updated_at)
+        .outerjoin(MemberAvatar, MemberAvatar.member_id == Member.id)
+        .where(Member.id == member_id)
+    )
+    row = found.tuples().one_or_none()
+    if row is None or row[0].email is None:
         raise unauthenticated()
+    member, avatar_at = row
     roles = await session.execute(
         select(ProjectMember.project_id, ProjectMember.role).where(
             ProjectMember.member_id == member_id,
@@ -180,6 +187,7 @@ async def me(session: AsyncSession, member_id: str) -> MeOut:
             "email": member.email,
             "system_role": member.system_role,
             "project_roles": dict(roles.tuples().all()),
+            "avatar_url": avatar_url(member.id, avatar_at),
         }
     )
 

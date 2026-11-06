@@ -490,7 +490,10 @@ const partsOf = (memberId: string) =>
                 >
                   <TableCell>
                     <span class="flex items-center gap-2">
-                      <PersonChip :name="r.member ? memberLabel(r.member) : '알 수 없음'" />
+                      <PersonChip
+                        :name="r.member ? memberLabel(r.member) : '알 수 없음'"
+                        :src="r.member?.avatarUrl"
+                      />
                       <Badge v-if="r.memberId === auth.me?.id" variant="secondary">나</Badge>
                     </span>
                   </TableCell>

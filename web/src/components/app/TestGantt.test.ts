@@ -6,6 +6,7 @@ import TestGantt from './TestGantt.vue'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
+import { useDataStore } from '@/stores/data'
 import { useTestStore } from '@/stores/test'
 
 /* 테스트 간트 — 작업 간트와 같은 껍데기(GanttChart)를 진짜 dhtmlx 로 그려 본다.
@@ -72,5 +73,18 @@ describe('테스트 간트', () => {
     expect(w.emitted('add-test')).toEqual([['tc5']])
     expect(w.findAll('.gantt_task_link')).toHaveLength(0)
     expect(w.find('.gantt_link_control').exists()).toBe(false)
+  })
+})
+
+describe('테스트 간트 — 담당자 동그라미', () => {
+  it('담당자의 사진이 있으면 동그라미에 사진, 이름은 그대로 옆에', async () => {
+    const data = useDataStore()
+    const owned = useTestStore().ganttRows.find((r) => r.test.ownerId !== null)!
+    const photo = 'data:image/png;base64,iVBORw0KGgo='
+    data.setMemberAvatar(owned.test.ownerId!, photo)
+    const w = await mountGantt()
+    const row = w.get(`.gantt_grid_data [data-task-id="${owned.test.id}"]`)
+    expect(row.get('.tg-avatar img').attributes('src')).toBe(photo)
+    expect(row.get('.tg-owner').text()).toBe(owned.ownerName)
   })
 })

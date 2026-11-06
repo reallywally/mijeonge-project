@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import MemberAvatar from '@/components/app/MemberAvatar.vue'
 import MemberPicker from '@/components/app/MemberPicker.vue'
 import { cn } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
@@ -46,12 +47,12 @@ const canAssignMe = computed(
     >
       <template #trigger>
         <span class="flex min-w-0 items-center gap-2">
-          <span
-            class="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-secondary text-[10px]"
-            :class="ownerName ? '' : 'text-muted-foreground'"
-          >
-            {{ ownerName ? ownerName.charAt(0) : '–' }}
-          </span>
+          <MemberAvatar
+            :name="ownerName"
+            :src="data.memberAvatar(ownerId)"
+            :size="22"
+            :class="ownerName ? 'text-foreground' : ''"
+          />
           <span class="truncate" :class="ownerName ? '' : 'text-muted-foreground'">
             {{ ownerName ?? (hinted ? `회의록: ${hint} — 골라 주세요` : '미정') }}
           </span>

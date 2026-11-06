@@ -40,6 +40,7 @@ const status = computed(() => history.statusOf(props.kind, props.targetId))
 /* 이름은 지금의 것으로 찾는다 — 이력에는 id 만 남는다 */
 const names: HistoryNames = {
   member: (id) => data.memberName(id),
+  avatar: (id) => data.memberAvatar(id),
   part: (id) => partStore.partName(id),
   task: (id) => data.allTasks.find((t) => t.id === id)?.key ?? null,
   agenda: (id) => data.allAgendas.find((t) => t.id === id)?.title ?? null,

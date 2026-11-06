@@ -30,6 +30,7 @@ const user: Me = {
   email: 'u2@inno-ax.com',
   systemRole: 'user',
   projectRoles: { p1: 'user', p2: 'user' },
+  avatarUrl: null,
 }
 
 const snapshot = (projectId: string): ProjectSnapshot => ({

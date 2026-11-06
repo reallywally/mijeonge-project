@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { KeyRound, Loader2, Pencil, Plus, RotateCcw } from 'lucide-vue-next'
+import { ImageOff, KeyRound, Loader2, Pencil, Plus, RotateCcw } from 'lucide-vue-next'
 import AdminShell from '@/components/app/AdminShell.vue'
 import MemberAccountDialog from '@/components/app/MemberAccountDialog.vue'
+import MemberAvatar from '@/components/app/MemberAvatar.vue'
 import MemberPasswordDialog from '@/components/app/MemberPasswordDialog.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,12 +19,15 @@ import { dayTime } from '@/lib/date'
 import { byMemberNo, systemRoleLabel } from '@/lib/member'
 import { useAdminStore } from '@/stores/admin'
 import { useAuthStore } from '@/stores/auth'
+import { useDataStore } from '@/stores/data'
 import type { MemberAccount } from '@/types/domain'
 
 /* 사용자 관리 — 시스템 관리자만 (라우터 가드 · 메뉴가 같은 판단을 쓴다, 막는 것은 서버다).
-   사용자는 지우지 않고 끈다. 프로젝트 부여는 프로젝트 관리에서 한다 */
+   사용자는 지우지 않고 끈다. 프로젝트 부여는 프로젝트 관리에서 한다.
+   사진은 멤버 목록(data)에서 본다 — 관리용 모양(MemberAccount)에는 없다. 남의 사진은 지우기만 한다(올려 주지 않는다) */
 const admin = useAdminStore()
 const auth = useAuthStore()
+const data = useDataStore()
 
 onMounted(() => {
   void admin.load()
@@ -52,6 +56,17 @@ function openEdit(account: MemberAccount) {
 function openPassword(account: MemberAccount) {
   passwordFor.value = account
   passwordOpen.value = true
+}
+
+/* 사진 지우기는 되돌릴 수 없다 — 그 줄에서 한 번 더 묻는다 */
+const removingAvatarOf = ref<string | null>(null)
+const avatarBusy = ref(false)
+
+async function removeAvatar(memberId: string) {
+  avatarBusy.value = true
+  await admin.removeAvatar(memberId)
+  avatarBusy.value = false
+  removingAvatarOf.value = null
 }
 </script>
 
@@ -101,7 +116,7 @@ function openPassword(account: MemberAccount) {
                 <TableHead class="h-10 w-[150px] text-xs font-medium text-muted-foreground"
                   >마지막 로그인</TableHead
                 >
-                <TableHead class="h-10 w-[84px]" />
+                <TableHead class="h-10 w-[120px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -117,6 +132,7 @@ function openPassword(account: MemberAccount) {
                 }}</TableCell>
                 <TableCell class="text-sm">
                   <span class="flex items-center gap-2">
+                    <MemberAvatar :name="a.name" :src="data.memberAvatar(a.id)" :size="24" />
                     <span class="truncate" :class="a.active ? 'font-medium' : ''">{{
                       a.name
                     }}</span>
@@ -141,7 +157,32 @@ function openPassword(account: MemberAccount) {
                   {{ a.lastLoginAt ? dayTime(a.lastLoginAt) : '—' }}
                 </TableCell>
                 <TableCell class="text-right">
-                  <div class="flex justify-end gap-0.5">
+                  <div v-if="removingAvatarOf === a.id" class="flex justify-end gap-1">
+                    <Button
+                      variant="destructive"
+                      size="xs"
+                      :disabled="avatarBusy"
+                      data-avatar-remove-confirm
+                      @click="removeAvatar(a.id)"
+                    >
+                      <Loader2 v-if="avatarBusy" class="animate-spin" />
+                      사진 지우기
+                    </Button>
+                    <Button variant="ghost" size="xs" @click="removingAvatarOf = null">취소</Button>
+                  </div>
+                  <div v-else class="flex justify-end gap-0.5">
+                    <Button
+                      v-if="data.memberAvatar(a.id)"
+                      variant="ghost"
+                      size="icon"
+                      class="size-8"
+                      :aria-label="`${a.name} 사진 지우기`"
+                      title="사진 지우기"
+                      data-avatar-remove
+                      @click="removingAvatarOf = a.id"
+                    >
+                      <ImageOff class="size-3.5" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
