@@ -40,7 +40,7 @@ export const useRiskStore = defineStore('risk', () => {
     report.value && reportProjectId.value === data.currentProjectId ? report.value : null,
   )
 
-  /* [내 파트 | 전체] 를 안건 화면과 같은 규칙으로 따른다. 사람별(owners)은 거르지 않는다 */
+  /* [내 파트 | 전체] 를 안건 화면과 같은 규칙으로 따른다. owners(사람별)는 화면에 안 그리지만 거르지 않고 둔다 */
   const agendas = computed(() =>
     (current.value?.agendas ?? []).filter((t) => partStore.showsAgenda(t.agendaId)),
   )

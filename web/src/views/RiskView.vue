@@ -40,7 +40,7 @@ watch(
   { immediate: true },
 )
 
-/* AI 요약은 이 화면에서만 산다 — 떠나면 버리고, 받는 중이면 끊는다 */
+/* AI 리스크 분석은 이 화면에서만 산다 — 떠나면 버리고, 받는 중이면 끊는다 */
 onBeforeUnmount(() => risk.resetSummary())
 
 const summaryLine = computed(() => {
@@ -95,10 +95,38 @@ function openTask(id: string) {
   <AppShell>
     <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
       <span class="text-xs font-medium text-muted-foreground">리스크</span>
-      <span v-if="risk.report" class="text-xs text-muted-foreground">
+      <!-- 기준값(기한 임박 · 멈춤 · 등급 점수)은 가리키면 보인다 — 본문의 '기준' 칸은 2026-11-06 걷었다 -->
+      <span
+        v-if="risk.report"
+        class="text-xs text-muted-foreground"
+        :title="riskSettingsLine(risk.report.settings)"
+        data-risk-settings
+      >
         {{ monthDay(risk.report.asOf) }} 기준
       </span>
       <div class="grow" />
+      <Button
+        variant="ghost"
+        size="sm"
+        class="shrink-0"
+        :disabled="risk.loading"
+        @click="risk.load()"
+      >
+        <Loader2 v-if="risk.loading" class="size-4 animate-spin" />
+        <RefreshCw v-else class="size-4" />
+        새로 고침
+      </Button>
+      <Button
+        v-if="canEditSettings"
+        variant="ghost"
+        size="sm"
+        class="shrink-0"
+        :disabled="!risk.report"
+        @click="settingsOpen = true"
+      >
+        <SlidersHorizontal class="size-4" />
+        기준 바꾸기
+      </Button>
       <PartScopeToggle />
     </div>
 
@@ -112,43 +140,16 @@ function openTask(id: string) {
           </p>
         </header>
 
-        <section
-          class="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-[17px] py-[11px]"
-        >
-          <span class="shrink-0 text-sm text-muted-foreground">기준</span>
-          <span class="min-w-0 grow truncate text-sm" data-risk-settings>{{
-            risk.report ? riskSettingsLine(risk.report.settings) : '—'
-          }}</span>
-          <span v-if="risk.report" class="shrink-0 text-xs text-muted-foreground">
-            {{ risk.report.asOf }}
-          </span>
-          <Button variant="outline" class="shrink-0" :disabled="risk.loading" @click="risk.load()">
-            <Loader2 v-if="risk.loading" class="size-4 animate-spin" />
-            <RefreshCw v-else class="size-4" />
-            새로 고침
-          </Button>
-          <Button
-            v-if="canEditSettings"
-            variant="outline"
-            class="shrink-0"
-            :disabled="!risk.report"
-            @click="settingsOpen = true"
-          >
-            <SlidersHorizontal class="size-4" />
-            기준 바꾸기
-          </Button>
-        </section>
-
-        <!-- AI 요약 — 누를 때만 부른다. 답은 AI 가 낸 글이라 v-html 없이 줄바꿈만 살린다 -->
+        <!-- AI 리스크 분석(2026-11-06 'AI 요약' 에서 이름만 바뀜) — 누를 때만 부른다. 답은 AI 가 낸 글이라 v-html 없이 줄바꿈만 살린다 -->
         <section
           v-if="risk.report"
           class="flex flex-col gap-2.5 rounded-lg border border-border bg-card px-[17px] py-[11px] shadow-sm"
-          aria-label="AI 요약"
+          aria-label="AI 리스크 분석"
           data-risk-summary
         >
           <div class="flex items-center gap-2.5">
             <Sparkles class="size-4 shrink-0 text-muted-foreground" />
-            <span class="shrink-0 text-sm font-medium">AI 요약</span>
+            <span class="shrink-0 text-sm font-medium">AI 리스크 분석</span>
             <span class="min-w-0 grow truncate text-xs text-muted-foreground" data-summary-line>{{
               summaryLine
             }}</span>
@@ -169,7 +170,7 @@ function openTask(id: string) {
               @click="risk.summarize()"
             >
               <RotateCcw class="size-4" />
-              다시 요약
+              다시 분석
             </Button>
             <Button
               v-else
@@ -179,7 +180,7 @@ function openTask(id: string) {
               @click="risk.summarize()"
             >
               <Sparkles class="size-4" />
-              AI 요약
+              AI 리스크 분석
             </Button>
           </div>
 
@@ -202,7 +203,7 @@ function openTask(id: string) {
               class="flex items-center gap-1.5 text-xs text-muted-foreground"
             >
               <Loader2 class="size-3.5 animate-spin" />
-              요약을 준비하는 중…
+              분석을 준비하는 중…
             </p>
             <p v-else-if="risk.summary.status === 'stopped'" class="text-xs text-muted-foreground">
               멈췄습니다.
@@ -321,86 +322,6 @@ function openTask(id: string) {
                   <TableRow v-if="risk.agendas.length === 0" class="hover:bg-transparent">
                     <TableCell colspan="6" class="h-20 text-center text-sm text-muted-foreground">
                       눈에 띄는 안건 리스크가 없습니다.
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          </section>
-
-          <!-- 사람별 — [내 파트 | 전체] 와 상관없이 다 보인다 -->
-          <section class="flex flex-col gap-2.5" aria-label="사람별">
-            <div class="flex items-baseline gap-2">
-              <h2 class="text-base font-semibold">사람별</h2>
-              <span class="text-xs text-muted-foreground">정하면 풀리는 일이 많은 순</span>
-            </div>
-            <div
-              class="overflow-hidden rounded-lg border border-border bg-card shadow-[0_1px_2px_rgb(16_24_40/0.04)]"
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow class="bg-muted/60 hover:bg-muted/60">
-                    <TableHead class="h-10 text-xs font-medium text-muted-foreground"
-                      >담당자</TableHead
-                    >
-                    <TableHead
-                      class="h-10 w-[112px] text-right text-xs font-medium text-muted-foreground"
-                      >안 정해진 안건</TableHead
-                    >
-                    <TableHead
-                      class="h-10 w-[96px] text-right text-xs font-medium text-muted-foreground"
-                      >기한 넘김</TableHead
-                    >
-                    <TableHead
-                      class="h-10 w-[96px] text-right text-xs font-medium text-muted-foreground"
-                      >막힌 작업</TableHead
-                    >
-                    <TableHead
-                      class="h-10 w-[128px] text-right text-xs font-medium text-muted-foreground"
-                      >정하면 풀리는 일</TableHead
-                    >
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow
-                    v-for="row in risk.owners"
-                    :key="row.memberId ?? 'none'"
-                    class="hover:bg-transparent"
-                    data-risk-owner
-                  >
-                    <TableCell
-                      class="text-sm"
-                      :class="row.memberId ? '' : 'text-muted-foreground'"
-                      >{{
-                        row.memberId
-                          ? (data.memberName(row.memberId) ?? row.memberId)
-                          : '담당자 없음'
-                      }}</TableCell
-                    >
-                    <TableCell class="text-right text-sm">{{ row.openAgendas }}</TableCell>
-                    <TableCell
-                      class="text-right text-sm"
-                      :class="
-                        row.overdueAgendas > 0
-                          ? 'font-medium text-destructive'
-                          : 'text-muted-foreground'
-                      "
-                      >{{ row.overdueAgendas }}</TableCell
-                    >
-                    <TableCell
-                      class="text-right text-sm"
-                      :class="row.blockedTasks > 0 ? '' : 'text-muted-foreground'"
-                      >{{ row.blockedTasks }}</TableCell
-                    >
-                    <TableCell
-                      class="text-right text-sm"
-                      :class="row.blockingImpact > 0 ? 'font-medium' : 'text-muted-foreground'"
-                      >{{ row.blockingImpact }}</TableCell
-                    >
-                  </TableRow>
-                  <TableRow v-if="risk.owners.length === 0" class="hover:bg-transparent">
-                    <TableCell colspan="5" class="h-20 text-center text-sm text-muted-foreground">
-                      몰린 사람이 없습니다.
                     </TableCell>
                   </TableRow>
                 </TableBody>

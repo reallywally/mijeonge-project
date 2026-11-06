@@ -79,14 +79,16 @@ describe('표 둘', () => {
     const w = await mountRisks()
 
     expect(rows('agenda')).toHaveLength(6)
-    expect(rows('owner')).toHaveLength(5)
+    /* '사람별' 칸은 2026-11-06 화면에서 걷었다(서버의 owners 는 챗봇 · AI 리스크 분석이 그대로 쓴다) */
+    expect(w.find('section[aria-label="사람별"]').exists()).toBe(false)
+    expect(rows('owner')).toHaveLength(0)
     /* '안건과 어긋난 작업' 칸은 2026-11-05 걷었다 */
     expect(w.text()).not.toContain('안건과 어긋난 작업')
     expect(document.body.querySelector('[data-risk-task]')).toBeNull()
-    expect(w.find('[data-risk-settings]').text()).toBe(
+    /* 본문의 '기준' 칸은 2026-11-06 걷었다 — 기준값은 위 줄의 'N/N 기준' 을 가리키면 보인다 */
+    expect(w.find('[data-risk-settings]').attributes('title')).toBe(
       '기한 임박 3일 · 멈춤 7일 · high 6점 · medium 3점',
     )
-    expect(w.text()).toContain('2026-10-15')
 
     const first = rows('agenda')[0]!.textContent ?? ''
     expect(first).toContain('보험료 산출 기간계 API 호출 in · out 정의')
@@ -94,16 +96,14 @@ describe('표 둘', () => {
     expect(first).toContain('작업을 막는 중')
     expect(first).toContain('medium')
     expect(rows('agenda')[1]!.textContent).toContain('15일')
-    expect(rows('owner')[4]!.textContent).toContain('담당자 없음')
   })
 
-  it('일반 사용자(u3)는 내 파트로 열린다 — 사람별은 거르지 않는다. 전체로 바꾸면 다 선다', async () => {
+  it('일반 사용자(u3)는 내 파트로 열린다. 전체로 바꾸면 다 선다', async () => {
     await signedIn('u3@inno-ax.com')
     await mountRisks()
 
     expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
     expect(rows('agenda')).toHaveLength(2)
-    expect(rows('owner')).toHaveLength(5)
 
     await click(scopeButton('all'))
     expect(rows('agenda')).toHaveLength(6)
@@ -155,7 +155,7 @@ describe('기준 바꾸기', () => {
     await type('staleDays', '14')
     await click(button('저장'))
 
-    expect(w.find('[data-risk-settings]').text()).toContain('멈춤 14일')
+    expect(w.find('[data-risk-settings]').attributes('title')).toContain('멈춤 14일')
   })
 
   it('화면이 먼저 막는다 — high <= medium 이면 high 칸에 까닭, 저장이 꺼진다', async () => {
@@ -189,7 +189,7 @@ describe('기준 바꾸기', () => {
   })
 })
 
-describe('AI 요약', () => {
+describe('AI 리스크 분석', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -206,7 +206,7 @@ describe('AI 요약', () => {
     })
   }
 
-  it('누를 때만 부른다 — 보이는 줄 그대로 보내고, 끝나면 기준일 · 건수와 [다시 요약]', async () => {
+  it('누를 때만 부른다 — 보이는 줄 그대로 보내고, 끝나면 기준일 · 건수와 [다시 분석]', async () => {
     await signedIn('u3@inno-ax.com')
     const spy = answerWith()
     await mountRisks()
@@ -214,11 +214,11 @@ describe('AI 요약', () => {
     expect(spy).not.toHaveBeenCalled()
     expect(line()).toBe('보이는 안건 2건을 정리합니다')
 
-    await click(button('AI 요약'))
+    await click(button('AI 리스크 분석'))
     expect(spy).toHaveBeenCalledTimes(1)
     expect(spy.mock.calls[0][1]).toEqual({ agendaIds: ['t9', 't4'] })
     expect(line()).toBe('2026-10-15 기준 · 보이는 2건')
-    expect(button('다시 요약')).toBeTruthy()
+    expect(button('다시 분석')).toBeTruthy()
     expect(card()?.textContent).toContain('가 병목입니다.')
   })
 
@@ -226,7 +226,7 @@ describe('AI 요약', () => {
     await signedIn('u3@inno-ax.com')
     answerWith()
     await mountRisks()
-    await click(button('AI 요약'))
+    await click(button('AI 리스크 분석'))
 
     const agendaChip = card()?.querySelector('[data-ref-agenda="t9"]')
     expect(agendaChip?.textContent).toContain('공통 코드 체계 확정')
@@ -245,24 +245,24 @@ describe('AI 요약', () => {
     await signedIn('u3@inno-ax.com')
     answerWith()
     await mountRisks()
-    await click(button('AI 요약'))
+    await click(button('AI 리스크 분석'))
 
     await click(card()?.querySelector('[data-ref-task="k3"]'))
     expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('프로그램 설계')
   })
 
-  it('[내 파트 | 전체] 를 바꾸면 흐리게 하고 다시 요약을 권한다 — 저절로 부르지 않는다', async () => {
+  it('[내 파트 | 전체] 를 바꾸면 흐리게 하고 다시 분석을 권한다 — 저절로 부르지 않는다', async () => {
     await signedIn('u3@inno-ax.com')
     const spy = answerWith()
     await mountRisks()
-    await click(button('AI 요약'))
+    await click(button('AI 리스크 분석'))
 
     await click(scopeButton('all'))
     expect(card()?.querySelector('[data-summary-changed]')).toBeTruthy()
     expect(line()).toBe('목록이 바뀌었습니다 —')
     expect(spy).toHaveBeenCalledTimes(1)
 
-    await click(button('다시 요약'))
+    await click(button('다시 분석'))
     expect(spy).toHaveBeenCalledTimes(2)
     expect(spy.mock.calls[1][1]).toEqual({
       agendaIds: ['t5', 't3', 't8', 't9', 't4', 't7'],
@@ -280,13 +280,13 @@ describe('AI 요약', () => {
     })
     await mountRisks()
 
-    await click(button('AI 요약'))
-    expect(button('AI 요약')).toBeUndefined()
+    await click(button('AI 리스크 분석'))
+    expect(button('AI 리스크 분석')).toBeUndefined()
     await click(button('멈춤'))
 
     expect(card()?.textContent).toContain('한 줄 총평')
     expect(card()?.textContent).toContain('멈췄습니다.')
-    expect(button('다시 요약')!.disabled).toBe(false)
+    expect(button('다시 분석')!.disabled).toBe(false)
   })
 
   it('보이는 줄이 0건이면 버튼이 꺼진다', async () => {
@@ -294,7 +294,7 @@ describe('AI 요약', () => {
     useDataStore().setProject('p3')
     await mountRisks()
 
-    expect(button('AI 요약')!.disabled).toBe(true)
+    expect(button('AI 리스크 분석')!.disabled).toBe(true)
     expect(line()).toBe('보이는 리스크가 없어 정리할 것이 없습니다.')
   })
 
@@ -306,7 +306,7 @@ describe('AI 요약', () => {
     })
     await mountRisks()
 
-    await click(button('AI 요약'))
+    await click(button('AI 리스크 분석'))
     expect(card()?.querySelector('[data-summary-error]')?.textContent?.trim()).toBe(
       '질문이 너무 잦습니다. 잠시 뒤에 다시 물어 주세요.',
     )
@@ -316,7 +316,7 @@ describe('AI 요약', () => {
     await signedIn('u1@inno-ax.com')
     answerWith()
     const w = await mountRisks()
-    await click(button('AI 요약'))
+    await click(button('AI 리스크 분석'))
     expect(useRiskStore().summary).not.toBeNull()
 
     w.unmount()
