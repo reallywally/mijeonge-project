@@ -1,7 +1,9 @@
 """확인 요청 — `docs/api/check.md`(2026-11-04 고침 — 결정 판). 보내기 · 목록 · 확인 · 배지.
 
 시드 p1 에 c1 ~ c4 가 있다(계약 '시드 · 목업' 표). t2 의 결정 판 1 · t1 의 결정 판 1 은 이미 보냈다.
-받는 사람은 연결 작업 담당자뿐이다 — t2 는 k4 · k22(둘 다 u3), t1 은 k4(u3), t6 은 연결 작업이 없다.
+받는 사람은 안건 담당자 · 작성자, 연결 작업 담당자, 참조 순이다 —
+t2 는 담당 · 작성 u3, k4 · k22(둘 다 u3), t1 은 담당 · 작성 u3, k4(u3),
+t6 은 담당 · 작성 u1 이고 연결 작업이 없다.
 부하 계산은 빈 p3 에 줄을 손으로 세워 본다.
 """
 
@@ -169,13 +171,14 @@ async def test_one_batch_shares_rev_and_time(client: httpx.AsyncClient) -> None:
 
 
 async def test_recipients_are_task_owners_in_task_order(client: httpx.AsyncClient) -> None:
-    """작업 seq 순 담당자. 겹치면 처음 자리, 담당자 없는 작업은 건너뛴다. t6 은 참조가 없다."""
+    """안건 담당 · 작성(u1) 다음 작업 seq 순 담당자. 겹치면 처음 자리, 담당자 없는 작업은 건너뛴다.
+    t6 은 참조가 없다."""
     # 링크를 거는 순서와 상관없이 작업 seq 순이다 — k9(u4) · k13(u1) · k15(u2), k1 은 담당자 없음
     for task in ("k15", "k9", "k13", "k1", "k20"):
         await link(client, task, "t6")
     res = await send(client, "t6")  # 시스템 관리자가 보낸다 — 받는 사람 누구도 빠지지 않는다
     assert res.status_code == 201
-    assert recipients(res) == ["u4", "u1", "u2", "u3"]
+    assert recipients(res) == ["u1", "u4", "u2", "u3"]
 
 
 async def test_sender_is_left_out(client: httpx.AsyncClient, as_member: AsMember) -> None:
@@ -191,8 +194,12 @@ async def test_sender_is_left_out(client: httpx.AsyncClient, as_member: AsMember
 async def test_recipients_are_task_owners_then_cc(
     client: httpx.AsyncClient, as_member: AsMember
 ) -> None:
-    """① 연결 작업 담당자(작업 seq 순) ② 참조(ccIds 순). 겹치면 처음 자리, 누른 사람은 빠진다."""
-    # t6 — 연결 작업 k9(u4) · k13(u1), 참조 u2 · u4(작업 담당과 겹침) · u3(누른 사람)
+    """안건 담당 · 작성 다음 ① 연결 작업 담당자(작업 seq 순) ② 참조(ccIds 순).
+
+    겹치면 처음 자리, 누른 사람은 빠진다.
+    """
+    # t6 — 담당 · 작성 u1, 연결 작업 k9(u4) · k13(u1),
+    # 참조 u2 · u4(작업 담당과 겹침) · u3(누른 사람)
     for task in ("k13", "k9"):
         await link(client, task, "t6")
     u1 = await as_member("u1")
@@ -201,7 +208,20 @@ async def test_recipients_are_task_owners_then_cc(
     u3 = await as_member("u3")
     res = await send(u3, "t6")
     assert res.status_code == 201
-    assert recipients(res) == ["u4", "u1", "u2"]
+    assert recipients(res) == ["u1", "u4", "u2"]
+
+
+async def test_agenda_owner_then_creator_come_first(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    """안건 담당자 · 작성자가 맨 앞 — 연결 작업 · 참조와 겹치면 앞 자리 하나 (2026-11-09)."""
+    # t6 — 작성 u1, 담당을 u4 로, 연결 작업 k15(u2), 참조 u1(작성자와 겹침) · u3
+    await link(client, "k15", "t6")
+    res = await client.patch("/api/agendas/t6", json={"ownerId": "u4", "ccIds": ["u1", "u3"]})
+    assert res.status_code == 200, res.text
+    res = await send(client, "t6")
+    assert res.status_code == 201
+    assert recipients(res) == ["u4", "u1", "u2", "u3"]
 
 
 async def test_cc_alone_is_enough(as_member: AsMember) -> None:

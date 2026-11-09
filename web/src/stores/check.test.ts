@@ -114,16 +114,32 @@ describe('안건 상세의 [확인 요청]', () => {
     expect(t2.block).toBe('sent')
     expect([t2.current?.confirmed, t2.current?.rows.length]).toEqual([1, 3])
 
-    /* 연결 작업도 참조도 없으면 받을 사람이 없다 */
+    /* 안건 담당 · 작성이 누른 사람(u1)이고 연결 작업도 참조도 없으면 받을 사람이 없다 */
     expect(checks.forAgenda('t6')).toMatchObject({ recipientIds: [], block: 'no-recipients' })
   })
 
-  it('누른 사람은 받는 사람에서 빠진다 — u2 에게 t6 은 받을 사람이 없다', async () => {
+  it('누른 사람은 받는 사람에서 빠진다 — u2 가 누르면 t6 은 안건 담당 · 작성 u1 만', async () => {
     await signedIn('u2@inno-ax.com')
     linkT6()
     const checks = useCheckStore()
     await checks.load()
-    expect(checks.forAgenda('t6')?.block).toBe('no-recipients')
+    expect(checks.forAgenda('t6')).toMatchObject({ recipientIds: ['u1'], block: null })
+  })
+
+  it('안건 담당자 · 작성자가 맨 앞 — 연결 작업 · 참조와 겹치면 앞 자리 하나', async () => {
+    await signedIn('u3@inno-ax.com')
+    linkT6()
+    /* t6 — 작성 u1, 담당을 u4 로, 연결 작업 k3(u2), 참조 u1(작성자와 겹침) */
+    Object.assign(
+      useDataStore().allAgendas.find((t) => t.id === 't6')!,
+      {
+        ownerId: 'u4',
+        ccIds: ['u1'],
+      },
+    )
+    const checks = useCheckStore()
+    await checks.load()
+    expect(checks.forAgenda('t6')?.recipientIds).toEqual(['u4', 'u1', 'u2'])
   })
 
   it('결정내용을 바꾸면(판이 오르면) 다시 누를 수 있고, 앞 판 묶음은 접힌 쪽으로 간다', async () => {
@@ -232,7 +248,8 @@ describe('배지', () => {
       },
     )
     data.taskAgendas.push({ taskId: 'k4', agendaId: 't10' })
-    expect(await useCheckStore().send('t10')).toBe(1)
+    /* 안건 담당 · 작성 u2 와 연결 작업 담당 u3 */
+    expect(await useCheckStore().send('t10')).toBe(2)
     await switchTo('u3@inno-ax.com')
 
     const checks = useCheckStore()

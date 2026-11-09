@@ -94,7 +94,7 @@ describe('[확인 요청]', () => {
     expect(sendButton()).toBeNull()
   })
 
-  it('받을 사람이 없으면 닫히고 까닭을 한 줄로 — 연결 작업이 없는 t6', async () => {
+  it('받을 사람이 없으면 닫히고 까닭을 한 줄로 — 담당 · 작성이 나(u1)이고 연결 작업이 없는 t6', async () => {
     await signedIn('u1@inno-ax.com')
     await mountDetail('t6')
     expect(sendButton()!.disabled).toBe(true)

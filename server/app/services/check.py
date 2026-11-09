@@ -1,7 +1,8 @@
 """확인 요청 — 목록 · 보내기 · 확인 · 배지.
 
 계약은 `docs/api/check.md`. 내용 · 수정 · 삭제 · 확인 취소는 없다.
-받는 사람은 서버가 정한다 — 연결 작업의 담당자 + 안건의 참조(docs/api/cc.md).
+받는 사람은 서버가 정한다 — 안건 담당자 · 작성자 + 연결 작업의 담당자 + 안건의 참조
+(docs/api/check.md).
 한 결정 판에 한 번 (Q42 ~ Q44 · docs/api/agenda.md).
 경로의 요청이 내 프로젝트의 것인지는 `access.resolve_scope` 가 본다.
 """
@@ -121,7 +122,7 @@ async def _already_sent(session: AsyncSession, agenda: Agenda) -> bool:
 
 
 async def recipients_of(session: AsyncSession, agenda: Agenda, sender_id: str) -> list[str]:
-    """연결 작업의 담당자(작업 seq 순) 다음 참조(ccIds 순). 겹치면 처음 자리 하나.
+    """안건 담당자 · 작성자, 연결 작업의 담당자(작업 seq 순), 참조(ccIds 순). 겹치면 처음 자리 하나.
 
     보낸 사람은 뺀다. 지금 부여된 활성 멤버가 아니면 조용히 건너뛴다 — 오류로 내면
     부여가 빠진 한 사람 때문에 아무에게도 못 보낸다.
@@ -137,7 +138,8 @@ async def recipients_of(session: AsyncSession, agenda: Agenda, sender_id: str) -
         )
         .order_by(Task.seq)
     )
-    ordered = [owner for owner in owners.all() if owner is not None]
+    ordered = [m for m in (agenda.owner_id, agenda.creator_id) if m is not None]
+    ordered += [owner for owner in owners.all() if owner is not None]
     ordered += [cc.member_id for cc in agenda.cc]
     candidates = [member_id for member_id in dict.fromkeys(ordered) if member_id != sender_id]
     granted = await active_project_members(session, agenda.project_id, candidates)
