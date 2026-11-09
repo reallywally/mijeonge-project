@@ -7,6 +7,7 @@ import { change } from '@/lib/history'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from './auth'
 import { useDataStore } from './data'
+import type { Task } from '@/types/domain'
 import { useTaskStore } from './task'
 
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
@@ -542,37 +543,75 @@ describe('줄 끌어 옮기기', () => {
   })
 })
 
-describe('내 작업만 (간트)', () => {
-  it('내가 등록했거나 담당인 작업과 그 조상만 남기고, 내 것이 아닌 조상은 흐리게 둔다', () => {
+describe('담당자 고르기 (간트 · 목록)', () => {
+  /** 고른 것과 그 조상만 남기는지 — 조상 중 고른 것이 아닌 것만 흐리게 */
+  function expectPicked(isPicked: (t: Task) => boolean) {
+    const task = useTaskStore()
+    const all = task.visibleRows.map((r) => r.task)
+    const picked = all.filter(isPicked)
+    expect(picked.length).toBeGreaterThan(0)
+    const byId = new Map(all.map((t) => [t.id, t]))
+    const ancestors = new Set<string>()
+    for (const t of picked) {
+      for (let at = t.parentId; at && byId.has(at); at = byId.get(at)!.parentId) ancestors.add(at)
+    }
+    const expected = all.filter((t) => picked.includes(t) || ancestors.has(t.id)).map((t) => t.id)
+    expect(task.shownRows.map((r) => r.task.id)).toEqual(expected)
+    expect(task.ownerShownCount).toBe(picked.length)
+    for (const id of ancestors)
+      expect(task.isOwnerContext(id)).toBe(!picked.some((t) => t.id === id))
+    for (const t of picked) expect(task.isOwnerContext(t.id)).toBe(false)
+    for (const t of all) expect(task.isPicked(t)).toBe(isPicked(t))
+  }
+
+  it("'나' 를 고르면 예전 '내 작업만' 처럼 내가 등록했거나 담당인 작업과 그 조상(흐리게)만 남는다", () => {
     const task = useTaskStore()
     const me = useAuthStore().me!.id
     task.setHideDone(false)
-    const all = task.shownRows.map((r) => r.task)
-    expect(task.mineOnly).toBe(false)
+    const all = task.shownRows.map((r) => r.task.id)
+    expect(task.ownerPick).toEqual([])
 
-    task.setMineOnly(true)
-    const mine = all.filter((t) => t.creatorId === me || t.ownerId === me)
-    expect(mine.length).toBeGreaterThan(0)
-    const byId = new Map(all.map((t) => [t.id, t]))
-    const ancestors = new Set<string>()
-    for (const t of mine) {
-      for (let at = t.parentId; at && byId.has(at); at = byId.get(at)!.parentId) ancestors.add(at)
-    }
-    const expected = all.filter((t) => mine.includes(t) || ancestors.has(t.id)).map((t) => t.id)
+    task.setOwnerPick([me])
+    expect(task.meInPick).toBe(true)
+    expectPicked((t) => t.creatorId === me || t.ownerId === me)
 
-    expect(task.shownRows.map((r) => r.task.id)).toEqual(expected)
-    expect(task.mineShownCount).toBe(mine.length)
-    for (const id of ancestors) expect(task.isMineContext(id)).toBe(!mine.some((t) => t.id === id))
-    for (const t of mine) expect(task.isMineContext(t.id)).toBe(false)
-
-    task.setMineOnly(false)
-    expect(task.shownRows.map((r) => r.task.id)).toEqual(all.map((t) => t.id))
+    task.setOwnerPick([])
+    expect(task.shownRows.map((r) => r.task.id)).toEqual(all)
   })
 
-  it('완료 숨기기와 같이 걸린다 — 숨긴 완료는 내 것이어도 안 선다', () => {
+  it('다른 사람은 담당자로만 보고, 여럿을 고르면 누구든 담당인 것이 남는다', () => {
+    const task = useTaskStore()
+    task.setHideDone(false)
+    const owners = [...new Set(task.rows.map((r) => r.task.ownerId))].filter(
+      (id): id is string => id !== null && id !== 'u1',
+    )
+    expect(owners.length).toBeGreaterThan(1)
+    const [a, b] = owners
+
+    task.setOwnerPick([a])
+    expect(task.meInPick).toBe(false)
+    expectPicked((t) => t.ownerId === a)
+
+    task.setOwnerPick([a, b])
+    expectPicked((t) => t.ownerId === a || t.ownerId === b)
+  })
+
+  it("'담당자 없음'(none) 은 담당자가 비어 있는 작업이다 — 사람과 같이 고를 수 있다", () => {
+    const task = useTaskStore()
+    task.setHideDone(false)
+    task.setOwnerPick(['none'])
+    expectPicked((t) => t.ownerId === null)
+
+    /* 나(u1)가 아닌 사람 — 나는 등록한 것까지 들어 규칙이 다르다 */
+    const someone = task.rows.find((r) => r.task.ownerId && r.task.ownerId !== 'u1')!.task.ownerId!
+    task.setOwnerPick(['none', someone])
+    expectPicked((t) => t.ownerId === null || t.ownerId === someone)
+  })
+
+  it('완료 숨기기와 같이 걸린다 — 숨긴 완료는 고른 사람의 것이어도 안 선다', () => {
     const task = useTaskStore()
     task.setHideDone(true)
-    task.setMineOnly(true)
+    task.setOwnerPick([useAuthStore().me!.id])
     expect(task.shownRows.some((r) => r.task.status === 'done' && !r.childCount)).toBe(false)
   })
 })

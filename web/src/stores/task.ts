@@ -7,6 +7,7 @@ import { firstLine } from '@/lib/agenda'
 import { monthDay, nowIso, slashDay } from '@/lib/date'
 import { bodyChanged, bodyText, change, diffChanges } from '@/lib/history'
 import { toastError } from '@/lib/notify'
+import { matchesOwnerPick } from '@/lib/ownerPick'
 import { inheritedPartId } from '@/lib/part'
 import { recall, remember } from '@/lib/storage'
 import {
@@ -157,43 +158,47 @@ export const useTaskStore = defineStore('task', () => {
   const doneHiddenIds = computed<Set<string>>(() =>
     hideDone.value ? hiddenDoneIds(visibleRows.value.map((r) => r.task)) : new Set(),
   )
-  /* 내 작업만 — 간트만 따른다. 내가 등록했거나 담당인 작업과, 트리가 끊기지 않게 그 조상(흐리게)을 남긴다.
-     늘 꺼진 채로 시작하고 바꾼 값은 기억하지 않는다(새로 열면 다시 꺼짐). 보기만 거른다 */
-  const mineOnly = ref(false)
-  function setMineOnly(on: boolean) {
-    mineOnly.value = on
+  /* 담당자 고르기 — 간트와 목록이 같이 따른다(목록은 다른 조회 조건과 AND). 고른 값은 주소(?owner=)가 들고,
+     화면이 주소를 읽어 여기에 넣는다. 간트는 고른 사람의 작업과, 트리가 끊기지 않게 그 조상(흐리게)을 남긴다.
+     '나' 를 고르면 담당뿐 아니라 내가 등록한 작업도 든다(예전 '내 작업만' 과 같은 규칙). 보기만 거른다 */
+  const ownerPick = ref<string[]>([])
+  function setOwnerPick(ids: string[]) {
+    ownerPick.value = [...ids]
   }
-  const isMine = (task: Task) =>
-    auth.me !== null && (task.creatorId === auth.me.id || task.ownerId === auth.me.id)
+  const pickedSet = computed(() => new Set(ownerPick.value))
+  const ownerPicked = computed(() => ownerPick.value.length > 0)
+  const meInPick = computed(() => auth.me !== null && pickedSet.value.has(auth.me.id))
+  const isPicked = (task: Task) =>
+    matchesOwnerPick(pickedSet.value, task.ownerId, meInPick.value ? [task.creatorId] : [])
 
-  /** 숨긴 완료를 뺀 행 — 내 작업만 거르기 전 */
+  /** 숨긴 완료를 뺀 행 — 담당자로 거르기 전 */
   const undoneRows = computed<TaskRow[]>(() =>
     visibleRows.value.filter((r) => !doneHiddenIds.value.has(r.task.id)),
   )
-  /** 내 작업만일 때 내 것이 아닌데 조상이라 남은 작업 — 간트가 흐리게 그린다 */
-  const mineContextIds = computed<Set<string>>(() => {
-    if (!mineOnly.value) return new Set()
+  /** 담당자를 골랐을 때 고른 사람의 것이 아닌데 조상이라 남은 작업 — 간트가 흐리게 그린다 */
+  const ownerContextIds = computed<Set<string>>(() => {
+    if (!ownerPicked.value) return new Set()
     const byId = new Map(undoneRows.value.map((r) => [r.task.id, r.task]))
     const context = new Set<string>()
     for (const r of undoneRows.value) {
-      if (!isMine(r.task)) continue
+      if (!isPicked(r.task)) continue
       let at = r.task.parentId
       while (at && byId.has(at) && !context.has(at)) {
-        if (!isMine(byId.get(at)!)) context.add(at)
+        if (!isPicked(byId.get(at)!)) context.add(at)
         at = byId.get(at)!.parentId
       }
     }
     return context
   })
-  /** 간트가 그리는 행 — 보이는 범위에서 숨긴 완료를 빼고, 내 작업만이면 내 것과 그 조상만 */
+  /** 간트가 그리는 행 — 보이는 범위에서 숨긴 완료를 빼고, 담당자를 골랐으면 그 사람들의 것과 그 조상만 */
   const shownRows = computed<TaskRow[]>(() =>
-    mineOnly.value
-      ? undoneRows.value.filter((r) => isMine(r.task) || mineContextIds.value.has(r.task.id))
+    ownerPicked.value
+      ? undoneRows.value.filter((r) => isPicked(r.task) || ownerContextIds.value.has(r.task.id))
       : undoneRows.value,
   )
-  /** 내 작업만일 때 간트에 선 내 작업 수 — 조상은 빼고 센다 */
-  const mineShownCount = computed(() => shownRows.value.filter((r) => isMine(r.task)).length)
-  const isMineContext = (taskId: string) => mineContextIds.value.has(taskId)
+  /** 담당자를 골랐을 때 간트에 선 고른 사람의 작업 수 — 조상은 빼고 센다 */
+  const ownerShownCount = computed(() => shownRows.value.filter((r) => isPicked(r.task)).length)
+  const isOwnerContext = (taskId: string) => ownerContextIds.value.has(taskId)
 
   /* 아래 수는 보이는 것만 센다 — 화면에 없는 작업을 '몇 건' 이라 적으면 찾을 수 없다 */
 
@@ -696,10 +701,12 @@ export const useTaskStore = defineStore('task', () => {
     setHideDone,
     doneHiddenIds,
     shownRows,
-    mineOnly,
-    setMineOnly,
-    mineShownCount,
-    isMineContext,
+    ownerPick,
+    setOwnerPick,
+    meInPick,
+    isPicked,
+    ownerShownCount,
+    isOwnerContext,
     periodLabel,
     taskDetail,
     agendaRow,

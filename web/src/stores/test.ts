@@ -4,6 +4,7 @@ import * as api from '@/api'
 import { messageOf } from '@/api'
 import { canDeleteComment } from '@/lib/access'
 import { toastError } from '@/lib/notify'
+import { matchesOwnerPick } from '@/lib/ownerPick'
 import { visibleInMyParts } from '@/lib/part'
 import { mergeSignals, sortAttention, testPeriodLabel, worstStatus } from '@/lib/testcase'
 import { useAuthStore } from '@/stores/auth'
@@ -164,41 +165,41 @@ export const useTestStore = defineStore('test', () => {
     scoped.value ? allRows.value.filter((r) => shows(r.test.id)) : allRows.value,
   )
 
-  /* 내 테스트만 — 간트만 따른다. 내가 담당이거나 참조에 든 테스트와, 트리가 끊기지 않게 그 조상(흐리게)을 남긴다.
-     작업 간트의 '내 작업만' 과 같이 늘 꺼진 채로 시작하고 바꾼 값은 기억하지 않는다. 보기만 거른다 */
-  const mineOnly = ref(false)
-  function setMineOnly(on: boolean) {
-    mineOnly.value = on
+  /* 담당자 고르기 — 간트와 목록이 같이 따른다(목록은 다른 조회 조건과 AND). 고른 값은 주소(?owner=)가 들고,
+     화면이 주소를 읽어 여기에 넣는다. 고른 사람이 담당이거나 참조에 든 테스트와, 트리가 끊기지 않게
+     그 조상(흐리게)을 남긴다. 보기만 거른다 */
+  const ownerPick = ref<string[]>([])
+  function setOwnerPick(ids: string[]) {
+    ownerPick.value = [...ids]
   }
-  const isMine = (t: TestCase) => {
-    const me = data.currentMemberId
-    return me !== null && (t.ownerId === me || t.ccIds.includes(me))
-  }
-  /** 내 테스트만일 때 내 것이 아닌데 조상이라 남은 테스트 — 간트가 흐리게 그린다 */
-  const mineContextIds = computed<Set<string>>(() => {
-    if (!mineOnly.value) return new Set()
+  const pickedSet = computed(() => new Set(ownerPick.value))
+  const ownerPicked = computed(() => ownerPick.value.length > 0)
+  const isPicked = (t: TestCase) => matchesOwnerPick(pickedSet.value, t.ownerId, t.ccIds)
+  /** 담당자를 골랐을 때 고른 사람의 것이 아닌데 조상이라 남은 테스트 — 간트가 흐리게 그린다 */
+  const ownerContextIds = computed<Set<string>>(() => {
+    if (!ownerPicked.value) return new Set()
     const shown = new Map(visibleRows.value.map((r) => [r.test.id, r.test]))
     const context = new Set<string>()
     for (const r of visibleRows.value) {
-      if (!isMine(r.test)) continue
+      if (!isPicked(r.test)) continue
       let at = r.test.parentId
       while (at && shown.has(at) && !context.has(at)) {
-        if (!isMine(shown.get(at)!)) context.add(at)
+        if (!isPicked(shown.get(at)!)) context.add(at)
         at = shown.get(at)!.parentId
       }
     }
     return context
   })
-  /** 간트가 그리는 줄 — 내 테스트만이면 내 것과 그 조상만 */
+  /** 간트가 그리는 줄 — 담당자를 골랐으면 그 사람들의 것과 그 조상만 */
   const ganttRows = computed<TestRow[]>(() =>
-    mineOnly.value
-      ? visibleRows.value.filter((r) => isMine(r.test) || mineContextIds.value.has(r.test.id))
+    ownerPicked.value
+      ? visibleRows.value.filter((r) => isPicked(r.test) || ownerContextIds.value.has(r.test.id))
       : visibleRows.value,
   )
-  /** 내 테스트만일 때 간트에 선 내 테스트 수 — 조상은 빼고 센다 */
-  const mineShownCount = computed(() => ganttRows.value.filter((r) => isMine(r.test)).length)
-  /** 간트에서 흐리게 그릴 줄 — '내 파트' 의 길잇기 조상이거나 '내 테스트만' 의 조상 */
-  const isGanttContext = (testId: string) => isContext(testId) || mineContextIds.value.has(testId)
+  /** 담당자를 골랐을 때 간트에 선 고른 사람의 테스트 수 — 조상은 빼고 센다 */
+  const ownerShownCount = computed(() => ganttRows.value.filter((r) => isPicked(r.test)).length)
+  /** 간트에서 흐리게 그릴 줄 — '내 파트' 의 길잇기 조상이거나 담당자 고르기의 조상 */
+  const isGanttContext = (testId: string) => isContext(testId) || ownerContextIds.value.has(testId)
 
   /* '지금' 은 돌리는 테스트(묶음이 아닌 것)만 센다 — 묶음까지 세면 같은 테스트가 두 번 든다.
      길을 잇느라 선 조상은 내 일이 아니라 뺀다 */
@@ -432,10 +433,11 @@ export const useTestStore = defineStore('test', () => {
     allRows,
     visibleRows,
     isContext,
-    mineOnly,
-    setMineOnly,
+    ownerPick,
+    setOwnerPick,
+    isPicked,
     ganttRows,
-    mineShownCount,
+    ownerShownCount,
     isGanttContext,
     nowCounts,
     testingNow,

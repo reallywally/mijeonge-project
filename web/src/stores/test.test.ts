@@ -155,3 +155,40 @@ describe('[내 파트 | 전체]', () => {
     expect(store.loaded).toBe(false)
   })
 })
+
+describe('담당자 고르기 (간트 · 목록)', () => {
+  const ids = (rows: { test: { id: string } }[]) => rows.map((r) => r.test.id).sort()
+
+  it('담당이거나 참조에 든 테스트와 그 상위(흐리게)만 남는다', async () => {
+    const store = await boot()
+    expect(store.ganttRows).toHaveLength(8)
+
+    /* 이도현(u3) — tc5 · tc6 담당, tc2 참조. tc1 은 tc2 의 상위라 흐리게 선다 */
+    store.setOwnerPick(['u3'])
+    expect(ids(store.ganttRows)).toEqual(['tc1', 'tc2', 'tc5', 'tc6'])
+    expect(store.isGanttContext('tc1')).toBe(true)
+    expect(store.isGanttContext('tc5')).toBe(false)
+    expect(store.ownerShownCount).toBe(3)
+    expect(store.isPicked(store.byId.tc2)).toBe(true)
+
+    store.setOwnerPick([])
+    expect(store.ganttRows).toHaveLength(8)
+  })
+
+  it('여럿을 고르면 누구든 담당 · 참조인 것이 남는다', async () => {
+    const store = await boot()
+    store.setOwnerPick(['u4', 'u1'])
+    expect(ids(store.ganttRows)).toEqual(['tc1', 'tc4', 'tc5', 'tc7', 'tc8'])
+    expect(['tc1', 'tc5'].every(store.isGanttContext)).toBe(true)
+    expect(store.ownerShownCount).toBe(3)
+  })
+
+  it("'담당자 없음'(none) 은 담당자가 비어 있는 테스트다 — 참조만 있어도 담당자 없음이다", async () => {
+    const store = await boot()
+    await store.patch('tc8', { ownerId: null, ccIds: ['u2'] })
+    store.setOwnerPick(['none'])
+    expect(ids(store.ganttRows)).toEqual(['tc5', 'tc8'])
+    expect(store.isGanttContext('tc5')).toBe(true)
+    expect(store.ownerShownCount).toBe(1)
+  })
+})

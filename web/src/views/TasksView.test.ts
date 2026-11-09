@@ -706,35 +706,115 @@ describe('간트차트 탭', () => {
   })
 })
 
-describe('내 작업만 (간트)', () => {
-  beforeEach(() => localStorage.clear())
+describe('담당자 고르기 (간트 · 목록)', () => {
+  const choice = (id: string) =>
+    document.body.querySelector<HTMLElement>(`[data-owner-choice="${id}"]`)!
+  const pickButtons = (w: Awaited<ReturnType<typeof mountView>>) => w.findAll('[data-owner-pick]')
+  const tab = (w: Awaited<ReturnType<typeof mountView>>, label: string) =>
+    w.findAll('a.border-b-2').find((a) => a.text() === label)!
 
-  it('간트에만 서고, 켜면 내가 등록 · 담당한 작업과 그 상위만 남는다 — 바꾼 값은 기억하지 않는다', async () => {
+  it("간트 위 [담당자 ▾] — '나' · 멤버 · '담당자 없음' 을 여럿 고르고, 주소 · 버튼 · 수가 따라간다", async () => {
     const w = await mountView('/tasks')
     const taskStore = useTaskStore()
-    const toggle = w.find('[data-mine-only]')
-    expect(toggle.attributes('data-state')).toBe('unchecked')
     const before = chart.parsed.length
+    expect(w.find('[data-owner-pick-label]').text()).toBe('담당자')
+    expect(w.find('[data-owner-count]').exists()).toBe(false)
 
-    await toggle.trigger('click')
+    await pickButtons(w)[0].trigger('click')
     await flushPromises()
-    expect(taskStore.mineOnly).toBe(true)
+    const rows = [...document.body.querySelectorAll<HTMLElement>('[data-owner-choice]')]
+    expect(rows[0].dataset.ownerChoice).toBe('u1')
+    expect(rows[0].textContent).toContain('나')
+    expect(rows.at(-1)!.dataset.ownerChoice).toBe('none')
+    /* 나는 맨 위 '나' 로만 선다 */
+    expect(rows.filter((r) => r.dataset.ownerChoice === 'u1')).toHaveLength(1)
+
+    await click(choice('u1'))
+    expect(window.location.search).toBe('?owner=u1')
+    expect(taskStore.ownerPick).toEqual(['u1'])
     expect(chart.parsed.length).toBeLessThan(before)
-    /* 간트는 트리 순서(order)로 세우니 무엇이 섰는지만 본다 */
     expect(chart.parsed.map((t) => t.id).sort()).toEqual(
       taskStore.shownRows.map((r) => r.task.id).sort(),
     )
-    expect(w.find('[data-mine-count]').attributes('title')).toBe(
-      `등록 · 담당 ${taskStore.mineShownCount}건`,
-    )
-    /* 내 것이 아닌 상위는 흐리게(context) 선다 */
+    /* 고른 사람의 것이 아닌 상위는 흐리게(context) 선다 */
     for (const t of chart.parsed)
-      expect(Boolean(t.context)).toBe(taskStore.isMineContext(String(t.id)))
-    expect(localStorage.getItem('innoflow.tasks.mineOnly')).toBeNull()
+      expect(Boolean(t.context)).toBe(taskStore.isOwnerContext(String(t.id)))
+    expect(w.find('[data-owner-count]').text()).toBe(`등록 · 담당 ${taskStore.ownerShownCount}건`)
+    expect(w.find('[data-owner-pick-label]').text()).toBe('나')
 
-    await w.vm.$router.push('/tasks?view=list')
+    await click(choice('u2'))
+    expect(window.location.search).toBe('?owner=u1,u2')
+    expect(w.find('[data-owner-pick-label]').text()).toBe('나 외 1')
+    expect(chart.parsed.map((t) => t.id).sort()).toEqual(
+      taskStore.shownRows.map((r) => r.task.id).sort(),
+    )
+
+    /* 나를 빼면 담당만 센다 */
+    await click(choice('u1'))
+    expect(w.find('[data-owner-count]').text()).toBe(`담당 ${taskStore.ownerShownCount}건`)
+
+    await w.find('[data-owner-pick-clear]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-mine-only]').exists()).toBe(false)
+    expect(window.location.search).toBe('')
+    expect(chart.parsed).toHaveLength(before)
+    /* 예전 '내 작업만' 처럼 브라우저에 기억하지 않는다 — 주소가 든다 */
+    expect(Object.keys(localStorage).some((k) => /owner|mine/i.test(k))).toBe(false)
+  })
+
+  it('주소(?owner=none)로 열면 담당자 없는 작업과 그 상위로 시작하고, 목록 · 칸반 탭으로 옮겨도 남는다', async () => {
+    const w = await mountView('/tasks?owner=none')
+    const taskStore = useTaskStore()
+    const none = taskStore.visibleRows.filter((r) => r.task.ownerId === null)
+    expect(none.length).toBeGreaterThan(0)
+    expect(taskStore.ownerPick).toEqual(['none'])
+    expect(w.find('[data-owner-pick-label]').text()).toBe('담당자 없음')
+    expect(taskStore.ownerShownCount).toBe(none.length)
+
+    expect(tab(w, '목록').attributes('href')).toBe('/tasks?view=list&owner=none')
+    expect(tab(w, '칸반보드').attributes('href')).toBe('/tasks?view=board&owner=none')
+
+    /* 목록은 같은 값으로 거른다 — 상위(맥락)는 목록에 서지 않는다 */
+    await w.vm.$router.push('/tasks?view=list&owner=none')
+    await flushPromises()
+    expect(w.text()).toContain(`${none.length}건`)
+    expect(w.find('[data-owner-count]').exists()).toBe(false)
+    expect(w.find('[data-owner-pick-label]').text()).toBe('담당자 없음')
+    expect(tab(w, '간트차트').attributes('href')).toBe('/tasks?owner=none')
+
+    /* 상세를 열고 닫아도 남는다 */
+    await w.findAll('tbody tr')[0].trigger('click')
+    await flushPromises()
+    expect(window.location.search).toContain('owner=none')
+    expect(window.location.search).toContain('view=list')
+  })
+
+  it('목록에서 고르면 다른 조회 조건과 함께 걸리고, 초기화가 같이 푼다', async () => {
+    const w = await mountView('/tasks?view=list')
+    const taskStore = useTaskStore()
+    await pickButtons(w)[0].trigger('click')
+    await flushPromises()
+    await click(choice('u2'))
+    expect(window.location.search).toBe('?view=list&owner=u2')
+    const owned = taskStore.visibleRows.filter((r) => r.task.ownerId === 'u2')
+    const doing = owned.filter((r) => r.task.status === 'doing')
+    expect(w.text()).toContain(`총 ${owned.length}건`)
+
+    await w
+      .findAll('button')
+      .find((b) => b.text().startsWith('진행 중'))!
+      .trigger('click')
+    await flushPromises()
+    expect(w.findAll('tbody tr').filter((r) => r.text().includes('박지훈'))).toHaveLength(
+      Math.min(doing.length, 10),
+    )
+
+    await w
+      .findAll('button')
+      .find((b) => b.text() === '초기화')!
+      .trigger('click')
+    await flushPromises()
+    expect(window.location.search).toBe('?view=list')
+    expect(taskStore.ownerPick).toEqual([])
   })
 })
 

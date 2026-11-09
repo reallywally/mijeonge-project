@@ -419,28 +419,54 @@ describe('테스트 간트', () => {
     expect(useTestStore().byId.tc8).toMatchObject({ start: '2026-10-14', due: '2026-10-16' })
   })
 
-  it('내 테스트만 — 켜면 내가 담당 · 참조인 테스트와 그 상위(흐리게)만, 목록에는 서지 않는다', async () => {
-    const { w } = await mountAt('/tests', 'u3@inno-ax.com')
+  it('담당자 고르기 — 고른 사람이 담당 · 참조인 테스트와 그 상위(흐리게)만, 주소에 남고 목록도 같은 값으로 거른다', async () => {
+    const { w, router } = await mountAt('/tests', 'u3@inno-ax.com')
     usePartStore().setScope('all')
     await flushPromises()
-    const toggle = w.find('[data-mine-only]')
-    expect(toggle.attributes('data-state')).toBe('unchecked')
     expect(chart.parsed).toHaveLength(8)
+    expect(text('[data-owner-pick-label]')).toBe('담당자')
 
-    await toggle.trigger('click')
+    $('[data-owner-pick]')!.click()
     await flushPromises()
+    $('[data-owner-choice="u3"]')!.click()
+    await flushPromises()
+    expect(window.location.search).toBe('?owner=u3')
+    expect(text('[data-owner-pick-label]')).toBe('나')
     /* 이도현(u3) — tc5 · tc6 담당, tc2 참조. tc1 은 tc2 의 상위라 흐리게 선다 */
     expect(chart.parsed.map((t) => t.id).sort()).toEqual(['tc1', 'tc2', 'tc5', 'tc6'])
     expect(chart.parsed.filter((t) => t.context).map((t) => t.id)).toEqual(['tc1'])
-    expect(w.find('[data-mine-count]').attributes('title')).toBe('담당 · 참조 3건')
+    expect(text('[data-owner-count]')).toBe('담당 · 참조 3건')
 
-    await toggle.trigger('click')
+    /* 여럿 — 박지훈(u2)은 T1 ~ T3 담당 */
+    $('[data-owner-choice="u2"]')!.click()
     await flushPromises()
-    expect(chart.parsed).toHaveLength(8)
+    expect(window.location.search).toBe('?owner=u3,u2')
+    expect(text('[data-owner-pick-label]')).toBe('나 외 1')
+    expect(chart.parsed.map((t) => t.id).sort()).toEqual(['tc1', 'tc2', 'tc3', 'tc5', 'tc6'])
+    expect(chart.parsed.filter((t) => t.context)).toHaveLength(0)
 
-    await w.vm.$router.push('/tests?view=list')
+    /* 목록으로 옮겨도 남는다 — 목록도 담당 · 참조로 거른다 */
+    const listTab = w.findAll('a.border-b-2').find((a) => a.text() === '목록')!
+    expect(listTab.attributes('href')).toBe('/tests?view=list&owner=u3,u2')
+    await router.push(listTab.attributes('href')!)
     await flushPromises()
-    expect(w.find('[data-mine-only]').exists()).toBe(false)
+    expect(text('[data-owner-pick-label]')).toBe('나 외 1')
+    expect(w.text()).toContain('총 5건')
+
+    $('[data-owner-pick-clear]')!.click()
+    await flushPromises()
+    expect(window.location.search).toBe('?view=list')
+    expect(w.text()).toContain('총 8건')
+  })
+
+  it('주소(?owner=none)로 열면 담당자 없는 테스트로 시작한다', async () => {
+    await mountAt('/tests?owner=none', 'u1@inno-ax.com')
+    expect(chart.parsed).toHaveLength(0)
+    /* 픽스처에는 담당자 없는 테스트가 없다 — 하나 비운다 */
+    await useTestStore().patch('tc8', { ownerId: null })
+    await flushPromises()
+    expect(chart.parsed.map((t) => t.id).sort()).toEqual(['tc5', 'tc8'])
+    expect(text('[data-owner-pick-label]')).toBe('담당자 없음')
   })
 
   it("줄의 '+' 는 그 묶음 아래로 추가 팝업을 연다", async () => {

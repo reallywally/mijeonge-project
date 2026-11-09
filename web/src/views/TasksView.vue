@@ -15,8 +15,8 @@ import {
 import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import AppShell from '@/components/app/AppShell.vue'
 import HideDoneToggle from '@/components/app/HideDoneToggle.vue'
-import MineOnlyToggle from '@/components/app/MineOnlyToggle.vue'
 import IdCell from '@/components/app/IdCell.vue'
+import OwnerPickFilter from '@/components/app/OwnerPickFilter.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TaskBoard from '@/components/app/TaskBoard.vue'
@@ -42,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ownerQueryOf, parseOwnerQuery, withOwnerQuery } from '@/lib/ownerPick'
 import { partFilterOf } from '@/lib/part'
 import { READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
@@ -65,14 +66,29 @@ const view = computed<TaskView>(() => {
   const q = route.query.view
   return q === 'board' || q === 'list' ? q : 'gantt'
 })
-const viewQuery = computed(() => (view.value === 'gantt' ? {} : { view: view.value }))
+/* 담당자 고르기 — 목록 · 간트가 같은 값을 쓰고 주소(?owner=u2,none)가 든다. 새로 고침 · 링크 공유 · 탭을 옮겨도 남는다.
+   주소가 원본이고 스토어는 주소를 따라간다 */
+const ownerPick = computed(() => parseOwnerQuery(route.query.owner))
+watch(
+  () => ownerPick.value.join(','),
+  () => taskStore.setOwnerPick(ownerPick.value),
+  { immediate: true },
+)
+function pickOwners(ids: string[]) {
+  void router.replace({ query: withOwnerQuery(route.query, ids) })
+  resetPage()
+}
+const ownerQuery = computed(() => ownerQueryOf(ownerPick.value))
+const viewQuery = computed(() => ({
+  ...(view.value === 'gantt' ? {} : { view: view.value }),
+  ...ownerQuery.value,
+}))
 
 /* 조회 조건 — 제목 · 파트 · 담당자. 안건 목록과 같은 자리, 같은 순서다. 목록 탭의 것이다.
    파트 거르기는 [내 파트 | 전체] 로 거른 뒤에 한 번 더 좁힌다 */
 const titleDraft = ref('')
 const query = ref('')
 const statusFilter = ref<'all' | TaskStatus | 'undated'>('all')
-const ownerFilter = ref<string>('all')
 const partFilter = ref<string>('all')
 const page = ref(1)
 const perPage = 10
@@ -100,11 +116,8 @@ function matchesStatus(row: TaskRow) {
   return row.task.status === statusFilter.value
 }
 
-function matchesOwner(row: TaskRow) {
-  if (ownerFilter.value === 'all') return true
-  if (ownerFilter.value === 'none') return row.task.ownerId === null
-  return row.task.ownerId === ownerFilter.value
-}
+/* 간트와 같은 규칙 — 고른 사람이 담당(나를 골랐으면 내가 등록한 것도) */
+const matchesOwner = (row: TaskRow) => taskStore.isPicked(row.task)
 
 function matchesPart(row: TaskRow) {
   if (partFilter.value === 'all') return true
@@ -169,8 +182,8 @@ function resetAll() {
   titleDraft.value = ''
   query.value = ''
   statusFilter.value = 'all'
-  ownerFilter.value = 'all'
   partFilter.value = 'all'
+  if (ownerPick.value.length > 0) pickOwners([])
   resetPage()
 }
 function pickStatus(key: (typeof statusChips.value)[number]['key']) {
@@ -354,7 +367,7 @@ function bulkOwner(value: string) {
 
     <div class="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-card px-6">
       <RouterLink
-        :to="{ path: '/tasks', query: { view: 'list' } }"
+        :to="{ path: '/tasks', query: { view: 'list', ...ownerQuery } }"
         class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'list'
@@ -366,7 +379,7 @@ function bulkOwner(value: string) {
         목록
       </RouterLink>
       <RouterLink
-        :to="{ path: '/tasks' }"
+        :to="{ path: '/tasks', query: ownerQuery }"
         class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'gantt'
@@ -378,7 +391,7 @@ function bulkOwner(value: string) {
         간트차트
       </RouterLink>
       <RouterLink
-        :to="{ path: '/tasks', query: { view: 'board' } }"
+        :to="{ path: '/tasks', query: { view: 'board', ...ownerQuery } }"
         class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'board'
@@ -397,13 +410,16 @@ function bulkOwner(value: string) {
           view === 'list' && doneChosen ? '상태로 완료를 골라 완료 작업도 보입니다' : undefined
         "
       />
-      <MineOnlyToggle
-        v-if="view === 'gantt'"
-        :model-value="taskStore.mineOnly"
-        label="내 작업만"
-        :count-title="`등록 · 담당 ${taskStore.mineShownCount}건`"
-        @update:model-value="taskStore.setMineOnly"
-      />
+      <template v-if="view === 'gantt'">
+        <OwnerPickFilter
+          :model-value="ownerPick"
+          label="담당자 고르기"
+          @update:model-value="pickOwners"
+        />
+        <span v-if="ownerPick.length > 0" class="text-xs text-muted-foreground" data-owner-count>
+          {{ taskStore.meInPick ? '등록 · 담당' : '담당' }} {{ taskStore.ownerShownCount }}건
+        </span>
+      </template>
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>
@@ -472,18 +488,12 @@ function bulkOwner(value: string) {
               </Select>
             </template>
             <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
-            <Select v-model="ownerFilter" @update:model-value="resetPage">
-              <SelectTrigger class="w-[132px] shrink-0">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
-                <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
-                  data.memberName(m.id)
-                }}</SelectItem>
-                <SelectItem value="none">미정</SelectItem>
-              </SelectContent>
-            </Select>
+            <OwnerPickFilter
+              :model-value="ownerPick"
+              label="담당자 고르기"
+              trigger-class="h-8 w-[132px] justify-between"
+              @update:model-value="pickOwners"
+            />
             <Button class="shrink-0" @click="search">
               <Search class="size-4" />
               조회

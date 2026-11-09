@@ -15,7 +15,7 @@ import {
 } from 'lucide-vue-next'
 import AppShell from '@/components/app/AppShell.vue'
 import IdCell from '@/components/app/IdCell.vue'
-import MineOnlyToggle from '@/components/app/MineOnlyToggle.vue'
+import OwnerPickFilter from '@/components/app/OwnerPickFilter.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
 import TestDetailDialog from '@/components/app/TestDetailDialog.vue'
@@ -26,13 +26,6 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -41,6 +34,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { kstToday } from '@/lib/date'
+import { ownerQueryOf, parseOwnerQuery, withOwnerQuery } from '@/lib/ownerPick'
 import { dueLeftLabel, testStatusLabel } from '@/lib/testcase'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
@@ -67,7 +61,23 @@ watch(
    팝업(/tests/:id · /tests/new)에도 이 쿼리를 달고 다녀서, 닫으면 열었던 보기로 돌아간다 */
 type TestView = 'list' | 'gantt'
 const view = computed<TestView>(() => (route.query.view === 'list' ? 'list' : 'gantt'))
-const viewQuery = computed(() => (view.value === 'gantt' ? {} : { view: view.value }))
+/* 담당자 고르기 — 목록 · 간트가 같은 값을 쓰고 주소(?owner=u2,none)가 든다. 새로 고침 · 링크 공유 · 보기를 옮겨도 남는다.
+   주소가 원본이고 스토어는 주소를 따라간다 */
+const ownerPick = computed(() => parseOwnerQuery(route.query.owner))
+watch(
+  () => ownerPick.value.join(','),
+  () => testStore.setOwnerPick(ownerPick.value),
+  { immediate: true },
+)
+function pickOwners(ids: string[]) {
+  void router.replace({ query: withOwnerQuery(route.query, ids) })
+  page.value = 1
+}
+const ownerQuery = computed(() => ownerQueryOf(ownerPick.value))
+const viewQuery = computed(() => ({
+  ...(view.value === 'gantt' ? {} : { view: view.value }),
+  ...ownerQuery.value,
+}))
 
 const today = computed(() => kstToday())
 
@@ -79,23 +89,20 @@ function pickCard(key: TestNowKey) {
   card.value = card.value === key ? null : key
   page.value = 1
   /* 간트에서 누르면 거른 목록으로 간다 */
-  if (view.value === 'gantt') router.push({ path: '/tests', query: { view: 'list' } })
+  if (view.value === 'gantt')
+    router.push({ path: '/tests', query: { view: 'list', ...ownerQuery.value } })
 }
 
 /* 조회 조건 — 제목 · 담당자 · 나를 참조. 작업 목록과 같은 자리 */
 const titleDraft = ref('')
 const query = ref('')
-const ownerFilter = ref<string>('all')
 /* 켜면 내가 참조(ccIds)에 있는 테스트만 */
 const ccMine = ref(false)
 const page = ref(1)
 const perPage = 10
 
-function matchesOwner(row: TestRow) {
-  if (ownerFilter.value === 'all') return true
-  if (ownerFilter.value === 'none') return row.test.ownerId === null
-  return row.test.ownerId === ownerFilter.value
-}
+/* 간트와 같은 규칙 — 고른 사람이 담당이거나 참조 */
+const matchesOwner = (row: TestRow) => testStore.isPicked(row.test)
 
 const matchesCc = (row: TestRow) =>
   !ccMine.value || (data.currentMemberId !== null && row.test.ccIds.includes(data.currentMemberId))
@@ -128,7 +135,7 @@ function search() {
 function resetAll() {
   titleDraft.value = ''
   query.value = ''
-  ownerFilter.value = 'all'
+  if (ownerPick.value.length > 0) pickOwners([])
   ccMine.value = false
   card.value = null
   page.value = 1
@@ -248,7 +255,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
 
     <div class="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-card px-6">
       <RouterLink
-        :to="{ path: '/tests', query: { view: 'list' } }"
+        :to="{ path: '/tests', query: { view: 'list', ...ownerQuery } }"
         class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'list'
@@ -260,7 +267,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
         목록
       </RouterLink>
       <RouterLink
-        :to="{ path: '/tests' }"
+        :to="{ path: '/tests', query: ownerQuery }"
         class="inline-flex h-11 items-center gap-1.5 border-b-2 px-2.5 text-[13px] transition-colors"
         :class="
           view === 'gantt'
@@ -272,13 +279,16 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
         간트차트
       </RouterLink>
       <div class="grow" />
-      <MineOnlyToggle
-        v-if="view === 'gantt'"
-        :model-value="testStore.mineOnly"
-        label="내 테스트만"
-        :count-title="`담당 · 참조 ${testStore.mineShownCount}건`"
-        @update:model-value="testStore.setMineOnly"
-      />
+      <template v-if="view === 'gantt'">
+        <OwnerPickFilter
+          :model-value="ownerPick"
+          label="담당자 고르기"
+          @update:model-value="pickOwners"
+        />
+        <span v-if="ownerPick.length > 0" class="text-xs text-muted-foreground" data-owner-count>
+          담당 · 참조 {{ testStore.ownerShownCount }}건
+        </span>
+      </template>
       <PartScopeToggle />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <Button v-else size="sm" @click="openCreate()">
@@ -534,18 +544,12 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
                 @keyup.enter="search"
               />
               <span class="shrink-0 text-sm text-muted-foreground">담당자</span>
-              <Select v-model="ownerFilter" @update:model-value="page = 1">
-                <SelectTrigger class="w-[132px] shrink-0" aria-label="담당자 거르기">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">전체</SelectItem>
-                  <SelectItem v-for="m in data.allMembers" :key="m.id" :value="m.id">{{
-                    data.memberName(m.id)
-                  }}</SelectItem>
-                  <SelectItem value="none">미정</SelectItem>
-                </SelectContent>
-              </Select>
+              <OwnerPickFilter
+                :model-value="ownerPick"
+                label="담당자 고르기"
+                trigger-class="h-8 w-[132px] justify-between"
+                @update:model-value="pickOwners"
+              />
               <label class="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm">
                 <Checkbox
                   :model-value="ccMine"

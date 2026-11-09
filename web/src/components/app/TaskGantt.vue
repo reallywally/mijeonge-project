@@ -28,7 +28,7 @@ const items = computed(() => {
   return toGanttItems(
     taskStore.shownRows,
     taskStatusLabel,
-    (id) => partStore.isContextTask(id) || taskStore.isMineContext(id),
+    (id) => partStore.isContextTask(id) || taskStore.isOwnerContext(id),
     data.memberAvatar,
   ).map((item) => ({
     ...item,
