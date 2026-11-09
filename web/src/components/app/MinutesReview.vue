@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CalendarDays, CornerDownRight, ListTree, Sparkles, TriangleAlert } from 'lucide-vue-next'
+import {
+  CalendarDays,
+  CornerDownRight,
+  ListTree,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+  Undo2,
+} from 'lucide-vue-next'
 import OwnerSelect from '@/components/app/OwnerSelect.vue'
 import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import AgendaStateSelect from '@/components/app/AgendaStateSelect.vue'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -25,6 +34,25 @@ const data = useDataStore()
 const agendaStore = useAgendaStore()
 
 const form = computed(() => minutes.form!)
+/* 지운 줄은 그리지 않는다 — 끈 줄과 같이 등록에서 빠지고, [되돌리기] 로 살린다 */
+const agendas = computed(() => form.value.agendas.filter((t) => !minutes.isRemoved(t.tempId)))
+const updates = computed(() =>
+  form.value.updates.filter((u) => !minutes.isRemoved(updateKey(u.agendaId))),
+)
+const tasks = computed(() => form.value.tasks.filter((t) => !minutes.isRemoved(t.tempId)))
+/** 마지막으로 지운 줄의 이름 — [되돌리기] 옆 한 줄 */
+const lastRemovedLabel = computed(() => {
+  const key = minutes.removed.at(-1)
+  if (!key) return ''
+  const agenda = form.value.agendas.find((t) => t.tempId === key)
+  if (agenda) return `새 안건 '${agenda.title || '제목 없음'}'`
+  const task = form.value.tasks.find((t) => t.tempId === key)
+  if (task) return `작업 '${task.title || '제목 없음'}'`
+  const update = form.value.updates.find((u) => updateKey(u.agendaId) === key)
+  return update
+    ? `'${existing(update.agendaId)?.agenda.title ?? update.agendaId}' 결정내용 바꾸기`
+    : ''
+})
 
 const existing = (agendaId: string) => agendaStore.rows.find((r) => r.agenda.id === agendaId)
 /* 상태 고르기 칸 — 검토 줄은 작게 */
@@ -79,14 +107,14 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
     </section>
 
     <!-- 새 안건 -->
-    <section v-if="form.agendas.length > 0" class="flex flex-col gap-2" aria-label="새 안건">
+    <section v-if="agendas.length > 0" class="flex flex-col gap-2" aria-label="새 안건">
       <h2 class="flex items-baseline gap-2 text-sm font-medium">
         새 안건
-        <span class="text-xs font-normal text-muted-foreground">{{ form.agendas.length }}</span>
+        <span class="text-xs font-normal text-muted-foreground">{{ agendas.length }}</span>
       </h2>
       <ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         <li
-          v-for="t in form.agendas"
+          v-for="t in agendas"
           :key="t.tempId"
           class="flex gap-3 px-4 py-3"
           :class="rowClass(t.tempId)"
@@ -132,26 +160,37 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
               {{ problemOf(t.tempId) }}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+            :aria-label="`새 안건 '${t.title}' 지우기`"
+            title="지우기 — 등록하지 않습니다"
+            data-minutes-row-remove
+            @click="minutes.removeRow(t.tempId)"
+          >
+            <Trash2 class="size-4" />
+          </Button>
         </li>
       </ul>
     </section>
 
     <!-- 기존 안건 결정내용 바꾸기 — 지금 결정내용을 통째로 갈아끼운다 -->
     <section
-      v-if="form.updates.length > 0"
+      v-if="updates.length > 0"
       class="flex flex-col gap-2"
       aria-label="기존 안건 결정내용 바꾸기"
     >
       <h2 class="flex items-baseline gap-2 text-sm font-medium">
         기존 안건 결정내용 바꾸기
-        <span class="text-xs font-normal text-muted-foreground">{{ form.updates.length }}</span>
+        <span class="text-xs font-normal text-muted-foreground">{{ updates.length }}</span>
         <span class="text-xs font-normal text-muted-foreground"
           >등록하면 지금 결정내용이 아래 글로 바뀝니다</span
         >
       </h2>
       <ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         <li
-          v-for="u in form.updates"
+          v-for="u in updates"
           :key="u.agendaId"
           class="flex gap-3 px-4 py-3"
           :class="rowClass(updateKey(u.agendaId))"
@@ -214,19 +253,30 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
               {{ problemOf(updateKey(u.agendaId)) }}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+            :aria-label="`'${existing(u.agendaId)?.agenda.title ?? u.agendaId}' 결정내용 바꾸기 지우기`"
+            title="지우기 — 등록하지 않습니다"
+            data-minutes-row-remove
+            @click="minutes.removeRow(updateKey(u.agendaId))"
+          >
+            <Trash2 class="size-4" />
+          </Button>
         </li>
       </ul>
     </section>
 
     <!-- 작업 -->
-    <section v-if="form.tasks.length > 0" class="flex flex-col gap-2" aria-label="작업">
+    <section v-if="tasks.length > 0" class="flex flex-col gap-2" aria-label="작업">
       <h2 class="flex items-baseline gap-2 text-sm font-medium">
         작업
-        <span class="text-xs font-normal text-muted-foreground">{{ form.tasks.length }}</span>
+        <span class="text-xs font-normal text-muted-foreground">{{ tasks.length }}</span>
       </h2>
       <ul class="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
         <li
-          v-for="t in form.tasks"
+          v-for="t in tasks"
           :key="t.tempId"
           class="flex gap-3 px-4 py-3"
           :class="rowClass(t.tempId)"
@@ -324,8 +374,37 @@ const picked = (e: Event) => (e.target as HTMLInputElement).value || null
               {{ problemOf(t.tempId) }}
             </p>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+            :aria-label="`작업 '${t.title}' 지우기`"
+            title="지우기 — 등록하지 않습니다"
+            data-minutes-row-remove
+            @click="minutes.removeRow(t.tempId)"
+          >
+            <Trash2 class="size-4" />
+          </Button>
         </li>
       </ul>
     </section>
+
+    <p
+      v-if="minutes.removed.length > 0"
+      class="flex items-center gap-2 text-xs text-muted-foreground"
+      data-minutes-rows-removed
+    >
+      지운 항목 {{ minutes.removed.length }}개 — 마지막: {{ lastRemovedLabel }}
+      <Button
+        variant="ghost"
+        size="sm"
+        class="h-7 gap-1 px-2 text-xs"
+        data-minutes-row-undo
+        @click="minutes.undoRemove()"
+      >
+        <Undo2 class="size-3.5" />
+        되돌리기
+      </Button>
+    </p>
   </div>
 </template>

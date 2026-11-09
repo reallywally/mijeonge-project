@@ -269,6 +269,31 @@ describe('상세 — AI 정리 → 등록 → 나온 것', () => {
     expect($('[data-minutes-apply]')!.textContent).toContain('등록 6건')
   })
 
+  it('줄의 [지우기] — 검토에서 사라지고 등록에서 빠진다, [되돌리기] 로 살린다', async () => {
+    await drafted()
+    await click($('[data-minutes-row="n1"] [data-minutes-row-remove]'))
+    expect($('[data-minutes-row="n1"]')).toBeNull()
+    expect($('[data-minutes-row="t1"] [data-minutes-dropped]')!.textContent).toContain(
+      '안건 연결이 빠집니다 — 가상비서 대화 로그 보관 기간',
+    )
+    await click($('[data-minutes-row="t3"] [data-minutes-row-remove]'))
+    expect($$('[data-minutes-row]').map((r) => r.dataset.minutesRow)).toEqual([
+      'n2',
+      'update:t2',
+      't1',
+      't2',
+    ])
+    expect($('[data-minutes-apply]')!.textContent).toContain('등록 4건')
+    expect($('[data-minutes-rows-removed]')!.textContent).toContain('지운 항목 2개')
+
+    await click($('[data-minutes-row-undo]'))
+    expect($('[data-minutes-row="t3"]')).toBeTruthy()
+    expect($('[data-minutes-apply]')!.textContent).toContain('등록 5건')
+    await click($('[data-minutes-row-undo]'))
+    expect($('[data-minutes-rows-removed]')).toBeNull()
+    expect($('[data-minutes-apply]')!.textContent).toContain('등록 6건')
+  })
+
   it('새 안건을 끄면 "안건 연결이 빠집니다", 등록하면 검토가 닫히고 나온 것 칩 · 요약이 는다', async () => {
     await drafted()
     await click(checkbox('n1'))

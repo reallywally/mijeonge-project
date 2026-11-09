@@ -38,6 +38,8 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
   const form = ref<MinutesDraft | null>(null)
   /** 줄의 열쇠(tempId · 기존 안건은 updateKey) → 고름. 기본은 다 켬 */
   const picked = ref<Record<string, boolean>>({})
+  /** 검토에서 지운 줄의 열쇠 — 지운 순서대로(되돌리기는 마지막 것부터). 지운 줄은 고름도 꺼진다 */
+  const removed = ref<string[]>([])
   const applying = ref(false)
   /** apply 가 짚은 자리 — tempId → 한 줄 */
   const rowErrors = ref<Record<string, string>>({})
@@ -107,6 +109,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     draft.value = null
     form.value = null
     picked.value = {}
+    removed.value = []
     rowErrors.value = {}
   }
 
@@ -164,6 +167,21 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
 
   function setPicked(tempId: string, on: boolean) {
     picked.value[tempId] = on
+  }
+
+  /** 줄을 검토에서 지운다 — 끈 것과 같이 등록에서 빠지고(걸린 연결 · 상위도 같은 규칙), 화면에서 사라진다 */
+  function removeRow(key: string) {
+    if (removed.value.includes(key)) return
+    picked.value[key] = false
+    removed.value.push(key)
+  }
+
+  const isRemoved = (key: string) => removed.value.includes(key)
+
+  /** 마지막으로 지운 줄을 되살린다 — 다시 켠 채로 */
+  function undoRemove() {
+    const key = removed.value.pop()
+    if (key) picked.value[key] = true
   }
 
   /**
@@ -243,6 +261,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     form,
     picked,
     applying,
+    removed,
     rowErrors,
     lastResult,
     dirty,
@@ -255,6 +274,9 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     run,
     stop,
     setPicked,
+    removeRow,
+    isRemoved,
+    undoRemove,
     apply,
     discard,
     reset,

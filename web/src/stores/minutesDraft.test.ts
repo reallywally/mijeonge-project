@@ -105,6 +105,37 @@ describe('정리', () => {
 })
 
 describe('보낼 모양', () => {
+  it('줄을 지우면 끈 것과 같이 빠지고, 되돌리면 켠 채로 돌아온다', async () => {
+    const minutes = await drafted()
+    minutes.removeRow('n1')
+    minutes.removeRow('t3')
+    expect(minutes.removed).toEqual(['n1', 't3'])
+    expect(minutes.isRemoved('n1')).toBe(true)
+    expect(minutes.pickedCount).toBe(4)
+    expect(minutes.droppedAgendas('t1')).toEqual(['가상비서 대화 로그 보관 기간'])
+    const input = minutes.applyInput!
+    expect(input.agendas.map((t) => t.tempId)).toEqual(['n2'])
+    expect(input.tasks.map((t) => t.tempId)).toEqual(['t1', 't2'])
+    expect(input.tasks[0]).toMatchObject({ agendaTempIds: [] })
+
+    minutes.undoRemove()
+    expect(minutes.removed).toEqual(['n1'])
+    expect(minutes.picked.t3).toBe(true)
+    minutes.undoRemove()
+    expect(minutes.pickedCount).toBe(6)
+    expect(minutes.applyInput!.tasks[0].agendaTempIds).toEqual(['n1'])
+  })
+
+  it('다시 정리하면 지운 줄도 비운다', async () => {
+    const minutes = await drafted()
+    minutes.removeRow('t1')
+    const again = minutes.run('m1')
+    await vi.runAllTimersAsync()
+    await again
+    expect(minutes.removed).toEqual([])
+    expect(minutes.pickedCount).toBe(6)
+  })
+
   it('새 안건을 끄면 걸린 작업에 빠질 안건이 잡히고, 보낼 때 agendaTempIds 에서 지운다', async () => {
     const minutes = await drafted()
     expect(minutes.droppedAgendas('t1')).toEqual([])
