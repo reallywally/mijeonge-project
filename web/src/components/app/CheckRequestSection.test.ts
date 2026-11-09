@@ -117,3 +117,13 @@ describe('[확인 요청]', () => {
     expect($('[data-check-older="1"]')!.textContent).toContain('mysql 을 쓴다')
   })
 })
+
+describe('확인 요청 숨김 (2026-11-09)', () => {
+  it('꺼 두면 결정된 안건에도 확인 요청 칸이 없다', async () => {
+    vi.stubEnv('VITE_FEATURE_CHECK_REQUEST', 'false')
+    await signedIn('u1@inno-ax.com')
+    await mountDetail('t2')
+    expect($('[data-check-section]')).toBeNull()
+    vi.unstubAllEnvs()
+  })
+})

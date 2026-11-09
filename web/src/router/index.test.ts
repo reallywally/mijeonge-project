@@ -19,6 +19,7 @@ vi.mock('@/views/ProjectSettingsView.vue', () => ({ default: { template: '<div /
 vi.mock('@/views/ProjectPartsView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/RiskView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/RiskAnalysisView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/ChecksView.vue', () => ({ default: { template: '<div />' } }))
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -234,5 +235,18 @@ describe('리포트 걷음 (2026-11-06)', () => {
 
   it('저장한 분석 상세는 /risks/analyses/:analysisId', () => {
     expect(router.resolve('/risks/analyses/ra1').name).toBe('risk-analysis')
+  })
+})
+
+describe('확인 요청 숨김 (2026-11-09)', () => {
+  it('꺼 두면 /checks 는 홈으로 보낸다', async () => {
+    vi.stubEnv('VITE_FEATURE_CHECK_REQUEST', 'false')
+    await router.push('/checks')
+    expect(router.currentRoute.value.name).not.toBe('checks')
+  })
+
+  it('켜면 /checks 가 열린다', async () => {
+    await router.push('/checks')
+    expect(router.currentRoute.value.name).toBe('checks')
   })
 })

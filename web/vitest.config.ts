@@ -9,7 +9,8 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     /* 테스트는 서버 없이 픽스처로 돈다. 서버 모드를 보는 테스트는 vi.stubEnv 로 끈다 */
-    env: { VITE_USE_MOCK: 'true' },
+    /* 화면에서 숨긴 기능도 테스트는 켜고 돈다(src/lib/features.ts). 끈 모양을 보는 테스트는 vi.stubEnv 로 끈다 */
+    env: { VITE_USE_MOCK: 'true', VITE_FEATURE_CHECK_REQUEST: 'true' },
   },
   resolve: {
     alias: [

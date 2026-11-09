@@ -38,6 +38,7 @@ API_PROXY_TARGET=http://localhost:8001 npm run dev
 - `npm run test` 는 늘 목업으로 돈다(`vitest.config.ts` 의 `env`). 서버 모드를 보는 테스트
   (`src/stores/server.test.ts` · `src/api/client.test.ts`)는 `fetch` 를 가짜로 바꾸고 `vi.stubEnv` 로 끈다
 - `VITE_USE_MOCK` 를 읽는 자리는 `src/api/mode.ts` 하나다
+- 화면에서 숨긴 기능은 `src/lib/features.ts` 가 켠다 — 확인 요청은 `VITE_FEATURE_CHECK_REQUEST=true npm run dev`(기본 꺼짐, 테스트는 켜고 돈다)
 
 **리포는 WSL 파일시스템(`~/workspace/mijeonge-project`)에 두고 WSL node 로만 쓴다.**
 `/mnt/c` 에 두면 inotify 가 없어 vite 가 폴링으로 돌아야 하고(느리고 CPU 를 먹는다),

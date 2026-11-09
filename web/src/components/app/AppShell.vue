@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge'
 import { canOpenAdmin } from '@/lib/access'
 import { orderProjects, projectStatusLabel } from '@/lib/project'
 import { useAuthStore } from '@/stores/auth'
+import { isCheckRequestOn } from '@/lib/features'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
@@ -38,6 +39,8 @@ const auth = useAuthStore()
 const taskStore = useTaskStore()
 const agendaStore = useAgendaStore()
 const checks = useCheckStore()
+/* 확인 요청은 화면에서 잠시 숨겼다(src/lib/features.ts) — 메뉴 · 배지를 같이 */
+const checkRequestOn = isCheckRequestOn()
 
 const openAdmin = computed(() => canOpenAdmin(auth.me))
 /** 진행 → 준비 → 종료 */
@@ -101,7 +104,7 @@ const projectOptions = computed(() => orderProjects(data.allProjects))
                 </template>
               </SelectValue>
               <Badge
-                v-if="checks.pendingElsewhere > 0"
+                v-if="checkRequestOn && checks.pendingElsewhere > 0"
                 variant="secondary"
                 class="shrink-0 px-1.5 font-normal"
                 :title="`다른 프로젝트에 확인 대기 ${checks.pendingElsewhere}건`"
@@ -126,7 +129,9 @@ const projectOptions = computed(() => orderProjects(data.allProjects))
                   >· {{ projectStatusLabel(p.status) }}</span
                 >
                 <span
-                  v-if="p.id !== data.currentProjectId && checks.pendingOf(p.id) > 0"
+                  v-if="
+                    checkRequestOn && p.id !== data.currentProjectId && checks.pendingOf(p.id) > 0
+                  "
                   class="text-xs text-muted-foreground"
                   :data-check-badge-project="p.id"
                   >· 확인 대기 {{ checks.pendingOf(p.id) }}</span
@@ -182,6 +187,7 @@ const projectOptions = computed(() => orderProjects(data.allProjects))
             <span class="grow">리스크</span>
           </RouterLink>
           <RouterLink
+            v-if="checkRequestOn"
             to="/checks"
             class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
             active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"

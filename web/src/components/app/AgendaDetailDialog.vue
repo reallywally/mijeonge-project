@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Loader2, Lock, Trash2 } from 'lucide-vue-next'
 import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
+import { isCheckRequestOn } from '@/lib/features'
 import MinutesSourceChip from '@/components/app/MinutesSourceChip.vue'
 import AgendaFields, { type AgendaTextField } from '@/components/app/AgendaFields.vue'
 import AgendaPropertyPanel from '@/components/app/AgendaPropertyPanel.vue'
@@ -27,6 +28,9 @@ import type { AgendaState } from '@/types/domain'
    그 값만 바로 들어가고 따로 저장 버튼이 없다. 왼쪽은 제목 · 설명 · 결정내용, 오른쪽은 상태 · 기한 · 담당자 · 파트.
    상태도 사람이 고른다. 고치기 · 지우기는 작성자 · 담당자 · 관리자만 — 아니면 칸을 잠그고 보기만 한다 */
 const props = defineProps<{ agendaId: string | null }>()
+
+/* 확인 요청은 화면에서 잠시 숨겼다(src/lib/features.ts) */
+const checkRequestOn = isCheckRequestOn()
 const open = defineModel<boolean>('open', { required: true })
 
 const data = useDataStore()
@@ -177,7 +181,10 @@ async function remove() {
             </template>
           </AgendaFields>
 
-          <CheckRequestSection v-if="agenda.state === 'decided'" :agenda-id="agenda.id" />
+          <CheckRequestSection
+            v-if="checkRequestOn && agenda.state === 'decided'"
+            :agenda-id="agenda.id"
+          />
 
           <HistorySection kind="agenda" :target-id="agenda.id" />
         </div>

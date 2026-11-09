@@ -6,6 +6,7 @@ import ChatWidget from '@/components/app/ChatWidget.vue'
 import { Toaster } from '@/components/ui/sonner'
 import { emptyProjectsHome } from '@/lib/access'
 import { useAuthStore } from '@/stores/auth'
+import { isCheckRequestOn } from '@/lib/features'
 import { useCheckStore } from '@/stores/check'
 import { useDataStore } from '@/stores/data'
 
@@ -19,7 +20,7 @@ void data.boot()
 /* 확인 요청 배지 — 앱이 뜰 때 · 창 포커스 · 60초마다. 로그인해 앱이 서 있는 동안만 돈다 */
 const checks = useCheckStore()
 watch(
-  () => data.status === 'ready' && auth.me !== null,
+  () => isCheckRequestOn() && data.status === 'ready' && auth.me !== null,
   (on) => (on ? checks.startBadge() : checks.stopBadge()),
   { immediate: true },
 )

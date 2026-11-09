@@ -9,6 +9,7 @@ import {
   safeNext,
   type RouteAccess,
 } from '@/lib/access'
+import { isCheckRequestOn } from '@/lib/features'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { clearSession } from '@/stores/session'
@@ -165,6 +166,8 @@ const router = createRouter({
       path: '/checks',
       name: 'checks',
       component: () => import('@/views/ChecksView.vue'),
+      /* 확인 요청은 화면에서 숨겼다(src/lib/features.ts) — 걸어 둔 링크는 홈으로 */
+      beforeEnter: () => (isCheckRequestOn() ? true : '/'),
     },
     {
       path: '/minutes',

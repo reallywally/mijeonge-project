@@ -166,3 +166,22 @@ describe('배지', () => {
     expect($('[data-check-badge-elsewhere]')).toBeNull()
   })
 })
+
+describe('확인 요청 숨김 (2026-11-09)', () => {
+  it('켜면 메뉴가 있다', async () => {
+    await signedIn('u3@inno-ax.com')
+    await mountChecks()
+    expect($('a[href="/checks"]')).toBeTruthy()
+  })
+
+  it('꺼 두면 메뉴 · 배지가 없다', async () => {
+    vi.stubEnv('VITE_FEATURE_CHECK_REQUEST', 'false')
+    await signedIn('u3@inno-ax.com')
+    useCheckStore().pending = { total: 3, byProject: { p1: 1, p2: 2 } }
+    await mountChecks()
+    expect($('a[href="/checks"]')).toBeNull()
+    expect($('[data-check-badge]')).toBeNull()
+    expect($('[data-check-badge-elsewhere]')).toBeNull()
+    vi.unstubAllEnvs()
+  })
+})
