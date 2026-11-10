@@ -390,6 +390,9 @@ const mock = {
 /* 보낸 것을 서버처럼 JSON 으로 한 번 거친다 — 화면의 반응형 배열(Proxy)을 그대로 쥐면 structuredClone 이 못 한다 */
 const sent = <T>(body: T): T => JSON.parse(JSON.stringify(body)) as T
 
+/** 목업의 테스트 고치기를 바로 — 영향도 분석 반영(api/impacts)이 일반 수정과 같은 검사 · 이력 · 기준으로 고친다 */
+export const mockPatchTest = (testId: string, patch: TestPatch) => mock.patch(testId, sent(patch))
+
 /** 그 프로젝트의 테스트 전부(seq 순) — '지금' · 목록 · 간트 · 작업 · 안건 상세의 칩이 같이 쓴다 */
 export const fetchTests = (projectId: string) =>
   isMockMode()

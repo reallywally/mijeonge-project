@@ -1085,3 +1085,104 @@ export interface TestRow {
   periodLabel: string
   childCount: number
 }
+
+/* ── AI 영향도 분석 (docs/api/impact.md) — 안건의 결정이 바뀌면 걸린 작업 · 테스트 · 다른 결정을 Claude 가 읽고 고칠 안을 낸다 ── */
+
+/** 작업 · 테스트의 판정 — 고칠 안 · 사람이 볼 것 · 그대로 */
+export type ImpactVerdict = 'update' | 'check' | 'ok'
+/** 다른 결정된 안건의 판정 — 부딪힘 · 확인 필요 */
+export type ConflictVerdict = 'conflict' | 'check'
+
+/** 고칠 안 · 분석 때의 본문 한 줄 — PATCH body 와 같은 모양, 줄 id 는 없다 */
+export interface ImpactBodyLine {
+  kind: 'check' | 'bullet'
+  text: string
+  done: boolean
+  level: number
+}
+
+/** 작업 한 줄의 판정 */
+export interface ImpactTask {
+  taskId: string
+  verdict: ImpactVerdict
+  reason: string
+  /** update 일 때만 — 바꿀 칸만. 안 바꾸는 칸은 없다 */
+  title?: string
+  /** update 일 때만 — 본문 전체를 이 줄들로 갈아끼운다 */
+  body?: ImpactBodyLine[]
+  /** 분석 때의 값 — 반영할 때 지금 값과 견준다. 화면은 '전' 으로 보인다 */
+  before: { title: string; body: ImpactBodyLine[] }
+  /** 반영한 시각 — 안 했으면 null */
+  appliedAt: string | null
+}
+
+/** 테스트 한 줄의 판정 */
+export interface ImpactTest {
+  testId: string
+  verdict: ImpactVerdict
+  reason: string
+  title?: string
+  content?: string
+  testData?: string
+  before: { title: string; content: string; testData: string }
+  appliedAt: string | null
+}
+
+/** 다른 결정된 안건과의 부딪힘 */
+export interface ImpactConflict {
+  agendaId: string
+  verdict: ConflictVerdict
+  reason: string
+  /** 분석 때 그 안건의 결정내용 */
+  decision: string
+}
+
+export interface AgendaImpact {
+  id: string
+  projectId: string
+  agendaId: string
+  /** 분석한 결정 판 — 지금 Agenda.decisionRev 와 다르면 '이전 판 분석' */
+  decisionRev: number
+  /** 처음 결정이면 null — 화면은 '새 결정' */
+  decisionBefore: string | null
+  decisionAfter: string
+  summary: string
+  /** 작업 seq 순 — 넣어 준 것은 판정이 빠져도 ok 로 모두 싣는다 */
+  tasks: ImpactTask[]
+  tests: ImpactTest[]
+  conflicts: ImpactConflict[]
+  createdBy: string | null
+  createdAt: string
+}
+
+/** GET /api/agendas/{agendaId}/impact — 안건 상세가 칸을 그릴 때 */
+export interface AgendaImpactState {
+  /** 가장 최근 분석 — 없으면 null */
+  latest: AgendaImpact | null
+  /** 지금 세는 것(AI 없이) — 알림 줄의 숫자 */
+  taskCount: number
+  testCount: number
+  decidedAgendaCount: number
+}
+
+/** POST /api/agendas/{agendaId}/impact 의 SSE — chat · risks/summary 와 같은 틀(`event:` 줄이 type) */
+export type ImpactEvent =
+  | { type: 'tool'; name: string; label: string }
+  /** 결과 — 꼭 한 번, done 보다 먼저. 이미 남긴 것이라 id 가 있다 */
+  | { type: 'impact'; impact: AgendaImpact }
+  | { type: 'done' }
+  | { type: 'error'; code: string; message: string }
+
+/** POST /api/agenda-impacts/{impactId}/apply — 고르고 고친 것만 */
+export interface ImpactApplyInput {
+  tasks: { taskId: string; title?: string; body?: ImpactBodyLine[] }[]
+  tests: { testId: string; title?: string; content?: string; testData?: string }[]
+}
+
+export interface ImpactApplyResult {
+  /** 바뀐 작업 · 테스트 — 요청 순서 */
+  tasks: Task[]
+  tests: TestCase[]
+  /** appliedAt 이 찍힌 뒤의 분석 */
+  impact: AgendaImpact
+}

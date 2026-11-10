@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Loader2, Lock, Trash2 } from 'lucide-vue-next'
+import AgendaImpactSection from '@/components/app/AgendaImpactSection.vue'
 import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
 import { isCheckRequestOn } from '@/lib/features'
@@ -27,7 +28,11 @@ import type { AgendaState } from '@/types/domain'
 /* 안건 상세 — 목록 위 팝업. 작업 상세처럼 보는 자리가 곧 고치는 자리다: 칸을 고치고 벗어나면
    그 값만 바로 들어가고 따로 저장 버튼이 없다. 왼쪽은 제목 · 설명 · 결정내용, 오른쪽은 상태 · 기한 · 담당자 · 파트.
    상태도 사람이 고른다. 고치기 · 지우기는 작성자 · 담당자 · 관리자만 — 아니면 칸을 잠그고 보기만 한다 */
-const props = defineProps<{ agendaId: string | null }>()
+const props = defineProps<{
+  agendaId: string | null
+  /** 'impact' 면 AI 영향도 분석 칸이 바로 보이게 연다 — 회의록 등록 뒤 '결정이 바뀐 안건' 칩 */
+  focus?: 'impact' | null
+}>()
 
 /* 확인 요청은 화면에서 잠시 숨겼다(src/lib/features.ts) */
 const checkRequestOn = isCheckRequestOn()
@@ -180,6 +185,12 @@ async function remove() {
               </div>
             </template>
           </AgendaFields>
+
+          <AgendaImpactSection
+            v-if="agenda.decision.trim()"
+            :agenda-id="agenda.id"
+            :focus="focus === 'impact'"
+          />
 
           <CheckRequestSection
             v-if="checkRequestOn && agenda.state === 'decided'"

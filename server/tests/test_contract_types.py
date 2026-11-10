@@ -640,3 +640,61 @@ def test_chat_tool_names_match_domain_ts() -> None:
     declared = re.search(r"type: 'tool'\n      name:\n((?:        \| '\w+'\n)+)", source)
     assert declared is not None
     assert _quoted(declared.group(1)) == set(get_args(ToolName))
+
+
+# AI 영향도 분석 — docs/api/impact.md. 고친 안 칸(title · body · content · testData)은 선택이고
+# 응답에서 키째 빠진다 — 그래서 null 자리에 들지 않는다
+IMPACT_SHAPES: dict[str, set[str]] = {
+    "ImpactBodyLine": {"kind", "text", "done", "level"},
+    "ImpactTask": {"taskId", "verdict", "reason", "title", "body", "before", "appliedAt"},
+    "ImpactTest": {
+        "testId",
+        "verdict",
+        "reason",
+        "title",
+        "content",
+        "testData",
+        "before",
+        "appliedAt",
+    },
+    "ImpactConflict": {"agendaId", "verdict", "reason", "decision"},
+    "AgendaImpact": {
+        "id",
+        "projectId",
+        "agendaId",
+        "decisionRev",
+        "decisionBefore",
+        "decisionAfter",
+        "summary",
+        "tasks",
+        "tests",
+        "conflicts",
+        "createdBy",
+        "createdAt",
+    },
+    "AgendaImpactState": {"latest", "taskCount", "testCount", "decidedAgendaCount"},
+    "ImpactApplyInput": {"tasks", "tests"},
+    "ImpactApplyResult": {"tasks", "tests", "impact"},
+}
+IMPACT_NULLABLE: dict[str, set[str]] = {
+    "ImpactTask": {"appliedAt"},
+    "ImpactTest": {"appliedAt"},
+    "AgendaImpact": {"decisionBefore", "createdBy"},
+    "AgendaImpactState": {"latest"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(IMPACT_SHAPES))
+def test_impact_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드 · null 자리가 impact.md 와 같아야 한다."""
+    if name not in FIELDS:
+        return
+    declared = all_fields(name)
+    assert set(declared) == IMPACT_SHAPES[name], f"domain.ts 의 {name} 이 impact.md 와 다르다"
+    nullable = {field for field, allowed in declared.items() if allowed}
+    assert nullable == IMPACT_NULLABLE.get(name, set())
+
+
+async def test_impact_state_matches_contract(client: AsyncClient) -> None:
+    body = (await client.get("/api/agendas/t2/impact")).json()
+    assert set(body) == IMPACT_SHAPES["AgendaImpactState"]

@@ -45,6 +45,8 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
   const rowErrors = ref<Record<string, string>>({})
   /** 마지막 [등록] 의 결과 — 상세가 '등록했습니다' 한 줄을 띄운다. 다시 정리하면 지운다 */
   const lastResult = ref<MinutesApplyResult | null>(null)
+  /** 마지막 [등록] 이 결정내용을 바꾼 기존 안건 — 상세가 '영향도를 분석해 보세요' 칩으로 띄운다 (docs/api/impact.md '화면') */
+  const decisionChangedIds = ref<string[]>([])
 
   let controller: AbortController | null = null
 
@@ -122,6 +124,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     minutesId.value = id
     dropDraft()
     lastResult.value = null
+    decisionChangedIds.value = []
     error.value = ''
     tool.value = ''
     phase.value = 'drafting'
@@ -202,6 +205,13 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
         ? res.tasks.map((t) => ({ ...t, key: data.takeTaskKey(projectId) }))
         : res.tasks
       const made = { ...res, tasks }
+      /* 상태만 바꾼 안건은 빼고 — 결정내용 글이 바뀐 것만. 갈아끼우기 전 값과 견준다 */
+      const changedIds = made.updatedAgendas
+        .filter((next) => {
+          const before = data.allAgendas.find((t) => t.id === next.id)
+          return !before || before.decision.trim() !== next.decision.trim()
+        })
+        .map((t) => t.id)
       /* 그사이 프로젝트를 바꿨으면 지금 레코드에 섞지 않는다 — 돌아가면 스냅샷에 있다 */
       if (data.holdsRecordsOf(projectId)) {
         data.allAgendas.unshift(...made.agendas)
@@ -219,6 +229,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
       board.afterApply(id, input.summary)
       if (minutesId.value !== id) return true
       lastResult.value = made
+      decisionChangedIds.value = changedIds
       dropDraft()
       phase.value = 'idle'
       return true
@@ -247,6 +258,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     discard()
     minutesId.value = null
     lastResult.value = null
+    decisionChangedIds.value = []
   }
 
   /* 초안의 안건 · 담당자는 그 프로젝트의 것이다 — 바꾸면 받는 중이면 끊고 초안을 버린다 */
@@ -264,6 +276,7 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
     removed,
     rowErrors,
     lastResult,
+    decisionChangedIds,
     dirty,
     pickedCount,
     applyInput,

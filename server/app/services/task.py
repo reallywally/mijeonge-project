@@ -577,6 +577,13 @@ def _guard_edit(scope: Scope, task: Task) -> None:
 async def patch_task(
     session: AsyncSession, task_id: str, payload: TaskPatch, scope: Scope
 ) -> TaskOut:
+    task = await edit_task(session, task_id, payload, scope)
+    await session.commit()
+    return to_task(task, await comment_count(session, task.id), await status_since(session, task))
+
+
+async def edit_task(session: AsyncSession, task_id: str, payload: TaskPatch, scope: Scope) -> Task:
+    """PATCH 의 몸통 — 커밋하지 않는다. 영향도 반영이 여러 작업을 한 트랜잭션에 묶는다."""
     task = await load_task(session, task_id)
     # 고치기 전 작업으로 본다 — 담당자를 남에게 넘긴 뒤의 모양으로 보지 않는다
     _guard_edit(scope, task)
@@ -617,8 +624,7 @@ async def patch_task(
     if body_after != body_before:
         changed.append(history_service.change("body", body_before, body_after))
     await history_service.record_task_body(session, task, changed, actor_id, at)
-    await session.commit()
-    return to_task(task, await comment_count(session, task.id), await status_since(session, task))
+    return task
 
 
 async def move_task(

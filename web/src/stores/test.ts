@@ -451,6 +451,7 @@ export const useTestStore = defineStore('test', () => {
     canRemove,
     load,
     ensure,
+    put,
     create,
     patch,
     setPeriod,

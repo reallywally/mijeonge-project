@@ -1,0 +1,280 @@
+# AI 영향도 분석 — 합의 (2026-11-10)
+
+안건의 결정내용이 바뀌면 **그 결정에 걸린 작업 · 테스트가 이제 틀리지 않았는지**, **다른 결정된 안건과 부딪히지 않는지**를
+Claude 가 읽고 고칠 안을 낸다. 사람은 검토 화면에서 골라 **[반영]** 한다.
+이 파일이 영향도 분석 계약의 정답이다. 안건 자체는 `agenda.md`, 리스크 AI 분석의 SSE 틀은 `risk.md` · `chat.md`.
+
+## 정해 둔 것 (사용자, 2026-11-10)
+
+| | 결정 |
+| --- | --- |
+| 언제 도나 | **[AI 영향도 분석] 버튼으로만.** 저장할 때마다 돌리지 않는다 — 안건 상세는 칸을 벗어날 때마다 저장되어 결정을 다듬는 중간에 여러 번 돌게 된다 |
+| 알아차리기 | 결정이 바뀌었는데(결정 판 ≥ 2) 그 판으로 분석한 적이 없으면 안건 상세에 **알림 줄**을 띄운다 — '결정이 바뀌었어요 — 연결 작업 n · 테스트 m · [AI 영향도 분석]'. 세는 것은 서버가 AI 없이 한다 |
+| 무엇을 보나 | ① 연결 작업(본문 줄까지) ② 닿는 테스트(내용 · 테스트 데이터) ③ **그 프로젝트의 다른 결정된 안건**(충돌) |
+| 답의 모양 | 항목마다 판정 — 작업 · 테스트는 `update`(고칠 안) · `check`(사람이 볼 것) · `ok`(그대로), 안건은 `conflict`(부딪힘) · `check`(확인 필요). **근거(`reason`)는 꼭** — 근거 없는 판정은 서버가 받지 않는다 |
+| 반영 | 회의록 AI 정리처럼 **체크 · 고치기 · [지우기] 로 고르고 [반영]**. 작업 · 테스트의 일반 수정과 **같은 권한 · 같은 검사 · 같은 변경 이력**. 한 트랜잭션 |
+| 저장 | 분석은 **늘 남긴다** — 그 안건 · 그 결정 판에 묶인다. 같은 판을 다시 열면 지난 결과를 보이고, 결정이 또 바뀌면 '이전 판 분석' 으로 흐린다 |
+| 판단은 사람 | AI 판정은 제안이다. 부딪힘(`conflict`)은 반영할 것이 없고 칩 · 근거만 보인다 — 안건을 고칠지는 사람이 정한다 |
+| 규칙 목록 | **2단계**(아래 '2단계 — 규칙 목록'). 1단계는 다른 결정된 안건과의 충돌까지 |
+
+## 흐름
+
+1. 안건 상세 — 결정내용이 있으면 **'AI 영향도 분석'** 칸이 선다. 결정 판 ≥ 2 이고 지금 판으로 분석한 적이 없으면 칸 머리가 알림 줄로 바뀐다
+2. **[AI 영향도 분석]** → `POST /api/agendas/{agendaId}/impact` — SSE. 진행 한 줄('연결 작업 읽는 중' · '다른 결정 비교 중' · '고칠 안 만드는 중') 뒤 결과 하나
+3. 검토 — 세 묶음(**고칠 작업 · 고칠 테스트 · 부딪히는 결정**). `update` 줄은 체크(기본 켬) · 고칠 안을 고치고 · [지우기]. `check` · `ok` 는 접은 묶음에 한 줄씩(근거만). 부딪힘은 안건 칩 + 근거
+4. **[반영 N건]** → `POST /api/agenda-impacts/{impactId}/apply` — 고른 것만. 끝나면 그 줄들이 '반영함' 으로 바뀐다
+5. 다시 누르면 새 분석이 같은 판에 하나 더 남고, 화면은 가장 최근 것을 보인다
+
+## 결정 전 · 후
+
+- **후** = 지금 `agenda.decision`(앞뒤 공백 뗀 것)
+- **전** = 변경 이력(`agenda_history`)에서 `decision` 칸이 바뀐 **가장 최근 줄의 `from`**. 그런 줄이 없으면(처음 결정) `null` — 그때는 '새 결정' 으로 보고 충돌 · 작업 · 테스트를 본다
+- 결정내용이 비어 있으면 분석하지 않는다 — 409 `IMPACT_NO_DECISION`
+
+## 무엇을 Claude 에 넣나 (서버가 정한다)
+
+| | 넣는 것 | 상한 |
+| --- | --- | --- |
+| 안건 | 제목 · 설명 · 결정 전 · 결정 후 · 상태 · 담당자 이름 | 글 칸마다 4,000자(넘으면 자르고 '…(잘림)') |
+| 연결 작업 | `task_agenda_link` 로 걸린 지우지 않은 작업 — id · 키 · 제목 · 상태 · 담당자 이름 · 기한 · **본문 줄**(종류 · 글 · 체크 · 들여쓰기) | 40개(작업 seq 순), 본문은 작업마다 60줄 |
+| 닿는 테스트 | 이 안건을 **직접 태그했거나, 이 안건에 걸린 작업을 태그한** 테스트(`test.md` '닿는 안건' 의 거꾸로) — id · 키 · 제목 · 상태 · 담당자 이름 · 내용 · 테스트 데이터 | 40개(테스트 seq 순), 글 칸마다 4,000자 |
+| 다른 결정된 안건 | 그 프로젝트의 `state = 'decided'` 이고 결정내용이 있는 **다른** 안건 — id · 제목 · 결정내용 · 결정 시각 | 결정 시각 최신 순 80개, 결정내용 1,500자 |
+
+- 셋 다 비면(연결 작업 · 닿는 테스트 · 다른 결정 안건 0) Claude 를 부르지 않고 빈 결과(`summary`: '살펴볼 연결 작업 · 테스트 · 다른 결정이 없습니다.')를 남기고 낸다
+- 시스템 프롬프트: 오늘(KST) · 프로젝트 이름 · 아래 규칙
+  - 결정 전 → 후 에서 **무엇이 바뀌었는지** 먼저 한두 줄로(`summary`)
+  - 작업 · 테스트마다: 바뀐 결정 때문에 제목 · 본문 · 내용 · 테스트 데이터가 **이제 틀렸으면** `update` 와 고친 안, 틀린지 확실치 않으면 `check`, 상관없으면 `ok`. 고칠 것이 없는데 `update` 를 내지 않는다
+  - 고친 안은 **바뀐 결정에 닿는 부분만** 고친다. 나머지 글 · 줄 · 체크 상태는 그대로 옮긴다
+  - 다른 결정된 안건과 **같이 지킬 수 없으면** `conflict`, 겹치거나 범위가 애매하면 `check`. 상관없는 안건은 내지 않는다
+  - `reason` 은 한두 문장, **결정 전 · 후 또는 그 안건의 결정내용을 짚어서**. 넣어 준 것에 없는 사실을 지어내지 않는다
+- Claude 가 쥐는 도구는 **`propose_impact`** 하나(강제). 검사에 걸리면 그 까닭을 돌려줘 다시 내게 한다 — 3번까지, 그래도 안 되면 `error` `IMPACT_FAILED`
+- 모델 · 분당 제한 · 키 없음은 챗봇과 같다(`chat_model`, 429 `CHAT_RATE_LIMITED`, 503 `CHAT_UNAVAILABLE`, 거절 `CHAT_REFUSED`)
+
+## 모양
+
+```ts
+type ImpactVerdict = 'update' | 'check' | 'ok'
+type ConflictVerdict = 'conflict' | 'check'
+
+/** 작업 한 줄의 판정 */
+interface ImpactTask {
+  taskId: string
+  verdict: ImpactVerdict
+  reason: string
+  /** update 일 때만 — 바꿀 칸만. 안 바꾸는 칸은 없다 */
+  title?: string
+  /** update 일 때만 — 본문 전체를 이 줄들로 갈아끼운다(PATCH body 와 같은 모양, 줄 id 는 없다) */
+  body?: { kind: 'check' | 'bullet'; text: string; done: boolean; level: number }[]
+  /** 분석 때의 값 — 반영할 때 지금 값과 견준다. 화면은 '전' 으로 보인다 */
+  before: { title: string; body: { kind: 'check' | 'bullet'; text: string; done: boolean; level: number }[] }
+  /** 반영한 시각 — 안 했으면 null */
+  appliedAt: string | null
+}
+
+/** 테스트 한 줄의 판정 */
+interface ImpactTest {
+  testId: string
+  verdict: ImpactVerdict
+  reason: string
+  /** update 일 때만 — 바꿀 칸만 */
+  title?: string
+  content?: string
+  testData?: string
+  before: { title: string; content: string; testData: string }
+  appliedAt: string | null
+}
+
+/** 다른 결정된 안건과의 부딪힘 */
+interface ImpactConflict {
+  agendaId: string
+  verdict: ConflictVerdict
+  reason: string
+  /** 분석 때 그 안건의 결정내용 */
+  decision: string
+}
+
+interface AgendaImpact {
+  id: string
+  projectId: string
+  agendaId: string
+  /** 분석한 결정 판 — 지금 agenda.decisionRev 와 다르면 '이전 판 분석' */
+  decisionRev: number
+  decisionBefore: string | null
+  decisionAfter: string
+  /** 무엇이 바뀌었나 · 무엇을 보면 되나 — 두세 줄 */
+  summary: string
+  tasks: ImpactTask[]
+  tests: ImpactTest[]
+  conflicts: ImpactConflict[]
+  createdBy: string | null
+  createdAt: string
+}
+
+/** 안건 상세가 칸을 그릴 때 받는 것 */
+interface AgendaImpactState {
+  /** 가장 최근 분석 — 없으면 null */
+  latest: AgendaImpact | null
+  /** 지금 세는 것(AI 없이) — 알림 줄의 숫자 */
+  taskCount: number
+  testCount: number
+  decidedAgendaCount: number
+}
+
+/** SSE 이벤트 — chat · risks/summary 와 같은 틀(`event:` 줄이 type) */
+type ImpactEvent =
+  | { type: 'tool'; name: string; label: string }
+  /** 결과 — 꼭 한 번, done 보다 먼저. 이미 남긴 것이라 id 가 있다 */
+  | { type: 'impact'; impact: AgendaImpact }
+  | { type: 'done' }
+  | { type: 'error'; code: string; message: string }
+
+/** 반영 — 고르고 고친 것만 */
+interface ImpactApplyInput {
+  tasks: { taskId: string; title?: string; body?: ImpactTask['body'] }[]
+  tests: { testId: string; title?: string; content?: string; testData?: string }[]
+}
+
+interface ImpactApplyResult {
+  /** 바뀐 작업 · 테스트 — 요청 순서 */
+  tasks: Task[]
+  tests: TestCase[]
+  /** appliedAt 이 찍힌 뒤의 분석 */
+  impact: AgendaImpact
+}
+```
+
+- 배열 순서: `tasks` 는 작업 seq 순, `tests` 는 테스트 seq 순, `conflicts` 는 Claude 가 낸 순. 넣어 준 작업 · 테스트는 **판정이 빠져도** 서버가 `ok` · 근거 '판정 없음' 으로 채워 **모두 싣는다**(화면이 '살펴본 것' 을 셀 수 있게)
+- `before` 는 서버가 분석 때 DB 에서 찍는다 — Claude 가 내지 않는다
+
+### `propose_impact` 검사 규칙
+
+- `taskId` · `testId` 는 넣어 준 작업 · 테스트, `agendaId` 는 넣어 준 다른 결정 안건 — 아니면 되돌린다. 같은 id 둘 금지
+- `reason` 은 앞뒤 공백을 떼고 1 ~ 500자
+- `update` 면 고칠 칸이 **하나 이상**이고 그 값이 `before` 와 달라야 한다. `update` 가 아니면 고칠 칸을 보내지 않는다
+- 작업 `title` 은 작업 등록과 같은 검사(1 ~ 200자), `body` 는 `PATCH /api/tasks/{taskId}` 의 `body` 와 같은 검사(줄 수 · 글 길이 · `level` 0 ~ 3)
+- 테스트 `title` · `content` · `testData` 는 `PATCH /api/tests/{testId}` 와 같은 검사
+- `summary` 는 1 ~ 1,000자
+
+## 테이블 `agenda_impact` (리비전 `0039_agenda_impact`)
+
+| 칸 | 타입 | |
+| --- | --- | --- |
+| `id` | str PK | |
+| `project_id` | str | FK `(agenda_id, project_id)` → `agenda(id, project_id)` ON DELETE CASCADE |
+| `agenda_id` | str | |
+| `decision_rev` | int | |
+| `decision_before` | text, null 가능 | |
+| `decision_after` | text | |
+| `summary` | text | |
+| `result` | jsonb | `{ tasks, tests, conflicts }` — 위 모양 그대로(camelCase) |
+| `created_by` | FK → member, null 가능 (ON DELETE SET NULL) | |
+| `created_at` | timestamptz | |
+
+- 색인 `(agenda_id, created_at desc)`
+- 안건을 지우면(논리 삭제) 분석도 404 로 간다 — 줄은 남는다
+
+## 엔드포인트
+
+| 메서드 | 경로 | 하는 일 | 응답 |
+| --- | --- | --- | --- |
+| GET | `/api/agendas/{agendaId}/impact` | 칸 그리기 — 가장 최근 분석 + 지금 세는 것 | `AgendaImpactState` |
+| POST | `/api/agendas/{agendaId}/impact` | 분석 — 본문 없음. 끝까지 받으면 남기고 `impact` 이벤트로 낸다 | `text/event-stream` (`ImpactEvent`) |
+| POST | `/api/agenda-impacts/{impactId}/apply` | 반영 — `ImpactApplyInput`. **한 트랜잭션** | `ImpactApplyResult` · 200 |
+
+- 권한: 보기 · 분석은 그 프로젝트 멤버(아니면 404 `AGENDA_NOT_FOUND` — 다른 안건 API 와 같다). 반영은 **줄마다 그 작업 · 테스트의 고치기 권한**(`auth.md` — 작업은 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자, 테스트는 테스트 PATCH 와 같이 그 프로젝트 멤버 누구나). 하나라도 없으면 403 `FORBIDDEN`, `detail` 은 `tasks.N` · `tests.N`
+- `impactId` 경로는 `require_scope` 경계 검사에 든다(분석의 프로젝트로 본다). 없음 · 지운 안건의 것 · 못 보는 프로젝트 것은 404 `IMPACT_NOT_FOUND`
+
+### `apply` 규칙
+
+- 고른 줄은 그 분석의 `update` 줄이어야 한다 — 아니면 422 `VALIDATION_ERROR`(`tasks.N.taskId` · `tests.N.testId`). 화면에서 고친 값은 그대로 받는다(Claude 의 안이 아니어도 된다). 같은 검사(위 '검사 규칙'의 작업 · 테스트 칸)를 다시 본다 — 자리는 `tasks.N.title` · `tests.N.content` 처럼
+- **분석 뒤 결정이 또 바뀌었으면** 409 `IMPACT_STALE` — "결정이 바뀌어 다시 분석해야 합니다"
+- **분석 뒤 그 작업 · 테스트가 바뀌었으면**(지금 값 ≠ `before` — 작업은 제목 · 본문 줄의 종류 · 글 · 체크 · 들여쓰기, 테스트는 제목 · 내용 · 테스트 데이터) 409 `IMPACT_TARGET_CHANGED`, `detail` 은 걸린 자리 전부 `{ "tasks.N": "…" }`. 덮어쓰지 않는다
+- 지운 작업 · 테스트면 409 `IMPACT_TARGET_CHANGED`(같은 까닭 — 분석 때와 다르다)
+- 반영은 **일반 수정과 같은 서비스**를 탄다 — 작업은 `patch_task`(제목 · 본문, 변경 이력 `title` · `body`), 테스트는 `patch_test`(변경 이력 · `basis_seq` 다시 찍기 — 그래서 반영하면 그 테스트의 '기준 바뀜' 도 풀린다)
+- 반영한 줄에 `appliedAt` = 지금. 이미 반영한 줄을 다시 보내면 그 줄은 `before` 와 달라 409 `IMPACT_TARGET_CHANGED` 로 걸린다(두 번 반영하지 않는다)
+- 하나라도 틀리면 아무것도 안 바뀐다
+- `tasks` · `tests` 가 둘 다 비면 422 `VALIDATION_ERROR`
+
+## 오류 코드 (늘어나는 것)
+
+| 상태 | `code` | 언제 |
+| --- | --- | --- |
+| 404 | `IMPACT_NOT_FOUND` | 위 |
+| 409 | `IMPACT_NO_DECISION` | 결정내용이 빈 안건을 분석 |
+| 409 | `IMPACT_STALE` | 분석 뒤 결정이 또 바뀌었는데 반영 |
+| 409 | `IMPACT_TARGET_CHANGED` | 분석 뒤 작업 · 테스트가 바뀌었거나 지워졌는데 반영 |
+| (스트림) | `IMPACT_FAILED` | `propose_impact` 를 3번 고쳐도 통과 못 함 |
+
+## 화면
+
+- **안건 상세의 'AI 영향도 분석' 칸** — 결정내용 칸 아래(확인 요청 칸 자리 근처). 결정내용이 비면 칸이 없다. 칸을 열 때 `GET …/impact`
+  - 머리: 'AI 영향도 분석' + **[AI 영향도 분석]**(분석한 적 있으면 [다시 분석]). 결정 판 ≥ 2 이고 `latest` 가 없거나 `latest.decisionRev` ≠ 지금 판이면 **알림 줄**: '결정이 바뀌었어요 — 연결 작업 n · 테스트 m' (둘 다 0 이고 다른 결정 안건도 0 이면 알림 줄을 안 띄운다)
+  - 결정내용 칸을 고쳐 판이 오르면(같은 화면에서) 다시 받는다
+  - 분석 중: 진행 한 줄 + [멈추기]. 멈추면 아무것도 안 남는다
+- **결과** — 맨 위 `summary` · '결정 전 → 후'(전이 없으면 '새 결정') · '분석 시각 · 분석한 사람'. `decisionRev` ≠ 지금 판이면 결과 전체를 흐리고 '이전 결정으로 한 분석이에요 — [다시 분석]', 반영 버튼은 끈다
+  - **고칠 작업** · **고칠 테스트** — `update` 줄: 체크(기본 켬) · 키 칩(누르면 그 상세) · 근거 · '전 → 후'(제목은 한 줄, 본문 · 내용은 바뀐 줄을 표시한 짧은 비교) · [고치기](안을 손으로 고침) · [지우기](회의록 검토와 같은 규칙 — 숨기고 반영에서 빠짐, [되돌리기]). 반영한 줄은 '반영함 ✓' 으로 잠근다
+  - **부딪히는 결정** — `conflict` 는 붉게, `check` 는 회색. 안건 칩 · 그 결정내용 한 줄 · 근거
+  - **살펴본 것** (접힘) — `check` · `ok` 작업 · 테스트 한 줄씩(키 · 제목 · 근거)
+  - 아래 **[반영 N건]** — N 은 켠 `update` 줄. 0 이면 꺼짐. 권한 없는 줄은 체크를 끄고 '고칠 권한이 없어요' 로 잠근다(작업은 작업 상세가 칸을 잠그는 것과 같은 판단 — 테스트는 멤버 누구나라 잠기지 않는다)
+  - 409 `IMPACT_STALE` → 결과를 흐리고 [다시 분석] 을 권한다. 409 `IMPACT_TARGET_CHANGED` → 걸린 줄에 '분석 뒤에 바뀌었어요' 를 달고 체크를 끈다(나머지는 다시 반영할 수 있다). 반영하면 바뀐 작업 · 테스트를 스토어에 넣는다
+- **회의록 [등록] 뒤** — 등록에서 기존 안건의 결정을 바꿨으면(`updates` 가 결정내용을 바꿈) 결과 줄 아래 '결정이 바뀐 안건 n건 — 영향도를 분석해 보세요' + 안건 칩(누르면 그 안건 상세, 칸이 바로 보이게)
+
+## 시드 · 목업
+
+- 시드에는 넣지 않는다(개발 DB 에 시드를 다시 돌리지 않는다)
+- 목업: 분석 스트림을 목업으로 흘린다 — 연결 작업 · 닿는 테스트 · 다른 결정 안건을 목업 데이터에서 같은 규칙으로 고르고, 작업 하나를 `update`(본문 한 줄을 고친 안), 테스트 하나를 `update`, 나머지를 `ok`, 다른 결정 안건이 있으면 하나를 `check` 로 낸다. 반영 검사(권한 · stale · target changed)도 같은 순서로 본다
+
+## 2단계 — 규칙 목록 (아직 계약 아님)
+
+결정된 안건 바깥의 비즈니스 · 내부 규칙(보안 정책 · 개발 표준 · 계약 조건)을 프로젝트에 적어 두고 영향도 분석이 같이 대조한다.
+
+- 규칙 한 줄 = **문장 · 까닭 · 태그 · 출처**(예: '보안정책 v3 4.2절'). 프로젝트 관리자 · 담당이 쓴다. 회의록 AI 정리가 '규칙으로 보이는 문장' 을 후보로 낼 수 있다
+- 영향도 분석의 `conflicts` 에 `ruleId` 갈래를 더한다 — 근거는 그 규칙을 짚어야 한다
+- 수십 개까지는 태그로 거른 규칙을 통째로 넣는다. 수백 개가 넘으면 임베딩 검색으로 고른다
+- 숫자 · 날짜로 딱 떨어지는 규칙(금액 상한 · 기한 범위)은 AI 가 아니라 서버 규칙으로 본다(리스크 신호와 같은 원칙)
+- 같은 것을 여러 이름으로 불러 놓치면 **용어 사전**(동의어)을 먼저 둔다. 관계 추론이 많아지거나 여러 프로젝트가 같은 규칙을 공유할 때 온톨로지를 본다
+
+## 1단계에서 하지 않는 것
+
+- 새 작업 · 새 테스트 제안(고칠 것만 낸다)
+- 안건 목록의 '결정 바뀜 · 분석 안 함' 표시
+- 챗봇 도구
+
+## 구현에서 메운 것 (서버, 2026-11-10)
+
+계약이 비워 둔 자리를 서버가 이렇게 메웠다. 모양(타입 · 키)은 위 '모양' 그대로다 — 프론트 `domain.ts` 와 대조하는 검사(`tests/test_contract_types.py` 의 `IMPACT_SHAPES`)가 있다.
+
+- **진행 줄** — `tool.name` 은 `read_tasks`('연결 작업 읽는 중') · `compare_decisions`('다른 결정 비교 중') · `propose_impact`('고칠 안 만드는 중'). 앞 둘은 Claude 를 부르기 직전에 한 번씩, `propose_impact` 는 Claude 가 낼 때마다(고쳐 낼 때마다 한 줄 더) 온다. **살펴볼 것이 없으면** 진행 줄 없이 `impact` · `done` 둘만 온다
+- **분석 요청의 순서** — 404 `AGENDA_NOT_FOUND` → 409 `IMPACT_NO_DECISION`(키 · 분당 제한보다 먼저 — 제한을 먹지 않는다) → 503 `CHAT_UNAVAILABLE` · 429 `CHAT_RATE_LIMITED` → 스트림. 살펴볼 것이 없는 경우도 키가 없으면 503 이다(리스크 분석의 '줄이 없음' 과 같다)
+- **결정 전** — 가장 최근 `decision` 칸 줄의 `from` 을 앞뒤 공백 떼고 쓴다. 빈 글(`''` → 결정, 이행 0032 의 줄이 이렇다)도 처음 결정으로 보고 `null`
+- **세는 것** (`taskCount` · `testCount` · `decidedAgendaCount`) — **상한 없이** 다 센다(상한은 Claude 에 넣는 것에만). 닿는 테스트는 상한 밖의 연결 작업까지 보고 고른다. 지운 작업은 세지 않고 그 작업으로만 닿던 테스트도 빠진다. 묶음(하위가 있는 테스트)도 태그가 닿으면 든다. 다른 결정 안건은 결정내용을 앞뒤 공백 떼고 비면 뺀다
+- **다른 결정 안건의 순서** — 결정 시각 최신 순, 같으면 나중에 등록한 것, 결정 시각이 없는 지난 줄은 맨 뒤
+- **잘린 칸은 못 고친다** — 본문이 60줄을 넘는 작업은 Claude 에 `body_cut: true` 로 가고 그 작업의 `body` 고친 안을 되돌린다(통째로 갈아끼우면 잘린 뒤 줄이 사라진다). 테스트 `content` · `testData` 가 4,000자를 넘으면 같은 까닭으로 그 칸을 못 고친다(`content_cut` · `test_data_cut`). 줄 글은 자르지 않는다
+- **검사 상한** — 지금 작업 `PATCH` 에는 제목 길이 · 본문 상한이 없다. 영향도의 고친 안 · 반영에만 건다: 작업 제목 앞뒤 공백 떼고 1 ~ 200자, 본문 200줄까지 · 한 줄 4,000자까지 · `level` 0 ~ 3. 테스트는 `PATCH /api/tests` 와 같다(제목 1 ~ 200자 · 내용 10,000자 · 테스트 데이터 4,000자). 제목 · `reason` · `summary` 는 앞뒤 공백을 떼고 남긴다
+- **'before 와 달라야'** — Claude 의 안은 **보낸 칸마다** 달라야 한다(안 바꾸는 칸은 `null`). 반영은 **보낸 칸 중 하나라도** 다르면 된다 — 화면에서 고쳐 되돌린 칸이 섞여도 받는다. 다 같으면 422 `tasks.N`(또는 `tests.N`) '지금 값과 다른 칸이 없습니다.'. 반영 요청에서 칸을 안 보내거나 `null` 이면 그 칸은 그대로다
+- **반영 검사 순서** — 422 `VALIDATION_ERROR` → 403 `FORBIDDEN` → 409 `IMPACT_STALE` → 409 `IMPACT_TARGET_CHANGED`. 앞에서 걸리면 뒤는 안 본다. 422 는 걸린 자리를 **한 번에 다** `detail` 에 싣는다(`tasks.N.taskId` · `tasks.N.title` · `tasks.N.body.M.level` · `tests.N.testData` · `tasks.N` …). 둘 다 비면 `{ "tasks": "반영할 줄이 없습니다." }`. 같은 작업 · 테스트를 두 번 보내면 `tasks.N.taskId` '같은 작업이 두 번 있습니다.'
+- **403 · 409 의 `detail` 글** — 403 `{ "tasks.N": "이 작업을 고칠 권한이 없습니다." }`. 409 `IMPACT_TARGET_CHANGED` 는 바뀌었으면 '분석 뒤에 바뀌었습니다.', 지웠으면 '분석 뒤에 지워졌습니다.'. 지운 작업은 권한을 보지 않고 바로 '지워짐' 으로 간다
+- **반영이 남기는 것** — 그 줄의 `appliedAt` 과 함께 **반영한 값**을 남긴다: 고친 안 칸이 보낸 값으로 바뀌고 안 보낸 고친 안 칸은 빠진다(화면에서 고친 안이면 그것이 '후' 다). `before` · 판정 · 근거는 그대로
+- **본문 줄 id** — 반영으로 본문을 갈아끼울 때 **같은 자리의 줄은 기존 id 를 이어 쓴다**(일반 `PATCH` 의 id 유지와 같은 효과 — 고치지 않은 줄의 id 가 그대로다). 남는 줄은 지우고 늘어난 줄은 새 id
+- **변경 이력** — `PATCH` 와 같은 서비스 몸통이라 작업 본문 '10분 합치기'(Q65)도 같다. 테스트는 글 칸을 고쳤으니 `basis_seq` 를 다시 찍는다
+- **테스트 반영 권한** — 테스트 `PATCH` 처럼 그 프로젝트를 볼 수 있으면 된다(부여 없는 시스템 관리자 포함)
+- **가장 최근 분석** — `created_at` 이 가장 늦은 것. 색인은 `(agenda_id, created_at)` 오름차순으로 세웠다 — Postgres 가 거꾸로 읽는다(sqlite 검사에서도 같은 모양으로 서게)
+- **루프** — `propose_impact` 실패 · 글로만 답함(다시 내라고 한 줄 덧붙임)을 합쳐 3번이면 `IMPACT_FAILED` '영향도를 분석하지 못했습니다. 잠시 뒤에 다시 분석해 주세요.'. 답이 `max_tokens` 에 닿으면 바로 `IMPACT_FAILED`(글만 다르다). 거절은 `CHAT_REFUSED`. `max_tokens` 는 새 설정 `IMPACT_MAX_TOKENS`(기본 16,000)
+- **스트림 중에 화면이 끊으면** 남기지 않는다 — 남기는 자리는 검사를 통과한 뒤 하나다. 분석 중에 결정이 또 바뀌면 분석을 시작한 판으로 남는다(화면은 '이전 판 분석' 으로 흐린다)
+
+## 구현에서 메운 것 (화면, 2026-11-10)
+
+계약이 비워 둔 화면 자리를 이렇게 메웠다. 타입 이름 · 모양은 위 '모양' 그대로다(`web/src/types/domain.ts`, 본문 줄은 `ImpactBodyLine` 으로 이름만 붙였다).
+
+- **스트림 읽기** — 챗봇의 `toChatEvent` 는 건드리지 않고 회의록처럼 `postSseMessages` 위에 `toImpactEvent`(`api/impacts.ts`)를 따로 둔다. `impact` 이벤트는 GET 의 `latest` 와 같은 읽기(`toImpact`)를 거치고, 모양이 아니면 깨진 스트림(`SERVER_UNREACHABLE`), `impact` 없이 `done` 이 와도 같다. 고친 안 칸이 없거나 `null` 이면 없는 칸으로 읽는다
+- **칸이 서는 때** — 결정내용(앞뒤 공백 뗀 것)이 있으면. 칸을 열 때 · 그 안건의 `decisionRev` 가 오를 때(같은 화면에서 결정을 고칠 때) `GET` 을 다시 부른다. 알림 줄은 머리 줄 자체가 노란 줄로 바뀌고 같은 줄 끝에 [AI 영향도 분석] 이 있다. 알림 숫자는 연결 작업 · 테스트만 적는다(다른 결정 안건 수는 띄울지만 가른다)
+- **분석 중** — 한 번에 한 안건. 진행 한 줄이 오기 전에는 '결정을 읽는 중'. **팝업을 닫거나 다른 안건으로 옮기면 받는 중인 분석을 끊는다**(끝까지 받지 못한 분석은 남지 않는다 — 계약 '멈추면 아무것도 안 남는다' 와 같다). 다시 분석하는 동안 앞 결과는 숨긴다. 실패는 서버 `message` 를 칸 안에 한 줄로(`CHAT_RATE_LIMITED` · `CHAT_UNAVAILABLE` · `IMPACT_FAILED` · `IMPACT_NO_DECISION` 모두 같은 자리)
+- **검토 상태는 화면 메모리** — 고름 · 지운 줄 · 고친 안은 분석 id 마다 `stores/impact.ts` 에 두고, 같은 프로젝트 안에서는 팝업을 다시 열어도 남는다. 프로젝트를 바꾸면 비운다
+- **[고치기]** — Claude 가 낸 칸만 고친다(제목만 낸 작업에 본문 칸을 새로 열지 않는다). 본문은 작업 상세의 본문 편집기(`TaskBodyEditor`)를 그대로 쓴다. 켠 줄이 칸 검사(제목 1 ~ 200자 · 본문 200줄 · 줄 4,000자 · `level` 0 ~ 3, 테스트는 `PATCH` 와 같은 검사)에 걸리거나 **보낸 칸이 모두 분석 때 값과 같으면**('지금 값과 다른 칸이 없습니다.') [반영] 을 끈다 — 서버의 422 를 미리 본다
+- **'전 → 후'** — 제목은 한 줄(전은 지운 글). 본문 · 테스트 내용 · 테스트 데이터는 줄 단위 비교(LCS)로 지운 줄(−) · 넣은 줄(+)과 앞뒤 한 줄만 두고 나머지는 '… n줄 그대로'. 본문 줄은 변경 이력과 같은 표시(☐ ☑ •, 들여쓰기 공백 둘)로 견준다. **반영한 줄의 '후' 는 서버가 남긴 반영한 값**(화면에서 고쳤으면 그 값)이다
+- **줄의 처지** — 반영함(✓, 체크 · [고치기] · [지우기] 없음) · 찾을 수 없는 작업(스냅샷에 없음) · 분석 뒤에 바뀌었어요(409 가 짚은 줄) · 고칠 권한이 없어요(작업 상세의 `canEdit` 와 같은 판단, 또는 403 이 짚은 줄) · 고를 수 있음. 앞의 넷은 체크를 끄고 잠근다. 테스트는 그 프로젝트 멤버 누구나라 403 이 짚을 때만 잠근다
+- **409 · 403 · 422** — `IMPACT_STALE` 는 결과를 흐리고 '이전 결정으로 한 분석이에요 — [다시 분석]', 반영을 끈다(지금 판과 다른 분석과 같은 모양). `IMPACT_TARGET_CHANGED` · `FORBIDDEN` 은 `detail` 의 `tasks.N` · `tests.N` 을 보낸 순서로 짚어 그 줄만 잠그고 알림을 띄우지 않는다 — 나머지 줄은 바로 다시 반영할 수 있다. 422 는 알리고 줄 아래에 첫 까닭 한 줄
+- **반영 뒤** — 바뀐 작업은 데이터 스토어의 작업을 통째로 갈아끼우고(그사이 프로젝트를 바꿨으면 넣지 않는다), 테스트는 테스트 스토어에 넣고, 둘 다 변경 이력 칸에 다시 부르라고 알린다. 분석은 응답의 `impact` 로 갈아끼운다
+- **칩** — 작업 · 테스트 키 칩과 부딪히는 결정의 안건 칩은 그 상세 주소(`/tasks/:id` · `/tests/:id` · `/agendas/:id`)로 간다 — 안건 상세는 여러 화면이 띄워서 화면마다 이벤트를 잇지 않는다(`TaggedTests` 와 같은 길)
+- **회의록 [등록] 뒤** — `updatedAgendas` 가운데 **결정내용 글이 바뀐 것만**(상태만 바꾼 것은 뺀다, 앞뒤 공백 뗀 글로 견줌) 칩으로 띄운다. 칩은 그 화면 안의 안건 상세를 열고 영향도 칸으로 스크롤한다. 다시 정리하거나 떠나면 지운다
+- **목업** — 진행 줄 셋(`read_tasks` · `compare_decisions` · `propose_impact`), 살펴볼 것이 없으면 진행 줄 없이 빈 결과. 고칠 안은 본문이 있는 첫 연결 작업의 첫 줄(본문 있는 작업이 없으면 첫 작업의 제목) · 첫 닿는 테스트의 내용 끝 한 줄, 다른 결정 안건은 첫 것을 `check`. 반영 검사 순서 · `detail` 글 · 반영한 값 남기기 · 같은 자리 줄 id 잇기는 위 '구현에서 메운 것 (서버)' 와 같다. 반영한 작업은 사본을 내고 데이터 스토어가 넣는다(회의록 apply 와 같은 길), 테스트는 목업 서버의 일반 수정(`mockPatchTest`)을 탄다. 이미 반영한 줄을 다시 보내면 `appliedAt` 으로 대상 바뀜을 낸다(서버는 `before` 와 달라서 같은 409)

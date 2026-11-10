@@ -321,6 +321,33 @@ describe('상세 — AI 정리 → 등록 → 나온 것', () => {
     expect($('[data-minutes-saved-summary]')!.textContent).toContain('외부 모델 호출 허용 범위')
   })
 
+  it('등록이 기존 안건의 결정을 바꿨으면 "영향도를 분석해 보세요" 와 안건 칩 — 누르면 영향도 칸이 있는 안건 상세', async () => {
+    await drafted()
+    expect($('[data-minutes-impact-prompt]')).toBeNull()
+    await click($('[data-minutes-apply]'))
+    expect($('[data-minutes-impact-prompt]')!.textContent).toContain(
+      '결정이 바뀐 안건 1건 — 영향도를 분석해 보세요',
+    )
+    expect($$('[data-minutes-impact-agenda]').map((b) => b.dataset.minutesImpactAgenda)).toEqual([
+      't2',
+    ])
+    await click($('[data-minutes-impact-agenda="t2"]'))
+    const dialog = $('[role="dialog"]')!
+    expect(dialog.querySelector('[data-impact-section]')).toBeTruthy()
+    /* 초안의 새 작업 하나도 t2 에 걸려 연결 작업이 셋 */
+    expect(dialog.querySelector('[data-impact-alert-text]')!.textContent).toContain(
+      '결정이 바뀌었어요 — 연결 작업 3 · 테스트 2',
+    )
+  })
+
+  it('결정내용을 끄고 등록하면 영향도 칩이 없다', async () => {
+    await drafted()
+    await click(checkbox('update:t2'))
+    await click($('[data-minutes-apply]'))
+    expect($('[data-minutes-result]')).toBeTruthy()
+    expect($('[data-minutes-impact-prompt]')).toBeNull()
+  })
+
   it('나온 작업 칩을 누르면 작업 상세 — "회의록에서" 칩이 그 회의록을 가리킨다', async () => {
     const { router } = await drafted()
     await click($('[data-minutes-apply]'))

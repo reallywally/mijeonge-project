@@ -2,6 +2,7 @@ from app.models.agenda import Agenda, AgendaCc, AgendaHistory
 from app.models.auth import AuthIdentity, AuthSession
 from app.models.base import Base, new_id
 from app.models.check import CheckRequest
+from app.models.impact import AgendaImpact
 from app.models.minutes import Minutes
 from app.models.part import Part, PartMember
 from app.models.project import Member, MemberAvatar, Project, ProjectMember
@@ -18,6 +19,7 @@ from app.models.task import (
 from app.models.test import TestCase, TestCc, TestComment, TestHistory, TestRef
 
 __all__ = [
+    "AgendaImpact",
     "AuthIdentity",
     "AuthSession",
     "Base",

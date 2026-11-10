@@ -590,6 +590,15 @@ def _diff_fields(
 async def patch_test(
     session: AsyncSession, test_id: str, payload: TestPatch, actor_id: str, *, today: date
 ) -> TestCaseOut:
+    test = await edit_test(session, test_id, payload, actor_id)
+    await session.commit()
+    return await _one(session, test, today)
+
+
+async def edit_test(
+    session: AsyncSession, test_id: str, payload: TestPatch, actor_id: str
+) -> TestCase:
+    """PATCH 의 몸통 — 커밋하지 않는다. 영향도 반영이 여러 테스트를 한 트랜잭션에 묶는다."""
     test = await load_test(session, test_id)
     texts_before = _text_fields(test)
     plan_before = _plan_fields(test)
@@ -615,8 +624,7 @@ async def patch_test(
     # 기준 바뀜 신호를 지우지 않는다 (docs/api/cc.md '구현에서 메운 것')
     if sent - {"cc_ids"}:
         test.basis_seq = await _current_basis(session, test.id)
-    await session.commit()
-    return await _one(session, test, today)
+    return test
 
 
 async def delete_test(session: AsyncSession, test_id: str, scope: Scope) -> None:

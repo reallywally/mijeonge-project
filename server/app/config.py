@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     chat_max_tokens: int = 8000
     # 회의록 초안은 도구 입력 하나에 안건 · 이력 · 작업 수십 줄이 실려 챗봇 답보다 길다
     minutes_max_tokens: int = 16000
+    # 영향도 분석은 작업 본문 · 테스트 내용을 통째로 고쳐 내는 줄이 여럿이라 초안만큼 길다
+    impact_max_tokens: int = 16000
     chat_timeout_seconds: float = 120.0
     # IP 하나가 1분에 보낼 수 있는 질문 수
     chat_rate_per_minute: int = 10

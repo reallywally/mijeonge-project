@@ -20,6 +20,7 @@ import {
 import type { MockAccount, MockProjectGrant, MockRiskAnalysis, MockTestCase } from '@/fixtures'
 import { canManageProject, canSeeProject } from '@/lib/access'
 import type {
+  AgendaImpact,
   CheckRequest,
   HistoryEntry,
   Me,
@@ -38,7 +39,7 @@ import type {
 
 /*
  * 목업 갈래의 '서버' — 계정 · 부여 · 세션을 들고 서버처럼 권한과 오류 코드를 본다 (docs/api/auth.md).
- * auth · admin · projects · parts · comments · tasks · risk · checks · minutes · riskAnalyses · tests · history 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
+ * auth · admin · projects · parts · comments · tasks · risk · checks · minutes · riskAnalyses · tests · history · impacts 의 목업 갈래가 같이 쓴다. 판단은 lib/access 의 함수 그대로다.
  *
  * 세션은 쿠키 대신 sessionStorage 에 둔다 — 새로고침해도 로그인이 남아야 서버 모드와 같게 돈다.
  */
@@ -81,6 +82,9 @@ interface MockDb {
   testHistory: Record<string, HistoryEntry[]>
   agendaHistory: Record<string, HistoryEntry[]>
   historySeq: number
+  /** AI 영향도 분석 — 배열 순서가 남긴 순서다. 시드는 없다 */
+  impacts: AgendaImpact[]
+  impactSeq: number
 }
 
 const fresh = (): MockDb => ({
@@ -112,6 +116,8 @@ const fresh = (): MockDb => ({
   testHistory: structuredClone(testHistory),
   agendaHistory: structuredClone(agendaHistory),
   historySeq: 0,
+  impacts: [],
+  impactSeq: 0,
 })
 
 let db = fresh()

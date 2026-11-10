@@ -101,6 +101,15 @@ const resultLine = computed(() => {
   return `새 안건 ${r.agendas.length} · 기존 안건 ${r.updatedAgendas.length} · 작업 ${r.tasks.length}건을 등록했습니다`
 })
 
+/** 등록이 결정내용을 바꾼 기존 안건 — 칩을 누르면 영향도 칸이 바로 보이게 안건 상세를 연다 */
+const decisionChanged = computed(() =>
+  mine.value
+    ? draft.decisionChangedIds
+        .map((id) => data.allAgendas.find((t) => t.id === id))
+        .filter((t) => t !== undefined)
+    : [],
+)
+
 /* 떠날 때 — 받는 중 · 검토 중이면 묻는다. 다른 회의록으로 옮길 때도 같다 */
 const LEAVE_MESSAGE = '정리한 초안은 남지 않습니다. 이 화면을 떠날까요?'
 let leaving = false
@@ -151,6 +160,7 @@ async function remove() {
 
 /* 칩을 누르면 상세 팝업. 이 화면 안에서만 여닫으므로 주소를 바꾸지 않는다 — 떠나는 확인이 뜨지 않게 */
 const agendaDetailId = ref<string | null>(null)
+const agendaFocus = ref<'impact' | null>(null)
 const taskDetailId = ref<string | null>(null)
 const agendaOpen = computed({
   get: () => agendaDetailId.value !== null,
@@ -164,8 +174,9 @@ const taskOpen = computed({
     if (!open) taskDetailId.value = null
   },
 })
-function openAgenda(id: string) {
+function openAgenda(id: string, focus: 'impact' | null = null) {
   taskDetailId.value = null
+  agendaFocus.value = focus
   agendaDetailId.value = id
 }
 function openTask(id: string) {
@@ -308,6 +319,27 @@ function closeDetails() {
               <CircleCheck class="size-4" />
               {{ resultLine }}
             </p>
+            <div
+              v-if="decisionChanged.length > 0"
+              class="flex flex-wrap items-center gap-1.5 text-sm"
+              data-minutes-impact-prompt
+            >
+              <Sparkles class="size-4 text-muted-foreground" />
+              <span class="text-muted-foreground"
+                >결정이 바뀐 안건 {{ decisionChanged.length }}건 — 영향도를 분석해 보세요</span
+              >
+              <button
+                v-for="t in decisionChanged"
+                :key="t.id"
+                type="button"
+                class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs hover:bg-accent"
+                :data-minutes-impact-agenda="t.id"
+                @click="openAgenda(t.id, 'impact')"
+              >
+                <ListTree class="size-3 shrink-0 text-muted-foreground" />
+                <span class="truncate">{{ t.title }}</span>
+              </button>
+            </div>
 
             <p v-if="madeCount === 0" class="text-sm text-muted-foreground" data-minutes-made-empty>
               아직 정리하지 않았어요
@@ -428,7 +460,11 @@ function closeDetails() {
       </DialogContent>
     </Dialog>
 
-    <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
+    <AgendaDetailDialog
+      v-model:open="agendaOpen"
+      :agenda-id="agendaDetailId"
+      :focus="agendaFocus"
+    />
     <TaskDetailDialog
       v-model:open="taskOpen"
       :task-id="taskDetailId"

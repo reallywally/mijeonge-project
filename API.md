@@ -197,6 +197,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | POST | `/api/projects/{projectId}/risks/summary` | 화면에 보이는 리스크 줄(`agendaIds`, 2026-11-04 `threadIds` 에서 · 2026-11-05 `taskIds` 걷음 → **2026-11-06 `taskIds` · `testIds` 되살림**(작업 · 테스트 리스크 줄, 없으면 `[]`), 답의 모양 · 근거는 `docs/api/risk-dashboard.md`)을 Claude 가 읽고 먼저 정할 것 · 패턴을 정리한다. 버튼을 누를 때만. 답을 끝까지 받으면 **임시 분석으로 남기고 `done` 에 `analysisId`**(2026-11-06 — 전엔 남기지 않았다, `docs/api/risk-analysis.md`). **SSE** — 챗봇과 같은 `delta` · `done` · `error` (`docs/api/risk.md` 'AI 요약') | `text/event-stream` | 구현 (2026-11-06 고침) |
 | GET · POST | `/api/projects/{projectId}/risk-analyses` | 저장한 분석 게시판(저장한 것만, `seq` 내림차순, `?limit=`(기본 50 · 최대 200) `&offset=`) · 저장(`{ analysisId, title }` — 내가 돌린 24시간 안의 임시 분석, 404 `RISK_ANALYSIS_NOT_FOUND` · 409 `RISK_ANALYSIS_ALREADY_SAVED`) (`docs/api/risk-analysis.md`) | `RiskAnalysisPage` · 201 `RiskAnalysis`(둘 다 `projectId` 를 싣는다, Q70) | 구현 |
 | GET · PATCH · DELETE | `/api/risk-analyses/{analysisId}` | 상세 · 제목 고치기(작성자만) · 지우기(작성자 · 프로젝트 관리자 · 시스템 관리자). 임시 · 없는 것 · 못 보는 프로젝트 것은 404 `RISK_ANALYSIS_NOT_FOUND` | `RiskAnalysis` · 204 | 구현 |
+| GET · POST | `/api/agendas/{agendaId}/impact` | AI 영향도 분석 — 칸 그리기(가장 최근 분석 + 연결 작업 · 닿는 테스트 · 다른 결정 안건 수) · 분석(SSE, 끝까지 받으면 남긴다, 409 `IMPACT_NO_DECISION`) (`docs/api/impact.md`) | `AgendaImpactState` · `text/event-stream` | 구현 |
+| POST | `/api/agenda-impacts/{impactId}/apply` | 영향도 분석의 고칠 안 반영 — 한 트랜잭션, 작업 · 테스트 일반 수정과 같은 권한 · 검사 · 이력. 409 `IMPACT_STALE` · `IMPACT_TARGET_CHANGED` | `ImpactApplyResult` | 구현 |
 
 확인 요청(`server/PLAN.md` 11단계 · `web/PLAN.md` 12단계). 모양은 `docs/api/check.md` 다. 기획은 `docs/check-request-proposal.md`, 결정은 Q38 ~ Q44. 2026-11-04 결정 판(`decisionRev`)으로 고침(`check.md`).
 

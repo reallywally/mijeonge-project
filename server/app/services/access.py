@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.errors import ApiError, not_found
 from app.models import (
     Agenda,
+    AgendaImpact,
     CheckRequest,
     Member,
     Minutes,
@@ -58,6 +59,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "test_id": ("TEST_NOT_FOUND", "테스트를 찾을 수 없습니다."),
     "test_comment_id": ("TEST_COMMENT_NOT_FOUND", "조치 내역을 찾을 수 없습니다."),
     "analysis_id": ("RISK_ANALYSIS_NOT_FOUND", "저장한 분석을 찾을 수 없습니다."),
+    "impact_id": ("IMPACT_NOT_FOUND", "영향도 분석을 찾을 수 없습니다."),
 }
 
 
@@ -118,6 +120,11 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             # 임시 분석(저장 전)은 돌린 사람에게도 경로로는 없는 것이다 — 저장 API 만 id 로 받는다
             stmt = select(RiskAnalysis.project_id).where(
                 RiskAnalysis.id == value, RiskAnalysis.saved_at.is_not(None)
+            )
+        case "impact_id":
+            # 안건을 지우면 분석 줄은 남고 경로로는 없는 것이다 (docs/api/impact.md)
+            stmt = select(AgendaImpact.project_id).where(
+                AgendaImpact.id == value, AgendaImpact.agenda_id.in_(live_agenda_ids())
             )
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")

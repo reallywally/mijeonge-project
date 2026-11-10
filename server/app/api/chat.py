@@ -12,6 +12,7 @@ from app.errors import ApiError
 from app.llm import LLMProvider, openai_compat
 from app.llm.anthropic_provider import AnthropicProvider, make_client
 from app.schemas.chat import ChatEvent, ChatInput
+from app.schemas.impact import ImpactEvent
 from app.schemas.minutes import MinutesEvent
 from app.services import chat as chat_service
 from app.services import project as project_service
@@ -67,15 +68,15 @@ def ready_llm(request: Request, llm: LLMProvider | None, limiter: RateLimiter) -
     return llm
 
 
-def _sse(event: ChatEvent | MinutesEvent) -> str:
+def _sse(event: ChatEvent | MinutesEvent | ImpactEvent) -> str:
     # 프론트는 event 줄로 가른다. data 는 한 줄 JSON 이라 줄바꿈이 끼지 않는다
     return f"event: {event.type}\ndata: {event.model_dump_json(by_alias=True)}\n\n"
 
 
 def sse_response(
-    events: AsyncIterator[ChatEvent | MinutesEvent],
+    events: AsyncIterator[ChatEvent | MinutesEvent | ImpactEvent],
 ) -> StreamingResponse:
-    """챗봇 · 리스크 분석 · 회의록 초안이 같이 쓴다 — 화면이 같은 스트림 읽기를 쓴다."""
+    """챗봇 · 리스크 분석 · 회의록 초안 · 영향도 분석이 같이 쓴다 — 화면이 같은 읽기를 쓴다."""
 
     async def body() -> AsyncIterator[str]:
         async for event in events:
