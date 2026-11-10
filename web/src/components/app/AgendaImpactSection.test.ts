@@ -276,3 +276,92 @@ describe('반영', () => {
     expect(applyButton()!.disabled).toBe(false)
   })
 })
+
+/** 숨은 영향 — 서버 OS 결정(t1)을 록키로 바꾸고, 연결 안 된 HW-19 본문 · 닿지 않는 tc1 내용에 '우분투' 를 적는다 */
+function plantHidden() {
+  useDataStore().allTasks.find((t) => t.id === 'k19')!.body = [
+    { id: 'h1', kind: 'check', text: 'OS 를 우분투로 설치한다', done: false, level: 0 },
+  ]
+  mockDb().tests.find((t) => t.id === 'tc1')!.content = '서버 OS: 우분투 최신'
+  useAgendaStore().updateAgenda('t1', { decision: '록키 최신 버전으로 한다' })
+}
+
+const linkChecked = (key: string) =>
+  row(key)!.querySelector('[data-impact-link]')!.getAttribute('data-state') === 'checked'
+
+describe('숨은 영향 — 연결 안 된 줄', () => {
+  it('고칠 작업 · 고칠 테스트에 같이 든다 — 배지 · [✓ 이 안건에 연결], check 줄은 확인 필요 + 근거, 연결만 고른다', async () => {
+    plantHidden()
+    await analyzed('t1')
+    expect($$('[data-impact-row]').map((r) => r.dataset.impactRow)).toEqual([
+      'task:k4',
+      'task:k19',
+      'test:tc2',
+      'test:tc1',
+    ])
+    expect(row('task:k4')!.querySelector('[data-impact-unlinked]')).toBeNull()
+    expect(row('task:k4')!.querySelector('[data-impact-link]')).toBeNull()
+
+    const k19 = row('task:k19')!
+    expect(k19.querySelector('[data-impact-unlinked]')!.textContent).toContain(
+      '연결 안 됨 · AI 가 찾음',
+    )
+    expect(k19.textContent).toContain('이 안건에 연결')
+    expect(linkChecked('task:k19')).toBe(true)
+    expect(checked('task:k19')).toBe(true)
+    expect(k19.querySelector('[data-op="add"]')!.textContent).toContain('OS 를 록키로 설치한다')
+
+    const tc1 = row('test:tc1')!
+    expect(tc1.querySelector('[data-impact-check]')!.textContent).toContain('확인 필요')
+    expect(tc1.querySelector('[data-impact-reason]')!.textContent).toContain('우분투')
+    expect(tc1.querySelector('[data-impact-pick]')).toBeNull()
+    expect(tc1.querySelector('[data-impact-edit]')).toBeNull()
+    expect(tc1.querySelector('[data-impact-diff]')).toBeNull()
+    expect(linkChecked('test:tc1')).toBe(true)
+
+    /* 살펴본 것(접힘)에는 들지 않는다 — t1 은 나머지가 다 고칠 줄이라 접힌 묶음이 없다 */
+    expect($('[data-impact-seen-toggle]')).toBeNull()
+    expect(applyButton()!.textContent).toContain('반영 4건')
+
+    /* check 줄의 연결을 끄면 보낼 것이 없어 하나 준다, 고칠 안 줄의 연결을 꺼도 고칠 안은 남는다 */
+    await click(tc1.querySelector('[data-impact-link]'))
+    expect(applyButton()!.textContent).toContain('반영 3건')
+    await click(k19.querySelector('[data-impact-link]'))
+    expect(linkChecked('task:k19')).toBe(false)
+    expect(applyButton()!.textContent).toContain('반영 3건')
+  })
+
+  it('[반영] — 연결한 줄은 "반영함 · 연결함", 링크가 데이터 스토어에 · 태그가 테스트 스토어에 든다', async () => {
+    plantHidden()
+    await analyzed('t1')
+    await click(applyButton())
+    expect(row('task:k19')!.querySelector('[data-impact-applied]')!.textContent).toContain(
+      '반영함 · 연결함',
+    )
+    expect(row('test:tc1')!.querySelector('[data-impact-applied]')!.textContent).toContain(
+      '반영함 · 연결함',
+    )
+    expect(row('task:k4')!.querySelector('[data-impact-applied]')!.textContent).not.toContain(
+      '연결함',
+    )
+    expect(row('task:k19')!.querySelector('[data-impact-link]')).toBeNull()
+    expect(useDataStore().taskAgendas).toContainEqual({ taskId: 'k19', agendaId: 't1' })
+    expect(useTestStore().byId.tc1.refs).toContainEqual({ kind: 'agenda', id: 't1' })
+  })
+
+  it('연결을 끄고 반영하면 고칠 안만 — 링크가 생기지 않는다', async () => {
+    plantHidden()
+    await analyzed('t1')
+    const spy = vi.spyOn(api, 'applyAgendaImpact')
+    await click(row('task:k19')!.querySelector('[data-impact-link]'))
+    await click(row('test:tc1')!.querySelector('[data-impact-remove]'))
+    await click(applyButton())
+    const sent = spy.mock.calls[0][1]
+    expect(sent.tasks.find((t) => t.taskId === 'k19')).not.toHaveProperty('link')
+    expect(sent.tests.map((t) => t.testId)).toEqual(['tc2'])
+    expect(row('task:k19')!.querySelector('[data-impact-applied]')!.textContent).not.toContain(
+      '연결함',
+    )
+    expect(useDataStore().taskAgendas).not.toContainEqual({ taskId: 'k19', agendaId: 't1' })
+  })
+})

@@ -393,6 +393,9 @@ const sent = <T>(body: T): T => JSON.parse(JSON.stringify(body)) as T
 /** 목업의 테스트 고치기를 바로 — 영향도 분석 반영(api/impacts)이 일반 수정과 같은 검사 · 이력 · 기준으로 고친다 */
 export const mockPatchTest = (testId: string, patch: TestPatch) => mock.patch(testId, sent(patch))
 
+/** 목업의 태그 걸기를 바로 — 영향도 분석 반영의 '이 안건에 연결' 이 같은 검사 · 이력 · 기준으로 건다(멱등) */
+export const mockPutTestRef = (testId: string, ref: TestRef) => mock.putRef(testId, sent(ref))
+
 /** 그 프로젝트의 테스트 전부(seq 순) — '지금' · 목록 · 간트 · 작업 · 안건 상세의 칩이 같이 쓴다 */
 export const fetchTests = (projectId: string) =>
   isMockMode()

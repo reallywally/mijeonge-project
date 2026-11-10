@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { watch } from 'vue'
 import * as api from '@/api'
 import { ApiError } from '@/api'
 import { mockDb, resetMockAuth } from '@/api/mockAuth'
@@ -201,5 +202,120 @@ describe('반영', () => {
     await vi.runAllTimersAsync()
     expect(impact.states).toEqual({})
     expect(impact.reviews).toEqual({})
+  })
+})
+
+/** 숨은 영향 — 서버 OS 결정(t1)을 록키로 바꾸고, 연결 안 된 HW-19 본문 · 닿지 않는 tc1 내용에 '우분투' 를 적는다 */
+function plantHidden() {
+  useDataStore().allTasks.find((t) => t.id === 'k19')!.body = [
+    { id: 'h1', kind: 'check', text: 'OS 를 우분투로 설치한다', done: false, level: 0 },
+  ]
+  mockDb().tests.find((t) => t.id === 'tc1')!.content = '서버 OS: 우분투 최신'
+  useAgendaStore().updateAgenda('t1', { decision: '록키 최신 버전으로 한다' })
+}
+
+describe('숨은 영향 — 연결 안 된 줄', () => {
+  it('진행 줄은 같은 것이 잇달아 와도 한 줄 — 찾기 · 읽기 줄이 차례로 선다', async () => {
+    plantHidden()
+    const impact = useImpactStore()
+    const labels: string[] = []
+    watch(
+      () => impact.running?.tool,
+      (v) => {
+        if (v) labels.push(v)
+      },
+      { flush: 'sync' },
+    )
+    await analyzed('t1')
+    expect(labels).toEqual([
+      '연결 작업 읽는 중',
+      '다른 결정 비교 중',
+      '관련 작업 · 테스트 찾는 중',
+      '관련 작업 · 테스트 읽는 중',
+      '고칠 안 만드는 중',
+    ])
+  })
+
+  it('연결 안 된 update 줄은 고칠 안 + link, check 줄은 link 만 — 기본 켬, 다 세어 반영 4건', async () => {
+    plantHidden()
+    const impact = useImpactStore()
+    const latest = await analyzed('t1')
+    expect(impact.pickedCount(latest)).toBe(4)
+    expect(impact.isLinking(latest, 'task', 'k19')).toBe(true)
+    expect(impact.isLinking(latest, 'task', 'k4')).toBe(false)
+    expect(impact.problems(latest)).toEqual({})
+    const input = impact.applyInput(latest)
+    expect(input.tasks.map((t) => [t.taskId, t.link ?? null, 'body' in t])).toEqual([
+      ['k4', null, true],
+      ['k19', true, true],
+    ])
+    expect(input.tests).toEqual([
+      { testId: 'tc2', content: expect.any(String) },
+      { testId: 'tc1', link: true },
+    ])
+  })
+
+  it('연결을 끄면 link 를 보내지 않는다 — 고칠 안만. check 줄은 연결을 끄면 빠진다', async () => {
+    plantHidden()
+    const impact = useImpactStore()
+    const latest = await analyzed('t1')
+    impact.setLink(latest, 'task:k19', false)
+    impact.setLink(latest, 'test:tc1', false)
+    expect(impact.pickedCount(latest)).toBe(3)
+    const input = impact.applyInput(latest)
+    expect(input.tasks.find((t) => t.taskId === 'k19')).not.toHaveProperty('link')
+    expect(input.tests.map((t) => t.testId)).toEqual(['tc2'])
+    /* 줄을 끄면 연결도 안 간다 */
+    impact.setLink(latest, 'task:k19', true)
+    impact.setPicked(latest, 'task:k19', false)
+    expect(impact.isLinking(latest, 'task', 'k19')).toBe(false)
+    expect(impact.applyInput(latest).tasks.map((t) => t.taskId)).toEqual(['k4'])
+  })
+
+  it('이미 걸린 줄에 연결이 켜져 있으면 미리 막는다', async () => {
+    plantHidden()
+    const impact = useImpactStore()
+    const latest = await analyzed('t1')
+    impact.reviewOf(latest).link['task:k4'] = true
+    expect(impact.problems(latest)).toEqual({ 'task:k4': expect.stringContaining('연결') })
+    expect(impact.canApply(latest)).toBe(false)
+  })
+
+  it('반영 — 링크를 데이터 스토어에 더하고 테스트 태그는 테스트 스토어에, 줄은 반영함 · 연결함', async () => {
+    plantHidden()
+    const impact = useImpactStore()
+    const data = useDataStore()
+    const latest = await analyzed('t1')
+    const done = impact.apply(latest)
+    await vi.runAllTimersAsync()
+    expect(await done).toBe(true)
+    expect(data.taskAgendas).toContainEqual({ taskId: 'k19', agendaId: 't1' })
+    expect(data.allTasks.find((t) => t.id === 'k19')!.body[0].text).toBe('OS 를 록키로 설치한다')
+    expect(useTestStore().byId.tc1.refs).toContainEqual({ kind: 'agenda', id: 't1' })
+    expect(useTestStore().byId.tc1.content).toBe('서버 OS: 우분투 최신')
+    const after = impact.states.t1.latest!
+    expect(after.tasks.find((t) => t.taskId === 'k19')!.linkedOnApply).toBe(true)
+    expect(impact.rowStatus(after, 'test', 'tc1')).toBe('applied')
+    expect(impact.pickedCount(after)).toBe(0)
+    /* 다음 분석부터 연결 작업 · 닿는 테스트로 본다 */
+    await impact.load('t1')
+    expect(impact.states.t1).toMatchObject({ taskCount: 2, testCount: 2 })
+  })
+
+  it('연결만 — check 줄 하나만 남기고 반영하면 태그만 걸린다', async () => {
+    plantHidden()
+    const impact = useImpactStore()
+    const latest = await analyzed('t1')
+    for (const key of ['task:k4', 'task:k19', 'test:tc2']) impact.removeRow(latest, key)
+    expect(impact.applyInput(latest)).toEqual({ tasks: [], tests: [{ testId: 'tc1', link: true }] })
+    const done = impact.apply(latest)
+    await vi.runAllTimersAsync()
+    expect(await done).toBe(true)
+    expect(mockDb().tests.find((t) => t.id === 'tc1')!.refs).toEqual([{ kind: 'agenda', id: 't1' }])
+    expect(
+      mockDb()
+        .testHistory.tc1.at(-1)!
+        .changes.map((c) => c.field),
+    ).toEqual(['agendaRef'])
   })
 })

@@ -646,7 +646,17 @@ def test_chat_tool_names_match_domain_ts() -> None:
 # 응답에서 키째 빠진다 — 그래서 null 자리에 들지 않는다
 IMPACT_SHAPES: dict[str, set[str]] = {
     "ImpactBodyLine": {"kind", "text", "done", "level"},
-    "ImpactTask": {"taskId", "verdict", "reason", "title", "body", "before", "appliedAt"},
+    "ImpactTask": {
+        "taskId",
+        "verdict",
+        "reason",
+        "title",
+        "body",
+        "before",
+        "appliedAt",
+        "linked",
+        "linkedOnApply",
+    },
     "ImpactTest": {
         "testId",
         "verdict",
@@ -656,6 +666,8 @@ IMPACT_SHAPES: dict[str, set[str]] = {
         "testData",
         "before",
         "appliedAt",
+        "linked",
+        "linkedOnApply",
     },
     "ImpactConflict": {"agendaId", "verdict", "reason", "decision"},
     "AgendaImpact": {
@@ -674,7 +686,7 @@ IMPACT_SHAPES: dict[str, set[str]] = {
     },
     "AgendaImpactState": {"latest", "taskCount", "testCount", "decidedAgendaCount"},
     "ImpactApplyInput": {"tasks", "tests"},
-    "ImpactApplyResult": {"tasks", "tests", "impact"},
+    "ImpactApplyResult": {"tasks", "tests", "links", "impact"},
 }
 IMPACT_NULLABLE: dict[str, set[str]] = {
     "ImpactTask": {"appliedAt"},

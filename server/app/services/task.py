@@ -788,14 +788,21 @@ async def link_agenda(
     session: AsyncSession, task_id: str, agenda_id: str, scope: Scope
 ) -> TaskAgendaLinkOut:
     task = await load_task(session, task_id)
-    _guard_edit(scope, task)
-    actor_id = scope.actor.id
-    if await _attach_agenda(session, task, agenda_id):
-        history_service.record_task(
-            session, task, [history_service.change("agenda", None, agenda_id)], actor_id, now()
-        )
+    await attach_agenda(session, task, agenda_id, scope)
     await session.commit()
     return TaskAgendaLinkOut(task_id=task_id, agenda_id=agenda_id)
+
+
+async def attach_agenda(session: AsyncSession, task: Task, agenda_id: str, scope: Scope) -> bool:
+    """PUT 링크의 몸통 — 커밋하지 않는다. 영향도 반영이 여러 링크를 한 트랜잭션에 묶는다.
+    새로 걸었으면 True."""
+    _guard_edit(scope, task)
+    if not await _attach_agenda(session, task, agenda_id):
+        return False
+    history_service.record_task(
+        session, task, [history_service.change("agenda", None, agenda_id)], scope.actor.id, now()
+    )
+    return True
 
 
 async def unlink_agenda(session: AsyncSession, task_id: str, agenda_id: str, scope: Scope) -> None:

@@ -1114,6 +1114,10 @@ export interface ImpactTask {
   before: { title: string; body: ImpactBodyLine[] }
   /** 반영한 시각 — 안 했으면 null */
   appliedAt: string | null
+  /** 연결 작업이면 true, 분석 중 검색으로 찾은 것(숨은 영향)이면 false */
+  linked: boolean
+  /** 반영 때 이 안건에 연결했으면 true — 연결 안 된 줄에서만. 반영 전 · 안 했으면 false */
+  linkedOnApply: boolean
 }
 
 /** 테스트 한 줄의 판정 */
@@ -1126,6 +1130,10 @@ export interface ImpactTest {
   testData?: string
   before: { title: string; content: string; testData: string }
   appliedAt: string | null
+  /** 닿는 테스트면 true, 검색으로 찾은 것이면 false */
+  linked: boolean
+  /** 반영 때 이 안건을 태그했으면 true */
+  linkedOnApply: boolean
 }
 
 /** 다른 결정된 안건과의 부딪힘 */
@@ -1175,14 +1183,18 @@ export type ImpactEvent =
 
 /** POST /api/agenda-impacts/{impactId}/apply — 고르고 고친 것만 */
 export interface ImpactApplyInput {
-  tasks: { taskId: string; title?: string; body?: ImpactBodyLine[] }[]
-  tests: { testId: string; title?: string; content?: string; testData?: string }[]
+  /** link — 연결 안 된 줄만, 이 안건에 연결(작업 ↔ 안건 링크) */
+  tasks: { taskId: string; title?: string; body?: ImpactBodyLine[]; link?: boolean }[]
+  /** link — 연결 안 된 줄만, 이 안건을 태그 */
+  tests: { testId: string; title?: string; content?: string; testData?: string; link?: boolean }[]
 }
 
 export interface ImpactApplyResult {
   /** 바뀐 작업 · 테스트 — 요청 순서 */
   tasks: Task[]
   tests: TestCase[]
+  /** 새로 건 작업 ↔ 안건 링크 — 스냅샷을 다시 받지 않고 더한다 */
+  links: TaskAgendaLink[]
   /** appliedAt 이 찍힌 뒤의 분석 */
   impact: AgendaImpact
 }

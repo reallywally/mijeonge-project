@@ -38,7 +38,9 @@ from app.schemas.search import (
     TaskList,
     TaskPlace,
     TestDoc,
+    TestHit,
     TestNote,
+    TestPlace,
     TestTag,
 )
 from app.schemas.test import TestRefOut, TestSignal
@@ -73,6 +75,7 @@ TEST_KEY = re.compile(r"^[A-Z][A-Z0-9]{0,7}-T\d+$")
 # 같은 점수면 이 순서로 고른다 (API.md '검색')
 _AGENDA_PLACES: tuple[AgendaPlace, ...] = ("title", "description", "decision")
 _TASK_PLACES: tuple[TaskPlace, ...] = ("title", "body")
+_TEST_PLACES: tuple[TestPlace, ...] = ("title", "content", "testData")
 
 
 def clean_query(query: str) -> str:
@@ -235,6 +238,45 @@ async def search_tasks(
     ranked = sorted(tasks, key=lambda row: (-found[row.id][0], row.seq))[:limit]
     return [
         TaskHit(
+            id=row.id,
+            key=row.key,
+            title=row.title,
+            status=row.status,
+            matched=found[row.id][1],
+            snippet=snippet(found[row.id][2], query),
+        )
+        for row in ranked
+    ]
+
+
+async def search_tests(
+    session: AsyncSession, project_id: str, query: str, limit: int = 10
+) -> list[TestHit]:
+    """제목 · 내용 · 테스트 데이터 — 작업 검색과 같은 수법. 지금은 영향도 분석의 도구만 쓴다."""
+    query = clean_query(query)
+    await _pin_threshold(session)
+
+    def scoped(owner: Select[Any]) -> Select[Any]:
+        return owner.where(TestCase.project_id == project_id)
+
+    title_hit, title_score = _match(TestCase.title, query)
+    content_hit, content_score = _match(TestCase.content, query)
+    data_hit, data_score = _match(TestCase.test_data, query)
+
+    owner = select(TestCase.id.label("owner_id"))
+    parts = [
+        _place(scoped(owner).where(title_hit), "title", TestCase.title, title_score, 0),
+        _place(scoped(owner).where(content_hit), "content", TestCase.content, content_score, 0),
+        _place(scoped(owner).where(data_hit), "testData", TestCase.test_data, data_score, 0),
+    ]
+    found = _best((await session.execute(union_all(*parts))).all(), _TEST_PLACES)
+    if not found:
+        return []
+
+    tests = (await session.scalars(select(TestCase).where(TestCase.id.in_(found)))).all()
+    ranked = sorted(tests, key=lambda row: (-found[row.id][0], row.seq))[:limit]
+    return [
+        TestHit(
             id=row.id,
             key=row.key,
             title=row.title,

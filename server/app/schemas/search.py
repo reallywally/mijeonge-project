@@ -8,6 +8,7 @@ from app.schemas.test import TestRefKind, TestSignal
 
 AgendaPlace = Literal["title", "description", "decision"]
 TaskPlace = Literal["title", "body"]
+TestPlace = Literal["title", "content", "testData"]
 
 
 class AgendaHit(Schema):
@@ -26,6 +27,16 @@ class TaskHit(Schema):
     title: str
     status: str
     matched: TaskPlace
+    snippet: str
+
+
+class TestHit(Schema):
+    id: str
+    key: str
+    title: str
+    # 테스트 자체의 상태 — 묶음도 하위에서 모으지 않는다
+    status: str
+    matched: TestPlace
     snippet: str
 
 

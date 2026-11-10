@@ -6,6 +6,8 @@ import {
   applyErrorsByKey,
   bareLines,
   impactKey,
+  inReview,
+  linkOnly,
   taskProposalProblems,
   taskUnchanged,
   testUnchanged,
@@ -23,6 +25,8 @@ import type {
   AgendaImpactState,
   ImpactApplyInput,
   ImpactBodyLine,
+  ImpactTask,
+  ImpactTest,
 } from '@/types/domain'
 
 /** 줄 하나의 처지 — 반영함 · 찾을 수 없음 · 분석 뒤 바뀜 · 권한 없음 · 고를 수 있음 */
@@ -32,6 +36,8 @@ export type ImpactRowStatus = 'applied' | 'missing' | 'changed' | 'locked' | 'op
 export interface ImpactReview {
   /** 줄 열쇠(impactKey) → 고름. 기본은 update 줄을 다 켬 */
   picked: Record<string, boolean>
+  /** 연결 안 된 줄(검색으로 찾은 것) → '이 안건에 연결'. 기본 켬. 연결만 하는 check 줄은 이것이 곧 고름이다 */
+  link: Record<string, boolean>
   /** 지운 줄 — 지운 순서대로(되돌리기는 마지막 것부터) */
   removed: string[]
   /** 고친 안 — update 줄에 Claude 가 낸 칸만 든다 */
@@ -50,6 +56,7 @@ export interface ImpactReview {
 }
 
 const EMPTY_COUNTS = { taskCount: 0, testCount: 0, decidedAgendaCount: 0 }
+const LINK_ON_LINKED = '이미 이 안건에 연결된 줄입니다 — 연결은 연결 안 된 줄에서만 합니다.'
 
 /**
  * AI 영향도 분석 (docs/api/impact.md) — 안건마다 칸 상태(가장 최근 분석 + 세는 것), 분석 스트림, 검토 · 반영.
@@ -84,6 +91,7 @@ export const useImpactStore = defineStore('impact', () => {
     if (have) return have
     const review: ImpactReview = {
       picked: {},
+      link: {},
       removed: [],
       tasks: {},
       tests: {},
@@ -94,6 +102,8 @@ export const useImpactStore = defineStore('impact', () => {
       stale: false,
     }
     for (const t of impact.tasks) {
+      if (!inReview(t)) continue
+      if (!t.linked) review.link[impactKey('task', t.taskId)] = t.appliedAt === null
       if (t.verdict !== 'update') continue
       review.picked[impactKey('task', t.taskId)] = t.appliedAt === null
       review.tasks[t.taskId] = {
@@ -102,6 +112,8 @@ export const useImpactStore = defineStore('impact', () => {
       }
     }
     for (const t of impact.tests) {
+      if (!inReview(t)) continue
+      if (!t.linked) review.link[impactKey('test', t.testId)] = t.appliedAt === null
       if (t.verdict !== 'update') continue
       review.picked[impactKey('test', t.testId)] = t.appliedAt === null
       review.tests[t.testId] = {
@@ -153,8 +165,10 @@ export const useImpactStore = defineStore('impact', () => {
     try {
       for await (const event of api.streamAgendaImpact(agendaId, mine.signal)) {
         if (controller !== mine) return false
-        if (event.type === 'tool') running.value.tool = event.label
-        else if (event.type === 'impact') received = event.impact
+        /* 같은 진행 줄이 잇달아 와도 한 줄 그대로 둔다(찾기 · 읽기는 여러 번 온다) */
+        if (event.type === 'tool') {
+          if (running.value.tool !== event.label) running.value.tool = event.label
+        } else if (event.type === 'impact') received = event.impact
         else if (event.type === 'done' && received) setLatest(agendaId, received)
       }
       return received !== null
@@ -216,19 +230,51 @@ export const useImpactStore = defineStore('impact', () => {
 
   const isRemoved = (impact: AgendaImpact, key: string) => reviewOf(impact).removed.includes(key)
 
-  /** 반영에 들어가나 — 켰고 · 고를 수 있고 · 지우지 않았다 */
+  const rowOf = (
+    impact: AgendaImpact,
+    kind: ImpactKind,
+    id: string,
+  ): ImpactTask | ImpactTest | null =>
+    (kind === 'task'
+      ? impact.tasks.find((t) => t.taskId === id)
+      : impact.tests.find((t) => t.testId === id)) ?? null
+
+  /**
+   * 반영에 들어가나 — 검토 묶음의 줄이고 · 켰고 · 고를 수 있고 · 지우지 않았다.
+   * 연결만 하는 check 줄은 '이 안건에 연결' 을 켠 것이 고름이다
+   */
   function isPicked(impact: AgendaImpact, kind: ImpactKind, id: string) {
+    const row = rowOf(impact, kind, id)
+    if (!row || !inReview(row)) return false
     const key = impactKey(kind, id)
     const review = reviewOf(impact)
+    const on = linkOnly(row) ? !!review.link[key] : !!review.picked[key]
+    return on && !review.removed.includes(key) && rowStatus(impact, kind, id) === 'open'
+  }
+
+  /** 반영 때 이 안건에 연결하나 — 연결 안 된 줄을 골랐고 연결을 켰다 */
+  function isLinking(impact: AgendaImpact, kind: ImpactKind, id: string) {
+    const row = rowOf(impact, kind, id)
     return (
-      !!review.picked[key] &&
-      !review.removed.includes(key) &&
-      rowStatus(impact, kind, id) === 'open'
+      !!row &&
+      !row.linked &&
+      !!reviewOf(impact).link[impactKey(kind, id)] &&
+      isPicked(impact, kind, id)
     )
   }
 
   function setPicked(impact: AgendaImpact, key: string, on: boolean) {
     reviewOf(impact).picked[key] = on
+  }
+
+  function setLink(impact: AgendaImpact, key: string, on: boolean) {
+    reviewOf(impact).link[key] = on
+  }
+
+  /** 줄을 끈다 — 409 · 403 이 짚은 줄. 연결만 하는 줄은 연결도 끈다 */
+  function unpick(review: ImpactReview, key: string) {
+    review.picked[key] = false
+    if (key in review.link) review.link[key] = false
   }
 
   /** 줄을 검토에서 지운다 — 숨기고 반영에서 빠진다(회의록 검토와 같은 규칙) */
@@ -244,7 +290,9 @@ export const useImpactStore = defineStore('impact', () => {
   function undoRemove(impact: AgendaImpact) {
     const review = reviewOf(impact)
     const key = review.removed.pop()
-    if (key) review.picked[key] = true
+    if (!key) return
+    review.picked[key] = true
+    if (key in review.link) review.link[key] = true
   }
 
   function toggleEdit(impact: AgendaImpact, key: string) {
@@ -253,24 +301,33 @@ export const useImpactStore = defineStore('impact', () => {
   }
 
   const pickedTasks = (impact: AgendaImpact) =>
-    impact.tasks.filter((t) => t.verdict === 'update' && isPicked(impact, 'task', t.taskId))
+    impact.tasks.filter((t) => isPicked(impact, 'task', t.taskId))
   const pickedTests = (impact: AgendaImpact) =>
-    impact.tests.filter((t) => t.verdict === 'update' && isPicked(impact, 'test', t.testId))
+    impact.tests.filter((t) => isPicked(impact, 'test', t.testId))
 
   const pickedCount = (impact: AgendaImpact) =>
     pickedTasks(impact).length + pickedTests(impact).length
 
-  /** 켠 줄 중 고쳐야 보낼 수 있는 것 — 줄 열쇠 → 한 줄. 서버도 같은 것을 422 로 거절한다 */
+  /**
+   * 켠 줄 중 고쳐야 보낼 수 있는 것 — 줄 열쇠 → 한 줄. 서버도 같은 것을 422 로 거절한다.
+   * 연결만 하는 줄은 고칠 칸 없이 된다. 이미 걸린 줄에는 연결을 보내지 않는다
+   */
   function problems(impact: AgendaImpact): Record<string, string> {
     const review = reviewOf(impact)
     const out: Record<string, string> = {}
+    for (const t of [...pickedTasks(impact), ...pickedTests(impact)]) {
+      const key = 'taskId' in t ? impactKey('task', t.taskId) : impactKey('test', t.testId)
+      if (t.linked && review.link[key]) out[key] = LINK_ON_LINKED
+    }
     for (const t of pickedTasks(impact)) {
+      if (linkOnly(t) || out[impactKey('task', t.taskId)]) continue
       const form = review.tasks[t.taskId] ?? {}
       const first = Object.values(taskProposalProblems(form))[0]
       if (first) out[impactKey('task', t.taskId)] = first
       else if (taskUnchanged(form, t.before)) out[impactKey('task', t.taskId)] = UNCHANGED_TEXT
     }
     for (const t of pickedTests(impact)) {
+      if (linkOnly(t) || out[impactKey('test', t.testId)]) continue
       const form = review.tests[t.testId] ?? {}
       const first = Object.values(testFieldProblems(form))[0]
       if (first) out[impactKey('test', t.testId)] = first
@@ -279,19 +336,27 @@ export const useImpactStore = defineStore('impact', () => {
     return out
   }
 
-  /** 보낼 모양 — 고른 줄만, 고친 안의 칸 그대로(분석 순서) */
+  /** 보낼 모양 — 고른 줄만, 고친 안의 칸 그대로(분석 순서). 연결만 하는 줄은 link 하나, 고칠 칸은 없다 */
   function applyInput(impact: AgendaImpact): ImpactApplyInput {
     const review = reviewOf(impact)
+    const link = (kind: ImpactKind, id: string) =>
+      isLinking(impact, kind, id) ? { link: true } : {}
     return {
       tasks: pickedTasks(impact).map((t) => {
+        if (linkOnly(t)) return { taskId: t.taskId, link: true }
         const form = review.tasks[t.taskId] ?? {}
         return {
           taskId: t.taskId,
           ...(form.title !== undefined ? { title: form.title } : {}),
           ...(form.body !== undefined ? { body: bareLines(form.body) } : {}),
+          ...link('task', t.taskId),
         }
       }),
-      tests: pickedTests(impact).map((t) => ({ testId: t.testId, ...review.tests[t.testId] })),
+      tests: pickedTests(impact).map((t) =>
+        linkOnly(t)
+          ? { testId: t.testId, link: true }
+          : { testId: t.testId, ...review.tests[t.testId], ...link('test', t.testId) },
+      ),
     }
   }
 
@@ -315,11 +380,16 @@ export const useImpactStore = defineStore('impact', () => {
     try {
       const res = await api.applyAgendaImpact(impact.id, input)
       /* 그사이 프로젝트를 바꿨으면 지금 레코드에 섞지 않는다 — 돌아가면 스냅샷에 있다 */
-      if (data.holdsRecordsOf(projectId))
+      if (data.holdsRecordsOf(projectId)) {
         for (const next of res.tasks) {
           const at = data.allTasks.findIndex((t) => t.id === next.id)
           if (at >= 0) data.allTasks[at] = next
         }
+        /* 새로 건 링크 — 다음 분석부터 연결 작업으로 본다. 이미 있으면 그대로 */
+        for (const l of res.links)
+          if (!data.taskAgendas.some((x) => x.taskId === l.taskId && x.agendaId === l.agendaId))
+            data.taskAgendas.push({ taskId: l.taskId, agendaId: l.agendaId })
+      }
       for (const t of res.tests) testStore.put(t)
       for (const t of res.tasks) history.touched('task', t.id)
       for (const t of res.tests) history.touched('test', t.id)
@@ -337,12 +407,12 @@ export const useImpactStore = defineStore('impact', () => {
       else if (e.code === 'IMPACT_TARGET_CHANGED') {
         for (const key of Object.keys(keys)) {
           if (!review.changed.includes(key)) review.changed.push(key)
-          review.picked[key] = false
+          unpick(review, key)
         }
       } else if (e.code === 'FORBIDDEN' && Object.keys(keys).length > 0) {
         for (const key of Object.keys(keys)) {
           if (!review.denied.includes(key)) review.denied.push(key)
-          review.picked[key] = false
+          unpick(review, key)
         }
       } else {
         review.errors = keys
@@ -388,7 +458,9 @@ export const useImpactStore = defineStore('impact', () => {
     rowStatus,
     isRemoved,
     isPicked,
+    isLinking,
     setPicked,
+    setLink,
     removeRow,
     undoRemove,
     toggleEdit,

@@ -18,6 +18,18 @@ export const IMPACT_LINE_MAX = 4000
 export const IMPACT_CHANGED_TEXT = '분석 뒤에 바뀌었어요'
 export const IMPACT_LOCKED_TEXT = '고칠 권한이 없어요'
 export const IMPACT_EMPTY_SUMMARY = '살펴볼 연결 작업 · 테스트 · 다른 결정이 없습니다.'
+export const IMPACT_UNLINKED_TEXT = '연결 안 됨 · AI 가 찾음'
+
+/**
+ * 검토 묶음(고칠 작업 · 고칠 테스트)에 드는 줄 — update 줄과, 검색으로 찾은(연결 안 된) check 줄.
+ * 연결 안 된 check 줄은 고칠 안이 없어 연결만 고를 수 있다
+ */
+export const inReview = (row: { verdict: string; linked: boolean }) =>
+  row.verdict === 'update' || (row.verdict === 'check' && !row.linked)
+
+/** 연결만 하는 줄인가 — 연결 안 된 check 줄 */
+export const linkOnly = (row: { verdict: string; linked: boolean }) =>
+  row.verdict === 'check' && !row.linked
 
 /** 줄 하나를 보는 모양 그대로 — 들여쓰기 · 표시 · 글. 변경 이력의 본문 값(lib/history bodyText)과 같은 표시 */
 export const bodyLineLabel = (l: ImpactBodyLine) =>

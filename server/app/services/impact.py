@@ -1,8 +1,9 @@
 """AI 영향도 분석 — 결정이 바뀐 안건에 걸린 작업 · 테스트 · 다른 결정 (`docs/api/impact.md`).
 
-읽을 것은 서버가 정해 미리 모은다(리스크 분석처럼). Claude 는 `propose_impact` 하나만 쥐고,
-검사에 떨어지면 까닭을 돌려받아 고쳐 낸다(회의록 초안처럼). 끝까지 받으면 늘 남긴다.
-반영은 작업 · 테스트 PATCH 의 몸통(`edit_task` · `edit_test`)을 한 트랜잭션으로 부른다 —
+연결 작업 · 닿는 테스트 · 다른 결정은 서버가 정해 미리 모은다(리스크 분석처럼). 연결 안 된 것은
+Claude 가 읽기 도구(검색 · get_*)로 찾고, `propose_impact` 로 내며 검사에 떨어지면 까닭을
+돌려받아 고쳐 낸다(회의록 초안처럼). 끝까지 받으면 늘 남긴다.
+반영은 작업 · 테스트 PATCH 와 링크 · 태그 PUT 의 몸통을 한 트랜잭션으로 부른다 —
 권한 · 검사 · 변경 이력 · 테스트 기준 다시 찍기가 일반 수정과 같다.
 """
 
@@ -37,22 +38,31 @@ from app.schemas.impact import (
     AgendaImpactState,
     ImpactApplyInput,
     ImpactApplyResult,
+    ImpactApplyTask,
+    ImpactApplyTest,
     ImpactConflict,
     ImpactDoneEvent,
     ImpactErrorEvent,
     ImpactEvent,
+    ImpactGetTaskInput,
+    ImpactGetTestInput,
     ImpactLine,
     ImpactResultEvent,
+    ImpactSearchInput,
     ImpactTask,
     ImpactTaskBefore,
     ImpactTest,
     ImpactTestBefore,
     ImpactToolEvent,
+    ImpactToolName,
     ProposedImpact,
+    ProposedImpactTask,
+    ProposedImpactTest,
 )
-from app.schemas.task import TaskLinePatchIn, TaskOut, TaskPatch
+from app.schemas.task import TaskAgendaLinkOut, TaskLinePatchIn, TaskOut, TaskPatch
 from app.schemas.test import CONTENT_MAX, TEXT_MAX, TestPatch
 from app.services import access
+from app.services import search as search_service
 from app.services import task as task_service
 from app.services import test as test_service
 from app.services.access import Scope
@@ -82,8 +92,12 @@ LEVEL_MAX = 3
 
 # 검사에 떨어진 안을 고쳐 낼 기회. 넘으면 IMPACT_FAILED
 MAX_FAILURES = 3
-# 공급자가 멈춘 차례(paused)를 이어 부를 몫까지
-MAX_ROUNDS = 6
+# 읽기 도구(검색 · get_*)는 분석 한 번에 이만큼 — 넘으면 도구가 '더 찾을 수 없습니다' 를 돌려준다
+READ_MAX = 12
+# 차례 전체의 천장 — 읽기 12번을 한 차례씩 + 고쳐 내기 3번 + 멈춘 차례(paused)를 이어 부를 몫
+MAX_ROUNDS = 20
+# 도구로 찾은 것(넣어 준 연결 작업 · 닿는 테스트 밖)을 결과에 싣는 상한
+FOUND_MAX = 20
 
 EMPTY_SUMMARY = "살펴볼 연결 작업 · 테스트 · 다른 결정이 없습니다."
 NO_VERDICT = "판정 없음"
@@ -96,6 +110,17 @@ STALE_MESSAGE = "결정이 바뀌어 다시 분석해야 합니다."
 TARGET_CHANGED_MESSAGE = "분석 뒤에 바뀐 작업 · 테스트가 있습니다."
 CHANGED = "분석 뒤에 바뀌었습니다."
 GONE = "분석 뒤에 지워졌습니다."
+
+READ_CAP_MESSAGE = "더 찾을 수 없습니다 — propose_impact 로 내세요"
+# 진행 한 줄 (impact.md '도구')
+SEARCH_LABEL = "관련 작업 · 테스트 찾는 중"
+READ_LABEL = "관련 작업 · 테스트 읽는 중"
+READ_TOOLS: dict[str, str] = {
+    "search_tasks": SEARCH_LABEL,
+    "search_tests": SEARCH_LABEL,
+    "get_task": READ_LABEL,
+    "get_test": READ_LABEL,
+}
 
 NUDGE = (
     "분석을 아직 내지 않았다. 글로 답하지 말고 propose_impact 로 내라. "
@@ -110,24 +135,42 @@ SYSTEM_PROMPT = """\
 바뀐 결정 때문에 이제 틀린 것을 찾아 propose_impact 로 낸다. 너는 아무것도 저장하지 못한다 —
 사람이 검토 화면에서 골라 [반영] 한다.
 
-## 규칙
-1. summary — 결정 전 → 후 에서 **무엇이 바뀌었는지** 먼저 한두 줄로, 이어 무엇을 보면 되는지 한 줄.
+## 순서
+1. 결정 전 · 후에서 **바뀐 값**을 먼저 뽑는다(예: 우분투 → 록키).
    결정 전이 null 이면 처음 정한 결정이다(새 결정)
+2. 넣어 준 연결 작업 · 닿는 테스트를 판정한다
+3. 그 안건에 **연결되지 않은** 작업 · 테스트 중에도 옛 값 · 옛 결정을 전제로 적힌 것이 있다.
+   search_tasks · search_tests 로 찾는다
+   - **바뀌기 전 값**, 바뀐 뒤 값, 그 주제(예: 'OS' · '운영체제')로 찾는다.
+     옛 값을 적은 것이 바로 고칠 대상이다
+   - 한글 · 영문 · 줄임말을 바꿔 가며 찾는다(예: 우분투 · Ubuntu, 운영체제 · OS)
+   - 결정 전이 null 이면 결정이 정한 주제로 찾아, 그 결정과 **어긋나게 적힌** 것을 찾는다
+   - 검색 결과의 linked 가 true 면 이미 넣어 준 것이다 — 다시 볼 것 없다
+   - 읽기 도구는 모두 {read_max}번까지다. 아끼어 쓴다
+4. 찾은 것의 본문 · 내용 · 테스트 데이터를 고치려면 get_task · get_test 로 **먼저 읽는다**.
+   제목만 고칠 때는 검색 결과로 된다. 확실치 않으면 check
+5. propose_impact 로 한 번에 낸다
+
+## 규칙
+1. summary — 결정 전 → 후 에서 **무엇이 바뀌었는지** 먼저 한두 줄로, 이어 무엇을 보면 되는지 한 줄
 2. 작업 · 테스트마다 판정한다
    - 바뀐 결정 때문에 제목 · 본문(작업) · 내용 · 테스트 데이터(테스트)가
      **이제 틀렸으면** update 와 고친 안
    - 틀린지 확실치 않으면 check, 상관없으면 ok
    - 고칠 것이 없는데 update 를 내지 않는다
+   - 도구로 찾은 것(넣어 준 것 밖)은 **영향이 있는 것만** update · check 로 낸다. ok 로 내지 않는다.
+     작업 {found_max}개 · 테스트 {found_max}개까지
 3. 고친 안은 **바뀐 결정에 닿는 부분만** 고친다.
    나머지 글 · 줄 · 체크 상태(done) · 들여쓰기(level)는 그대로 옮긴다
    - 바꿀 칸만 보낸다. 안 바꾸는 칸은 null 로 둔다
    - 작업 body 는 **본문 전체를 갈아끼운다** — 고치지 않는 줄도 다 옮겨 적는다
-   - body_cut · content_cut · test_data_cut 이 true 인 칸은 잘려서 보인 것이라 고칠 수 없다(null)
+   - body_cut · content_cut · test_data_cut(도구에서는 bodyCut · contentCut · testDataCut)이
+     true 인 칸은 잘려서 보인 것이라 고칠 수 없다(null)
 4. 다른 결정된 안건과 **같이 지킬 수 없으면** conflict, 겹치거나 범위가 애매하면 check.
    상관없는 안건은 conflicts 에 내지 않는다
 5. reason 은 한두 문장, **결정 전 · 후 또는 그 안건의 결정내용을 짚어서** 쓴다.
-   넣어 준 것에 없는 사실을 지어내지 않는다
-6. id 는 넣어 준 것만 쓴다. 같은 id 를 두 번 내지 않는다
+   넣어 준 것 · 도구가 돌려준 것에 없는 사실을 지어내지 않는다
+6. id 는 넣어 준 것과 도구가 돌려준 것만 쓴다. 같은 id 를 두 번 내지 않는다
 7. propose_impact 가 오류를 돌려주면 problems 가 짚은 자리를 고쳐 다시 부른다.
    통과하면 거기서 끝난다 — 글로 답하지 않는다
 """
@@ -152,7 +195,9 @@ PROPOSE_TOOL: ToolSpec = {
             "summary": {"type": "string", "description": "무엇이 바뀌었나 · 무엇을 보면 되나"},
             "tasks": {
                 "type": "array",
-                "description": "넣어 준 연결 작업의 판정",
+                "description": (
+                    "넣어 준 연결 작업의 판정 + 도구로 찾은 작업 중 영향이 있는 것(update · check)"
+                ),
                 "items": {
                     "type": "object",
                     "properties": {
@@ -180,7 +225,10 @@ PROPOSE_TOOL: ToolSpec = {
             },
             "tests": {
                 "type": "array",
-                "description": "넣어 준 닿는 테스트의 판정",
+                "description": (
+                    "넣어 준 닿는 테스트의 판정 + "
+                    "도구로 찾은 테스트 중 영향이 있는 것(update · check)"
+                ),
                 "items": {
                     "type": "object",
                     "properties": {
@@ -215,7 +263,60 @@ PROPOSE_TOOL: ToolSpec = {
         "required": ["summary", "tasks", "tests", "conflicts"],
     },
 }
-TOOLS: list[ToolSpec] = [PROPOSE_TOOL]
+_SEARCH_INPUT = {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string", "description": "낱말 하나나 짧은 말 — 옛 값 · 새 값 · 주제"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+    },
+    "required": ["query"],
+}
+READ_TOOL_SPECS: list[ToolSpec] = [
+    {
+        "name": "search_tasks",
+        "description": (
+            "이 프로젝트의 작업을 낱말로 찾는다 — 제목과 본문 줄을 본다. 지운 작업은 빠진다. "
+            "linked 는 이 안건의 연결 작업인가(true 면 이미 넣어 준 것). "
+            "matched 는 맞은 자리(title · body), snippet 은 그 한 줄."
+        ),
+        "input_schema": _SEARCH_INPUT,
+    },
+    {
+        "name": "search_tests",
+        "description": (
+            "이 프로젝트의 테스트를 낱말로 찾는다 — "
+            "제목 · 내용(content) · 테스트 데이터(testData). "
+            "linked 는 이 안건에 닿는 테스트인가(true 면 이미 넣어 준 것)."
+        ),
+        "input_schema": _SEARCH_INPUT,
+    },
+    {
+        "name": "get_task",
+        "description": (
+            f"작업 하나를 본문까지 읽는다. 본문은 {BODY_LINES_MAX}줄까지(넘으면 bodyCut true). "
+            "task_id 에는 작업 id 나 키(HW-4)를 넣는다. 본문 고친 안을 내기 전에 꼭 읽는다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "get_test",
+        "description": (
+            f"테스트 하나를 내용 · 테스트 데이터까지 읽는다. 칸마다 {FIELD_MAX}자까지"
+            "(넘으면 contentCut · testDataCut true). test_id 에는 테스트 id 나 키(HW-T3)를 넣는다. "
+            "내용 · 테스트 데이터 고친 안을 내기 전에 꼭 읽는다."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"test_id": {"type": "string"}},
+            "required": ["test_id"],
+        },
+    },
+]
+TOOLS: list[ToolSpec] = [*READ_TOOL_SPECS, PROPOSE_TOOL]
 
 
 def _impact_not_found() -> ApiError:
@@ -238,24 +339,40 @@ def _cut(text: str, limit: int) -> tuple[str, bool]:
 @dataclass
 class TaskSnap:
     id: str
+    seq: int
     key: str
     title: str
     status: str
-    owner: str
+    # 담당자 이름 — 없으면 None. 사용자 메시지는 '담당자 없음' 으로 적는다
+    owner: str | None
     due: date | None
     # 분석 때의 본문 전체 — before 가 된다. Claude 에는 앞 60줄만 간다
     lines: list[ImpactLine]
+
+    @property
+    def body_cut(self) -> bool:
+        return len(self.lines) > BODY_LINES_MAX
 
 
 @dataclass
 class TestSnap:
     id: str
+    seq: int
     key: str
     title: str
     status: str
-    owner: str
+    owner: str | None
     content: str
     test_data: str
+
+    @property
+    def cut(self) -> set[str]:
+        """잘려서 보인 칸(자리 이름) — 그 칸은 고친 안을 받지 않는다."""
+        return {
+            place
+            for place, value in (("content", self.content), ("testData", self.test_data))
+            if len(value) > FIELD_MAX
+        }
 
 
 @dataclass
@@ -283,10 +400,27 @@ class ImpactContext:
     tasks: list[TaskSnap] = field(default_factory=list)
     tests: list[TestSnap] = field(default_factory=list)
     others: list[DecidedSnap] = field(default_factory=list)
+    # 상한 없이 다 — 도구가 돌려주는 linked 와 결과 줄의 linked 가 이것을 본다
+    linked_task_ids: set[str] = field(default_factory=set)
+    reached_test_ids: set[str] = field(default_factory=set)
 
     @property
     def empty(self) -> bool:
         return not self.tasks and not self.tests and not self.others
+
+
+@dataclass
+class Found:
+    """분석 한 번에 읽기 도구가 돌려준 것 — 지어낸 id 와 읽지 않은 본문 갈아끼우기를 막는다.
+
+    스냅샷은 도구가 돌려준 때의 DB 값이다(나중에 다시 돌려주면 새 값으로) — before 가 된다."""
+
+    tasks: dict[str, TaskSnap] = field(default_factory=dict)
+    tests: dict[str, TestSnap] = field(default_factory=dict)
+    # get_task · get_test 로 본문 · 내용까지 읽은 것
+    read_tasks: set[str] = field(default_factory=set)
+    read_tests: set[str] = field(default_factory=set)
+    reads: int = 0
 
 
 async def decision_before(session: AsyncSession, agenda_id: str) -> str | None:
@@ -395,6 +529,32 @@ def _lines(task: Task) -> list[ImpactLine]:
     ]
 
 
+def _task_snap(task: Task, owner: str | None) -> TaskSnap:
+    return TaskSnap(
+        id=task.id,
+        seq=task.seq,
+        key=task.key,
+        title=task.title,
+        status=task.status,
+        owner=owner,
+        due=task.due,
+        lines=_lines(task),
+    )
+
+
+def _test_snap(test: TestCase, owner: str | None) -> TestSnap:
+    return TestSnap(
+        id=test.id,
+        seq=test.seq,
+        key=test.key,
+        title=test.title,
+        status=test.status,
+        owner=owner,
+        content=test.content,
+        test_data=test.test_data,
+    )
+
+
 async def build_context(session: AsyncSession, agenda: Agenda, project_name: str) -> ImpactContext:
     try:
         tasks = list((await session.scalars(_linked_tasks(agenda.id))).all())
@@ -402,14 +562,18 @@ async def build_context(session: AsyncSession, agenda: Agenda, project_name: str
         tests = list(
             (await session.scalars(_reached_tests(agenda.id, [t.id for t in tasks]))).all()
         )
-        tasks, tests = tasks[:TASKS_MAX], tests[:TESTS_MAX]
         others = (await _other_decided(session, agenda.project_id, agenda.id))[:DECIDED_MAX]
         names = await _names(
-            session, [agenda.owner_id, *(t.owner_id for t in tasks), *(t.owner_id for t in tests)]
+            session,
+            [
+                agenda.owner_id,
+                *(t.owner_id for t in tasks[:TASKS_MAX]),
+                *(t.owner_id for t in tests[:TESTS_MAX]),
+            ],
         )
 
-        def who(member_id: str | None) -> str:
-            return names.get(member_id, NO_OWNER) if member_id is not None else NO_OWNER
+        def who(member_id: str | None) -> str | None:
+            return names.get(member_id) if member_id is not None else None
 
         return ImpactContext(
             project_id=agenda.project_id,
@@ -418,59 +582,24 @@ async def build_context(session: AsyncSession, agenda: Agenda, project_name: str
             title=agenda.title,
             description=agenda.description,
             state=agenda.state,
-            owner=who(agenda.owner_id),
+            owner=who(agenda.owner_id) or NO_OWNER,
             decision_rev=agenda.decision_rev,
             before=await decision_before(session, agenda.id),
             after=agenda.decision.strip(),
-            tasks=[
-                TaskSnap(
-                    id=t.id,
-                    key=t.key,
-                    title=t.title,
-                    status=t.status,
-                    owner=who(t.owner_id),
-                    due=t.due,
-                    lines=_lines(t),
-                )
-                for t in tasks
-            ],
-            tests=[
-                TestSnap(
-                    id=t.id,
-                    key=t.key,
-                    title=t.title,
-                    status=t.status,
-                    owner=who(t.owner_id),
-                    content=t.content,
-                    test_data=t.test_data,
-                )
-                for t in tests
-            ],
+            tasks=[_task_snap(t, who(t.owner_id)) for t in tasks[:TASKS_MAX]],
+            tests=[_test_snap(t, who(t.owner_id)) for t in tests[:TESTS_MAX]],
             others=[
                 DecidedSnap(
                     id=a.id, title=a.title, decision=a.decision.strip(), decided_at=a.decided_at
                 )
                 for a in others
             ],
+            linked_task_ids={t.id for t in tasks},
+            reached_test_ids={t.id for t in tests},
         )
     finally:
         # 읽기만 한다 — Claude 를 부르는 동안 트랜잭션을 붙잡지 않는다
         await session.rollback()
-
-
-def _cut_flags(context: ImpactContext) -> tuple[set[str], dict[str, set[str]]]:
-    """잘려서 보인 칸 — 그 칸은 고친 안을 받지 않는다(통째로 갈아끼우면 잘린 뒤가 사라진다)."""
-    tasks = {t.id for t in context.tasks if len(t.lines) > BODY_LINES_MAX}
-    tests: dict[str, set[str]] = {}
-    for t in context.tests:
-        cut = {
-            name
-            for name, value in (("content", t.content), ("testData", t.test_data))
-            if len(value) > FIELD_MAX
-        }
-        if cut:
-            tests[t.id] = cut
-    return tasks, tests
 
 
 def user_message(context: ImpactContext) -> str:
@@ -483,11 +612,11 @@ def user_message(context: ImpactContext) -> str:
             "key": t.key,
             "title": t.title,
             "status": t.status,
-            "owner": t.owner,
+            "owner": t.owner or NO_OWNER,
             "due": t.due.isoformat() if t.due else None,
             "body": [line.model_dump() for line in t.lines[:BODY_LINES_MAX]],
         }
-        if len(t.lines) > BODY_LINES_MAX:
+        if t.body_cut:
             doc["body_cut"] = True
         return doc
 
@@ -499,7 +628,7 @@ def user_message(context: ImpactContext) -> str:
             "key": t.key,
             "title": t.title,
             "status": t.status,
-            "owner": t.owner,
+            "owner": t.owner or NO_OWNER,
             "content": content,
             "test_data": test_data,
         }
@@ -537,8 +666,177 @@ def user_message(context: ImpactContext) -> str:
 
 def system_prompt(project_name: str, today: date) -> str:
     return SYSTEM_PROMPT.format(
-        project_name=project_name, today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})"
+        project_name=project_name,
+        today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})",
+        read_max=READ_MAX,
+        found_max=FOUND_MAX,
     )
+
+
+# --- 읽기 도구 — 연결 안 된 작업 · 테스트를 찾는다 (impact.md '도구') ---
+
+
+def _tool_error(message: str) -> str:
+    return json.dumps({"error": message}, ensure_ascii=False)
+
+
+async def _snap_tasks(session: AsyncSession, found: Found, tasks: Sequence[Task]) -> list[TaskSnap]:
+    names = await _names(session, [t.owner_id for t in tasks])
+    snaps = [_task_snap(t, names.get(t.owner_id) if t.owner_id else None) for t in tasks]
+    found.tasks |= {snap.id: snap for snap in snaps}
+    return snaps
+
+
+async def _snap_tests(
+    session: AsyncSession, found: Found, tests: Sequence[TestCase]
+) -> list[TestSnap]:
+    names = await _names(session, [t.owner_id for t in tests])
+    snaps = [_test_snap(t, names.get(t.owner_id) if t.owner_id else None) for t in tests]
+    found.tests |= {snap.id: snap for snap in snaps}
+    return snaps
+
+
+async def _search_tasks(
+    session: AsyncSession, context: ImpactContext, found: Found, raw: object
+) -> dict[str, Any]:
+    args = ImpactSearchInput.model_validate(raw)
+    hits = await search_service.search_tasks(
+        session, context.project_id, args.query, limit=args.limit
+    )
+    rows = (await session.scalars(select(Task).where(Task.id.in_([h.id for h in hits])))).all()
+    snaps = {snap.id: snap for snap in await _snap_tasks(session, found, rows)}
+    return {
+        "tasks": [
+            {
+                "id": hit.id,
+                "key": hit.key,
+                "title": hit.title,
+                "status": hit.status,
+                "ownerName": snaps[hit.id].owner,
+                "linked": hit.id in context.linked_task_ids,
+                "matched": hit.matched,
+                "snippet": hit.snippet,
+            }
+            for hit in hits
+        ]
+    }
+
+
+async def _search_tests(
+    session: AsyncSession, context: ImpactContext, found: Found, raw: object
+) -> dict[str, Any]:
+    args = ImpactSearchInput.model_validate(raw)
+    hits = await search_service.search_tests(
+        session, context.project_id, args.query, limit=args.limit
+    )
+    rows = (
+        await session.scalars(select(TestCase).where(TestCase.id.in_([h.id for h in hits])))
+    ).all()
+    snaps = {snap.id: snap for snap in await _snap_tests(session, found, rows)}
+    return {
+        "tests": [
+            {
+                "id": hit.id,
+                "key": hit.key,
+                "title": hit.title,
+                "status": hit.status,
+                "ownerName": snaps[hit.id].owner,
+                "linked": hit.id in context.reached_test_ids,
+                "matched": hit.matched,
+                "snippet": hit.snippet,
+            }
+            for hit in hits
+        ]
+    }
+
+
+async def _get_task(
+    session: AsyncSession, context: ImpactContext, found: Found, raw: object
+) -> dict[str, Any] | None:
+    args = ImpactGetTaskInput.model_validate(raw)
+    # 프로젝트로 먼저 거른다 — 다른 프로젝트의 id 를 넣어도 못 읽는다
+    task = await session.scalar(
+        select(Task).where(
+            Task.project_id == context.project_id,
+            or_(Task.id == args.task_id, Task.key == args.task_id.strip().upper()),
+            Task.is_deleted.is_(False),
+        )
+    )
+    if task is None:
+        return None
+    (snap,) = await _snap_tasks(session, found, [task])
+    found.read_tasks.add(snap.id)
+    return {
+        "id": snap.id,
+        "key": snap.key,
+        "title": snap.title,
+        "status": snap.status,
+        "ownerName": snap.owner,
+        "due": snap.due.isoformat() if snap.due else None,
+        "linked": snap.id in context.linked_task_ids,
+        "body": [line.model_dump() for line in snap.lines[:BODY_LINES_MAX]],
+        "bodyCut": snap.body_cut,
+    }
+
+
+async def _get_test(
+    session: AsyncSession, context: ImpactContext, found: Found, raw: object
+) -> dict[str, Any] | None:
+    args = ImpactGetTestInput.model_validate(raw)
+    test = await session.scalar(
+        select(TestCase).where(
+            TestCase.project_id == context.project_id,
+            or_(TestCase.id == args.test_id, TestCase.key == args.test_id.strip().upper()),
+        )
+    )
+    if test is None:
+        return None
+    (snap,) = await _snap_tests(session, found, [test])
+    found.read_tests.add(snap.id)
+    content, content_cut = _cut(snap.content, FIELD_MAX)
+    test_data, data_cut = _cut(snap.test_data, FIELD_MAX)
+    return {
+        "id": snap.id,
+        "key": snap.key,
+        "title": snap.title,
+        "status": snap.status,
+        "ownerName": snap.owner,
+        "linked": snap.id in context.reached_test_ids,
+        "content": content,
+        "contentCut": content_cut,
+        "testData": test_data,
+        "testDataCut": data_cut,
+    }
+
+
+async def run_read_tool(
+    session: AsyncSession, context: ImpactContext, found: Found, name: str, raw: object
+) -> tuple[str, bool]:
+    """(결과 JSON, 오류인가). 없는 id · 키 · 틀린 입력은 오류로 돌려주고 분석은 잇는다."""
+    try:
+        match name:
+            case "search_tasks":
+                doc: dict[str, Any] | None = await _search_tasks(session, context, found, raw)
+            case "search_tests":
+                doc = await _search_tests(session, context, found, raw)
+            case "get_task":
+                doc = await _get_task(session, context, found, raw)
+                if doc is None:
+                    return _tool_error("작업을 찾을 수 없습니다."), True
+            case "get_test":
+                doc = await _get_test(session, context, found, raw)
+                if doc is None:
+                    return _tool_error("테스트를 찾을 수 없습니다."), True
+            case _:
+                return _tool_error(f"없는 도구다: {name}"), True
+        return json.dumps(doc, ensure_ascii=False), False
+    except ApiError as exc:
+        return _tool_error(exc.message), True
+    except ValidationError as exc:
+        return _tool_error(f"입력이 올바르지 않다: {exc.errors(include_url=False)}"), True
+    finally:
+        # 읽기만 한다 — 다음 차례를 기다리는 동안 트랜잭션을 붙잡지 않는다
+        await session.rollback()
 
 
 # --- 고친 안 검사 — Claude 의 안과 반영 요청이 같은 규칙을 탄다 ---
@@ -689,29 +987,39 @@ def _test_before(t: TestSnap) -> ImpactTestBefore:
     return ImpactTestBefore(title=t.title, content=t.content, test_data=t.test_data)
 
 
-def _problems(context: ImpactContext, proposed: ProposedImpact) -> dict[str, str]:
+FOUND_OK = "상관없는 것은 내지 마세요 — 도구로 찾은 것은 영향이 있는 것만 update · check 로 냅니다."
+
+
+def _problems(context: ImpactContext, proposed: ProposedImpact, found: Found) -> dict[str, str]:
     problems: dict[str, str] = {}
     summary = proposed.summary.strip()
     if not summary:
         problems["summary"] = "요약을 적어 주세요."
     elif len(summary) > SUMMARY_MAX:
         problems["summary"] = f"요약은 {SUMMARY_MAX}자까지입니다."
-    body_cut, test_cut = _cut_flags(context)
 
     tasks = {t.id: t for t in context.tasks}
     seen: set[str] = set()
+    found_count = 0
     for index, item in enumerate(proposed.tasks):
         at = f"tasks.{index}"
+        # 넣어 준 것 밖은 이 분석에서 도구가 돌려준 것만 — 지어낸 id 를 막는다
         snap = tasks.get(item.task_id)
+        from_tool = snap is None
         if snap is None:
-            problems[f"{at}.taskId"] = "넣어 준 연결 작업이 아닙니다."
+            snap = found.tasks.get(item.task_id)
+        if snap is None:
+            problems[f"{at}.taskId"] = "넣어 준 연결 작업도, 도구가 돌려준 작업도 아닙니다."
             continue
         if item.task_id in seen:
             problems[f"{at}.taskId"] = "같은 작업을 두 번 냈습니다."
             continue
         seen.add(item.task_id)
-        if found := _reason_problem(item.reason):
-            problems[f"{at}.reason"] = found
+        found_count += from_tool
+        if bad := _reason_problem(item.reason):
+            problems[f"{at}.reason"] = bad
+        if from_tool and item.verdict == "ok":
+            problems[f"{at}.verdict"] = FOUND_OK
         if item.verdict == "update":
             problems |= task_fix_problems(
                 at,
@@ -719,36 +1027,52 @@ def _problems(context: ImpactContext, proposed: ProposedImpact) -> dict[str, str
                 item.body,
                 _task_before(snap),
                 every_field_differs=True,
-                body_cut=snap.id in body_cut,
+                body_cut=snap.body_cut,
             )
+            # 검색 결과의 한 줄 조각만 보고 본문 전체를 갈아끼우지 않게
+            if from_tool and item.body is not None and snap.id not in found.read_tasks:
+                problems[f"{at}.body"] = "본문을 고치려면 get_task 로 먼저 읽어야 합니다."
         elif item.title is not None or item.body is not None:
             problems[at] = "update 가 아니면 고칠 칸을 보내지 않습니다."
+    if found_count > FOUND_MAX:
+        problems["tasks"] = f"도구로 찾은 작업은 {FOUND_MAX}개까지 냅니다."
 
     tests = {t.id: t for t in context.tests}
     seen = set()
+    found_count = 0
     for index, test in enumerate(proposed.tests):
         at = f"tests.{index}"
         tsnap = tests.get(test.test_id)
+        from_tool = tsnap is None
         if tsnap is None:
-            problems[f"{at}.testId"] = "넣어 준 테스트가 아닙니다."
+            tsnap = found.tests.get(test.test_id)
+        if tsnap is None:
+            problems[f"{at}.testId"] = "넣어 준 테스트도, 도구가 돌려준 테스트도 아닙니다."
             continue
         if test.test_id in seen:
             problems[f"{at}.testId"] = "같은 테스트를 두 번 냈습니다."
             continue
         seen.add(test.test_id)
-        if found := _reason_problem(test.reason):
-            problems[f"{at}.reason"] = found
+        found_count += from_tool
+        if bad := _reason_problem(test.reason):
+            problems[f"{at}.reason"] = bad
+        if from_tool and test.verdict == "ok":
+            problems[f"{at}.verdict"] = FOUND_OK
         values = {"title": test.title, "content": test.content, "test_data": test.test_data}
         if test.verdict == "update":
             problems |= test_fix_problems(
-                at,
-                values,
-                _test_before(tsnap),
-                every_field_differs=True,
-                cut=test_cut.get(tsnap.id, set()),
+                at, values, _test_before(tsnap), every_field_differs=True, cut=tsnap.cut
             )
+            if from_tool and tsnap.id not in found.read_tests:
+                for name, place, _ in TEST_FIELDS:
+                    if values[name] is not None:
+                        problems[f"{at}.{place}"] = (
+                            "내용 · 테스트 데이터를 고치려면 get_test 로 먼저 읽어야 합니다."
+                        )
         elif any(value is not None for value in values.values()):
             problems[at] = "update 가 아니면 고칠 칸을 보내지 않습니다."
+    if found_count > FOUND_MAX:
+        problems["tests"] = f"도구로 찾은 테스트는 {FOUND_MAX}개까지 냅니다."
 
     others = {a.id for a in context.others}
     seen = set()
@@ -761,59 +1085,80 @@ def _problems(context: ImpactContext, proposed: ProposedImpact) -> dict[str, str
             problems[f"{at}.agendaId"] = "같은 안건을 두 번 냈습니다."
             continue
         seen.add(conflict.agenda_id)
-        if found := _reason_problem(conflict.reason):
-            problems[f"{at}.reason"] = found
+        if bad := _reason_problem(conflict.reason):
+            problems[f"{at}.reason"] = bad
     return problems
 
 
-def _build(context: ImpactContext, proposed: ProposedImpact) -> Built:
-    """검사를 통과한 안 → 남길 모양. 판정이 빠진 작업 · 테스트는 ok 로 채워 다 싣는다."""
+def _impact_task(snap: TaskSnap, item: ProposedImpactTask | None, linked: bool) -> ImpactTask:
+    if item is None:
+        return ImpactTask(
+            task_id=snap.id,
+            verdict="ok",
+            reason=NO_VERDICT,
+            before=_task_before(snap),
+            linked=linked,
+        )
+    update = item.verdict == "update"
+    return ImpactTask(
+        task_id=snap.id,
+        verdict=item.verdict,
+        reason=item.reason.strip(),
+        title=item.title.strip() if update and item.title is not None else None,
+        body=item.body if update else None,
+        before=_task_before(snap),
+        linked=linked,
+    )
+
+
+def _impact_test(snap: TestSnap, item: ProposedImpactTest | None, linked: bool) -> ImpactTest:
+    if item is None:
+        return ImpactTest(
+            test_id=snap.id,
+            verdict="ok",
+            reason=NO_VERDICT,
+            before=_test_before(snap),
+            linked=linked,
+        )
+    update = item.verdict == "update"
+    return ImpactTest(
+        test_id=snap.id,
+        verdict=item.verdict,
+        reason=item.reason.strip(),
+        title=item.title.strip() if update and item.title is not None else None,
+        content=item.content if update else None,
+        test_data=item.test_data if update else None,
+        before=_test_before(snap),
+        linked=linked,
+    )
+
+
+def _build(context: ImpactContext, proposed: ProposedImpact, found: Found) -> Built:
+    """검사를 통과한 안 → 남길 모양. 넣어 준 작업 · 테스트는 판정이 빠져도 ok 로 채워 다 싣고,
+    도구로 찾은 것은 그 뒤에 seq 순으로 붙인다."""
     by_task = {item.task_id: item for item in proposed.tasks}
     by_test = {item.test_id: item for item in proposed.tests}
     decisions = {a.id: a.decision for a in context.others}
-    tasks: list[ImpactTask] = []
-    for snap in context.tasks:
-        item = by_task.get(snap.id)
-        if item is None:
-            tasks.append(
-                ImpactTask(
-                    task_id=snap.id, verdict="ok", reason=NO_VERDICT, before=_task_before(snap)
-                )
-            )
-            continue
-        update = item.verdict == "update"
-        tasks.append(
-            ImpactTask(
-                task_id=snap.id,
-                verdict=item.verdict,
-                reason=item.reason.strip(),
-                title=item.title.strip() if update and item.title is not None else None,
-                body=item.body if update else None,
-                before=_task_before(snap),
-            )
-        )
-    tests: list[ImpactTest] = []
-    for tsnap in context.tests:
-        test = by_test.get(tsnap.id)
-        if test is None:
-            tests.append(
-                ImpactTest(
-                    test_id=tsnap.id, verdict="ok", reason=NO_VERDICT, before=_test_before(tsnap)
-                )
-            )
-            continue
-        update = test.verdict == "update"
-        tests.append(
-            ImpactTest(
-                test_id=tsnap.id,
-                verdict=test.verdict,
-                reason=test.reason.strip(),
-                title=test.title.strip() if update and test.title is not None else None,
-                content=test.content if update else None,
-                test_data=test.test_data if update else None,
-                before=_test_before(tsnap),
-            )
-        )
+
+    given_tasks = {snap.id for snap in context.tasks}
+    tasks = [_impact_task(snap, by_task.get(snap.id), True) for snap in context.tasks]
+    extra_tasks = sorted(
+        (found.tasks[i] for i in by_task if i not in given_tasks), key=lambda snap: snap.seq
+    )
+    tasks += [
+        _impact_task(snap, by_task[snap.id], snap.id in context.linked_task_ids)
+        for snap in extra_tasks
+    ]
+
+    given_tests = {snap.id for snap in context.tests}
+    tests = [_impact_test(snap, by_test.get(snap.id), True) for snap in context.tests]
+    extra_tests = sorted(
+        (found.tests[i] for i in by_test if i not in given_tests), key=lambda snap: snap.seq
+    )
+    tests += [
+        _impact_test(snap, by_test[snap.id], snap.id in context.reached_test_ids)
+        for snap in extra_tests
+    ]
     return Built(
         summary=proposed.summary.strip(),
         tasks=tasks,
@@ -830,8 +1175,9 @@ def _build(context: ImpactContext, proposed: ProposedImpact) -> Built:
     )
 
 
-def check_proposal(context: ImpactContext, raw: object) -> Checked:
-    """propose_impact. DB 를 보지 않는다 — 넣어 준 것(context)만으로 본다."""
+def check_proposal(context: ImpactContext, raw: object, found: Found | None = None) -> Checked:
+    """propose_impact. DB 를 보지 않는다 — 넣어 준 것(context)과 도구가 돌려준 것(found)만 본다."""
+    found = found if found is not None else Found()
     try:
         proposed = ProposedImpact.model_validate(raw)
     except ValidationError as exc:
@@ -843,7 +1189,7 @@ def check_proposal(context: ImpactContext, raw: object) -> Checked:
             ),
             is_error=True,
         )
-    problems = _problems(context, proposed)
+    problems = _problems(context, proposed, found)
     if problems:
         return Checked(
             content=json.dumps(
@@ -853,7 +1199,7 @@ def check_proposal(context: ImpactContext, raw: object) -> Checked:
             is_error=True,
         )
     return Checked(
-        content=json.dumps({"ok": True}), is_error=False, result=_build(context, proposed)
+        content=json.dumps({"ok": True}), is_error=False, result=_build(context, proposed, found)
     )
 
 
@@ -973,7 +1319,13 @@ async def _loop(
     system = system_prompt(context.project_name, today)
     # 근거는 차례마다 다시 실려 간다 — 캐시해 두면 고쳐 내는 차례부터 싸다
     history: list[Message] = [UserMessage(user_message(context), cache=True)]
+    found = Found()
     failures = 0
+
+    def failed() -> bool:
+        nonlocal failures
+        failures += 1
+        return failures >= MAX_FAILURES
 
     for _ in range(MAX_ROUNDS):
         reply: Reply | None = None
@@ -999,41 +1351,67 @@ async def _loop(
         calls = reply.message.calls
         history.append(reply.message)
         if not calls:
-            failures += 1
-            if failures >= MAX_FAILURES:
+            if failed():
                 yield _error("IMPACT_FAILED", FAILED_MESSAGE)
                 return
             history.append(UserMessage(NUDGE))
             continue
 
         results: list[ToolResult] = []
+        # 읽기를 하나라도 했거나 안을 냈으면 쓸모 있는 차례다. 상한에 막힌 읽기 · 없는 도구뿐이면
+        # 고쳐 내기 기회를 하나 먹는다 — 끝없이 돌지 않게
+        useful = False
         for call in calls:
+            if call.name in READ_TOOLS:
+                if found.reads >= READ_MAX:
+                    results.append(
+                        ToolResult(
+                            call_id=call.id, content=_tool_error(READ_CAP_MESSAGE), is_error=True
+                        )
+                    )
+                    continue
+                found.reads += 1
+                useful = True
+                yield ImpactToolEvent(name=_tool_name(call.name), label=READ_TOOLS[call.name])
+                content, is_error = await run_read_tool(
+                    session, context, found, call.name, call.input
+                )
+                results.append(ToolResult(call_id=call.id, content=content, is_error=is_error))
+                continue
             if call.name != "propose_impact":
                 results.append(
                     ToolResult(
                         call_id=call.id,
-                        content=json.dumps(
-                            {"error": f"없는 도구다: {call.name}"}, ensure_ascii=False
-                        ),
+                        content=_tool_error(f"없는 도구다: {call.name}"),
                         is_error=True,
                     )
                 )
                 continue
+            useful = True
             yield ImpactToolEvent(name="propose_impact", label="고칠 안 만드는 중")
-            checked = check_proposal(context, call.input)
+            checked = check_proposal(context, call.input, found)
             if checked.result is not None:
                 impact = await save(session, context, checked.result, actor_id)
                 yield ImpactResultEvent(impact=impact)
                 yield ImpactDoneEvent()
                 return
-            failures += 1
-            if failures >= MAX_FAILURES:
+            if failed():
                 yield _error("IMPACT_FAILED", FAILED_MESSAGE)
                 return
             results.append(
                 ToolResult(call_id=call.id, content=checked.content, is_error=checked.is_error)
             )
+        if not useful and failed():
+            yield _error("IMPACT_FAILED", FAILED_MESSAGE)
+            return
         history.append(UserMessage(results=results))
+
+
+def _tool_name(name: str) -> ImpactToolName:
+    match name:
+        case "search_tasks" | "search_tests" | "get_task" | "get_test":
+            return name
+    raise ValueError(name)
 
 
 # --- 반영 ---
@@ -1050,6 +1428,45 @@ async def load_impact(session: AsyncSession, impact_id: str) -> AgendaImpact:
     return found
 
 
+LINK_ON_LINKED = "이미 이 안건에 연결된 줄입니다 — 연결은 연결 안 된 줄에서만 합니다."
+CHECK_WITH_FIX = "확인 필요 줄은 고칠 안이 없습니다 — 연결(link)만 보냅니다."
+CHECK_NO_LINK = "확인 필요 줄은 연결(link)로만 고릅니다."
+
+
+def _task_fix(item: ImpactApplyTask) -> bool:
+    return item.title is not None or item.body is not None
+
+
+def _test_fix(item: ImpactApplyTest) -> bool:
+    return any(value is not None for value in (item.title, item.content, item.test_data))
+
+
+def _pickable(verdict: str, linked: bool) -> bool:
+    """고를 수 있는 줄 — update 줄 + 연결 안 된 check 줄(연결만)."""
+    return verdict == "update" or (verdict == "check" and not linked)
+
+
+def _line_problems(
+    at: str, verdict: str, linked: bool, link: bool, has_fix: bool, places: str
+) -> dict[str, str]:
+    """고칠 칸 · link 의 짝 — 고칠 칸 자체의 검사는 task_fix_problems · test_fix_problems."""
+    problems: dict[str, str] = {}
+    if link and linked:
+        problems[f"{at}.link"] = LINK_ON_LINKED
+    if verdict == "check":
+        if has_fix:
+            problems[at] = CHECK_WITH_FIX
+        elif not link:
+            problems[f"{at}.link"] = CHECK_NO_LINK
+    elif not has_fix and not link:
+        problems[at] = (
+            f"고칠 칸({places})이 하나도 없습니다."
+            if linked
+            else f"고칠 칸({places})도 연결(link)도 없습니다."
+        )
+    return problems
+
+
 def _apply_problems(impact: AgendaImpactOut, payload: ImpactApplyInput) -> dict[str, str]:
     if not payload.tasks and not payload.tests:
         return {"tasks": "반영할 줄이 없습니다."}
@@ -1059,30 +1476,40 @@ def _apply_problems(impact: AgendaImpactOut, payload: ImpactApplyInput) -> dict[
     for index, item in enumerate(payload.tasks):
         at = f"tasks.{index}"
         row = tasks.get(item.task_id)
-        if row is None or row.verdict != "update":
+        if row is None or not _pickable(row.verdict, row.linked):
             problems[f"{at}.taskId"] = "이 분석의 고칠 작업이 아닙니다."
             continue
         if item.task_id in seen:
             problems[f"{at}.taskId"] = "같은 작업이 두 번 있습니다."
             continue
         seen.add(item.task_id)
-        problems |= task_fix_problems(
-            at, item.title, item.body, row.before, every_field_differs=False
+        has_fix = _task_fix(item)
+        problems |= _line_problems(
+            at, row.verdict, row.linked, bool(item.link), has_fix, "title · body"
         )
+        if row.verdict == "update" and has_fix:
+            problems |= task_fix_problems(
+                at, item.title, item.body, row.before, every_field_differs=False
+            )
     tests = {t.test_id: t for t in impact.tests}
     seen = set()
     for index, test in enumerate(payload.tests):
         at = f"tests.{index}"
         trow = tests.get(test.test_id)
-        if trow is None or trow.verdict != "update":
+        if trow is None or not _pickable(trow.verdict, trow.linked):
             problems[f"{at}.testId"] = "이 분석의 고칠 테스트가 아닙니다."
             continue
         if test.test_id in seen:
             problems[f"{at}.testId"] = "같은 테스트가 두 번 있습니다."
             continue
         seen.add(test.test_id)
-        values = {"title": test.title, "content": test.content, "test_data": test.test_data}
-        problems |= test_fix_problems(at, values, trow.before, every_field_differs=False)
+        has_fix = _test_fix(test)
+        problems |= _line_problems(
+            at, trow.verdict, trow.linked, bool(test.link), has_fix, "title · content · testData"
+        )
+        if trow.verdict == "update" and has_fix:
+            values = {"title": test.title, "content": test.content, "test_data": test.test_data}
+            problems |= test_fix_problems(at, values, trow.before, every_field_differs=False)
     return problems
 
 
@@ -1093,7 +1520,7 @@ def _task_now(task: Task) -> ImpactTaskBefore:
 async def apply_impact(
     session: AsyncSession, impact_id: str, payload: ImpactApplyInput, scope: Scope, *, today: date
 ) -> ImpactApplyResult:
-    """고른 고칠 안을 한 트랜잭션에 반영한다.
+    """고른 고칠 안 · 연결을 한 트랜잭션에 반영한다.
 
     검사 순서는 422 → 403 → 409 STALE → 409 TARGET_CHANGED — 앞에서 걸리면 뒤는 안 본다.
     """
@@ -1128,8 +1555,9 @@ async def apply_impact(
         ).all()
     }
 
-    # 작업은 줄마다 그 작업의 고치기 권한 — 지운 작업은 아래 '바뀜' 으로 간다.
-    # 테스트는 그 프로젝트 멤버 누구나라 경로의 경계(require_scope)로 이미 됐다
+    # 작업은 줄마다 그 작업의 고치기 권한 — 연결도 링크 PUT 처럼 같은 권한이다.
+    # 지운 작업은 아래 '바뀜' 으로 간다. 테스트는 그 프로젝트 멤버 누구나라
+    # 경로의 경계(require_scope)로 이미 됐다
     denied = {
         f"tasks.{index}": "이 작업을 고칠 권한이 없습니다."
         for index, task_id in enumerate(task_ids)
@@ -1145,21 +1573,26 @@ async def apply_impact(
     by_task = {t.task_id: t for t in impact.tasks}
     by_test = {t.test_id: t for t in impact.tests}
     changed: dict[str, str] = {}
-    for index, task_id in enumerate(task_ids):
-        task = live_tasks.get(task_id)
+    for index, item in enumerate(payload.tasks):
+        task = live_tasks.get(item.task_id)
         if task is None:
             changed[f"tasks.{index}"] = GONE
             continue
-        before = by_task[task_id].before
+        # 연결만 하는 줄은 글을 덮어쓰지 않으니 견주지 않는다
+        if not _task_fix(item):
+            continue
+        before = by_task[item.task_id].before
         current = _task_now(task)
         if current.title != before.title or not _same_body(current.body, before.body):
             changed[f"tasks.{index}"] = CHANGED
-    for index, test_id in enumerate(test_ids):
-        test = live_tests.get(test_id)
+    for index, chosen in enumerate(payload.tests):
+        test = live_tests.get(chosen.test_id)
         if test is None:
             changed[f"tests.{index}"] = GONE
             continue
-        tbefore = by_test[test_id].before
+        if not _test_fix(chosen):
+            continue
+        tbefore = by_test[chosen.test_id].before
         if (test.title, test.content, test.test_data) != (
             tbefore.title,
             tbefore.content,
@@ -1170,14 +1603,16 @@ async def apply_impact(
         raise ApiError(409, "IMPACT_TARGET_CHANGED", TARGET_CHANGED_MESSAGE, changed)
 
     applied_at = now()
+    links: list[TaskAgendaLinkOut] = []
     edited_tasks: list[Task] = []
     for item in payload.tasks:
+        task = live_tasks[item.task_id]
         fields: dict[str, Any] = {}
         if item.title is not None:
             fields["title"] = item.title.strip()
         if item.body is not None:
             # 같은 자리의 줄은 id 를 이어 쓴다 — 고치지 않은 줄의 id 가 반영 뒤에도 그대로다
-            ids = [line.id for line in live_tasks[item.task_id].lines]
+            ids = [line.id for line in task.lines]
             fields["body"] = [
                 TaskLinePatchIn(
                     id=ids[order] if order < len(ids) else None,
@@ -1188,18 +1623,24 @@ async def apply_impact(
                 )
                 for order, line in enumerate(item.body)
             ]
-        edited_tasks.append(
-            await task_service.edit_task(session, item.task_id, TaskPatch(**fields), scope)
-        )
-        by_task[item.task_id] = by_task[item.task_id].model_copy(
+        if fields:
+            task = await task_service.edit_task(session, item.task_id, TaskPatch(**fields), scope)
+        # 링크 PUT 과 같은 몸통 — 이미 걸려 있으면 그대로(멱등), 새로 건 것만 돌려준다
+        if item.link and await task_service.attach_agenda(session, task, row.agenda_id, scope):
+            links.append(TaskAgendaLinkOut(task_id=task.id, agenda_id=row.agenda_id))
+        edited_tasks.append(task)
+        current_row = by_task[item.task_id]
+        by_task[item.task_id] = current_row.model_copy(
             update={
                 "title": fields.get("title"),
                 "body": item.body,
                 "applied_at": applied_at,
+                "linked_on_apply": current_row.linked_on_apply or bool(item.link),
             }
         )
     edited_tests: list[TestCase] = []
-    for chosen in payload.tests:
+    for index, chosen in enumerate(payload.tests):
+        test = live_tests[chosen.test_id]
         test_fields: dict[str, Any] = {}
         if chosen.title is not None:
             test_fields["title"] = chosen.title.strip()
@@ -1207,17 +1648,28 @@ async def apply_impact(
             test_fields["content"] = chosen.content
         if chosen.test_data is not None:
             test_fields["test_data"] = chosen.test_data
-        edited_tests.append(
-            await test_service.edit_test(
+        if test_fields:
+            test = await test_service.edit_test(
                 session, chosen.test_id, TestPatch(**test_fields), scope.actor.id
             )
-        )
-        by_test[chosen.test_id] = by_test[chosen.test_id].model_copy(
+        if chosen.link:
+            try:
+                # 태그 PUT 과 같은 몸통 — 태그 상한도 같다. 걸리면 그 오류를 이 줄 자리로
+                await test_service.add_ref(session, test, "agenda", row.agenda_id, scope.actor.id)
+            except ApiError as exc:
+                await session.rollback()
+                raise ApiError(
+                    exc.status_code, exc.code, exc.message, {f"tests.{index}.link": exc.message}
+                ) from exc
+        edited_tests.append(test)
+        current_test = by_test[chosen.test_id]
+        by_test[chosen.test_id] = current_test.model_copy(
             update={
                 "title": test_fields.get("title"),
                 "content": chosen.content,
                 "test_data": chosen.test_data,
                 "applied_at": applied_at,
+                "linked_on_apply": current_test.linked_on_apply or bool(chosen.link),
             }
         )
     # 반영한 값 그대로 남긴다 — 화면에서 고친 안이면 그것이 '후' 다
@@ -1237,4 +1689,4 @@ async def apply_impact(
         for task in edited_tasks
     ]
     tests_out = await test_service.build_tests(session, row.project_id, edited_tests, today=today)
-    return ImpactApplyResult(tasks=tasks_out, tests=tests_out, impact=to_impact(row))
+    return ImpactApplyResult(tasks=tasks_out, tests=tests_out, links=links, impact=to_impact(row))

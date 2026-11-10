@@ -675,23 +675,33 @@ async def put_ref(
 ) -> TestCaseOut:
     """멱등 — 이미 걸려 있으면 아무것도 바꾸지 않는다(기준도 그대로)."""
     test = await load_test(session, test_id)
+    if await add_ref(session, test, kind, target_id, actor_id):
+        await session.commit()
+    return await _one(session, test, today)
+
+
+async def add_ref(
+    session: AsyncSession, test: TestCase, kind: TestRefKind, target_id: str, actor_id: str
+) -> bool:
+    """PUT 태그의 몸통 — 커밋하지 않는다. 영향도 반영이 여러 태그를 한 트랜잭션에 묶는다.
+    새로 걸었으면 True."""
     await _guard_target(session, test.project_id, kind, target_id)
     column = TestRef.task_id if kind == "task" else TestRef.agenda_id
     exists = await session.scalar(
         select(TestRef.id).where(TestRef.test_id == test.id, column == target_id)
     )
-    if exists is None:
-        count = await session.scalar(
-            select(func.count()).select_from(TestRef).where(TestRef.test_id == test.id, _live_ref())
-        )
-        if (count or 0) >= REFS_MAX:
-            raise _ref_limit()
-        session.add(_ref_row(test, kind, target_id))
-        tagged = [history_service.change(_ref_field(kind), None, target_id)]
-        history_service.record_test(session, test, tagged, actor_id, now())
-        test.basis_seq = await _current_basis(session, test.id)
-        await session.commit()
-    return await _one(session, test, today)
+    if exists is not None:
+        return False
+    count = await session.scalar(
+        select(func.count()).select_from(TestRef).where(TestRef.test_id == test.id, _live_ref())
+    )
+    if (count or 0) >= REFS_MAX:
+        raise _ref_limit()
+    session.add(_ref_row(test, kind, target_id))
+    tagged = [history_service.change(_ref_field(kind), None, target_id)]
+    history_service.record_test(session, test, tagged, actor_id, now())
+    test.basis_seq = await _current_basis(session, test.id)
+    return True
 
 
 async def delete_ref(

@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Link2,
   ListTree,
   Loader2,
   Lock,
@@ -16,6 +17,7 @@ import {
   Undo2,
 } from 'lucide-vue-next'
 import TaskBodyEditor from '@/components/app/TaskBodyEditor.vue'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -27,7 +29,10 @@ import {
   bodyDiff,
   IMPACT_CHANGED_TEXT,
   IMPACT_LOCKED_TEXT,
+  IMPACT_UNLINKED_TEXT,
   impactKey,
+  inReview,
+  linkOnly,
   textDiff,
   type CompactOp,
   type ImpactKind,
@@ -39,7 +44,8 @@ import type { ImpactTask, ImpactTest, TaskLine } from '@/types/domain'
 
 /* 안건 상세의 'AI 영향도 분석' 칸 (docs/api/impact.md '화면') — 결정내용 아래. [AI 영향도 분석] 으로만 돈다.
    결정이 바뀌었는데 그 판으로 분석한 적이 없으면 머리가 알림 줄로 바뀐다. 결과는 회의록 검토처럼
-   고칠 작업 · 고칠 테스트 줄을 체크 · [고치기] · [지우기] 로 고르고 [반영 N건]. 부딪히는 결정은 칩 · 근거만 —
+   고칠 작업 · 고칠 테스트 줄을 체크 · [고치기] · [지우기] 로 고르고 [반영 N건]. 검색으로 찾은 연결 안 된 줄은
+   배지와 '이 안건에 연결' 체크가 붙고, 그중 확인 필요(check) 줄은 연결만 고른다. 부딪히는 결정은 칩 · 근거만 —
    안건을 고칠지는 사람이 정한다. 근거 · 고친 안은 AI 가 낸 글이라 v-html 없이 글로만 그린다 */
 const props = defineProps<{ agendaId: string; focus?: boolean }>()
 
@@ -93,28 +99,27 @@ function run() {
   void impact.run(props.agendaId)
 }
 
+/* 고칠 작업 · 고칠 테스트 — update 줄과 검색으로 찾은 check 줄(찾아낸 것이라 접지 않는다) */
 const updateTasks = computed(() =>
   (latest.value?.tasks ?? []).filter(
-    (t) => t.verdict === 'update' && !impact.isRemoved(latest.value!, key('task', t.taskId)),
+    (t) => inReview(t) && !impact.isRemoved(latest.value!, key('task', t.taskId)),
   ),
 )
 const updateTests = computed(() =>
   (latest.value?.tests ?? []).filter(
-    (t) => t.verdict === 'update' && !impact.isRemoved(latest.value!, key('test', t.testId)),
+    (t) => inReview(t) && !impact.isRemoved(latest.value!, key('test', t.testId)),
   ),
 )
 const hasUpdates = computed(
-  () =>
-    (latest.value?.tasks ?? []).some((t) => t.verdict === 'update') ||
-    (latest.value?.tests ?? []).some((t) => t.verdict === 'update'),
+  () => (latest.value?.tasks ?? []).some(inReview) || (latest.value?.tests ?? []).some(inReview),
 )
-/** 살펴본 것 — check · ok 작업 · 테스트 한 줄씩 */
+/** 살펴본 것 — 연결된 check · ok 작업 · 테스트 한 줄씩 */
 const seen = computed(() => [
   ...(latest.value?.tasks ?? [])
-    .filter((t) => t.verdict !== 'update')
+    .filter((t) => !inReview(t))
     .map((t) => ({ ...t, kind: 'task' as const, id: t.taskId, title: t.before.title })),
   ...(latest.value?.tests ?? [])
-    .filter((t) => t.verdict !== 'update')
+    .filter((t) => !inReview(t))
     .map((t) => ({ ...t, kind: 'test' as const, id: t.testId, title: t.before.title })),
 ])
 
@@ -126,6 +131,15 @@ const agendaTitle = (id: string) => data.allAgendas.find((t) => t.id === id)?.ti
 
 const status = (kind: ImpactKind, id: string) => impact.rowStatus(latest.value!, kind, id)
 const picked = (kind: ImpactKind, id: string) => impact.isPicked(latest.value!, kind, id)
+const linking = (kind: ImpactKind, id: string) => impact.isLinking(latest.value!, kind, id)
+/* 연결만 하는 줄은 연결 체크가 곧 고름 — 고칠 안이 있는 줄은 줄을 켰을 때만 연결을 고른다 */
+const linkDisabled = (row: ImpactTask | ImpactTest, kind: ImpactKind, id: string) =>
+  status(kind, id) !== 'open' ||
+  stale.value ||
+  (!linkOnly(row) && !review.value?.picked[key(kind, id)])
+function setLink(kind: ImpactKind, id: string, on: boolean) {
+  impact.setLink(latest.value!, key(kind, id), on)
+}
 const editing = (kind: ImpactKind, id: string) => !!review.value?.editing[key(kind, id)]
 const problemOf = (kind: ImpactKind, id: string) => {
   if (!picked(kind, id)) return ''
@@ -328,7 +342,9 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
               :data-impact-row="key('task', t.taskId)"
               :data-impact-status="status('task', t.taskId)"
             >
+              <span v-if="linkOnly(t)" class="size-4 shrink-0" />
               <Checkbox
+                v-else
                 class="mt-0.5"
                 :model-value="picked('task', t.taskId)"
                 :disabled="status('task', t.taskId) !== 'open' || stale"
@@ -351,11 +367,21 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
                     }}</span>
                     <span class="truncate">{{ t.before.title }}</span>
                   </button>
+                  <Badge
+                    v-if="!t.linked"
+                    variant="outline"
+                    class="gap-1 font-normal text-muted-foreground"
+                    data-impact-unlinked
+                    ><Link2 class="size-3" />{{ IMPACT_UNLINKED_TEXT }}</Badge
+                  >
+                  <span v-if="linkOnly(t)" class="text-xs font-medium" data-impact-check
+                    >확인 필요</span
+                  >
                   <span
                     v-if="status('task', t.taskId) === 'applied'"
                     class="inline-flex items-center gap-1 text-xs text-status-done"
                     data-impact-applied
-                    ><Check class="size-3" />반영함</span
+                    ><Check class="size-3" />반영함{{ t.linkedOnApply ? ' · 연결함' : '' }}</span
                   >
                   <span
                     v-else-if="status('task', t.taskId) === 'changed'"
@@ -427,6 +453,18 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
                     </li>
                   </ul>
                 </template>
+                <label
+                  v-if="!t.linked && status('task', t.taskId) !== 'applied'"
+                  class="inline-flex items-center gap-1.5 self-start text-xs"
+                >
+                  <Checkbox
+                    :model-value="linking('task', t.taskId)"
+                    :disabled="linkDisabled(t, 'task', t.taskId)"
+                    data-impact-link
+                    @update:model-value="(v) => setLink('task', t.taskId, v === true)"
+                  />
+                  이 안건에 연결
+                </label>
                 <p v-if="problemOf('task', t.taskId)" class="text-xs text-destructive" role="alert">
                   {{ problemOf('task', t.taskId) }}
                 </p>
@@ -436,6 +474,7 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
                 class="flex shrink-0 items-start gap-0.5"
               >
                 <Button
+                  v-if="!linkOnly(t)"
                   variant="ghost"
                   size="icon-sm"
                   class="text-muted-foreground"
@@ -484,7 +523,9 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
               :data-impact-row="key('test', t.testId)"
               :data-impact-status="status('test', t.testId)"
             >
+              <span v-if="linkOnly(t)" class="size-4 shrink-0" />
               <Checkbox
+                v-else
                 class="mt-0.5"
                 :model-value="picked('test', t.testId)"
                 :disabled="status('test', t.testId) !== 'open' || stale"
@@ -507,11 +548,21 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
                     }}</span>
                     <span class="truncate">{{ t.before.title }}</span>
                   </button>
+                  <Badge
+                    v-if="!t.linked"
+                    variant="outline"
+                    class="gap-1 font-normal text-muted-foreground"
+                    data-impact-unlinked
+                    ><Link2 class="size-3" />{{ IMPACT_UNLINKED_TEXT }}</Badge
+                  >
+                  <span v-if="linkOnly(t)" class="text-xs font-medium" data-impact-check
+                    >확인 필요</span
+                  >
                   <span
                     v-if="status('test', t.testId) === 'applied'"
                     class="inline-flex items-center gap-1 text-xs text-status-done"
                     data-impact-applied
-                    ><Check class="size-3" />반영함</span
+                    ><Check class="size-3" />반영함{{ t.linkedOnApply ? ' · 연결함' : '' }}</span
                   >
                   <span
                     v-else-if="status('test', t.testId) === 'changed'"
@@ -598,6 +649,18 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
                     </div>
                   </template>
                 </template>
+                <label
+                  v-if="!t.linked && status('test', t.testId) !== 'applied'"
+                  class="inline-flex items-center gap-1.5 self-start text-xs"
+                >
+                  <Checkbox
+                    :model-value="linking('test', t.testId)"
+                    :disabled="linkDisabled(t, 'test', t.testId)"
+                    data-impact-link
+                    @update:model-value="(v) => setLink('test', t.testId, v === true)"
+                  />
+                  이 안건에 연결
+                </label>
                 <p v-if="problemOf('test', t.testId)" class="text-xs text-destructive" role="alert">
                   {{ problemOf('test', t.testId) }}
                 </p>
@@ -607,6 +670,7 @@ function openTarget(kind: ImpactKind | 'agenda', id: string) {
                 class="flex shrink-0 items-start gap-0.5"
               >
                 <Button
+                  v-if="!linkOnly(t)"
                   variant="ghost"
                   size="icon-sm"
                   class="text-muted-foreground"
