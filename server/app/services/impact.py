@@ -9,6 +9,7 @@ Claude 가 읽기 도구(검색 · get_*)로 찾고, `propose_impact` 로 내며
 
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator, AsyncIterator, Collection, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
@@ -98,6 +99,53 @@ READ_MAX = 12
 MAX_ROUNDS = 20
 # 도구로 찾은 것(넣어 준 연결 작업 · 닿는 테스트 밖)을 결과에 싣는 상한
 FOUND_MAX = 20
+# 서버가 미리 찾는 후보 (impact.md '서버가 먼저 찾는 후보')
+# — 모델이 검색 도구를 안 불러도 놓치지 않게
+TERMS_MAX = 10
+TERM_HITS = 10
+CANDIDATES_MAX = 20
+# 낱말 끝의 조사 · 어미 — 긴 것부터 뗀다('우분투로' → '우분투')
+_ENDINGS = (
+    "으로",
+    "에서",
+    "에게",
+    "한다",
+    "합니다",
+    "하기",
+    "로",
+    "을",
+    "를",
+    "은",
+    "는",
+    "이",
+    "가",
+    "에",
+    "의",
+    "도",
+    "와",
+    "과",
+)
+# 찾아 봐야 아무것에나 걸리는 낱말
+_STOPWORDS = frozenset(
+    {
+        "결정",
+        "안건",
+        "한다",
+        "하다",
+        "사용",
+        "최신",
+        "버전",
+        "여부",
+        "검토",
+        "적용",
+        "진행",
+        "정의",
+        "확정",
+        "우리",
+        "모든",
+        "전체",
+    }
+)
 
 EMPTY_SUMMARY = "살펴볼 연결 작업 · 테스트 · 다른 결정이 없습니다."
 NO_VERDICT = "판정 없음"
@@ -140,7 +188,10 @@ SYSTEM_PROMPT = """\
    결정 전이 null 이면 처음 정한 결정이다(새 결정)
 2. 넣어 준 연결 작업 · 닿는 테스트를 판정한다
 3. 그 안건에 **연결되지 않은** 작업 · 테스트 중에도 옛 값 · 옛 결정을 전제로 적힌 것이 있다.
-   search_tasks · search_tests 로 찾는다
+   - **candidates** 는 서버가 낱말(terms)로 미리 찾아 둔 연결 안 된 작업 · 테스트다(본문까지 있다).
+     **하나씩 빠짐없이** 보고, 바뀐 결정과 어긋나게 적혔으면 update(고친 안) · 애매하면 check,
+     상관없으면 내지 않는다
+   - candidates 로 모자라면 search_tasks · search_tests 로 더 찾는다
    - **바뀌기 전 값**, 바뀐 뒤 값, 그 주제(예: 'OS' · '운영체제')로 찾는다.
      옛 값을 적은 것이 바로 고칠 대상이다
    - 한글 · 영문 · 줄임말을 바꿔 가며 찾는다(예: 우분투 · Ubuntu, 운영체제 · OS)
@@ -403,10 +454,16 @@ class ImpactContext:
     # 상한 없이 다 — 도구가 돌려주는 linked 와 결과 줄의 linked 가 이것을 본다
     linked_task_ids: set[str] = field(default_factory=set)
     reached_test_ids: set[str] = field(default_factory=set)
+    # 서버가 낱말로 미리 찾은 연결 안 된 작업 · 테스트 — 본문까지 넣어 준다(읽은 것으로 친다)
+    terms: list[str] = field(default_factory=list)
+    candidate_tasks: list[TaskSnap] = field(default_factory=list)
+    candidate_tests: list[TestSnap] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
-        return not self.tasks and not self.tests and not self.others
+        return not (
+            self.tasks or self.tests or self.others or self.candidate_tasks or self.candidate_tests
+        )
 
 
 @dataclass
@@ -555,6 +612,75 @@ def _test_snap(test: TestCase, owner: str | None) -> TestSnap:
     )
 
 
+def _words(text: str) -> list[str]:
+    """글을 낱말로 — 조사 · 어미를 떼고, 한 글자 · 흔한 낱말은 뺀다. 나온 순서, 겹치면 하나."""
+    out: list[str] = []
+    for raw in re.findall(r"[0-9A-Za-z가-힣]+", text):
+        word = raw
+        for ending in _ENDINGS:
+            if word.endswith(ending) and len(word) - len(ending) >= 2:
+                word = word[: -len(ending)]
+                break
+        if len(word) < 2 or word in _STOPWORDS:
+            continue
+        if word.lower() not in (w.lower() for w in out):
+            out.append(word)
+    return out
+
+
+def search_terms(title: str, before: str | None, after: str, others: Sequence[Agenda]) -> list[str]:
+    """미리 찾을 낱말 — 옛 결정 → 주제가 겹치는 다른 결정 안건의 결정 → 제목 → 그 안건들의 제목 →
+    새 결정 순.
+
+    옛 값을 적은 작업이 바로 고칠 대상이라 옛 값을 앞에 둔다. 처음 결정이면(전 없음) 제목이
+    겹치는 다른 결정된 안건의 결정이 사실상의 옛 값이다('server os' 의 록키 ↔ '서버 OS' 의 우분투).
+    그 안건들의 제목은 한 · 영이 갈린 주제어를 채운다(server ↔ 서버).
+    """
+    title_words = {w.lower() for w in _words(title)}
+    related = [a for a in others if title_words & {w.lower() for w in _words(a.title)}]
+    out: list[str] = []
+    texts = [before or "", *(a.decision for a in related), title, *(a.title for a in related)]
+    for text in [*texts, after]:
+        for word in _words(text):
+            if word.lower() not in (w.lower() for w in out):
+                out.append(word)
+    return out[:TERMS_MAX]
+
+
+async def _candidates(
+    session: AsyncSession,
+    project_id: str,
+    terms: Sequence[str],
+    linked: Collection[str],
+    reached: Collection[str],
+) -> tuple[list[Task], list[TestCase]]:
+    """낱말마다 검색해 연결 안 된 것만 — 먼저 걸린 순, 각 CANDIDATES_MAX 개까지."""
+    if session.get_bind().dialect.name != "postgresql":
+        # 검색은 pg_trgm 이다 — sqlite 위의 검사에서는 건너뛴다(찾는 것은 pg 검사가 본다)
+        return [], []
+    task_ids: list[str] = []
+    test_ids: list[str] = []
+    for term in terms:
+        try:
+            task_hits = await search_service.search_tasks(
+                session, project_id, term, limit=TERM_HITS
+            )
+            test_hits = await search_service.search_tests(
+                session, project_id, term, limit=TERM_HITS
+            )
+        except ApiError:
+            continue
+        task_ids += [h.id for h in task_hits if h.id not in linked and h.id not in task_ids]
+        test_ids += [h.id for h in test_hits if h.id not in reached and h.id not in test_ids]
+    task_ids, test_ids = task_ids[:CANDIDATES_MAX], test_ids[:CANDIDATES_MAX]
+    tasks = (await session.scalars(select(Task).where(Task.id.in_(task_ids)))).all()
+    tests = (await session.scalars(select(TestCase).where(TestCase.id.in_(test_ids)))).all()
+    return (
+        sorted(tasks, key=lambda t: t.seq),
+        sorted(tests, key=lambda t: t.seq),
+    )
+
+
 async def build_context(session: AsyncSession, agenda: Agenda, project_name: str) -> ImpactContext:
     try:
         tasks = list((await session.scalars(_linked_tasks(agenda.id))).all())
@@ -563,12 +689,23 @@ async def build_context(session: AsyncSession, agenda: Agenda, project_name: str
             (await session.scalars(_reached_tests(agenda.id, [t.id for t in tasks]))).all()
         )
         others = (await _other_decided(session, agenda.project_id, agenda.id))[:DECIDED_MAX]
+        before = await decision_before(session, agenda.id)
+        terms = search_terms(agenda.title, before, agenda.decision, others)
+        found_tasks, found_tests = await _candidates(
+            session,
+            agenda.project_id,
+            terms,
+            {t.id for t in tasks},
+            {t.id for t in tests},
+        )
         names = await _names(
             session,
             [
                 agenda.owner_id,
                 *(t.owner_id for t in tasks[:TASKS_MAX]),
                 *(t.owner_id for t in tests[:TESTS_MAX]),
+                *(t.owner_id for t in found_tasks),
+                *(t.owner_id for t in found_tests),
             ],
         )
 
@@ -584,7 +721,7 @@ async def build_context(session: AsyncSession, agenda: Agenda, project_name: str
             state=agenda.state,
             owner=who(agenda.owner_id) or NO_OWNER,
             decision_rev=agenda.decision_rev,
-            before=await decision_before(session, agenda.id),
+            before=before,
             after=agenda.decision.strip(),
             tasks=[_task_snap(t, who(t.owner_id)) for t in tasks[:TASKS_MAX]],
             tests=[_test_snap(t, who(t.owner_id)) for t in tests[:TESTS_MAX]],
@@ -596,6 +733,9 @@ async def build_context(session: AsyncSession, agenda: Agenda, project_name: str
             ],
             linked_task_ids={t.id for t in tasks},
             reached_test_ids={t.id for t in tests},
+            terms=terms,
+            candidate_tasks=[_task_snap(t, who(t.owner_id)) for t in found_tasks],
+            candidate_tests=[_test_snap(t, who(t.owner_id)) for t in found_tests],
         )
     finally:
         # 읽기만 한다 — Claude 를 부르는 동안 트랜잭션을 붙잡지 않는다
@@ -660,6 +800,12 @@ def user_message(context: ImpactContext) -> str:
             for a in context.others
         ],
     }
+    if context.candidate_tasks or context.candidate_tests:
+        payload["candidates"] = {
+            "terms": context.terms,
+            "tasks": [task_doc(t) for t in context.candidate_tasks],
+            "tests": [test_doc(t) for t in context.candidate_tests],
+        }
     data = json.dumps(payload, ensure_ascii=False)
     return f"결정이 바뀐 안건과 그 결정에 걸린 것들이다. 규칙대로 판정해 내라.\n\n{data}"
 
@@ -1316,10 +1462,19 @@ async def _loop(
 
     yield ImpactToolEvent(name="read_tasks", label="연결 작업 읽는 중")
     yield ImpactToolEvent(name="compare_decisions", label="다른 결정 비교 중")
+    if context.candidate_tasks or context.candidate_tests:
+        yield ImpactToolEvent(name="search_tasks", label=SEARCH_LABEL)
     system = system_prompt(context.project_name, today)
     # 근거는 차례마다 다시 실려 간다 — 캐시해 두면 고쳐 내는 차례부터 싸다
     history: list[Message] = [UserMessage(user_message(context), cache=True)]
     found = Found()
+    # 미리 찾은 후보는 본문까지 넣어 줬다 — 도구로 읽은 것과 같이 친다
+    for snap in context.candidate_tasks:
+        found.tasks[snap.id] = snap
+        found.read_tasks.add(snap.id)
+    for test_snap in context.candidate_tests:
+        found.tests[test_snap.id] = test_snap
+        found.read_tests.add(test_snap.id)
     failures = 0
 
     def failed() -> bool:

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import settings
-from app.models import AgendaImpact, TaskHistory, TaskLine, TestCase, TestHistory
+from app.models import Agenda, AgendaImpact, TaskHistory, TaskLine, TestCase, TestHistory
 from app.services import impact as impact_service
 from app.services import test as test_service
 from tests.conftest import AsMember, decide
@@ -562,6 +562,51 @@ async def hide(client: httpx.AsyncClient) -> tuple[dict[str, Any], dict[str, Any
     return task.json(), test.json()
 
 
+async def test_candidates_found_without_search_tools(pg_client: httpx.AsyncClient) -> None:
+    """모델이 검색 도구를 안 불러도 — 서버가 옛 값 · 제목 낱말로 미리 찾아 본문까지 넣어 준다.
+
+    읽은 것으로 쳐 get_task 없이 본문 고친 안을 낼 수 있다 (impact.md '서버가 먼저 찾는 후보')."""
+    task, test = await hide(pg_client)
+    fake, events = await analyze(
+        pg_client,
+        Turn(tools=[("propose_impact", hidden_proposal(task["id"], test["id"]))]),
+        url=T1,
+    )
+    assert events[-1][0] == "done", events
+    text = fake.calls[0]["messages"][0]["content"][0]["text"]
+    payload = json.loads(text[text.index("{") :])
+    candidates = payload["candidates"]
+    assert "우분투" in candidates["terms"]
+    # 시드의 k19(HW-19) 도 우분투로 설치한다고 적혀 있어 같이 걸린다 — 작업 번호 순
+    assert [t["id"] for t in candidates["tasks"]] == ["k19", task["id"]]
+    assert candidates["tasks"][1]["body"] == HIDDEN_BODY
+    assert test["id"] in [t["id"] for t in candidates["tests"]]
+    impact = events[-2][1]["impact"]
+    (row,) = [t for t in impact["tasks"] if t["taskId"] == task["id"]]
+    assert (row["verdict"], row["linked"]) == ("update", False)
+
+
+def test_search_terms_put_old_values_first() -> None:
+    """옛 결정 → 제목이 겹치는 다른 결정 안건의 결정 → 제목 → 그 안건들의 제목 → 새 결정.
+
+    조사 · 흔한 낱말은 떼고, 대소문자만 다른 낱말은 하나로 친다."""
+    other = Agenda(title="서버 OS", decision="우분투로 한다")
+    unrelated = Agenda(title="DB 선택", decision="mysql 을 쓴다")
+    assert impact_service.search_terms("server os", None, "록키", [other, unrelated]) == [
+        "우분투",
+        "server",
+        "os",
+        "서버",
+        "록키",
+    ]
+    assert impact_service.search_terms("서버 OS", "우분투", "록키로 한다", []) == [
+        "우분투",
+        "서버",
+        "OS",
+        "록키",
+    ]
+
+
 def hidden_proposal(
     task_id: str, test_id: str, *, task: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -625,6 +670,8 @@ async def test_hidden_task_found_by_search(pg_client: httpx.AsyncClient) -> None
     assert [(d["name"], d["label"]) for name, d in events if name == "tool"] == [
         ("read_tasks", "연결 작업 읽는 중"),
         ("compare_decisions", "다른 결정 비교 중"),
+        # 서버가 미리 찾은 후보 — 한 줄
+        ("search_tasks", "관련 작업 · 테스트 찾는 중"),
         ("search_tasks", "관련 작업 · 테스트 찾는 중"),
         ("search_tests", "관련 작업 · 테스트 찾는 중"),
         ("get_task", "관련 작업 · 테스트 읽는 중"),
