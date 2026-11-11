@@ -103,6 +103,25 @@ export const chatReplies: MockChatReply[] = [
       '[[test:tc7]] 는 실패 상태입니다. 관리 화면 주소를 직접 치면 열린다는 메모가 남아 있습니다.\n' +
       '같은 묶음의 [[test:tc6]] 는 DB 설치가 안 끝나 막혀 있습니다.',
   },
+  {
+    /* 내 일 — 서버의 get_my_work 를 흉내 낸다. 목업은 묻는 사람을 가리지 않고 같은 답을 낸다.
+       예시 질문의 앞 줄들이 테스트에서 순서로 쓰여 뒤에 둔다 */
+    keywords: ['할 일', '내 작업', '내 담당', '브리핑', '결정 바뀐'],
+    tools: [{ name: 'get_my_work', label: '내 업무 모으는 중' }],
+    answer:
+      '오늘 챙길 일입니다.\n' +
+      '- **기한 지남**: [[task:k18]] — 연결된 안건 [[agenda:t5]] 가 아직 안 정해져 막혀 있습니다.\n' +
+      '- **결정이 바뀐 안건**: [[agenda:t1]] — 걸린 작업이 새 결정과 맞는지 다시 보시면 좋겠습니다.\n' +
+      '- 그 밖에 진행 중인 작업이 3개 있습니다.\n\n' +
+      '먼저 [[agenda:t5]] 를 정할 사람에게 확인을 요청해 보시길 권합니다.',
+  },
+  {
+    keywords: ['뭐부터', '위험', '리스크'],
+    tools: [{ name: 'get_decision_risks', label: '결정 리스크 보는 중' }],
+    answer:
+      '이번 주에는 [[agenda:t5]] 부터 정하시길 권합니다. 두 번 미뤘고, [[task:k18]] 을 막고 있습니다.\n' +
+      '다음은 [[agenda:t3]] 입니다. 정보보안팀 확인이 먼저입니다.',
+  },
 ]
 
 export const chatFallback: MockChatReply = {

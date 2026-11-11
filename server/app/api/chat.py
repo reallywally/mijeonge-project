@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CurrentActor
 from app.config import settings
 from app.db import get_session
 from app.errors import ApiError
@@ -100,6 +101,7 @@ async def chat(
     payload: ChatInput,
     request: Request,
     session: Session,
+    actor: CurrentActor,
     llm: Annotated[LLMProvider | None, Depends(get_llm)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> StreamingResponse:
@@ -107,5 +109,7 @@ async def chat(
     project = await project_service.load_project(session, project_id)
     ready = ready_llm(request, llm, limiter)
     return sse_response(
-        chat_service.answer(ready, session, project.id, project.name, payload.messages)
+        chat_service.answer(
+            ready, session, project.id, project.name, payload.messages, asker_id=actor.id
+        )
     )

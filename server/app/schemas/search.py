@@ -162,3 +162,51 @@ class SimilarPair(Schema):
     matched: TaskPlace
     # 계층 관계면 원래 범위가 겹친다 — 중복으로 보기 전에 본다
     relation: Literal["parent_child", "siblings"] | None
+
+
+# 아래는 챗봇 도구 get_my_work 의 결과다 — 묻는 사람이 맡은 것만 모은다.
+# daysLeft 는 오늘부터 기한까지 날 수(지났으면 음수), 기한이 없으면 null
+
+
+class MyTask(Schema):
+    id: str
+    key: str
+    title: str
+    status: str
+    due: date | None
+    days_left: int | None
+
+
+class MyTest(Schema):
+    id: str
+    key: str
+    title: str
+    status: str
+    due: date | None
+    days_left: int | None
+
+
+class MyAgenda(Schema):
+    id: str
+    title: str
+    state: str
+    due_date: date | None
+    days_left: int | None
+
+
+class ChangedDecision(Schema):
+    """내 작업이 걸린 안건 중 결정이 다시 바뀐 것 — 작업을 다시 봐야 할 수 있다."""
+
+    id: str
+    title: str
+    decided_at: Utc | None
+    # 그 안건에 걸린 내 작업의 키
+    task_keys: list[str]
+
+
+class MyWork(Schema):
+    name: str
+    tasks: list[MyTask]
+    tests: list[MyTest]
+    agendas: list[MyAgenda]
+    changed_decisions: list[ChangedDecision]

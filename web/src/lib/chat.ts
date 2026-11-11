@@ -1,6 +1,9 @@
 import type { ApiError } from '@/api/client'
 import type { ChatLine, ChatMessage, ChatProposal, ChatRef } from '@/types/domain'
 
+/** 챗봇 이름. 바꿀 때는 여기와 서버의 BOT_NAME(services/chat.py)을 같이 바꾼다 */
+export const BOT_NAME = '이노봇'
+
 /** 계약의 messages 상한 (API.md '## AI 챗봇') */
 export const MAX_CHAT_MESSAGES = 20
 

@@ -19,6 +19,7 @@ from app.llm import (
     ToolSpec,
     UserMessage,
 )
+from app.models import Member
 from app.schemas.chat import (
     ChatEvent,
     ChatMessage,
@@ -62,11 +63,29 @@ MENTION_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9]{0,7}-[Tt]?\d+)(?![A-Za-z0-9_])"
 )
 
+# 챗봇 이름. 바꿀 때는 화면의 BOT_NAME(web/src/lib/chat.ts)을 같이 바꾼다
+BOT_NAME = "이노봇"
+
 SYSTEM_PROMPT = """\
-너는 사내 업무 도구 innoFlow 의 도우미다. 지금 프로젝트는 '{project_name}' 이다.
-오늘은 {today} 이다(한국 시간).
+너는 사내 업무 도구 innoFlow 의 업무 비서 '{bot_name}' 이다. 이름을 물으면 {bot_name} 이라고 답한다.
+지금 프로젝트는 '{project_name}' 이다. 오늘은 {today} 이다(한국 시간).
+{asker}
 사용자의 질문에 이 프로젝트에 저장된 안건(agenda) · 작업(task) · 테스트(test)를
 찾아 근거로 답한다. 작업을 만들어 달라고 하면 작업 초안을 낸다.
+비서답게 묻는 사람의 일을 먼저 챙긴다 — 결론부터 말하고, 할 일이 보이면 다음에 무엇을 하면 좋을지
+한 가지를 짧게 권한다. 권하는 것도 찾은 근거 안에서만 한다.
+
+## 내 업무 · 브리핑
+1. "오늘 할 일" · "내 거 뭐 있어?" · "이번 주 브리핑" · "내 담당 중 결정 바뀐 거" 처럼
+   묻는 사람 자신의 일을 물으면 get_my_work 를 먼저 부른다
+2. 브리핑은 이 순서로 묶는다. 없는 묶음은 건너뛴다
+   - **기한 지남**: daysLeft 가 음수인 작업 · 테스트 · 안건
+   - **오늘 · 이번 주**: daysLeft 가 0 ~ 6 인 것
+   - **결정이 바뀐 안건**: changedDecisions — 걸린 내 작업(taskKeys)을 다시 봐야 할 수 있다고 말한다
+   - **내가 정할 안건**: agendas 중 위에 안 나온 것
+   - 나머지 진행 중인 일은 개수만 말하고, 물으면 늘어놓는다
+3. 날짜 · 날 수는 도구가 준 그대로 쓴다("2일 지남" · "오늘까지" · "3일 남음"). 지어내지 않는다
+4. 맡은 것이 하나도 없으면 없다고 말한다. 묻는 사람을 모르면(get_my_work 오류) 누구 일인지 되묻는다
 
 ## 찾는 법
 - 답하기 전에 반드시 도구로 찾는다. 기억이나 짐작으로 답하지 않는다
@@ -337,6 +356,19 @@ TOOLS: list[ToolSpec] = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "get_my_work",
+        "description": (
+            "지금 묻는 사람이 맡은 것을 모아 준다 — tasks: 안 끝난 작업, "
+            "tests: 통과 못 한 테스트, agendas: 안 정해진 안건(모두 기한 급한 순, "
+            "daysLeft 는 기한까지 날 수 · 지났으면 음수 · 기한 없으면 null), "
+            "changedDecisions: 내 작업이 걸린 안건 중 최근 2주 안에 결정이 "
+            "다시 바뀐 것(taskKeys 는 걸린 내 작업). '오늘 할 일' · '내 거' · '브리핑' 처럼 "
+            "묻는 사람 자신의 일을 물을 때 먼저 쓴다. 다른 사람의 일은 get_decision_risks 의 "
+            "member_id 로 본다."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "propose_tasks",
         "description": (
             "작업 초안을 화면에 보인다. 저장하지 않는다 — 사용자가 [등록] 을 눌러야 저장된다. "
@@ -429,14 +461,22 @@ def tool_label(name: ToolName, raw: object) -> str:
             return "결정 리스크 보는 중"
         case "list_members":
             return "멤버 확인 중"
+        case "get_my_work":
+            return "내 업무 모으는 중"
         case "propose_tasks":
             return "작업 초안 만드는 중"
 
 
 async def run_tool(
-    session: AsyncSession, project_id: str, name: str, raw: object
+    session: AsyncSession,
+    project_id: str,
+    name: str,
+    raw: object,
+    *,
+    asker_id: str | None = None,
 ) -> tuple[str, bool]:
-    """(결과 JSON 문자열, 오류인가). project_id 는 경로에서 온 것만 쓴다 — Claude 가 못 바꾼다."""
+    """(결과 JSON 문자열, 오류인가). project_id · asker_id 는 요청에서 온 것만 쓴다 —
+    Claude 가 못 바꾼다."""
     try:
         match name:
             case "search_agendas":
@@ -491,6 +531,13 @@ async def run_tool(
                 return json.dumps(
                     [{"id": m.id, "name": m.name} for m in members], ensure_ascii=False
                 ), False
+            case "get_my_work":
+                if asker_id is None:
+                    return _tool_error("묻는 사람을 모른다 — 이 도구를 쓸 수 없다"), True
+                work = await search_service.my_work(
+                    session, project_id, asker_id, today=today_kst()
+                )
+                return work.model_dump_json(by_alias=True), False
             case _:
                 return _tool_error(f"없는 도구다: {name}"), True
     except ApiError as exc:
@@ -658,6 +705,8 @@ async def answer(
     project_id: str,
     project_name: str,
     messages: Sequence[ChatMessage],
+    *,
+    asker_id: str | None = None,
 ) -> AsyncIterator[ChatEvent]:
     """도구 루프. 글자 조각은 바로 delta 로, 도구를 부를 때마다 tool 로 흘린다.
 
@@ -668,7 +717,9 @@ async def answer(
     proposal: ProposalEvent | None = None
     try:
         # 일찍 끝나도 안쪽 루프(열린 스트림)를 바로 닫는다
-        async with aclosing(_loop(llm, session, project_id, project_name, messages)) as events:
+        async with aclosing(
+            _loop(llm, session, project_id, project_name, messages, asker_id)
+        ) as events:
             async for event in events:
                 if isinstance(event, ProposalEvent):
                     proposal = event
@@ -690,17 +741,31 @@ async def answer(
     yield DoneEvent(refs=extract_refs("".join(written)))
 
 
+async def _asker_line(session: AsyncSession, asker_id: str | None) -> str:
+    member = await session.get(Member, asker_id) if asker_id else None
+    if member is None:
+        return "지금 묻는 사람은 알 수 없다 — '나' · '내' 가 누구인지 짐작하지 않는다."
+    return (
+        f"지금 묻는 사람은 {member.name} 님이다(멤버 id {member.id}). "
+        "'나' · '내' · '제' 는 이 사람이다."
+    )
+
+
 async def _loop(
     llm: LLMProvider,
     session: AsyncSession,
     project_id: str,
     project_name: str,
     messages: Sequence[ChatMessage],
+    asker_id: str | None,
 ) -> AsyncGenerator[ChatEvent, None]:
     history = _to_messages(messages, await find_mentions(session, project_id, messages))
     today = today_kst()
     system = SYSTEM_PROMPT.format(
-        project_name=project_name, today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})"
+        bot_name=BOT_NAME,
+        asker=await _asker_line(session, asker_id),
+        project_name=project_name,
+        today=f"{today.isoformat()} ({WEEKDAYS[today.weekday()]})",
     )
     wrote = False
 
@@ -760,7 +825,9 @@ async def _loop(
                 if proposal is not None:
                     yield ProposalEvent(proposal=proposal)
             else:
-                content, is_error = await run_tool(session, project_id, call.name, call.input)
+                content, is_error = await run_tool(
+                    session, project_id, call.name, call.input, asker_id=asker_id
+                )
             results.append(ToolResult(call_id=call.id, content=content, is_error=is_error))
         # 다음이 마지막 차례면 찾은 것으로 마무리하게 한다
         wrap_up = WRAP_UP if round_no == MAX_ROUNDS - 1 else ""

@@ -525,6 +525,7 @@ export type ChatEvent =
         | 'find_similar_tasks'
         | 'list_members'
         | 'get_decision_risks'
+        | 'get_my_work'
         | 'propose_tasks'
       label: string
     }

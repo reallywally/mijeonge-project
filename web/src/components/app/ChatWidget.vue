@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowUp, Loader2, MessageCircle, Minus, RotateCcw, Square, X } from 'lucide-vue-next'
+import { ArrowUp, Bot, Loader2, Minus, RotateCcw, Square, X } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import ChatProposalCard from '@/components/app/ChatProposalCard.vue'
 import ChatRefText from '@/components/app/ChatRefText.vue'
@@ -13,6 +13,8 @@ import {
   mentionQuery,
   type MentionQuery,
 } from '@/lib/mention'
+import { BOT_NAME } from '@/lib/chat'
+import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
@@ -21,13 +23,20 @@ import { useTestStore } from '@/stores/test'
 /* 오른쪽 아래 챗봇. App.vue 에 한 번만 둔다 — 화면을 옮겨도 대화가 이어진다.
    창을 닫으면 대화가 끝난다 (API.md Q26). 최소화는 창만 내린다 — 대화 · 쓰던 글 · 받는 중인 답이 그대로다.
    모달이 아니라 열어 둔 채 뒤 화면을 쓸 수 있다. */
+const auth = useAuthStore()
 const data = useDataStore()
 const chat = useChatStore()
 const taskStore = useTaskStore()
 const testStore = useTestStore()
 const router = useRouter()
 
-const EXAMPLES = ['서버 OS 뭐로 정했지?', '아직 안 정해진 안건 뭐 있어?', '막힌 작업 알려줘']
+/* 앞의 둘은 내 일(get_my_work), 뒤는 프로젝트 전체를 묻는다 */
+const EXAMPLES = [
+  '오늘 내 할 일 정리해줘',
+  '내 작업에 걸린 안건 중 결정 바뀐 거 있어?',
+  '이번 주 뭐부터 정해야 해?',
+  '막힌 작업 알려줘',
+]
 
 const open = ref(false)
 const draft = ref('')
@@ -161,11 +170,11 @@ watch(
       v-if="!open"
       size="icon-lg"
       class="fixed right-6 bottom-6 z-40 size-12 rounded-full shadow-lg"
-      aria-label="AI 도우미 열기"
+      :aria-label="`${BOT_NAME} 열기`"
       :title="chat.empty ? undefined : '이어지는 대화가 있습니다'"
       @click="show"
     >
-      <MessageCircle class="size-5" />
+      <Bot class="size-5" />
       <!-- 최소화해 둔 대화가 있다는 표 -->
       <span
         v-if="!chat.empty"
@@ -177,16 +186,20 @@ watch(
     <section
       v-else
       role="dialog"
-      aria-label="AI 도우미"
+      :aria-label="BOT_NAME"
       class="fixed inset-0 z-40 flex flex-col bg-background sm:inset-auto sm:right-6 sm:bottom-6 sm:h-150 sm:max-h-[calc(100dvh-3rem)] sm:w-100 sm:rounded-xl sm:border sm:border-border sm:shadow-xl"
       @keydown="onPanelKeydown"
     >
       <header class="flex shrink-0 items-center gap-2 border-b border-border py-3 pr-2 pl-4">
-        <MessageCircle class="size-4 text-muted-foreground" />
+        <span
+          class="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+        >
+          <Bot class="size-4" />
+        </span>
         <div class="min-w-0 grow">
-          <h2 class="text-sm font-semibold">AI 도우미</h2>
+          <h2 class="text-sm font-semibold">{{ BOT_NAME }}</h2>
           <p class="truncate text-xs text-muted-foreground">
-            {{ data.currentProject?.name }}의 안건 · 작업에서 찾아 답합니다
+            {{ data.currentProject?.name }}의 업무 비서
           </p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label="최소화" title="최소화" @click="minimize">
@@ -199,9 +212,19 @@ watch(
 
       <div ref="scroller" class="min-h-0 grow overflow-y-auto px-4 py-4" aria-live="polite">
         <div v-if="chat.empty" class="flex h-full flex-col justify-end gap-3">
-          <p class="text-sm text-muted-foreground">
-            정해 둔 것, 아직 못 정한 것, 막힌 작업을 물어보세요.
-            <br />
+          <div class="flex items-start gap-2" data-chat-greeting>
+            <span
+              class="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+            >
+              <Bot class="size-4" />
+            </span>
+            <p class="rounded-lg bg-muted px-3 py-2 text-sm">
+              안녕하세요{{ auth.me ? `, ${auth.me.name}님` : '' }}. {{ BOT_NAME }}입니다.
+              <br />
+              오늘 할 일, 결정이 바뀐 안건, 막힌 작업을 챙겨 드릴게요.
+            </p>
+          </div>
+          <p class="text-xs text-muted-foreground">
             창을 닫으면 대화는 지워집니다. 최소화하면 대화가 이어집니다.
           </p>
           <div class="flex flex-col items-start gap-2">

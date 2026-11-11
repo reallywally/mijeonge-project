@@ -384,3 +384,19 @@ export interface TaskBatchResult {
 - **언급의 갈래** — 키가 `접두사-T번호` 꼴이면 테스트, 아니면 작업으로 찾는다(`search.is_test_key`). 작업 키는 숫자만이라 겹치지 않는다
 - **리포트 · 리스크 요약** — `REF_PATTERN` 을 같이 쓰므로, 두 곳의 근거 거르기를 종류별로 바꿔 `[[test:…]]` 는 칩으로 내지 않는다(그쪽 데이터에 테스트가 없다)
 - 지금 도구 전체: `search_agendas` · `get_agenda` · `search_tasks` · `get_task` · `get_test` · `list_tasks` · `find_similar_tasks` · `get_decision_risks` · `list_members` · `propose_tasks`
+
+## AI 챗봇 — 이름 · 업무 비서 '이노봇' (2026-11-11)
+
+챗봇에 이름을 붙이고, 묻는 사람의 일을 챙기는 비서로 바꾼다. 요청 모양(`ChatInput`)은 그대로다.
+
+- **이름** — `이노봇`. 화면은 `web/src/lib/chat.ts` 의 `BOT_NAME`, 서버는 `services/chat.py` 의 `BOT_NAME` 하나에서 읽는다(바꿀 때 둘을 같이). 창 제목 · 여는 버튼 라벨(`이노봇 열기`) · 창의 `aria-label` 이 이 이름이다. 시스템 프롬프트 첫 줄이 "업무 비서 '이노봇'" 이고 이름을 물으면 이노봇이라고 답한다
+- **묻는 사람** — 라우트가 로그인한 사람(`CurrentActor`)을 `answer(..., asker_id=)` 로 넘기고, 프롬프트에 "지금 묻는 사람은 ○○ 님이다(멤버 id …). '나' · '내' · '제' 는 이 사람이다" 를 싣는다. 모르면(`asker_id` 없음) 짐작하지 말라고 적는다
+- **도구 `get_my_work`** (입력 없음, 화면 라벨 '내 업무 모으는 중') — 묻는 사람(`asker_id`, Claude 가 못 바꾼다)이 이 프로젝트에서 맡은 것:
+  `{ name, tasks, tests, agendas, changedDecisions }`.
+  `tasks` 는 안 끝난(`done` 아닌) 작업, `tests` 는 통과 못 한(`pass` 아닌) 테스트, `agendas` 는 안 정해진 안건 — 셋 다 기한 급한 순(기한 없는 것은 뒤), 갈래마다 30개까지, 줄마다 `daysLeft`(오늘부터 기한까지 날 수, 지났으면 음수, 기한 없으면 `null`).
+  `changedDecisions` 는 내 안 끝난 작업이 걸린 안건 중 **결정 판이 2 이상이고 최근 14일 안에 결정된** 것(`{ id, title, decidedAt, taskKeys }`, 최근 결정 순) — 결정이 다시 바뀌어 작업을 다시 봐야 할 수 있는 것이다.
+  묻는 사람을 모르면 도구 오류 `묻는 사람을 모른다`. 셈은 `services/search.py` 의 `my_work`
+- **프롬프트 '내 업무 · 브리핑'** — "오늘 할 일" · "브리핑" · "내 담당 중 결정 바뀐 거" 는 `get_my_work` 를 먼저 부르고, 기한 지남 → 오늘 · 이번 주(0 ~ 6일) → 결정이 바뀐 안건 → 내가 정할 안건 → 나머지는 개수만, 순서로 묶는다. 날 수는 도구 값 그대로. 비서답게 결론부터, 다음 할 일 한 가지를 근거 안에서 권한다
+- **화면** — 여는 버튼 · 창 머리에 봇 아바타(`Bot` 아이콘), 머리 부제 '○○의 업무 비서', 빈 대화에 인사 말풍선("안녕하세요, ○○님. 이노봇입니다." — 로그인 전이면 이름 없이). 예시 질문은 '오늘 내 할 일 정리해줘' · '내 작업에 걸린 안건 중 결정 바뀐 거 있어?' · '이번 주 뭐부터 정해야 해?' · '막힌 작업 알려줘'
+- **목업** — '할 일' · '내 작업' · '내 담당' · '브리핑' · '결정 바뀐' 은 `get_my_work`, '뭐부터' · '위험' · '리스크' 는 `get_decision_risks` 를 흉내 낸 답을 낸다(묻는 사람을 가리지 않는다)
+- 지금 도구 전체: `search_agendas` · `get_agenda` · `search_tasks` · `get_task` · `get_test` · `list_tasks` · `find_similar_tasks` · `get_decision_risks` · `list_members` · `get_my_work` · `propose_tasks`

@@ -19,13 +19,14 @@ import httpx2
 import pytest
 from anthropic import APIConnectionError, RateLimitError
 from anthropic.types.beta import BetaMessage
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import chat as chat_api
 from app.config import Settings, settings
 from app.llm.anthropic_provider import AnthropicProvider, make_client
 from app.main import app
-from app.models import TestCase, TestComment
+from app.models import Agenda, Member, Task, TaskAgendaLink, TestCase, TestComment
 from app.services import chat as chat_service
 from app.services.ratelimit import RateLimiter
 from app.time import today_kst
@@ -207,6 +208,7 @@ async def test_request_follows_the_settings(session: AsyncSession) -> None:
         "find_similar_tasks",
         "get_decision_risks",
         "list_members",
+        "get_my_work",
         "propose_tasks",
     }
     assert "한화손보 차세대" in call["system"]
@@ -650,6 +652,95 @@ async def test_today_is_in_the_system_prompt(session: AsyncSession) -> None:
     today = today_kst()
     weekday = "월화수목금토일"[today.weekday()]
     assert f"오늘은 {today.isoformat()} ({weekday})" in fake.calls[0]["system"]
+
+
+async def test_bot_name_and_asker_are_in_the_system_prompt(session: AsyncSession) -> None:
+    """이노봇이라는 이름과 묻는 사람(나)이 프롬프트에 실린다. 모르면 짐작하지 말라고 한다."""
+    await seed(session)
+    owner = await session.scalar(select(Task.owner_id).where(Task.owner_id.is_not(None)))
+    member = await session.get(Member, owner)
+    assert member is not None
+
+    fake = FakeClient(Turn(texts=["답"]))
+    async for _ in chat_service.answer(
+        AnthropicProvider(fake, settings),  # type: ignore[arg-type]
+        session,
+        "p1",
+        "p1",
+        [chat_service.ChatMessage(role="user", text="오늘 내 할 일 정리해줘")],
+        asker_id=member.id,
+    ):
+        pass
+    system = fake.calls[0]["system"]
+    assert f"'{chat_service.BOT_NAME}'" in system
+    assert f"지금 묻는 사람은 {member.name} 님이다(멤버 id {member.id})" in system
+
+    fake = FakeClient(Turn(texts=["답"]))
+    await run(session, fake)
+    assert "지금 묻는 사람은 알 수 없다" in fake.calls[0]["system"]
+
+
+async def test_my_work_gathers_what_the_asker_owns(session: AsyncSession) -> None:
+    """get_my_work — 내 안 끝난 작업 · 통과 못 한 테스트 · 안 정해진 안건, 기한 급한 순.
+    내 작업이 걸린 안건의 결정이 최근 다시 바뀌었으면 changedDecisions 에 그 작업 키와 함께."""
+    await seed(session)
+    owner = await session.scalar(
+        select(Task.owner_id)
+        .where(Task.project_id == "p1", Task.owner_id.is_not(None), Task.status != "done")
+        .limit(1)
+    )
+    assert owner is not None
+    mine = (
+        await session.scalars(
+            select(Task).where(
+                Task.project_id == "p1",
+                Task.owner_id == owner,
+                Task.status != "done",
+                Task.is_deleted.is_(False),
+            )
+        )
+    ).all()
+    today = today_kst()
+    mine[0].due = today - timedelta(days=2)
+    agenda = Agenda(
+        id="a-my-work", project_id="p1", title="바뀐 결정", state="decided",
+        decision="새 결정", decision_rev=2, decided_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+    )
+    session.add(agenda)
+    await session.flush()
+    session.add(TaskAgendaLink(task_id=mine[0].id, agenda_id=agenda.id, project_id="p1"))
+    await session.commit()
+    # 도구가 끝에 rollback 해 객체가 만료된다 — 볼 값은 미리 뽑아 둔다
+    ids = {t.id for t in mine}
+    first = {
+        "id": mine[0].id, "key": mine[0].key, "title": mine[0].title,
+        "status": mine[0].status, "due": (today - timedelta(days=2)).isoformat(),
+        "daysLeft": -2,
+    }
+
+    content, is_error = await chat_service.run_tool(
+        session, "p1", "get_my_work", {}, asker_id=owner
+    )
+    assert not is_error
+    work = json.loads(content)
+    assert {t["id"] for t in work["tasks"]} == ids
+    assert first in work["tasks"]
+    # 기한 급한 순, 기한 없는 것은 뒤로
+    left = [t["daysLeft"] for t in work["tasks"]]
+    dated = [d for d in left if d is not None]
+    assert left == dated + [None] * (len(left) - len(dated)) and dated == sorted(dated)
+    assert all(t["status"] != "pass" for t in work["tests"])
+    assert all(a["state"] != "decided" for a in work["agendas"])
+    assert [c["id"] for c in work["changedDecisions"]] == ["a-my-work"]
+    assert work["changedDecisions"][0]["taskKeys"] == [first["key"]]
+
+    # 다른 프로젝트에서는 내 것이 아니다 — 경로의 프로젝트만 본다
+    content, _ = await chat_service.run_tool(session, "p2", "get_my_work", {}, asker_id=owner)
+    assert first["id"] not in content
+
+    content, is_error = await chat_service.run_tool(session, "p1", "get_my_work", {})
+    assert is_error and "묻는 사람을 모른다" in json.loads(content)["error"]
 
 
 async def test_past_proposal_is_written_after_the_answer(client: httpx.AsyncClient) -> None:

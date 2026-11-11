@@ -23,6 +23,7 @@ ToolName = Literal[
     "find_similar_tasks",
     "get_decision_risks",
     "list_members",
+    "get_my_work",
     "propose_tasks",
 ]
 

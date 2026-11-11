@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterable, Sequence
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 from sqlalchemy import (
@@ -27,9 +27,14 @@ from app.schemas.search import (
     AgendaDoc,
     AgendaHit,
     AgendaPlace,
+    ChangedDecision,
     LinkedAgenda,
     LinkedTask,
     LinkedTest,
+    MyAgenda,
+    MyTask,
+    MyTest,
+    MyWork,
     SearchResult,
     SimilarPair,
     TaskBrief,
@@ -651,3 +656,116 @@ async def similar_tasks(
             )
         )
     return pairs
+
+
+# 내 업무 — 한 갈래에 이만큼까지. 기한이 급한 것부터 싣는다
+MY_WORK_MAX = 30
+# 이 날 수 안에 결정이 다시 바뀐 안건만 '결정 바뀜' 으로 알린다
+CHANGED_DECISION_DAYS = 14
+
+
+def _days_left(due: date | None, today: date) -> int | None:
+    return None if due is None else (due - today).days
+
+
+def _by_due(due: date | None, seq: int) -> tuple[bool, date, int]:
+    # 기한 없는 것은 뒤로
+    return (due is None, due or date.max, seq)
+
+
+async def my_work(session: AsyncSession, project_id: str, member_id: str, today: date) -> MyWork:
+    """묻는 사람이 맡은 것 — 안 끝난 작업 · 통과 못 한 테스트 · 안 정해진 안건과,
+    내 작업이 걸린 안건 중 최근 결정이 다시 바뀐 것. 오늘 할 일 · 브리핑의 재료다."""
+    member = await session.get(Member, member_id)
+    tasks = (
+        await session.scalars(
+            select(Task).where(
+                Task.project_id == project_id,
+                Task.is_deleted.is_(False),
+                Task.owner_id == member_id,
+                Task.status != "done",
+            )
+        )
+    ).all()
+    tests = (
+        await session.scalars(
+            select(TestCase).where(
+                TestCase.project_id == project_id,
+                TestCase.owner_id == member_id,
+                TestCase.status != "pass",
+            )
+        )
+    ).all()
+    agendas = (
+        await session.scalars(
+            select(Agenda).where(
+                Agenda.project_id == project_id,
+                Agenda.is_deleted.is_(False),
+                Agenda.owner_id == member_id,
+                Agenda.state != "decided",
+            )
+        )
+    ).all()
+
+    # 결정이 한 번 정해진 뒤 다시 바뀐(판 2 이상) 안건 중, 내 안 끝난 작업이 걸린 것
+    since = datetime.now(UTC) - timedelta(days=CHANGED_DECISION_DAYS)
+    changed: dict[str, ChangedDecision] = {}
+    if tasks:
+        key_of = {t.id: t.key for t in tasks}
+        rows = await session.execute(
+            select(Agenda, TaskAgendaLink.task_id)
+            .join(TaskAgendaLink, TaskAgendaLink.agenda_id == Agenda.id)
+            .where(
+                TaskAgendaLink.task_id.in_(key_of),
+                Agenda.is_deleted.is_(False),
+                Agenda.state == "decided",
+                Agenda.decision_rev >= 2,
+                Agenda.decided_at >= since,
+            )
+            .order_by(Agenda.decided_at.desc(), Agenda.seq)
+        )
+        for agenda, task_id in rows.tuples().all():
+            item = changed.setdefault(
+                agenda.id,
+                ChangedDecision(
+                    id=agenda.id, title=agenda.title, decided_at=agenda.decided_at, task_keys=[]
+                ),
+            )
+            item.task_keys.append(key_of[task_id])
+
+    return MyWork(
+        name=member.name if member else "",
+        tasks=[
+            MyTask(
+                id=t.id,
+                key=t.key,
+                title=t.title,
+                status=t.status,
+                due=t.due,
+                days_left=_days_left(t.due, today),
+            )
+            for t in sorted(tasks, key=lambda t: _by_due(t.due, t.seq))[:MY_WORK_MAX]
+        ],
+        tests=[
+            MyTest(
+                id=t.id,
+                key=t.key,
+                title=t.title,
+                status=t.status,
+                due=t.due,
+                days_left=_days_left(t.due, today),
+            )
+            for t in sorted(tests, key=lambda t: _by_due(t.due, t.seq))[:MY_WORK_MAX]
+        ],
+        agendas=[
+            MyAgenda(
+                id=a.id,
+                title=a.title,
+                state=a.state,
+                due_date=a.due_date,
+                days_left=_days_left(a.due_date, today),
+            )
+            for a in sorted(agendas, key=lambda a: _by_due(a.due_date, a.seq))[:MY_WORK_MAX]
+        ],
+        changed_decisions=list(changed.values())[:MY_WORK_MAX],
+    )

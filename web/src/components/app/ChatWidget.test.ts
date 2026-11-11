@@ -40,7 +40,7 @@ function makeRouter() {
 
 async function opened(router = makeRouter()) {
   const w = mount(ChatWidget, { attachTo: document.body, global: { plugins: [router] } })
-  await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+  await w.get('button[aria-label="이노봇 열기"]').trigger('click')
   await nextTick()
   return w
 }
@@ -57,21 +57,29 @@ async function openedSignedIn(router = makeRouter()) {
 }
 
 describe('챗봇 창', () => {
-  it('버튼을 누르면 창이 열리고 입력칸에 포커스가 간다. 빈 대화면 예시 질문 셋이 선다', async () => {
+  it('버튼을 누르면 창이 열리고 입력칸에 포커스가 간다. 빈 대화면 이노봇 인사와 예시 질문이 선다', async () => {
     const w = await opened()
     expect(w.find('[role="dialog"]').exists()).toBe(true)
+    expect(w.get('[role="dialog"]').attributes('aria-label')).toBe('이노봇')
     expect(document.activeElement).toBe(textarea(w).element)
-    for (const q of ['서버 OS 뭐로 정했지?', '아직 안 정해진 안건 뭐 있어?', '막힌 작업 알려줘'])
+    expect(w.get('[data-chat-greeting]').text()).toContain('이노봇입니다')
+    for (const q of ['오늘 내 할 일 정리해줘', '이번 주 뭐부터 정해야 해?', '막힌 작업 알려줘'])
       expect(w.text()).toContain(q)
   })
 
-  it('예시 질문을 누르면 그 질문을 보낸다', async () => {
+  it('로그인해 있으면 인사에 이름을 부른다', async () => {
+    const w = await openedSignedIn()
+    expect(w.get('[data-chat-greeting]').text()).toContain(`${useAuthStore().me!.name}님`)
+  })
+
+  it('예시 질문을 누르면 그 질문을 보낸다 — 내 할 일은 get_my_work 로 답한다', async () => {
     const w = await opened()
-    const example = w.findAll('button').find((b) => b.text() === '서버 OS 뭐로 정했지?')!
+    const example = w.findAll('button').find((b) => b.text() === '오늘 내 할 일 정리해줘')!
     await example.trigger('click')
     await vi.runAllTimersAsync()
 
-    expect(w.text()).toContain(chatReplies[0].answer.split('\n')[0])
+    const mine = chatReplies.find((r) => r.tools.some((t) => t.name === 'get_my_work'))!
+    expect(w.text()).toContain(mine.answer.split('\n')[0])
   })
 
   it('Enter 는 보내고, Shift+Enter 와 한글 조합 중 Enter 는 보내지 않는다', async () => {
@@ -114,7 +122,7 @@ describe('챗봇 창', () => {
     expect(useChatStore().lines).toEqual([])
     expect(useChatStore().receiving).toBe(false)
 
-    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    await w.get('button[aria-label="이노봇 열기"]').trigger('click')
     expect(w.text()).toContain('막힌 작업 알려줘')
     await vi.runAllTimersAsync()
   })
@@ -132,7 +140,7 @@ describe('챗봇 창', () => {
     expect(useChatStore().lines).not.toEqual([])
     expect(w.find('[data-chat-minimized]').exists()).toBe(true)
 
-    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    await w.get('button[aria-label="이노봇 열기"]').trigger('click')
     await nextTick()
     expect(w.text()).toContain(chatReplies[0].answer.split('\n')[0])
     expect((textarea(w).element as HTMLTextAreaElement).value).toBe('쓰던 글')
@@ -152,7 +160,7 @@ describe('챗봇 창', () => {
     await vi.runAllTimersAsync()
 
     expect(useChatStore().receiving).toBe(false)
-    await w.get('button[aria-label="AI 도우미 열기"]').trigger('click')
+    await w.get('button[aria-label="이노봇 열기"]').trigger('click')
     await nextTick()
     expect(w.text()).toContain(chatReplies[0].answer.split('\n')[0])
   })
