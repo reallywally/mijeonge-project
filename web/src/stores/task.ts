@@ -269,17 +269,19 @@ export const useTaskStore = defineStore('task', () => {
   const logPatch = (task: Task, next: TaskPatch) =>
     logMock(task.id, diffChanges(task, next, 'task'))
 
-  /** 고칠 수 있나 — 등록한 사람 · 담당자 · 프로젝트 관리자 · 시스템 관리자. 상세 · 목록 · 칸반 · 간트가 같이 본다 */
-  const canEdit = (task: Task) => canEditTask(auth.me, task, task.projectId)
-  /** 지울 수 있나 — 등록한 사람 · 프로젝트 관리자 · 시스템 관리자(담당자는 못 지운다) */
-  const canDelete = (task: Task) => canDeleteTask(auth.me, task, task.projectId)
+  /** 고칠 수 있나 — 담당자 · 관리자, 공통 작업은 등록한 사람, 파트 작업은 그 파트의 수정 권한(lib/access).
+      상세 · 목록 · 칸반 · 간트가 같이 본다 */
+  const canEdit = (task: Task) => canEditTask(auth.me, task, task.projectId, data.partMembers)
+  /** 지울 수 있나 — 관리자, 공통 작업은 등록한 사람, 파트 작업은 그 파트의 삭제 권한(담당자라서 지우지는 못한다) */
+  const canDelete = (task: Task) => canDeleteTask(auth.me, task, task.projectId, data.partMembers)
 
   /** 목업은 서버가 없어 고치기 권한도 여기서 흉내 낸다 — 서버의 403 FORBIDDEN 과 같은 모양 */
-  function rejectEdit(task: Task) {
-    if (!data.mock || canEdit(task)) return false
-    toastError(new ApiError(403, { code: 'FORBIDDEN', message: '권한이 없습니다.' }))
+  function rejectIf(denied: boolean, message = '권한이 없습니다.') {
+    if (!data.mock || !denied) return false
+    toastError(new ApiError(403, { code: 'FORBIDDEN', message }))
     return true
   }
+  const rejectEdit = (task: Task) => rejectIf(!canEdit(task))
 
   /* 작업 상세는 보는 자리가 곧 고치는 자리다 — 칸 하나를 고치면 그 값만 바로 들어간다.
      화면에 먼저 반영하고 서버에 보낸 뒤, 돌아온 레코드로 갈아끼운다. */
@@ -460,6 +462,8 @@ export const useTaskStore = defineStore('task', () => {
   function setPart(taskId: string, partId: string | null) {
     const task = findTask(taskId)
     if (!task || task.partId === partId || rejectEdit(task)) return
+    /* 옮겨 갈 파트에도 수정 권한이 있어야 한다 — 공통으로는 누구나 */
+    if (rejectIf(!partStore.canMoveTo(partId), '옮길 파트에 작업을 고칠 권한이 없습니다.')) return
     if (data.rejectPart(partId, task.partId)) return
     logPatch(task, { partId })
     task.partId = partId
@@ -562,6 +566,9 @@ export const useTaskStore = defineStore('task', () => {
     const parentTask = input.parentId ? findTask(input.parentId) : null
     const partId = inheritedPartId(input.partId, parentTask)
     if (data.rejectPart(partId)) return null
+    /* 파트에 두려면 그 파트의 등록 권한 — 공통은 누구나 */
+    if (rejectIf(!partStore.canCreateIn(partId), '이 파트에 작업을 등록할 권한이 없습니다.'))
+      return null
     const id = data.nextId('nk')
     const createdAt = nowIso()
     data.allTasks.push({

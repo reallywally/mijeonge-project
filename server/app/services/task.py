@@ -1,6 +1,7 @@
 """작업 쓰기 — 등록 · 부분 수정 · 옮기기 · 본문 줄 · 안건 링크 · 삭제.
 
-고치기 · 지우기 권한은 `access.can_edit_task` · `can_delete_task` 하나로 본다.
+고치기 · 지우기 권한은 `access.can_edit_task` · `can_delete_task` 하나로 본다. 파트가 달린 작업은
+그 파트의 권한을 탄다 — 등록은 `access.can_create_in_part`, 옮겨 갈 파트는 `can_move_to_part`.
 
 작업 ↔ 안건 링크(`task_agenda_link`)는 멱등이다: PUT 을 두 번 눌러도 결과가 같고,
 없는 링크를 DELETE 해도 성공이다. 읽기 쪽(`services/snapshot.py`)이 쓰는 `to_task` 도
@@ -283,14 +284,22 @@ async def _siblings(
     return list(found.all())
 
 
+CREATE_FORBIDDEN = "이 파트에 작업을 등록할 권한이 없습니다."
+MOVE_FORBIDDEN = "옮길 파트에 작업을 고칠 권한이 없습니다."
+
+
 async def _insert_task(
-    session: AsyncSession, project: Project, payload: TaskCreate, actor_id: str | None
+    session: AsyncSession, project: Project, payload: TaskCreate, scope: Scope
 ) -> Task:
     """작업 하나를 넣는다 — 상태 기록 첫 줄(`null → 상태`) · 이력 '등록' 줄까지.
-    커밋하지 않는다 — 일괄 등록 · 회의록 apply 가 여럿을 한 트랜잭션에 묶는다."""
+    커밋하지 않는다 — 일괄 등록 · 회의록 apply 가 여럿을 한 트랜잭션에 묶는다.
+    파트 권한도 여기서 본다 — 등록하는 길(단건 · 일괄 · 회의록)이 다 지난다."""
+    actor_id = scope.actor.id
     if await _guard_parent(session, project.id, None, payload.parent_id) + 1 > MAX_TASK_DEPTH:
         raise _depth_exceeded()
     part_id = await _part_for_new_task(session, project.id, payload)
+    if not access.can_create_in_part(scope, part_id):
+        raise access.forbidden(CREATE_FORBIDDEN)
     # 일괄 · 회의록은 한 줄씩 flush 하며 넣으니 앞의 줄을 보고 이어 붙는다
     sort_order = await _next_order(session, project.id, payload.parent_id)
 
@@ -364,11 +373,11 @@ async def _guard_owner(session: AsyncSession, project_id: str, owner_id: str | N
 
 
 async def create_task(
-    session: AsyncSession, project_id: str, payload: TaskCreate, actor_id: str
+    session: AsyncSession, project_id: str, payload: TaskCreate, scope: Scope
 ) -> TaskOut:
     project = await project_service.load_project(session, project_id)
     await _guard_owner(session, project.id, payload.owner_id)
-    task = await _insert_task(session, project, payload, actor_id)
+    task = await _insert_task(session, project, payload, scope)
     await session.commit()
     # 방금 만든 작업이라 댓글이 있을 수 없다
     return to_task(task, 0, StatusSince(task.created_at, False))
@@ -503,7 +512,7 @@ async def too_deep(
 
 
 async def create_tasks(
-    session: AsyncSession, project_id: str, payload: TaskBatchInput, actor_id: str
+    session: AsyncSession, project_id: str, payload: TaskBatchInput, scope: Scope
 ) -> TaskBatchResult:
     """초안을 한 트랜잭션에 넣는다. 하나라도 틀리면 아무것도 안 남는다 — 발번한 번호까지."""
     project = await project_service.load_project(session, project_id)
@@ -520,6 +529,7 @@ async def create_tasks(
     if deep:
         raise ApiError(400, "TASK_DEPTH_EXCEEDED", DEPTH_EXCEEDED, deep)
     await _guard_batch_parts(session, project.id, payload.tasks)
+    await _guard_batch_rights(session, scope, payload.tasks)
 
     id_by_temp: dict[str, str] = {}
     created: list[Task] = []
@@ -541,7 +551,7 @@ async def create_tasks(
             # 보낸 줄만 partId 를 넘긴다 — 안 보낸 줄은 앞의 상위를 따른다
             if "part_id" in item.model_fields_set:
                 fields["part_id"] = item.part_id
-            task = await _insert_task(session, project, TaskCreate.model_validate(fields), actor_id)
+            task = await _insert_task(session, project, TaskCreate.model_validate(fields), scope)
             id_by_temp[item.temp_id] = task.id
             created.append(task)
         await session.commit()
@@ -567,6 +577,44 @@ async def _guard_batch_parts(
             await part_service.guard_part(
                 session, project_id, item.part_id, field=f"tasks.{index}.partId"
             )
+
+
+async def _guard_batch_rights(
+    session: AsyncSession, scope: Scope, tasks: Sequence[BatchTaskIn]
+) -> None:
+    """줄마다 들어갈 파트(상위를 따른 뒤)에 등록 권한이 있나 — 걸린 줄을 다 `tasks.N.partId` 로.
+
+    넣으면서도 `_insert_task` 가 다시 보지만, 여기서 먼저 다 짚어야 화면이 한 번에 고친다.
+    """
+    if scope.can_manage:
+        return
+    parent_parts = {
+        row.id: row.part_id
+        for row in (
+            await session.execute(
+                select(Task.id, Task.part_id).where(
+                    Task.id.in_({item.parent_id for item in tasks if item.parent_id is not None})
+                )
+            )
+        ).all()
+    }
+    part_by_temp: dict[str, str | None] = {}
+    denied: dict[str, str] = {}
+    for index, item in enumerate(tasks):
+        part_id: str | None
+        if "part_id" in item.model_fields_set:
+            part_id = item.part_id
+        elif item.parent_temp_id is not None:
+            part_id = part_by_temp.get(item.parent_temp_id)
+        elif item.parent_id is not None:
+            part_id = parent_parts.get(item.parent_id)
+        else:
+            part_id = None
+        part_by_temp[item.temp_id] = part_id
+        if not access.can_create_in_part(scope, part_id):
+            denied[f"tasks.{index}.partId"] = CREATE_FORBIDDEN
+    if denied:
+        raise ApiError(403, "FORBIDDEN", CREATE_FORBIDDEN, denied)
 
 
 def _guard_edit(scope: Scope, task: Task) -> None:
@@ -608,6 +656,8 @@ async def edit_task(session: AsyncSession, task_id: str, payload: TaskPatch, sco
     # 이미 달린 보관 파트를 그대로 두는 수정은 막지 않는다. 하위 작업은 따라 바뀌지 않는다
     if "part_id" in changes and changes["part_id"] != task.part_id:
         await part_service.guard_part(session, task.project_id, changes["part_id"])
+        if not access.can_move_to_part(scope, changes["part_id"]):
+            raise access.forbidden(MOVE_FORBIDDEN)
     if "parent_id" in changes and changes["parent_id"] != task.parent_id:
         # 새 상위의 맨 끝으로 — 옛 형제의 빈자리는 순서만 뜻이 있어 메우지 않는다
         task.sort_order = await _next_order(session, task.project_id, changes["parent_id"])

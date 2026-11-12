@@ -10,11 +10,12 @@ import { useTestStore } from '@/stores/test'
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
 /* 테스트 스토어 — 묶음의 상태 · 신호, '지금' 의 숫자 · 표 정렬, 작업 · 안건별 거르기, [내 파트 | 전체] */
-/* 프로젝트 관리자(u1)는 처음부터 '전체' 를 본다 — 일반 사용자는 '내 파트' 로 시작한다 */
-async function boot(email = 'u1@inno-ax.com') {
+/* 업무 화면은 누구나 내 파트로 시작한다 — 계산을 보는 검사들이라 전체로 풀어 두고, 파트 고르기는 따로 본다 */
+async function boot(email = 'u1@inno-ax.com', scope: 'mine' | 'all' = 'all') {
   resetMockAuth()
   setActivePinia(createPinia())
   await useAuthStore().login(email, MOCK_PASSWORD)
+  if (scope === 'all') usePartStore().setScope('all')
   const store = useTestStore()
   await store.load()
   return store
@@ -123,20 +124,40 @@ describe('쓰기', () => {
     expect(store.parentChoicesFor(null)).toHaveLength(9)
   })
 
-  it('지우기 권한 — 만든 사람 · 프로젝트 관리자', async () => {
+  it('지우기 권한 — 공통은 만든 사람 · 프로젝트 관리자, 파트 테스트는 그 파트의 삭제 권한', async () => {
     let store = await boot('u3@inno-ax.com')
     expect(store.canRemove(store.byId.tc5)).toBe(true)
+    expect(store.canRemove(store.byId.tc8)).toBe(true)
     expect(store.canRemove(store.byId.tc2)).toBe(false)
+    useDataStore().partMembers.find((pm) => pm.memberId === 'u3')!.canDelete = false
+    expect(store.canRemove(store.byId.tc5)).toBe(false)
     store = await boot('u1@inno-ax.com')
     expect(store.canRemove(store.byId.tc2)).toBe(true)
+  })
+
+  it('고치기 권한 — 공통은 누구나, 파트 테스트는 담당자 · 관리자 · 그 파트의 수정 권한', async () => {
+    /* 박지훈(u2)은 기간계 연동 소속 — 인프라 테스트 T8(담당 u4)은 못 고친다 */
+    const store = await boot('u2@inno-ax.com')
+    expect(store.canEdit(store.byId.tc2)).toBe(true)
+    expect(store.canEdit(store.byId.tc8)).toBe(false)
+    useDataStore().partMembers.push({
+      partId: 'pt1',
+      memberId: 'u2',
+      canView: true,
+      canCreate: false,
+      canUpdate: true,
+      canDelete: false,
+    })
+    expect(store.canEdit(store.byId.tc8)).toBe(true)
+    expect(store.canRemove(store.byId.tc8)).toBe(false)
   })
 })
 
 describe('[내 파트 | 전체]', () => {
-  it("'내 파트' 는 공통 · 내 파트 · 내가 담당한 테스트와 그 조상을 보인다", async () => {
+  it("'내 파트' 는 공통 · 내 파트 · 내가 담당한 테스트와 그 조상을 보인다 — 처음부터 내 파트다", async () => {
     /* 이도현(u3)은 인프라(pt1) — T5 묶음이 pt1, 그 밖은 공통이라 다 보인다 */
-    const store = await boot('u3@inno-ax.com')
-    usePartStore().setScope('mine')
+    const store = await boot('u3@inno-ax.com', 'mine')
+    expect(usePartStore().scope).toBe('mine')
     expect(store.visibleRows).toHaveLength(8)
 
     /* 박지훈(u2)은 기간계 연동(pt3) — pt1 인 T6 · T7 · T8 은 안 보이고 T5 도 빠진다 */

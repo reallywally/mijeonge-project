@@ -1,9 +1,14 @@
 import { id, mockError, request } from '@/api/client'
 import { forbidden, later, mockDb, requireMe, requireManager } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
-import { canManageProject, canSeeProject } from '@/lib/access'
+import {
+  canManageProject,
+  canSeeProject,
+  DEFAULT_PART_RIGHTS,
+  normalizePartRights,
+} from '@/lib/access'
 import { partNameProblem } from '@/lib/part'
-import type { Part, PartInput, PartMember, PartPatch } from '@/types/domain'
+import type { Part, PartInput, PartMember, PartMemberInput, PartPatch } from '@/types/domain'
 
 /* 파트 관리 — 쓰기는 그 프로젝트 관리자 · 시스템 관리자 (docs/api/part.md). 읽기는 스냅샷이 싣는다.
    목업 갈래도 서버와 같은 규칙 · 코드를 낸다 */
@@ -57,14 +62,28 @@ const mock = {
     if (patch.active !== undefined) part.active = patch.active
     return structuredClone(part)
   },
-  join(partId: string, memberId: string): PartMember {
+  join(partId: string, memberId: string, input: PartMemberInput): PartMember {
     const part = requirePartManager(partId)
     const db = mockDb()
     if (!db.grants.some((g) => g.projectId === part.projectId && g.memberId === memberId))
       throw mockError(400, 'MEMBER_NOT_IN_PROJECT', '이 프로젝트에 부여되지 않은 사람입니다.')
-    if (!db.partMembers.some((pm) => pm.partId === partId && pm.memberId === memberId))
-      db.partMembers.push({ partId, memberId })
-    return { partId, memberId }
+    const at = db.partMembers.findIndex((pm) => pm.partId === partId && pm.memberId === memberId)
+    /* 안 보낸 것 — 새 소속은 기본값, 있던 소속은 그대로 */
+    const base = at >= 0 ? db.partMembers[at] : DEFAULT_PART_RIGHTS
+    const pick = (k: keyof PartMemberInput) => (typeof input[k] === 'boolean' ? input[k] : base[k])
+    const row: PartMember = {
+      partId,
+      memberId,
+      ...normalizePartRights({
+        canView: pick('canView'),
+        canCreate: pick('canCreate'),
+        canUpdate: pick('canUpdate'),
+        canDelete: pick('canDelete'),
+      }),
+    }
+    if (at >= 0) db.partMembers[at] = row
+    else db.partMembers.push(row)
+    return structuredClone(row)
   },
   leave(partId: string, memberId: string) {
     requirePartManager(partId)
@@ -87,11 +106,15 @@ export const patchPart = (partId: string, patch: PartPatch) =>
     ? later(() => mock.patch(partId, patch))
     : request<Part>('PATCH', `/parts/${id(partId)}`, patch)
 
-/** 파트에 넣기 (멱등). 그 프로젝트에 부여되지 않은 사람은 400 MEMBER_NOT_IN_PROJECT */
-export const putPartMember = (partId: string, memberId: string) =>
+/**
+ * 파트에 넣기 · 권한 바꾸기 (멱등). 보낸 권한만 바뀐다 — 새 소속은 안 보낸 것이 보기 · 등록 · 수정 켜짐, 삭제 꺼짐.
+ * 서버가 지우기 ⇒ 수정, 등록 · 수정 ⇒ 보기로 맞춘 소속 전체가 돌아온다.
+ * 그 프로젝트에 부여되지 않은 사람은 400 MEMBER_NOT_IN_PROJECT
+ */
+export const putPartMember = (partId: string, memberId: string, input?: PartMemberInput) =>
   isMockMode()
-    ? later(() => mock.join(partId, memberId))
-    : request<PartMember>('PUT', `/parts/${id(partId)}/members/${id(memberId)}`)
+    ? later(() => mock.join(partId, memberId, input ?? {}))
+    : request<PartMember>('PUT', `/parts/${id(partId)}/members/${id(memberId)}`, input)
 
 /** 파트에서 빼기 (멱등) */
 export const deletePartMember = (partId: string, memberId: string) =>

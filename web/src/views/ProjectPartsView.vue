@@ -20,13 +20,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { projectPartsPath, projectSettingsPath } from '@/lib/access'
 import { memberLabel } from '@/lib/member'
-import { partNameProblem } from '@/lib/part'
+import { PART_RIGHT_OPTIONS, partNameProblem, togglePartRight } from '@/lib/part'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
-import type { Part } from '@/types/domain'
+import type { Part, PartRights } from '@/types/domain'
 
 /* 파트 관리 — 왼쪽에서 파트 하나를 고르고 오른쪽에서 그 파트를 다룬다. 고른 파트는 주소(?part=)에 싣는다.
-   파트는 보기 범위지 권한이 아니다 (docs/api/part.md). 지우지 않고 보관한다 — 지난 작업 · 안건이 가리킨다.
+   파트는 보기를 가리지 않고, 사람마다 보기 · 등록 · 수정 · 삭제 권한이 그 파트의 작업 · 테스트 쓰기를 가른다
+   (docs/api/part.md). 지우지 않고 보관한다 — 지난 작업 · 안건이 가리킨다.
    이 화면은 주소의 프로젝트 = 고른 프로젝트라 part 스토어를 그대로 쓴다 */
 const data = useDataStore()
 const partStore = usePartStore()
@@ -132,12 +133,35 @@ const projectRoleOf = (memberId: string) =>
   data.projectMembers[projectId.value]?.find((p) => p.memberId === memberId)?.role ?? null
 
 const people = computed(() => {
-  if (!selected.value) return []
+  const part = selected.value
+  if (!part) return []
   return partStore
-    .membersOf(selected.value.id)
-    .map((id) => ({ id, member: data.allMembers.find((m) => m.id === id) ?? null }))
+    .membersOf(part.id)
+    .map((id) => ({
+      id,
+      member: data.allMembers.find((m) => m.id === id) ?? null,
+      rights: partStore.membershipOf(part.id, id),
+    }))
     .sort((a, b) => (a.member?.name ?? '').localeCompare(b.member?.name ?? '', 'ko'))
 })
+
+/* 권한 칸 — 하나를 바꾸면 앞서야 할 것까지 맞춘 넷을 다 실어 보내고, 응답을 기다렸다가 넣는다(실패하면 알린다) */
+const rightsOf = (memberId: string): PartRights | null =>
+  selected.value ? partStore.membershipOf(selected.value.id, memberId) : null
+const savingRightsId = ref<string | null>(null)
+async function setRight(memberId: string, right: keyof PartRights, on: boolean) {
+  const current = rightsOf(memberId)
+  if (!selected.value || !current || savingRightsId.value) return
+  const next = togglePartRight(current, right, on)
+  savingRightsId.value = memberId
+  await partStore.setPartRights(selected.value.id, memberId, {
+    canView: next.canView,
+    canCreate: next.canCreate,
+    canUpdate: next.canUpdate,
+    canDelete: next.canDelete,
+  })
+  savingRightsId.value = null
+}
 
 const leavingId = ref<string | null>(null)
 async function leave(memberId: string) {
@@ -214,8 +238,9 @@ const listLink = (path: '/tasks' | '/agendas') =>
         <header class="flex flex-col gap-2.5">
           <h1 class="text-[22px] font-bold tracking-[-0.025em]">{{ p.name }} · 파트 관리</h1>
           <p class="text-sm leading-relaxed text-muted-foreground text-pretty">
-            파트는 보기 범위이지 권한이 아닙니다. '내 파트' 로 보면 공통 · 자기 파트 · 자기가 맡은
-            것과 그 작업에 걸린 안건이 보입니다. 파트가 없으면 모두가 프로젝트 전체를 봅니다.
+            파트는 누구에게나 열려 있습니다. 사람마다 보기 · 등록 · 수정 · 삭제를 골라 그 파트의
+            작업 · 테스트를 누가 만들고 고치고 지울지 정합니다(안건은 따르지 않습니다). 보기가 있는
+            파트가 그 사람의 '내 파트' 입니다.
           </p>
         </header>
 
@@ -385,6 +410,29 @@ const listLink = (path: '/tasks' | '/agendas') =>
                     >프로젝트 관리자</Badge
                   >
                   <span class="grow" />
+                  <div
+                    v-if="person.rights"
+                    role="group"
+                    :aria-label="`${person.member?.name ?? ''} 권한`"
+                    :aria-busy="savingRightsId === person.id"
+                    class="flex shrink-0 items-center gap-3"
+                    data-part-rights
+                  >
+                    <label
+                      v-for="o in PART_RIGHT_OPTIONS"
+                      :key="o.key"
+                      class="flex cursor-pointer items-center gap-1.5 text-xs"
+                    >
+                      <Checkbox
+                        :model-value="person.rights[o.key]"
+                        :disabled="savingRightsId !== null"
+                        :aria-label="`${person.member?.name ?? ''} ${o.label}`"
+                        :data-right="o.key"
+                        @update:model-value="(v) => setRight(person.id, o.key, v === true)"
+                      />
+                      {{ o.label }}
+                    </label>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"

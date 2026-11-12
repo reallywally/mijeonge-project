@@ -411,7 +411,9 @@ async def test_dependency_leaves_no_line(client: httpx.AsyncClient) -> None:
 
 
 async def test_changed_by_is_the_requester(client: httpx.AsyncClient, as_member: AsMember) -> None:
-    # u2 는 k3 의 담당자 · k4 의 생성자다 — 고칠 수 있는 사람이어야 줄이 남는다
+    # u2 는 k3 의 담당자 · k4(인프라) 의 생성자다 — 고칠 수 있는 사람이어야 줄이 남는다.
+    # 파트가 달린 작업은 등록만 해서는 못 고친다 — 인프라에 넣는다(기본 권한에 수정이 있다)
+    assert (await client.put("/api/parts/pt1/members/u2")).status_code == 200
     u2 = await as_member("u2")
     assert (await u2.patch("/api/tasks/k3", json={"priority": "high"})).status_code == 200
     assert (await u2.patch("/api/tasks/k4/lines/l3", json={"done": True})).status_code == 200

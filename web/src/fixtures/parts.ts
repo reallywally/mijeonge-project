@@ -13,10 +13,13 @@ export const parts: Part[] = [
   { id: 'pt1', projectId: 'p1', name: '인프라', active: true },
 ]
 
+/* 지금 소속은 다 네 권한이 켜져 있다 — 2026-11-12 전 소속을 서버가 옮긴 모양과 같다 */
+const all = { canView: true, canCreate: true, canUpdate: true, canDelete: true }
+
 /** (partId, memberId) 순 */
 export const partMembers: PartMember[] = [
-  { partId: 'pt1', memberId: 'u3' },
-  { partId: 'pt2', memberId: 'u1' },
-  { partId: 'pt2', memberId: 'u4' },
-  { partId: 'pt3', memberId: 'u2' },
+  { partId: 'pt1', memberId: 'u3', ...all },
+  { partId: 'pt2', memberId: 'u1', ...all },
+  { partId: 'pt2', memberId: 'u4', ...all },
+  { partId: 'pt3', memberId: 'u2', ...all },
 ]

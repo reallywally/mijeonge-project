@@ -7,6 +7,7 @@ import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTestStore } from '@/stores/test'
 
 /* 테스트 간트 — 작업 간트와 같은 껍데기(GanttChart)를 진짜 dhtmlx 로 그려 본다.
@@ -26,6 +27,8 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-10-15T03:00:00Z'))
   await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
+  /* 업무 화면은 내 파트로 시작한다 — 여기 검사들은 전부를 본다 */
+  usePartStore().setScope('all')
   await useTestStore().load()
 })
 

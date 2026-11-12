@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
+import { TASK_READONLY_HINT } from '@/lib/task'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { useHistoryStore } from '@/stores/history'
@@ -101,19 +102,17 @@ describe('작업 상세 — 변경 이력', () => {
 })
 
 describe('작업 상세 — 고치기 권한', () => {
-  /* 박지훈(u2)은 p1 의 일반 사용자다. HW-18 은 담당 정하늘 · 등록 이도현이라 못 고치고,
-     HW-4 는 자기가 등록해(담당은 이도현) 고친다 */
-  const asU2 = async () => {
+  /* HW-18 은 기간계 연동 작업(담당 정하늘 · 등록 이도현) — 이도현(u3)은 그 파트 소속이 아니라 등록했어도 못 고친다.
+     HW-4 는 인프라 작업(담당 이도현 · 등록 박지훈) — 박지훈(u2)은 인프라 소속이 아니라 못 고친다 */
+  const as = async (email: string) => {
     resetMockAuth()
-    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    await useAuthStore().login(email, MOCK_PASSWORD)
   }
 
   it('못 고치면 안내가 서고 제목 · 속성 · 본문 · 안건 연결이 잠긴다 — 댓글은 그대로 쓴다', async () => {
-    await asU2()
+    await as('u3@inno-ax.com')
     await mountDetail('k18')
-    expect($('[data-task-readonly]')!.textContent).toContain(
-      '작성자 · 담당자 · 관리자만 고칠 수 있습니다',
-    )
+    expect($('[data-task-readonly]')!.textContent).toContain(TASK_READONLY_HINT)
     expect(document.body.textContent).not.toContain('고치면 바로 저장됩니다')
     expect($('textarea[aria-label="제목"]')!.hasAttribute('readonly')).toBe(true)
     for (const label of ['상태', '담당자'])
@@ -134,7 +133,7 @@ describe('작업 상세 — 고치기 권한', () => {
   })
 
   it('잠긴 제목을 고쳐 벗어나도 들어가지 않는다', async () => {
-    await asU2()
+    await as('u3@inno-ax.com')
     await mountDetail('k18')
     const title = $('textarea[aria-label="제목"]') as HTMLTextAreaElement
     title.value = '바꾼 제목'
@@ -146,8 +145,12 @@ describe('작업 상세 — 고치기 권한', () => {
     )
   })
 
-  it('등록한 사람은 담당이 아니어도 고친다 · 작성자 칸에 등록한 사람', async () => {
-    await asU2()
+  it('공통 작업은 등록한 사람이 담당이 아니어도 고친다. 파트 작업은 그 파트의 수정 권한이 있어야 한다', async () => {
+    await as('u2@inno-ax.com')
+    const w = await mountDetail('k4')
+    expect($('[data-task-readonly]')).not.toBeNull()
+    w.unmount()
+    useDataStore().allTasks.find((t) => t.id === 'k4')!.partId = null
     await mountDetail('k4')
     expect($('[data-task-readonly]')).toBeNull()
     expect($('textarea[aria-label="제목"]')!.hasAttribute('readonly')).toBe(false)
@@ -163,21 +166,22 @@ describe('작업 상세 — 고치기 권한', () => {
 describe('작업 상세 — 지우기', () => {
   const deleteButton = () => $('[data-task-delete]') as HTMLButtonElement | null
 
-  it('등록한 사람 · 관리자에게만 보인다 — 담당자에게는 없다', async () => {
+  it('관리자 · 공통 작업을 등록한 사람 · 그 파트의 삭제 권한에게만 보인다 — 담당자라서 서지는 않는다', async () => {
     /* u1 은 p1 관리자 */
     let w = await mountDetail('k21')
     expect(deleteButton()).not.toBeNull()
     w.unmount()
 
-    /* 이도현(u3)은 HW-20 의 담당 · 등록, HW-19 는 담당만 */
+    /* 이도현(u3)은 인프라의 삭제 권한이 있다 — 담당만 한 HW-19 도 지운다 */
     resetMockAuth()
     await useAuthStore().login('u3@inno-ax.com', MOCK_PASSWORD)
-    w = await mountDetail('k20')
+    w = await mountDetail('k19')
     expect(deleteButton()).not.toBeNull()
     w.unmount()
-    await mountDetail('k19')
+    /* 삭제 권한을 끄면 등록 · 담당한 HW-20 도 못 지운다 — 담당이라 고치기는 된다 */
+    useDataStore().partMembers.find((pm) => pm.memberId === 'u3')!.canDelete = false
+    await mountDetail('k20')
     expect(deleteButton()).toBeNull()
-    /* 담당이라 고치기는 된다 */
     expect($('[data-task-readonly]')).toBeNull()
   })
 
@@ -231,9 +235,10 @@ describe('작업 상세 — 지우기', () => {
   })
 
   it('못 지우는 후손이 있으면 버튼이 꺼지고 이유가 선다', async () => {
-    /* HW-4 는 박지훈(u2)이 등록했지만 하위는 아니다 */
+    /* 이도현(u3)은 인프라 작업 HW-4 를 지운다 — 하위 HW-22 를 기간계 연동으로 옮겨 두면 그것을 못 지운다 */
     resetMockAuth()
-    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    await useAuthStore().login('u3@inno-ax.com', MOCK_PASSWORD)
+    useDataStore().allTasks.find((t) => t.id === 'k22')!.partId = 'pt3'
     await mountDetail('k4')
     expect(deleteButton()!.disabled).toBe(true)
     expect($('[data-delete-reason]')!.textContent).toContain(
@@ -271,7 +276,7 @@ describe('작업 상세 — 지우기', () => {
   })
 
   it('그사이 못 지우는 하위가 생겨 403 이 오면 이유를 띄우고 지우지 않는다', async () => {
-    /* 이도현(u3)은 HW-20 을 등록했다 */
+    /* 이도현(u3)은 인프라의 삭제 권한이 있다 */
     resetMockAuth()
     await useAuthStore().login('u3@inno-ax.com', MOCK_PASSWORD)
     const data = useDataStore()
@@ -286,6 +291,7 @@ describe('작업 상세 — 지우기', () => {
       key: 'HW-99',
       parentId: 'k20',
       creatorId: 'u1',
+      partId: 'pt3',
     })
     $('[data-delete-confirm]')!.click()
     await flushPromises()

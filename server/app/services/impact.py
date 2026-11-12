@@ -1710,13 +1710,17 @@ async def apply_impact(
         ).all()
     }
 
-    # 작업은 줄마다 그 작업의 고치기 권한 — 연결도 링크 PUT 처럼 같은 권한이다.
-    # 지운 작업은 아래 '바뀜' 으로 간다. 테스트는 그 프로젝트 멤버 누구나라
-    # 경로의 경계(require_scope)로 이미 됐다
+    # 줄마다 그 작업 · 테스트의 고치기 권한 — 연결도 링크 · 태그 PUT 처럼 같은 권한이다.
+    # 지운 것은 아래 '바뀜' 으로 간다. 공통 테스트는 그 프로젝트 멤버 누구나다
     denied = {
         f"tasks.{index}": "이 작업을 고칠 권한이 없습니다."
         for index, task_id in enumerate(task_ids)
         if task_id in live_tasks and not access.can_edit_task(scope, live_tasks[task_id])
+    }
+    denied |= {
+        f"tests.{index}": "이 테스트를 고칠 권한이 없습니다."
+        for index, test_id in enumerate(test_ids)
+        if test_id in live_tests and not access.can_edit_test(scope, live_tests[test_id])
     }
     if denied:
         raise ApiError(403, "FORBIDDEN", "권한이 없습니다.", denied)
@@ -1805,7 +1809,7 @@ async def apply_impact(
             test_fields["test_data"] = chosen.test_data
         if test_fields:
             test = await test_service.edit_test(
-                session, chosen.test_id, TestPatch(**test_fields), scope.actor.id
+                session, chosen.test_id, TestPatch(**test_fields), scope
             )
         if chosen.link:
             try:

@@ -1,6 +1,7 @@
 """파트 — 만들기 · 이름 · 보관 · 사람 넣고 빼기, 작업 · 안건이 다는 `partId` 검사.
 
-계약은 `docs/api/part.md`. **보기 범위지 권한이 아니다** — 서버는 숨기지 않고, 거르는 것은 화면이다.
+계약은 `docs/api/part.md`. 보기는 열려 있다 — 서버는 숨기지 않고, 거르는 것은 화면이다.
+소속마다 등록 · 수정 · 삭제 권한이 붙고 작업 · 테스트 쓰기가 그것을 본다(`access`).
 파트는 지우지 않고 보관한다. 경로의 파트가 내 프로젝트의 것인지는 `access.resolve_scope` 가 본다.
 """
 
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ApiError, bad_request, not_found
 from app.models import Part, PartMember, ProjectMember, new_id
-from app.schemas.part import PartMemberOut, PartOut, PartPatch
+from app.schemas.part import PartMemberIn, PartMemberOut, PartOut, PartPatch
 from app.time import now
 
 
@@ -58,16 +59,47 @@ async def patch_part(session: AsyncSession, part_id: str, payload: PartPatch) ->
     return to_part(part)
 
 
-async def add_member(session: AsyncSession, part_id: str, member_id: str) -> PartMemberOut:
-    """넣기 (멱등). 그 프로젝트에 부여된 사람만 — 역할 · 활성은 따지지 않는다."""
+# 새 소속에서 안 보낸 값 — 지우기만 끔
+NEW_MEMBER_RIGHTS = {"can_view": True, "can_create": True, "can_update": True, "can_delete": False}
+
+
+def normalize_rights(rights: dict[str, bool]) -> dict[str, bool]:
+    """삭제 ⇒ 수정, 등록 · 수정 ⇒ 보기 — 딸린 것을 위로 켠다. 화면도 같은 규칙으로 맞춘다."""
+    fixed = dict(rights)
+    if fixed["can_delete"]:
+        fixed["can_update"] = True
+    if fixed["can_create"] or fixed["can_update"]:
+        fixed["can_view"] = True
+    return fixed
+
+
+def to_part_member(row: PartMember) -> PartMemberOut:
+    return PartMemberOut.model_validate(row)
+
+
+async def add_member(
+    session: AsyncSession, part_id: str, member_id: str, payload: PartMemberIn | None = None
+) -> PartMemberOut:
+    """넣기 · 권한 바꾸기 (멱등). 그 프로젝트에 부여된 사람만 — 역할 · 활성은 따지지 않는다.
+
+    있던 소속은 보낸 값만 덮어쓴다. 본문이 없으면 있던 소속은 그대로다.
+    """
     part = await load_part(session, part_id)
     granted = await session.get(ProjectMember, (part.project_id, member_id))
     if granted is None:
         raise bad_request("MEMBER_NOT_IN_PROJECT", "이 프로젝트에 부여되지 않은 사람입니다.")
-    if await session.get(PartMember, (part_id, member_id)) is None:
-        session.add(PartMember(part_id=part_id, member_id=member_id, created_at=now()))
+    sent = payload.model_dump(exclude_unset=True) if payload is not None else {}
+    row = await session.get(PartMember, (part_id, member_id))
+    if row is None:
+        row = PartMember(part_id=part_id, member_id=member_id, created_at=now())
+        session.add(row)
+        current = dict(NEW_MEMBER_RIGHTS)
+    else:
+        current = {name: getattr(row, name) for name in NEW_MEMBER_RIGHTS}
+    for name, value in normalize_rights(current | sent).items():
+        setattr(row, name, value)
     await session.commit()
-    return PartMemberOut(part_id=part_id, member_id=member_id)
+    return to_part_member(row)
 
 
 async def remove_member(session: AsyncSession, part_id: str, member_id: str) -> None:

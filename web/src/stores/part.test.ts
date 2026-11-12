@@ -20,6 +20,8 @@ async function signedIn(email: string, password = MOCK_PASSWORD) {
   await useDataStore().retry()
 }
 
+const ALL_RIGHTS = { canView: true, canCreate: true, canUpdate: true, canDelete: true }
+
 const lastError = () => vi.mocked(toastError).mock.calls.at(-1)?.[0]
 
 const blankTask = (over: Partial<TaskInput> = {}): TaskInput => ({
@@ -44,13 +46,54 @@ beforeEach(() => {
 })
 
 describe('[내 파트 | 전체]', () => {
-  it('일반 사용자(u3 · 인프라)는 내 파트로 시작한다 — 목록 · 수가 같이 줄어든다', async () => {
+  it('업무(작업 · 테스트 · 리스크)는 내 파트 전부로, 안건은 전체로 시작한다', async () => {
+    await signedIn('u3@inno-ax.com')
+    const part = usePartStore()
+    expect(part.canNarrow).toBe(true)
+    expect(part.scope).toBe('mine')
+    expect(part.pickedIds).toEqual(['pt1'])
+    expect(useTaskStore().visibleRows).toHaveLength(10)
+    expect(part.scopeOf('agenda')).toBe('all')
+    expect(useAgendaStore().visibleRows).toHaveLength(useAgendaStore().rows.length)
+  })
+
+  it('두 묶음은 따로 기억한다 — 안건에서 고른 것이 작업에 번지지 않는다', async () => {
+    await signedIn('u3@inno-ax.com')
+    const part = usePartStore()
+    part.setScope('mine', 'agenda')
+    part.setScope('all')
+    expect(part.pickedIdsOf('agenda')).toEqual(['pt1'])
+    expect(part.pickedIds).toEqual([])
+    expect(JSON.parse(localStorage.getItem('innoflow.partPick.agenda.u3.p1')!)).toEqual(['pt1'])
+    expect(localStorage.getItem('innoflow.partPick.u3.p1')).toBe('[]')
+
+    setActivePinia(createPinia())
+    await signedIn('u3@inno-ax.com')
+    expect(usePartStore().scope).toBe('all')
+    expect(usePartStore().scopeOf('agenda')).toBe('mine')
+  })
+
+  it('내 파트는 보기 권한이 있는 소속만 — 보기를 끄면 고르기에서도 빠진다', async () => {
+    await signedIn('u3@inno-ax.com')
+    const data = useDataStore()
+    const pm = data.partMembers.find((x) => x.partId === 'pt1' && x.memberId === 'u3')!
+    pm.canView = false
+    const part = usePartStore()
+    expect(part.myPartIds.size).toBe(0)
+    expect(part.canNarrow).toBe(false)
+    expect(part.scope).toBe('all')
+    /* 소속은 남는다 — 파트 관리가 그린다 */
+    expect(part.partIdsOf('u3').has('pt1')).toBe(true)
+  })
+
+  it('일반 사용자(u3 · 인프라)가 내 파트를 고르면 목록 · 수가 같이 줄어든다', async () => {
     await signedIn('u3@inno-ax.com')
     const part = usePartStore()
     const task = useTaskStore()
     const agenda = useAgendaStore()
 
-    expect(part.canNarrow).toBe(true)
+    part.setScope('mine')
+    part.setScope('mine', 'agenda')
     expect(part.scope).toBe('mine')
     expect(task.visibleRows.map((r) => r.task.key)).not.toContain('HW-7')
     expect(task.visibleRows.map((r) => r.task.key)).toContain('HW-4')
@@ -73,7 +116,7 @@ describe('[내 파트 | 전체]', () => {
     const part = usePartStore()
     part.setScope('all')
     expect(useTaskStore().visibleRows).toHaveLength(22)
-    expect(localStorage.getItem('innoflow.partScope.u3.p1')).toBe('all')
+    expect(localStorage.getItem('innoflow.partPick.u3.p1')).toBe('[]')
 
     /* 새로 들어와도(스토어를 새로 세워도) 기억한 값으로 선다 */
     setActivePinia(createPinia())
@@ -81,11 +124,10 @@ describe('[내 파트 | 전체]', () => {
     expect(usePartStore().scope).toBe('all')
   })
 
-  it('프로젝트 관리자(u1)는 전체로 시작하고, 내 파트로 바꿀 수 있다', async () => {
+  it('프로젝트 관리자(u1)도 업무는 내 파트로 시작한다 — 조상은 흐리게 선다', async () => {
     await signedIn('u1@inno-ax.com')
     const part = usePartStore()
-    expect(part.scope).toBe('all')
-    part.setScope('mine')
+    expect(part.scope).toBe('mine')
     expect(useTaskStore().visibleRows.map((r) => r.task.id)).toContain('k21')
     expect(part.isContextTask('k4')).toBe(true)
   })
@@ -98,11 +140,18 @@ describe('[내 파트 | 전체]', () => {
     setActivePinia(createPinia())
     await signedIn('u2@inno-ax.com')
     const data = useDataStore()
+    usePartStore().setScope('mine')
     expect(usePartStore().scope).toBe('mine')
     data.setProject('p2')
     expect(usePartStore().parts).toEqual([])
     expect(usePartStore().canNarrow).toBe(false)
     expect(useTaskStore().visibleRows.map((r) => r.task.key)).toEqual(['PAS-1', 'PAS-2'])
+  })
+
+  it('예전 [내 파트 | 전체] 로 기억한 값을 이어받는다', async () => {
+    localStorage.setItem('innoflow.partScope.u3.p1', 'all')
+    await signedIn('u3@inno-ax.com')
+    expect(usePartStore().scope).toBe('all')
   })
 
   it('파트를 빼면 그 자리에서 내 파트가 다시 계산된다', async () => {
@@ -111,6 +160,54 @@ describe('[내 파트 | 전체]', () => {
     expect(part.myPartIds.has('pt2')).toBe(true)
     expect(await part.leavePart('pt2', 'u1')).toBe(true)
     expect(part.canNarrow).toBe(false)
+  })
+})
+
+describe('볼 파트 고르기 — 여럿을 고르고 비우면 전체', () => {
+  /* 목업에는 파트가 둘인 사람이 없다 — u3(인프라)를 AI 에도 넣는다 */
+  async function twoParts() {
+    await signedIn('u3@inno-ax.com')
+    useDataStore().partMembers.push({ partId: 'pt2', memberId: 'u3', ...ALL_RIGHTS })
+    const part = usePartStore()
+    part.setScope('mine')
+    return part
+  }
+  const keys = () => useTaskStore().visibleRows.map((r) => r.task.key)
+
+  it('내 파트를 고르면 전부가 골라진다. 하나를 빼면 그 파트 것만 빠지고, 브라우저에 남는다', async () => {
+    const part = await twoParts()
+    expect([...part.pickedIds].sort()).toEqual(['pt1', 'pt2'])
+    const both = keys()
+
+    part.togglePicked('pt2')
+    expect(part.pickedIds).toEqual(['pt1'])
+    const infraOnly = keys()
+    expect(infraOnly.length).toBeLessThan(both.length)
+    expect(infraOnly).toContain('HW-4')
+    expect(JSON.parse(localStorage.getItem('innoflow.partPick.u3.p1')!)).toEqual(['pt1'])
+
+    part.togglePicked('pt2')
+    expect(keys()).toEqual(both)
+  })
+
+  it('다 빼면 전체다', async () => {
+    const part = await twoParts()
+    part.togglePicked('pt2')
+    part.togglePicked('pt1')
+    expect(part.pickedIds).toEqual([])
+    expect(part.scope).toBe('all')
+    expect(useTaskStore().visibleRows).toHaveLength(22)
+  })
+
+  it('고른 파트에서 빠지면 내 파트 전부로 돌아간다 — 내 파트 밖의 값은 버린다', async () => {
+    const part = await twoParts()
+    part.togglePicked('pt1')
+    expect(part.pickedIds).toEqual(['pt2'])
+    const data = useDataStore()
+    data.partMembers = data.partMembers.filter(
+      (pm) => !(pm.partId === 'pt2' && pm.memberId === 'u3'),
+    )
+    expect(part.pickedIds).toEqual(['pt1'])
   })
 })
 
@@ -244,5 +341,87 @@ describe('파트 관리 (목업 서버)', () => {
     /* 다시 부여해도 파트는 비어 있다 — 목업 서버에서도 지워졌다 */
     await data.grantMember('p1', 'u4', 'user')
     expect(await part.joinPart('pt2', 'u4')).toBe(true)
+  })
+})
+
+describe('파트 권한 (목업 서버)', () => {
+  const rightsOf = (partId: string, memberId: string) => {
+    const pm = usePartStore().membershipOf(partId, memberId)!
+    return [pm.canView, pm.canCreate, pm.canUpdate, pm.canDelete]
+  }
+
+  it('새로 넣으면 보기 · 등록 · 수정, 삭제는 꺼져 있다. 바꾸면 서버가 맞춘 넷으로 갈아끼운다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const part = usePartStore()
+    expect(await part.joinPart('pt1', 'u2')).toBe(true)
+    expect(rightsOf('pt1', 'u2')).toEqual([true, true, true, false])
+    /* 다시 넣어도 바꾼 권한은 그대로다 */
+    const none = { canView: false, canCreate: false, canUpdate: false, canDelete: false }
+    expect(await part.setPartRights('pt1', 'u2', { ...none, canView: true })).toBe(true)
+    expect(await part.joinPart('pt1', 'u2')).toBe(true)
+    expect(rightsOf('pt1', 'u2')).toEqual([true, false, false, false])
+    /* 삭제만 보내도 수정 · 보기가 따라 켜진다 */
+    expect(await part.setPartRights('pt1', 'u2', { ...none, canDelete: true })).toBe(true)
+    expect(rightsOf('pt1', 'u2')).toEqual([true, false, true, true])
+    expect(part.membersOf('pt1')).toEqual(['u3', 'u2'])
+  })
+
+  it('일반 사용자는 권한을 못 바꾼다 — FORBIDDEN', async () => {
+    await signedIn('u3@inno-ax.com')
+    const all = { canView: true, canCreate: true, canUpdate: true, canDelete: true }
+    expect(await usePartStore().setPartRights('pt1', 'u3', all)).toBe(false)
+    expect(lastError()).toMatchObject({ status: 403, code: 'FORBIDDEN' })
+  })
+
+  it('등록 권한이 없는 파트에는 작업을 못 만든다 — 고르기에서 빠지고, 하위 작업은 공통으로 둔다', async () => {
+    /* 박지훈(u2)은 기간계 연동만 — AI 의 가상비서(k7) 밑에 만들면 공통이다 */
+    await signedIn('u2@inno-ax.com')
+    const part = usePartStore()
+    const task = useTaskStore()
+    expect(part.choicesFor(null, 'canCreate').map((p) => p.id)).toEqual(['pt3'])
+    /* 안건은 권한을 따르지 않는다 */
+    expect(part.choicesFor(null).map((p) => p.id)).toEqual(['pt2', 'pt3', 'pt1'])
+    expect(part.partForChildOf('k7')).toBeNull()
+    expect(part.partForChildOf('k18')).toBe('pt3')
+
+    expect(await task.addTask(blankTask({ parentId: 'k7' }))).toBeNull()
+    expect(lastError()).toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    expect(await task.addTask(blankTask({ partId: 'pt2' }))).toBeNull()
+    const id = await task.addTask(blankTask({ parentId: 'k7', partId: part.partForChildOf('k7') }))
+    expect(useDataStore().allTasks.find((t) => t.id === id)!.partId).toBeNull()
+
+    /* 등록을 끄면 자기 파트에도 못 만든다 */
+    useDataStore().partMembers.find((pm) => pm.memberId === 'u2')!.canCreate = false
+    expect(part.choicesFor(null, 'canCreate')).toEqual([])
+    expect(part.partForChildOf('k18')).toBeNull()
+  })
+
+  it('다른 파트로 옮기려면 옮겨 갈 파트의 수정 권한 — 지금 파트는 고르기에 남는다', async () => {
+    /* 이도현(u3)은 인프라 — HW-21(인프라)을 AI 로는 못 옮기고 공통으로는 옮긴다 */
+    await signedIn('u3@inno-ax.com')
+    const part = usePartStore()
+    const task = useTaskStore()
+    const data = useDataStore()
+    expect(part.choicesFor('pt1', 'canUpdate').map((p) => p.id)).toEqual(['pt1'])
+    expect(part.choicesFor('pt2', 'canUpdate').map((p) => p.id)).toEqual(['pt2', 'pt1'])
+
+    task.setPart('k21', 'pt2')
+    expect(lastError()).toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    expect(data.allTasks.find((t) => t.id === 'k21')!.partId).toBe('pt1')
+    task.setPart('k21', null)
+    expect(data.allTasks.find((t) => t.id === 'k21')!.partId).toBeNull()
+  })
+
+  it('수정 권한을 끄면 등록한 작업도 못 고치고, 담당한 작업은 고친다', async () => {
+    await signedIn('u3@inno-ax.com')
+    const task = useTaskStore()
+    const data = useDataStore()
+    data.partMembers.find((pm) => pm.memberId === 'u3')!.canUpdate = false
+    /* HW-21: 등록 u3 · 담당 u1. HW-20: 등록 · 담당 u3 */
+    const k21 = data.allTasks.find((t) => t.id === 'k21')!
+    expect(task.canEdit(k21)).toBe(false)
+    task.setTitle('k21', '바꿈')
+    expect(k21.title).toBe('개발자 계정 배포')
+    expect(task.canEdit(data.allTasks.find((t) => t.id === 'k20')!)).toBe(true)
   })
 })

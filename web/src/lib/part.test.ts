@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { partMembers, tasks, taskAgendaLinks, agendas } from '@/fixtures'
 import {
-  defaultPartScope,
   inheritedPartId,
   partChoices,
   partFilterOf,
@@ -163,14 +162,7 @@ describe('내 파트 — 규칙 하나씩', () => {
   })
 })
 
-describe('기본 보기 · 고르기 · 상속', () => {
-  it('일반 사용자는 내 파트, 프로젝트 관리자 · 시스템 관리자는 전체로 시작한다', () => {
-    expect(defaultPartScope('user')).toBe('mine')
-    expect(defaultPartScope('projectAdmin')).toBe('all')
-    expect(defaultPartScope('systemAdmin')).toBe('all')
-    expect(defaultPartScope(null)).toBe('all')
-  })
-
+describe('고르기 · 상속', () => {
   const parts: Part[] = [
     { id: 'b', projectId: 'p', name: '인프라', active: true },
     { id: 'a', projectId: 'p', name: 'AI', active: true },

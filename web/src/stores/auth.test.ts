@@ -139,9 +139,10 @@ describe('담당자 거르기 (목업 갈래 · API.md Q30)', () => {
     expect(agendas.updateAgenda('t9', { ownerId: 'u0' })).toBe(false)
     expect(codeOfLastToast()).toMatchObject({ code: 'AGENDA_OWNER_NOT_FOUND' })
 
-    tasks.setOwner('k4', 'u0')
+    /* k3 — 박지훈(u2) 담당인 공통 작업이라 고칠 수 있다 */
+    tasks.setOwner('k3', 'u0')
     expect(codeOfLastToast()).toMatchObject({ code: 'TASK_OWNER_NOT_FOUND' })
-    expect(useDataStore().allTasks.find((t) => t.id === 'k4')!.ownerId).not.toBe('u0')
+    expect(useDataStore().allTasks.find((t) => t.id === 'k3')!.ownerId).not.toBe('u0')
 
     expect(await agendas.addAgenda({ title: '새 안건', ownerId: 'u3' })).not.toBeNull()
   })

@@ -2,9 +2,17 @@ import { ApiError, id, mockError, request } from '@/api/client'
 import { forgetMockCommentsOf } from '@/api/comments'
 import { recordMockHistory } from '@/api/history'
 import { isMockMode } from '@/api/mode'
-import { forbidden, later, mockDb, mockSessionMemberId, mockWorld, requireMe } from '@/api/mockAuth'
+import {
+  forbidden,
+  later,
+  meOf,
+  mockDb,
+  mockSessionMemberId,
+  mockWorld,
+  requireMe,
+} from '@/api/mockAuth'
 import { projects, tasks } from '@/fixtures'
-import { canDeleteTask, canEditTask, canSeeProject } from '@/lib/access'
+import { canCreateInPart, canDeleteTask, canEditTask, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import { change } from '@/lib/history'
 import { inheritedPartId } from '@/lib/part'
@@ -52,7 +60,8 @@ function mockDelete(taskId: string) {
   if (!task || !canSeeProject(me, task.projectId))
     throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
   const doomed = [task, ...descendantsOf(world.tasks, taskId)]
-  if (!doomed.every((t) => canDeleteTask(me, t, t.projectId))) throw forbidden()
+  const pms = mockDb().partMembers
+  if (!doomed.every((t) => canDeleteTask(me, t, t.projectId, pms))) throw forbidden()
   const ids = new Set(doomed.map((t) => t.id))
   const db = mockDb()
   for (const t of db.tests) t.refs = t.refs.filter((r) => !(r.kind === 'task' && ids.has(r.id)))
@@ -155,6 +164,25 @@ function mockBatch(projectId: string, input: TaskBatchInput): TaskBatchResult {
       detail: tooDeep,
     })
 
+  /* 초안은 부모의 파트를 따른다 — 파트에 두는 것은 그 파트의 등록 권한이 있어야 한다. 걸린 자리를 모두 짚는다 */
+  const memberId = mockSessionMemberId()
+  const me = memberId ? meOf(memberId) : null
+  const partByTempId: Record<string, string | null> = {}
+  const denied: Record<string, string> = {}
+  input.tasks.forEach((t, i) => {
+    const partId =
+      t.parentTempId !== null
+        ? (partByTempId[t.parentTempId] ?? null)
+        : t.parentId !== null
+          ? (existing(t.parentId)?.partId ?? null)
+          : null
+    partByTempId[t.tempId] = partId
+    if (partId !== null && !canCreateInPart(me, partId, projectId, db.partMembers))
+      denied[`tasks.${i}.partId`] = '이 파트에 작업을 등록할 권한이 없습니다.'
+  })
+  if (Object.keys(denied).length > 0)
+    throw mockError(403, 'FORBIDDEN', '이 파트에 작업을 등록할 권한이 없습니다.', denied)
+
   const taskIdByTempId: Record<string, string> = {}
   const madeByTempId: Record<string, Task> = {}
   const createdAt = nowIso()
@@ -217,7 +245,7 @@ function mockMove(taskId: string, move: TaskMove): Task[] {
   const task = world.tasks.find((t) => t.id === taskId)
   if (!task || !canSeeProject(me, task.projectId))
     throw mockError(404, 'TASK_NOT_FOUND', '작업을 찾을 수 없습니다.')
-  if (!canEditTask(me, task, task.projectId)) throw forbidden()
+  if (!canEditTask(me, task, task.projectId, mockDb().partMembers)) throw forbidden()
   const problem = moveProblem(world.tasks, taskId, move.parentId, move.beforeId)
   if (problem) throw mockError(400, problem.code, problem.message)
   return placeTask(world.tasks, taskId, move.parentId, move.beforeId)

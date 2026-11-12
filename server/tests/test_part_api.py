@@ -1,4 +1,5 @@
-"""파트 — `docs/api/part.md`. 보기 범위지 권한이 아니다: 서버는 다 싣고 화면이 거른다.
+"""파트 — `docs/api/part.md`. 보기는 열려 있다: 서버는 다 싣고 화면이 거른다.
+소속의 권한(등록 · 수정 · 삭제)은 `test_part_rights.py`.
 
 시드: p1 에 pt1(인프라 · u3) · pt2(AI · u1 · u4) · pt3(기간계 연동 · u2). p2 · p3 에는 파트가 없다.
 u1 은 p1 관리자 · p2 user, u2 ~ u4 는 user, `client` 는 시스템 관리자(부여 없음).
@@ -11,6 +12,11 @@ import pytest
 
 from tests.conftest import AsMember
 from tests.test_task_batch_api import item
+
+# 시드 소속은 넷 다 켜 있다 — 0040 이행이 있던 소속을 그렇게 둔 것과 같다
+ALL = {"canView": True, "canCreate": True, "canUpdate": True, "canDelete": True}
+# 본문 없이 새로 넣은 소속
+NEW = {"canView": True, "canCreate": True, "canUpdate": True, "canDelete": False}
 
 
 async def snapshot(client: httpx.AsyncClient, project_id: str = "p1") -> dict[str, Any]:
@@ -50,10 +56,10 @@ async def test_snapshot_carries_parts_and_members(client: httpx.AsyncClient) -> 
         {"id": "pt1", "projectId": "p1", "name": "인프라", "active": True},
     ]
     assert snap["partMembers"] == [
-        {"partId": "pt1", "memberId": "u3"},
-        {"partId": "pt2", "memberId": "u1"},
-        {"partId": "pt2", "memberId": "u4"},
-        {"partId": "pt3", "memberId": "u2"},
+        {"partId": "pt1", "memberId": "u3", **ALL},
+        {"partId": "pt2", "memberId": "u1", **ALL},
+        {"partId": "pt2", "memberId": "u4", **ALL},
+        {"partId": "pt3", "memberId": "u2", **ALL},
     ]
 
 
@@ -238,16 +244,19 @@ async def test_add_member_is_idempotent(client: httpx.AsyncClient) -> None:
     for _ in range(2):
         res = await client.put("/api/parts/pt1/members/u4")
         assert res.status_code == 200
-        assert res.json() == {"partId": "pt1", "memberId": "u4"}
+        assert res.json() == {"partId": "pt1", "memberId": "u4", **NEW}
     rows = (await snapshot(client))["partMembers"]
-    assert rows.count({"partId": "pt1", "memberId": "u4"}) == 1
+    assert rows.count({"partId": "pt1", "memberId": "u4", **NEW}) == 1
 
 
 async def test_remove_member_is_idempotent(client: httpx.AsyncClient) -> None:
     for _ in range(2):
         res = await client.delete("/api/parts/pt1/members/u3")
         assert res.status_code == 204
-    assert {"partId": "pt1", "memberId": "u3"} not in (await snapshot(client))["partMembers"]
+    assert all(
+        (row["partId"], row["memberId"]) != ("pt1", "u3")
+        for row in (await snapshot(client))["partMembers"]
+    )
 
 
 @pytest.mark.parametrize("member_id", ["admin", "nope"])
@@ -265,7 +274,9 @@ async def test_leaving_project_leaves_its_parts(client: httpx.AsyncClient) -> No
     assert (await client.delete("/api/projects/p1/members/u3")).status_code == 204
     assert all(row["memberId"] != "u3" for row in (await snapshot(client))["partMembers"])
     # 다른 프로젝트의 파트 소속은 그대로다
-    assert {"partId": other, "memberId": "u3"} in (await snapshot(client, "p2"))["partMembers"]
+    assert {"partId": other, "memberId": "u3", **NEW} in (await snapshot(client, "p2"))[
+        "partMembers"
+    ]
 
 
 # --- 작업 등록의 상속 ----------------------------------------------------------------

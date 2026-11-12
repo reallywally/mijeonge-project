@@ -9,8 +9,9 @@ import { useAgendaStore } from '@/stores/agenda'
 import type { TestRef } from '@/types/domain'
 
 /* 태그 — 테스트에 거는 작업 · 안건 참조. 작업 번호나 안건 제목으로 찾아 걸고(상위 작업 찾기와 같은 찾기),
-   칩을 누르면 그 작업 · 안건 상세로 간다. 작업이 지워지면 서버가 그 태그만 뺀다 */
-const props = defineProps<{ refs: TestRef[] }>()
+   칩을 누르면 그 작업 · 안건 상세로 간다. 작업이 지워지면 서버가 그 태그만 뺀다.
+   readonly 면 칩만 보인다 — 고칠 권한이 없는 테스트 */
+const props = defineProps<{ refs: TestRef[]; readonly?: boolean }>()
 const emit = defineEmits<{
   (e: 'add', ref: TestRef): void
   (e: 'remove', ref: TestRef): void
@@ -63,6 +64,7 @@ const chip =
     </div>
 
     <SearchPicker
+      v-if="!readonly"
       :items="choices"
       :text="(c) => `${c.key} ${c.title}`"
       :key-of="(c) => `${c.ref.kind}:${c.ref.id}`"
@@ -86,7 +88,7 @@ const chip =
       <span
         v-for="c in chips"
         :key="`${c.ref.kind}:${c.ref.id}`"
-        :class="chip"
+        :class="[chip, readonly ? 'pr-2' : '']"
         :data-test-ref="`${c.ref.kind}:${c.ref.id}`"
       >
         <component
@@ -110,6 +112,7 @@ const chip =
           >
         </button>
         <button
+          v-if="!readonly"
           type="button"
           class="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           :aria-label="`${c.label} 태그 떼기`"

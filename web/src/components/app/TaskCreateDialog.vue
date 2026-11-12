@@ -240,6 +240,7 @@ function onKeydown(e: KeyboardEvent) {
           :parent-id="parent"
           :part-id="partId"
           :parent-choices="taskStore.parentOptions"
+          part-right="canCreate"
           @update:parent-id="pickParent"
           @update:part-id="pickPart"
         >

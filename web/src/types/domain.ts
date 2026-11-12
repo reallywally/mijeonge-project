@@ -109,10 +109,21 @@ export interface Part {
   active: boolean
 }
 
-export interface PartMember {
+/** 파트 소속에 붙은 권한 — 그 파트의 작업 · 테스트 쓰기를 가른다. 안건은 따르지 않는다 (docs/api/part.md) */
+export interface PartRights {
+  canView: boolean
+  canCreate: boolean
+  canUpdate: boolean
+  canDelete: boolean
+}
+
+export interface PartMember extends PartRights {
   partId: string
   memberId: string
 }
+
+/** PUT /api/parts/{partId}/members/{memberId} — 보낸 것만 바뀐다. 새 소속은 안 보낸 것이 보기 · 등록 · 수정 켜짐, 삭제 꺼짐 */
+export type PartMemberInput = Partial<PartRights>
 
 /** POST /api/projects/{projectId}/parts — 이름은 서버가 앞뒤 공백을 떼고 1 ~ 50자 */
 export interface PartInput {

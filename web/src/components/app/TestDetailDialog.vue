@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ChevronRight, Clock, FolderClosed, Plus, Trash2, TriangleAlert } from 'lucide-vue-next'
+import {
+  ChevronRight,
+  Clock,
+  FolderClosed,
+  Lock,
+  Plus,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-vue-next'
 import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import CcField from '@/components/app/CcField.vue'
 import CommentThread from '@/components/app/CommentThread.vue'
@@ -23,7 +31,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { monthDay } from '@/lib/date'
-import { TEST_STATUS_OPTIONS, testFieldProblems } from '@/lib/testcase'
+import { TEST_READONLY_HINT, TEST_STATUS_OPTIONS, testFieldProblems } from '@/lib/testcase'
 import { fitTextarea } from '@/lib/utils'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
@@ -76,11 +84,13 @@ const titleField = ref<HTMLTextAreaElement | null>(null)
 const fitTitle = () => fitTextarea(titleField.value)
 watch(titleField, fitTitle)
 
-/** 새 테스트의 파트 — 상위 테스트의 것. 보관한 파트는 새로 달 수 없어 공통으로 둔다 */
-function partForChild(parent: string | null) {
-  const p = parent ? (testStore.byId[parent]?.partId ?? null) : null
-  return p && partStore.parts.find((x) => x.id === p)?.active ? p : null
-}
+/** 새 테스트의 파트 — 상위 테스트의 것. 보관했거나 등록 권한이 없는 파트면 공통으로 둔다 */
+const partForChild = (parent: string | null) =>
+  partStore.partForChild(parent ? (testStore.byId[parent]?.partId ?? null) : null)
+
+/* 고칠 권한이 없는 테스트(파트 테스트인데 담당 · 관리자 · 그 파트의 수정 권한이 아님)는 칸을 모두 잠근다.
+   조치 내역은 따르지 않는다 */
+const readonly = computed(() => (test.value ? !testStore.canEdit(test.value) : false))
 
 function fill() {
   const t = test.value
@@ -117,7 +127,7 @@ watch([() => props.testId, open, () => test.value !== null], fill, { immediate: 
 
 function commitTitle() {
   const t = test.value
-  if (!t) return
+  if (!t || readonly.value) return
   const next = title.value.trim()
   if (next && next !== t.title) void testStore.patch(t.id, { title: next })
   title.value = next || t.title
@@ -143,7 +153,7 @@ const textRefs = { content, testData }
 
 function commitText(key: TextKey) {
   const t = test.value
-  if (!t) return
+  if (!t || readonly.value) return
   const value = textRefs[key].value
   if (value !== t[key]) void testStore.patch(t.id, { [key]: value })
 }
@@ -172,7 +182,7 @@ const periodHint = computed(() =>
 /* 날짜는 다 고른 뒤(change)에만 넣는다. 한쪽만 있는 기간도 받는다 — 간트에는 둘 다 있어야 막대가 선다 */
 function commitPeriod() {
   const t = test.value
-  if (!t || periodHint.value) return
+  if (!t || readonly.value || periodHint.value) return
   const next = { start: start.value || null, due: due.value || null }
   if (next.start !== t.start || next.due !== t.due) void testStore.patch(t.id, next)
 }
@@ -250,8 +260,11 @@ async function create() {
   if (id) emit('created', id)
 }
 
-const ghost =
-  'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-accent focus-visible:bg-background focus-visible:border-input'
+const ghost = computed(() =>
+  readonly.value
+    ? 'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none disabled:cursor-default disabled:opacity-100'
+    : 'h-8 w-full border-transparent bg-transparent px-2 text-xs shadow-none hover:bg-accent focus-visible:bg-background focus-visible:border-input',
+)
 const area =
   'min-h-[60px] resize-none border-transparent bg-transparent px-2 text-sm shadow-none [field-sizing:content] hover:border-border focus-visible:border-input focus-visible:bg-background'
 </script>
@@ -271,9 +284,17 @@ const area =
         <ChevronRight class="size-3 text-muted-foreground" />
         <span class="text-xs">{{ test?.key ?? (isNew ? '새 테스트' : '') }}</span>
         <span class="grow" />
-        <span class="text-xs text-muted-foreground">{{
+        <span v-if="!readonly" class="text-xs text-muted-foreground">{{
           isNew ? '[만들기] 를 눌러야 들어갑니다' : '고치면 바로 저장됩니다'
         }}</span>
+        <span
+          v-else
+          class="flex items-center gap-1.5 text-xs text-muted-foreground"
+          data-test-readonly
+        >
+          <Lock class="size-3" />
+          {{ TEST_READONLY_HINT }}
+        </span>
       </div>
 
       <div v-if="missing" class="px-[22px] py-10 text-center text-sm text-muted-foreground">
@@ -292,8 +313,10 @@ const area =
               v-model="title"
               rows="1"
               aria-label="제목"
+              :readonly="readonly"
               :placeholder="isNew ? '무엇을 확인하는 테스트인가' : ''"
-              class="-mx-2 resize-none overflow-hidden [field-sizing:content] rounded-md border border-transparent bg-transparent px-2 py-1 text-xl leading-snug font-semibold tracking-tight outline-none placeholder:text-muted-foreground hover:border-border focus:border-input"
+              class="-mx-2 resize-none overflow-hidden [field-sizing:content] rounded-md border border-transparent bg-transparent px-2 py-1 text-xl leading-snug font-semibold tracking-tight outline-none placeholder:text-muted-foreground"
+              :class="readonly ? '' : 'hover:border-border focus:border-input'"
               @input="fitTitle"
               @keydown="onTitleKeydown"
               @blur="!isNew && commitTitle()"
@@ -321,6 +344,7 @@ const area =
               <Textarea
                 v-model="content"
                 aria-label="테스트 내용"
+                :readonly="readonly"
                 placeholder="무엇을 어떻게 해 보고 무엇이 나와야 하나"
                 :class="[area, 'min-h-[180px]']"
                 @blur="commitText('content')"
@@ -334,6 +358,7 @@ const area =
               <Textarea
                 v-model="testData"
                 aria-label="테스트 데이터"
+                :readonly="readonly"
                 placeholder="쓸 계정 · 값 · 파일"
                 :class="area"
                 @blur="commitText('testData')"
@@ -374,6 +399,7 @@ const area =
                 >태그한 안건의 결정이 이 테스트를 확인한 뒤에 바뀌었습니다</span
               >
               <Button
+                v-if="!readonly"
                 variant="outline"
                 size="sm"
                 class="shrink-0"
@@ -433,9 +459,13 @@ const area =
               <span class="text-xs text-muted-foreground">하위에서 모은 상태</span>
             </div>
             <template v-else>
-              <Select :model-value="row.test.status" @update:model-value="pickStatus">
+              <Select
+                :model-value="row.test.status"
+                :disabled="readonly"
+                @update:model-value="pickStatus"
+              >
                 <SelectTrigger
-                  class="h-8 w-full bg-background text-xs font-medium"
+                  class="h-8 w-full bg-background text-xs font-medium disabled:cursor-default disabled:opacity-100"
                   aria-label="상태"
                 >
                   <SelectValue />
@@ -464,18 +494,28 @@ const area =
             <div class="flex min-h-9 items-center gap-2">
               <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">담당자</dt>
               <dd class="min-w-0 grow">
-                <OwnerSelect v-model="ownerId" label="담당자" self-assign />
+                <OwnerSelect v-model="ownerId" label="담당자" self-assign :disabled="readonly" />
               </dd>
             </div>
 
-            <CcField v-model="ccIds" />
+            <CcField v-model="ccIds" :readonly="readonly" />
 
-            <PartField v-model="partId" :trigger-class="ghost" />
+            <PartField
+              v-model="partId"
+              :trigger-class="ghost"
+              :right="isNew ? 'canCreate' : 'canUpdate'"
+              :disabled="readonly"
+            />
 
             <div class="flex min-h-9 items-center gap-2">
               <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">상위 테스트</dt>
               <dd class="min-w-0 grow">
-                <ParentTaskPicker v-model="parentId" :choices="parentChoices" noun="테스트" />
+                <ParentTaskPicker
+                  v-model="parentId"
+                  :choices="parentChoices"
+                  noun="테스트"
+                  :disabled="readonly"
+                />
               </dd>
             </div>
 
@@ -486,6 +526,7 @@ const area =
                   :model-value="start"
                   type="date"
                   aria-label="시작 날짜"
+                  :disabled="readonly"
                   :class="[ghost, start ? '' : 'text-muted-foreground']"
                   @change="
                     (e: Event) => {
@@ -503,6 +544,7 @@ const area =
                   :model-value="due"
                   type="date"
                   aria-label="기한"
+                  :disabled="readonly"
                   :class="[ghost, due ? '' : 'text-muted-foreground']"
                   @change="
                     (e: Event) => {
@@ -522,7 +564,13 @@ const area =
           </dl>
 
           <div class="h-px bg-border" />
-          <TestRefs :refs="shownRefs" @add="addRef" @remove="removeRef" @open="openRef" />
+          <TestRefs
+            :refs="shownRefs"
+            :readonly="readonly"
+            @add="addRef"
+            @remove="removeRef"
+            @open="openRef"
+          />
 
           <template v-if="test">
             <div class="h-px bg-border" />

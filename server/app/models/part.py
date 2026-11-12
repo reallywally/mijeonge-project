@@ -10,7 +10,8 @@ PART_NAME_MAX = 50
 
 
 class Part(Base):
-    """프로젝트 안의 보기 범위(docs/api/part.md). 권한이 아니다 — 거르는 것은 화면이다.
+    """프로젝트 안의 묶음(docs/api/part.md). 보기는 열려 있고, 작업 · 테스트의 등록 · 수정 · 삭제를
+    소속의 권한(`PartMember.can_*`)으로 가른다 — 안건은 파트 권한을 타지 않는다.
 
     지우지 않고 보관한다(`active=false`) — 지난 작업 · 안건이 가리킨다.
     """
@@ -31,7 +32,10 @@ class Part(Base):
 
 
 class PartMember(Base):
-    """파트 소속. 한 사람이 여러 파트에 속한다. 그 프로젝트에 부여된 사람만 들어온다."""
+    """파트 소속과 그 파트에서의 권한. 한 사람이 여러 파트에 속한다. 그 프로젝트에 부여된 사람만.
+
+    삭제 ⇒ 수정, 등록 · 수정 ⇒ 보기 — 쓸 때마다 서비스가 맞춘다(`part.normalize_rights`).
+    """
 
     __tablename__ = "part_member"
     # 프로젝트에서 사람을 뺄 때 멤버 쪽에서 찾는다
@@ -41,4 +45,10 @@ class PartMember(Base):
         ForeignKey("part.id", ondelete="CASCADE"), primary_key=True
     )
     member_id: Mapped[str] = mapped_column(ForeignKey("member.id"), primary_key=True)
+    # 보기는 목록의 기본 거르기, 나머지는 그 파트 작업 · 테스트의 권한이다
+    can_view: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    can_create: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    can_update: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    # 지우기만 기본이 끔이다 — 새로 넣은 사람이 남의 기록을 없애지 않게
+    can_delete: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

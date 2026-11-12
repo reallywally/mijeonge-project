@@ -448,6 +448,21 @@ describe('목업 apply', () => {
     expect([r.tasks[2].parentId, r.tasks[2].partId]).toEqual(['k4', 'pt1'])
   })
 
+  it('403 — 등록 권한이 없는 파트 작업 밑에는 못 붙인다. 앞 줄을 따라간 줄도 짚는다', async () => {
+    /* 박지훈(u2)은 기간계 연동 소속 — 인프라 작업(HW-4) 밑에는 못 단다 */
+    await signIn('u2')
+    const input = fullInput()
+    input.tasks[2].parentId = 'k4'
+    const e = await rejected(applyMinutes('m1', input))
+    expect(e).toMatchObject({
+      status: 403,
+      code: 'FORBIDDEN',
+      detail: { 'tasks.2.partId': '이 파트에 작업을 등록할 권한이 없습니다.' },
+    })
+    input.tasks[2].parentId = 'k18'
+    expect((await applyMinutes('m1', input)).tasks[2].partId).toBe('pt3')
+  })
+
   it('400 TASK_DEPTH_EXCEEDED — 4단 작업(tool01) 밑에는 못 붙인다 (Q64)', async () => {
     const input = fullInput()
     input.tasks[2].parentId = 'k8'

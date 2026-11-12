@@ -28,7 +28,7 @@ import { toastError } from '@/lib/notify'
 import {
   MAX_TASK_DEPTH,
   periodProblem,
-  READONLY_HINT,
+  TASK_READONLY_HINT,
   statusSinceLabel,
   TASK_STATUS_OPTIONS,
   taskStatusLabel,
@@ -43,7 +43,7 @@ import type { TaskLine, TaskStatus } from '@/types/domain'
 /* 작업 상세 — 목록 위 팝업. 보는 자리가 곧 고치는 자리다: 칸을 눌러 고치면 그 값이 바로 들어가고
    따로 저장 버튼이 없다. 왼쪽이 제목 · 본문 · 하위 작업 · 연결, 오른쪽이 속성이다.
    안건 맵핑은 memo 의 연관 관계대로 여기서만 한다. 그 아래 댓글, 맨 아래가 접어 둔 변경 이력이다.
-   고치기는 작성자 · 담당자 · 관리자만 — 아니면 칸을 잠그고 보기만 한다(댓글은 누구나 쓴다) */
+   고치기는 담당자 · 관리자 · 파트 수정 권한(공통 작업은 작성자도)만 — 아니면 칸을 잠그고 보기만 한다(댓글은 누구나 쓴다) */
 const props = defineProps<{ taskId: string | null }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{
@@ -255,7 +255,7 @@ function onAgendaCreated(id: string) {
           data-task-readonly
         >
           <Lock class="size-3" />
-          {{ READONLY_HINT }}
+          {{ TASK_READONLY_HINT }}
         </span>
       </div>
 
@@ -424,6 +424,7 @@ function onAgendaCreated(id: string) {
           :parent-id="detail.task.parentId"
           :part-id="detail.task.partId"
           :parent-choices="parentChoices"
+          part-right="canUpdate"
           :status-since="statusSinceLabel(detail.task)"
           show-done
           :readonly="!canEdit"

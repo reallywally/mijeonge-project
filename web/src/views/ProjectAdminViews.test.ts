@@ -330,6 +330,68 @@ describe('파트 관리 화면', () => {
     expect(w.find('[aria-label="이 파트의 사람"] li[data-member-id="u3"]').exists()).toBe(false)
   })
 
+  it('사람마다 보기 · 등록 · 수정 · 삭제 칸 — 새로 더하면 삭제만 꺼져 있다', async () => {
+    await signedIn('u1@inno-ax.com')
+    const { w } = await mountAt('/admin/projects/p1/parts?part=pt1')
+    const boxes = (memberId: string) =>
+      [...document.body.querySelectorAll(`li[data-member-id="${memberId}"] [data-right]`)].map(
+        (b) => [b.getAttribute('data-right'), b.getAttribute('aria-checked')],
+      )
+    expect(boxes('u3')).toEqual([
+      ['canView', 'true'],
+      ['canCreate', 'true'],
+      ['canUpdate', 'true'],
+      ['canDelete', 'true'],
+    ])
+    expect(w.get('li[data-member-id="u3"] [data-part-rights]').attributes('aria-label')).toBe(
+      '이도현 권한',
+    )
+    expect(
+      document.body.querySelector('button[aria-label="이도현 삭제"]')!.closest('label')!
+        .textContent,
+    ).toContain('삭제')
+
+    await click(document.body.querySelector('button[aria-label="박지훈 고르기"]'))
+    await click(bodyButton('1명 더하기'))
+    expect(boxes('u2').map((b) => b[1])).toEqual(['true', 'true', 'true', 'false'])
+  })
+
+  it('칸을 바꾸면 앞서야 할 것까지 맞춰 넷을 다 보낸다 — 보기를 끄면 다, 수정을 끄면 삭제도 꺼진다', async () => {
+    await signedIn('u1@inno-ax.com')
+    await mountAt('/admin/projects/p1/parts?part=pt1')
+    const rights = () => {
+      const pm = mockDb().partMembers.find((x) => x.partId === 'pt1' && x.memberId === 'u3')!
+      return [pm.canView, pm.canCreate, pm.canUpdate, pm.canDelete]
+    }
+    const box = (label: string) =>
+      document.body.querySelector(`button[aria-label="이도현 ${label}"]`)
+
+    await click(box('수정'))
+    expect(rights()).toEqual([true, true, false, false])
+    await click(box('보기'))
+    expect(rights()).toEqual([false, false, false, false])
+    expect(box('등록')!.getAttribute('aria-checked')).toBe('false')
+    await click(box('삭제'))
+    expect(rights()).toEqual([true, false, true, true])
+    expect(box('수정')!.getAttribute('aria-checked')).toBe('true')
+    await click(box('등록'))
+    expect(rights()).toEqual([true, true, true, true])
+    /* 화면 스토어도 응답으로 갈아끼웠다 */
+    expect(usePartStore().membershipOf('pt1', 'u3')).toMatchObject({ canCreate: true })
+  })
+
+  it('저장에 실패하면 알리고 칸은 그대로다', async () => {
+    await signedIn('u1@inno-ax.com')
+    await mountAt('/admin/projects/p1/parts?part=pt1')
+    /* 그사이 프로젝트 관리자에서 내려왔다 */
+    mockDb().grants.find((g) => g.projectId === 'p1' && g.memberId === 'u1')!.role = 'user'
+    await click(document.body.querySelector('button[aria-label="이도현 삭제"]'))
+    expect(vi.mocked(toastError).mock.calls.at(-1)![0]).toMatchObject({ code: 'FORBIDDEN' })
+    expect(
+      document.body.querySelector('button[aria-label="이도현 삭제"]')!.getAttribute('aria-checked'),
+    ).toBe('true')
+  })
+
   it('이름을 바꾸고, 겹치면 서버의 message 를 알리고 되돌린다', async () => {
     await signedIn('u1@inno-ax.com')
     const { w } = await mountAt('/admin/projects/p1/parts?part=pt1')

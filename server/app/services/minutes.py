@@ -319,9 +319,7 @@ async def apply_minutes(
     await _guard_updates(session, updates, scope)
 
     try:
-        result = await _insert(
-            session, project, minutes.id, _Rows(agendas, updates, tasks), scope.actor.id
-        )
+        result = await _insert(session, project, minutes.id, _Rows(agendas, updates, tasks), scope)
         if payload.summary is not None:
             # updated_at 은 그대로 둔다 — '고친 시각' 은 사람이 글을 고친 때다
             minutes.summary = payload.summary
@@ -341,8 +339,9 @@ class _Rows:
 
 
 async def _insert(
-    session: AsyncSession, project: Project, minutes_id: str, rows: _Rows, actor_id: str
+    session: AsyncSession, project: Project, minutes_id: str, rows: _Rows, scope: Scope
 ) -> MinutesApplyResult:
+    actor_id = scope.actor.id
     created_at = now()
     agenda_ids: dict[str, str] = {}
     created_agendas: list[Agenda] = []
@@ -410,9 +409,9 @@ async def _insert(
             "agenda_ids": linked,
         }
         # partId 는 안 보낸다 — 상위 작업의 파트를 따르고, 최상위면 공통이다
-        # 상태 기록 첫 줄도 여기서 남는다 — 등록과 같은 함수다
+        # 상태 기록 첫 줄 · 파트 등록 권한도 여기서 — 등록과 같은 함수다
         task = await task_service._insert_task(
-            session, project, TaskCreate.model_validate(fields), actor_id
+            session, project, TaskCreate.model_validate(fields), scope
         )
         task.minutes_id = minutes_id
         task_ids[row.temp_id] = task.id

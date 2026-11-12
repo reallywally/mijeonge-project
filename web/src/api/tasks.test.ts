@@ -147,6 +147,34 @@ describe('한 번에 등록 — 목업 갈래', () => {
     const res = await createTasksBatch('p1', { tasks: [draft('t1')] })
     expect(res.tasks[0].key).toBe(`HW-${lastHwNo + 1}`)
   })
+
+  it('파트 작업 밑의 초안은 그 파트의 등록 권한이 있어야 한다 — 403, 걸린 자리를 짚고 아무것도 안 남긴다', async () => {
+    resetMockAuth()
+    /* AI Biz(k6)는 AI 파트 — 박지훈(u2)은 AI 소속이 아니다. 그 밑에 이은 초안도 같은 파트다 */
+    writeMockSession('u2')
+    const error = await createTasksBatch('p1', {
+      tasks: [draft('t1'), draft('t2', { parentId: 'k6' }), draft('t3', { parentTempId: 't2' })],
+    }).catch((e) => e)
+    expect(error).toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    expect(Object.keys((error as ApiError).detail ?? {})).toEqual([
+      'tasks.1.partId',
+      'tasks.2.partId',
+    ])
+
+    /* 등록 권한을 주면 만든다 */
+    mockDb().partMembers.push({
+      partId: 'pt2',
+      memberId: 'u2',
+      canView: true,
+      canCreate: true,
+      canUpdate: false,
+      canDelete: false,
+    })
+    const res = await createTasksBatch('p1', { tasks: [draft('t2', { parentId: 'k6' })] })
+    expect(res.tasks[0].partId).toBe('pt2')
+    expect(res.tasks[0].key).toBe(`HW-${lastHwNo + 1}`)
+    resetMockAuth()
+  })
 })
 
 describe('지우기 — 목업 갈래', () => {
@@ -161,12 +189,19 @@ describe('지우기 — 목업 갈래', () => {
     await expect(deleteTask('k21')).rejects.toMatchObject({ status: 401 })
   })
 
-  it('담당자는 못 지운다 — 403 FORBIDDEN. 등록한 사람은 지운다', async () => {
-    /* HW-3: 담당 박지훈(u2) · 등록 김서연(u1). HW-18: 담당 정하늘(u4) · 등록 이도현(u3) */
+  it('담당자는 못 지운다 — 403 FORBIDDEN. 공통은 등록한 사람, 파트 작업은 그 파트의 삭제 권한이 지운다', async () => {
+    /* HW-3(공통): 담당 박지훈(u2) · 등록 김서연(u1). HW-18(기간계 연동): 담당 정하늘(u4) · 등록 이도현(u3) */
     as('u2')
     await expect(deleteTask('k3')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
-    await expect(deleteTask('k18')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    /* 등록했어도 기간계 연동 소속이 아니다 */
     as('u3')
+    await expect(deleteTask('k18')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    /* 박지훈은 기간계 연동의 삭제 권한이 있다 — 그것을 끄면 못 지운다 */
+    as('u2')
+    const pm = mockDb().partMembers.find((x) => x.partId === 'pt3' && x.memberId === 'u2')!
+    pm.canDelete = false
+    await expect(deleteTask('k18')).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' })
+    pm.canDelete = true
     await expect(deleteTask('k18')).resolves.toBeUndefined()
   })
 
@@ -268,13 +303,14 @@ describe('줄 옮기기 — 목업 갈래', () => {
 
   it('고칠 수 없으면 403 · 없는 작업은 404 · 로그인이 없으면 401', async () => {
     expect(await codeOf(moveTask('k18', { parentId: null, beforeId: null }))).toMatch(/^401/)
-    /* HW-18: 담당 정하늘(u4) · 등록 이도현(u3) — 박지훈(u2)은 못 옮기고 등록한 사람은 옮긴다 */
-    as('u2')
+    /* HW-18(기간계 연동): 담당 정하늘(u4) · 등록 이도현(u3) — 파트 작업이라 등록한 사람도 그 파트의 수정 권한이
+       없으면 못 옮기고, 기간계 연동의 박지훈(u2)은 옮긴다 */
+    as('u3')
     expect(await codeOf(moveTask('k18', { parentId: null, beforeId: null }))).toBe('403 FORBIDDEN')
     expect(await codeOf(moveTask('nope', { parentId: null, beforeId: null }))).toBe(
       '404 TASK_NOT_FOUND',
     )
-    as('u3')
+    as('u2')
     expect(await codeOf(moveTask('k18', { parentId: null, beforeId: null }))).toBeNull()
   })
 })

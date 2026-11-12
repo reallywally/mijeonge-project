@@ -208,7 +208,7 @@ const openTest = (id: string) => openDetail('test', id)
           <SlidersHorizontal class="size-4" />
           기준 바꾸기
         </Button>
-        <PartScopeToggle />
+        <PartScopeToggle area="work" />
       </template>
     </div>
 

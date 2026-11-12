@@ -125,7 +125,7 @@ README 의 두 번째 핵심 컨셉이다. "서버 OS 뭐로 하기로 했지?" 
 - 만료된 세션 행은 그 쿠키가 다시 올 때만 지운다. 쌓이면 주기적으로 지우는 일을 6단계(운영)에 더한다
 - SSO(OIDC) — `provider='oidc:<이름>'` 줄을 더하고 처음 들어온 사람은 `email` 로 기존 멤버에 잇는다(없으면 거절)
 
-## 9단계 · 파트 — 보기 범위(권한 아님)
+## 9단계 · 파트 — 보기 범위(2026-11-12 부터 작업 · 테스트 쓰기에 파트 권한 — 31단계)
 
 **끝났다.** 자세한 기록(정해 둔 것 · 체크리스트 · 알게 된 것)은 `PLAN.done.md` 의 같은 제목 절에 있다.
 
@@ -470,6 +470,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 28 테스트 조치 내역 | **끝남** (2026-11-05) — 계약 `docs/api/test-comment.md`(사용자 결정). 리비전 `0034_test_comment`(작업 댓글과 같은 모양, `test_id` → `test_case` cascade, `(test_id, seq)` 인덱스). 넷 경로(`api/comment.py` · `services/comment.py` 에 작업 댓글 옆으로) · `require_scope` 의 `test_comment_id` 갈래(404 `TEST_COMMENT_NOT_FOUND`) · `TestCase.commentCount`(select 하나) · 상태 바꾸기의 실패 · 막힘 메모를 선택으로(빈 메모 422 걷음). 이력 · 신호 · 기준에 안 닿음. 시드엔 안 넣음 · `tests/test_test_comment.py`. API.md 두 줄 `구현`. 개발 DB 는 올림 |
 | 29 챗봇 테스트 언급 | **끝남** (2026-11-05) — 계약 `docs/api/chat.md` '테스트 언급 `@HW-T3`'. `MENTION_PATTERN` 이 `-T?\d+`, `find_mentions` 가 작업(`search.tasks_by_key`) · 테스트(`search.tests_by_key`)로 갈라 찾고 줄마다 `kind`. 도구 `get_test`(`search.get_test` → `TestDoc` — 태그 · 하위 · 결과 메모 · 조치 내역 최근 20개, 묶음은 `test.roll_up` 으로 화면과 같이 모음), `ChatRef.kind` · `REF_PATTERN` 에 `test`, 시스템 프롬프트. 리포트 · 리스크 요약은 `[[test:…]]` 를 칩으로 안 냄. `tests/test_chat.py` · 계약 검사에 `ChatRef.kind` · 도구 이름 대조를 더함. 이행 없음 |
 | 30 프로필 사진 | **끝남** (2026-11-06) — 계약 `docs/api/me.md`(사용자 결정). 리비전 `0035_member_avatar`(빈 표, PK = FK `member_id` cascade, `content_type` · `data` bytea · `updated_at`). `services/avatar.py`(data URL 풀기 · 매직 넘버 · 512 KB · 주소 만들기), `PUT · DELETE /api/auth/me/avatar`(→ `Me`), `GET /api/members/{id}/avatar`(project 라우터 — 로그인만, 경로에 프로젝트가 없어 부여는 안 봄), `DELETE /api/admin/members/{id}/avatar`. `Member` · `Me` 의 `avatarUrl` 은 `updated_at` 만 바깥 조인(`project.list_members` · `auth.me`). 시드엔 안 넣음 · `tests/test_avatar.py` · 계약 검사 `AUTH_SHAPES` 에 `avatarUrl` · `AvatarInput`. 개발 DB 는 올림, 시드는 안 다시 돌림 |
+| 31 파트 권한 | **끝남** (2026-11-12) — 계약 `docs/api/part.md` '파트 권한 (2026-11-12)'(사용자 결정). 리비전 `0040_part_rights`(`part_member` 에 `can_view` · `can_create` · `can_update` · `can_delete`, 있던 소속은 넷 다 켬, 열 기본값은 삭제만 끔). `PUT .../members/{memberId}` 가 본문(선택)으로 권한을 받고 서버가 맞춤(`part.normalize_rights`). 판정은 `access.py` 한 곳 — `Scope.part_rights`(요청마다 내 소속을 한 번 읽음, 관리자는 안 읽음) · `can_create_in_part` · `can_move_to_part` · `can_edit_task` · `can_delete_task` · `can_edit_test` · `can_delete_test`. 작업 등록은 `_insert_task`(단건 · 일괄 · 회의록)에서, 일괄은 먼저 줄마다 `tasks.N.partId`. 테스트 쓰기 길 전부 · 영향도 반영의 테스트 줄도. 안건은 안 탄다. `tests/test_part_rights.py` |
 
 ## 아직 안 정한 것
 

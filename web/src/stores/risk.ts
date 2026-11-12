@@ -72,7 +72,7 @@ export const useRiskStore = defineStore('risk', () => {
   /* [내 파트 | 전체] 는 세 종류에 같이 건다. 안건은 안건 화면과 같은 규칙, 작업 · 테스트는 파트 · 담당자만으로(조상으로 끌려 서는 것은 빼고).
      owners(사람별)는 화면에 안 그리지만 거르지 않고 둔다 */
   const agendas = computed(() =>
-    (current.value?.agendas ?? []).filter((t) => partStore.showsAgenda(t.agendaId)),
+    (current.value?.agendas ?? []).filter((t) => partStore.showsAgenda(t.agendaId, 'work')),
   )
   const tasks = computed(() => (current.value?.tasks ?? []).filter((t) => partStore.showsOwned(t)))
   const tests = computed(() => (current.value?.tests ?? []).filter((t) => partStore.showsOwned(t)))

@@ -10,6 +10,7 @@ import { MOCK_ADMIN_PASSWORD, MOCK_PASSWORD } from '@/fixtures'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import TasksView from './TasksView.vue'
 import AgendaListView from './AgendaListView.vue'
 
@@ -55,8 +56,12 @@ async function click(el: Element | undefined | null) {
   await flushPromises()
 }
 
+/* 볼 파트 고르기 — 'all' 은 풀기 단추(고른 게 있을 때만 선다), 'mine' 은 고르기 단추 */
 const scopeButton = (key: 'mine' | 'all') =>
-  document.body.querySelector<HTMLButtonElement>(`[aria-label="보기 범위"] [data-scope="${key}"]`)
+  document.body.querySelector<HTMLButtonElement>(
+    key === 'all' ? '[data-part-pick-clear]' : '[data-part-pick]',
+  )
+const pickLabel = () => document.body.querySelector('[data-part-pick-label]')?.textContent?.trim()
 const bodyButton = (text: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
 
@@ -78,7 +83,7 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
     await signedIn('u3@inno-ax.com')
     const w = await mountAt('/tasks?view=list')
 
-    expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
+    expect(pickLabel()).toBe('인프라')
     expect(w.text()).toContain('총 10건 중 1–10건')
     expect(w.text()).not.toContain('가상비서')
 
@@ -96,6 +101,8 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 
   it('조회 조건의 파트로 한 번 더 좁힌다', async () => {
     await signedIn('u1@inno-ax.com')
+    /* 업무 화면은 내 파트로 시작한다 — 전체에서 조회 조건으로 좁힌다 */
+    usePartStore().setScope('all')
     const w = await mountAt('/tasks?view=list')
     const picker = w
       .findAllComponents(Select)
@@ -112,6 +119,8 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 
   it('?part= 로 들어오면 그 파트로 걸러진 채 열린다. 이 프로젝트에 없는 파트면 거르지 않는다', async () => {
     await signedIn('u1@inno-ax.com')
+    /* 업무 화면은 내 파트로 시작한다 — 전체에서 조회 조건으로 좁힌다 */
+    usePartStore().setScope('all')
     const w = await mountAt('/tasks?view=list&part=pt1')
     expect(w.text()).toContain('총 5건')
 
@@ -122,6 +131,8 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
   it("파트 관리의 '작업 N건 보기' 로 와도 완료 숨기기로 건수가 어긋나지 않는다 — 보인 수 + 숨긴 수 (Q64)", async () => {
     localStorage.removeItem('innoflow.tasks.hideDone')
     await signedIn('u1@inno-ax.com')
+    /* 업무 화면은 내 파트로 시작한다 — 전체에서 조회 조건으로 좁힌다 */
+    usePartStore().setScope('all')
     const w = await mountAt('/tasks?view=list&part=pt1')
     /* 인프라 5건 중 완료(HW-19) 하나가 숨는다 */
     expect(w.text()).toContain('총 4건')
@@ -161,6 +172,8 @@ describe('작업 화면의 [내 파트 | 전체]', () => {
 describe('안건 목록의 [내 파트 | 전체]', () => {
   it('기간계(u2)는 공통 둘과 기간계 안건만 보고, 전체로 바꾸면 다 본다', async () => {
     await signedIn('u2@inno-ax.com')
+    /* 안건은 전체로 시작한다 — 내 파트를 골라 둔다 */
+    usePartStore().setScope('mine', 'agenda')
     const w = await mountAt('/agendas')
     expect(w.text()).toContain('총 3건')
     expect(w.text()).not.toContain('서버 OS 결정')

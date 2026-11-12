@@ -207,8 +207,8 @@ describe('검토', () => {
 
   it('작업 고칠 권한이 없으면 체크를 끄고 "고칠 권한이 없어요" 로 잠근다', async () => {
     resetMockAuth()
-    await signedIn('u2@inno-ax.com')
-    /* t5 의 연결 작업 k18 — 등록 이도현 · 담당 정하늘 */
+    await signedIn('u3@inno-ax.com')
+    /* t5 의 연결 작업 k18 — 기간계 연동 작업이라 등록한 이도현도 그 파트의 수정 권한이 없어 못 고친다 */
     await analyzed('t5')
     expect(row('task:k18')!.dataset.impactStatus).toBe('locked')
     expect(row('task:k18')!.querySelector('[data-impact-locked]')!.textContent).toContain(

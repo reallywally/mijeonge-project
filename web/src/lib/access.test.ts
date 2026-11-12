@@ -3,22 +3,28 @@ import {
   adminHome,
   canCreateProject,
   canDeleteComment,
+  canCreateInPart,
   canDeleteTask,
+  canDeleteTest,
   canDeleteAgenda,
   canEditComment,
   canEditTask,
+  canEditTest,
   canEditAgenda,
   canManageAccounts,
   canManageProject,
+  canMoveToPart,
   canOpen,
   canOpenAdmin,
   canSeeProject,
   emptyProjectsHome,
   gradeOf,
+  normalizePartRights,
   safeNext,
 } from '@/lib/access'
+import { togglePartRight } from '@/lib/part'
 import { assignableMembers, memberLabel, passwordProblem } from '@/lib/member'
-import type { Me } from '@/types/domain'
+import type { Me, PartMember, PartRights } from '@/types/domain'
 
 const me = (over: Partial<Me> = {}): Me => ({
   id: 'u2',
@@ -81,34 +87,156 @@ describe('권한 셋', () => {
   })
 })
 
-describe('작업 고치기 · 지우기', () => {
-  const task = (creatorId: string | null, ownerId: string | null) => ({ creatorId, ownerId })
+describe('작업 고치기 · 지우기 — 공통 작업', () => {
+  const task = (creatorId: string | null, ownerId: string | null) => ({
+    creatorId,
+    ownerId,
+    partId: null,
+  })
   const other = me({ id: 'u4' })
+  const none: PartMember[] = []
 
   it('고치기는 등록한 사람 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자', () => {
-    expect(canEditTask(user, task('u2', 'u3'), 'p1')).toBe(true)
-    expect(canEditTask(user, task('u3', 'u2'), 'p1')).toBe(true)
-    expect(canEditTask(other, task('u2', 'u3'), 'p1')).toBe(false)
-    expect(canEditTask(projectAdmin, task('u2', 'u3'), 'p1')).toBe(true)
+    expect(canEditTask(user, task('u2', 'u3'), 'p1', none)).toBe(true)
+    expect(canEditTask(user, task('u3', 'u2'), 'p1', none)).toBe(true)
+    expect(canEditTask(other, task('u2', 'u3'), 'p1', none)).toBe(false)
+    expect(canEditTask(projectAdmin, task('u2', 'u3'), 'p1', none)).toBe(true)
     /* p2 에서는 일반 사용자다 */
-    expect(canEditTask(projectAdmin, task('u2', 'u3'), 'p2')).toBe(false)
-    expect(canEditTask(systemAdmin, task(null, null), 'p9')).toBe(true)
-    expect(canEditTask(null, task('u2', 'u2'), 'p1')).toBe(false)
+    expect(canEditTask(projectAdmin, task('u2', 'u3'), 'p2', none)).toBe(false)
+    expect(canEditTask(systemAdmin, task(null, null), 'p9', none)).toBe(true)
+    expect(canEditTask(null, task('u2', 'u2'), 'p1', none)).toBe(false)
   })
 
   it('등록한 사람을 모르는(null) 옛 작업은 담당자 · 관리자만 고친다', () => {
-    expect(canEditTask(user, task(null, null), 'p1')).toBe(false)
-    expect(canEditTask(user, task(null, 'u2'), 'p1')).toBe(true)
+    expect(canEditTask(user, task(null, null), 'p1', none)).toBe(false)
+    expect(canEditTask(user, task(null, 'u2'), 'p1', none)).toBe(true)
   })
 
   it('지우기는 등록한 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 담당자는 못 지운다', () => {
-    expect(canDeleteTask(user, task('u2', 'u3'), 'p1')).toBe(true)
-    expect(canDeleteTask(user, task('u3', 'u2'), 'p1')).toBe(false)
-    expect(canDeleteTask(user, task(null, 'u2'), 'p1')).toBe(false)
-    expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p1')).toBe(true)
-    expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p2')).toBe(false)
-    expect(canDeleteTask(systemAdmin, task(null, null), 'p9')).toBe(true)
-    expect(canDeleteTask(null, task(null, null), 'p1')).toBe(false)
+    expect(canDeleteTask(user, task('u2', 'u3'), 'p1', none)).toBe(true)
+    expect(canDeleteTask(user, task('u3', 'u2'), 'p1', none)).toBe(false)
+    expect(canDeleteTask(user, task(null, 'u2'), 'p1', none)).toBe(false)
+    expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p1', none)).toBe(true)
+    expect(canDeleteTask(projectAdmin, task('u2', 'u3'), 'p2', none)).toBe(false)
+    expect(canDeleteTask(systemAdmin, task(null, null), 'p9', none)).toBe(true)
+    expect(canDeleteTask(null, task(null, null), 'p1', none)).toBe(false)
+  })
+})
+
+describe('파트 권한 — 파트 작업 · 테스트', () => {
+  const rights = (over: Partial<PartRights> = {}): PartRights => ({
+    canView: true,
+    canCreate: false,
+    canUpdate: false,
+    canDelete: false,
+    ...over,
+  })
+  /* u2 는 pt1 에 보기만, pt2 에 넷 다 */
+  const pms: PartMember[] = [
+    { partId: 'pt1', memberId: 'u2', ...rights() },
+    {
+      partId: 'pt2',
+      memberId: 'u2',
+      ...rights({ canCreate: true, canUpdate: true, canDelete: true }),
+    },
+  ]
+  const task = (
+    partId: string,
+    creatorId: string | null = 'u2',
+    ownerId: string | null = null,
+  ) => ({
+    creatorId,
+    ownerId,
+    partId,
+  })
+
+  it('등록 — 공통은 누구나, 파트는 그 파트의 등록 권한 · 관리자', () => {
+    expect(canCreateInPart(user, null, 'p1', [])).toBe(true)
+    expect(canCreateInPart(user, 'pt1', 'p1', pms)).toBe(false)
+    expect(canCreateInPart(user, 'pt2', 'p1', pms)).toBe(true)
+    /* 소속이 아닌 파트 */
+    expect(canCreateInPart(user, 'pt3', 'p1', pms)).toBe(false)
+    expect(canCreateInPart(projectAdmin, 'pt3', 'p1', [])).toBe(true)
+    expect(canCreateInPart(systemAdmin, 'pt3', 'p9', [])).toBe(true)
+    expect(canCreateInPart(null, null, 'p1', [])).toBe(false)
+  })
+
+  it('작업 고치기 — 등록한 사람이어도 파트의 수정 권한이 없으면 못 고친다. 담당자 · 관리자는 고친다', () => {
+    expect(canEditTask(user, task('pt1'), 'p1', pms)).toBe(false)
+    expect(canEditTask(user, task('pt1', 'u9', 'u2'), 'p1', pms)).toBe(true)
+    expect(canEditTask(user, task('pt2', 'u9'), 'p1', pms)).toBe(true)
+    expect(canEditTask(projectAdmin, task('pt1', 'u9'), 'p1', [])).toBe(true)
+  })
+
+  it('작업 지우기 — 파트의 삭제 권한 · 관리자만. 등록한 사람 · 담당자라도 권한이 없으면 못 지운다', () => {
+    expect(canDeleteTask(user, task('pt1', 'u2', 'u2'), 'p1', pms)).toBe(false)
+    expect(canDeleteTask(user, task('pt2', 'u9'), 'p1', pms)).toBe(true)
+    expect(canDeleteTask(projectAdmin, task('pt1', 'u9'), 'p1', [])).toBe(true)
+  })
+
+  it('다른 파트로 옮기기 — 옮겨 갈 파트의 수정 권한. 공통으로는 누구나', () => {
+    expect(canMoveToPart(user, null, 'p1', [])).toBe(true)
+    expect(canMoveToPart(user, 'pt1', 'p1', pms)).toBe(false)
+    expect(canMoveToPart(user, 'pt2', 'p1', pms)).toBe(true)
+    expect(canMoveToPart(projectAdmin, 'pt1', 'p1', [])).toBe(true)
+  })
+
+  it('테스트 — 공통은 프로젝트 멤버 누구나 고치고, 지우기는 만든 사람 · 관리자', () => {
+    const common = { ownerId: null, partId: null, createdBy: 'u9' }
+    expect(canEditTest(user, common, 'p1', [])).toBe(true)
+    expect(canEditTest(user, common, 'p3', [])).toBe(false)
+    expect(canDeleteTest(user, common, 'p1', [])).toBe(false)
+    expect(canDeleteTest(user, { ...common, createdBy: 'u2' }, 'p1', [])).toBe(true)
+    expect(canDeleteTest(projectAdmin, common, 'p1', [])).toBe(true)
+  })
+
+  it('테스트 — 파트는 담당자 · 관리자 · 수정 권한이 고치고, 삭제 권한 · 관리자가 지운다', () => {
+    const t = (partId: string, ownerId: string | null = null) => ({
+      ownerId,
+      partId,
+      createdBy: 'u2',
+    })
+    expect(canEditTest(user, t('pt1'), 'p1', pms)).toBe(false)
+    expect(canEditTest(user, t('pt1', 'u2'), 'p1', pms)).toBe(true)
+    expect(canEditTest(user, t('pt2'), 'p1', pms)).toBe(true)
+    expect(canEditTest(projectAdmin, t('pt1'), 'p1', [])).toBe(true)
+    expect(canDeleteTest(user, t('pt1', 'u2'), 'p1', pms)).toBe(false)
+    expect(canDeleteTest(user, t('pt2'), 'p1', pms)).toBe(true)
+  })
+
+  it('맞추기 — 삭제 ⇒ 수정, 등록 · 수정 ⇒ 보기', () => {
+    const off = rights({ canView: false })
+    expect(normalizePartRights({ ...off, canDelete: true })).toEqual({
+      canView: true,
+      canCreate: false,
+      canUpdate: true,
+      canDelete: true,
+    })
+    expect(normalizePartRights({ ...off, canCreate: true }).canView).toBe(true)
+    expect(normalizePartRights(off)).toEqual(off)
+  })
+
+  it('칸 하나 켜고 끄기 — 켜면 앞선 것도 켜고, 보기를 끄면 다, 수정을 끄면 삭제도 끈다', () => {
+    const off = rights({ canView: false })
+    const all = rights({ canCreate: true, canUpdate: true, canDelete: true })
+    expect(togglePartRight(off, 'canDelete', true)).toEqual({
+      canView: true,
+      canCreate: false,
+      canUpdate: true,
+      canDelete: true,
+    })
+    expect(togglePartRight(off, 'canCreate', true)).toEqual(rights({ canCreate: true }))
+    expect(togglePartRight(all, 'canView', false)).toEqual(off)
+    expect(togglePartRight(all, 'canUpdate', false)).toEqual(rights({ canCreate: true }))
+    expect(togglePartRight(all, 'canCreate', false)).toEqual(
+      rights({ canUpdate: true, canDelete: true }),
+    )
+    /* 화면이 보내는 넷은 서버가 다시 맞춰도 그대로다 */
+    for (const r of ['canView', 'canCreate', 'canUpdate', 'canDelete'] as const)
+      for (const on of [true, false]) {
+        const next = togglePartRight(all, r, on)
+        expect(normalizePartRights(next)).toEqual(next)
+      }
   })
 })
 

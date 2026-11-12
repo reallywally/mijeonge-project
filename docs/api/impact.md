@@ -181,7 +181,7 @@ interface ImpactApplyResult {
 | POST | `/api/agendas/{agendaId}/impact` | 분석 — 본문 없음. 끝까지 받으면 남기고 `impact` 이벤트로 낸다 | `text/event-stream` (`ImpactEvent`) |
 | POST | `/api/agenda-impacts/{impactId}/apply` | 반영 — `ImpactApplyInput`. **한 트랜잭션** | `ImpactApplyResult` · 200 |
 
-- 권한: 보기 · 분석은 그 프로젝트 멤버(아니면 404 `AGENDA_NOT_FOUND` — 다른 안건 API 와 같다). 반영은 **줄마다 그 작업 · 테스트의 고치기 권한**(`auth.md` — 작업은 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자, 테스트는 테스트 PATCH 와 같이 그 프로젝트 멤버 누구나). 하나라도 없으면 403 `FORBIDDEN`, `detail` 은 `tasks.N` · `tests.N`
+- 권한: 보기 · 분석은 그 프로젝트 멤버(아니면 404 `AGENDA_NOT_FOUND` — 다른 안건 API 와 같다). 반영은 **줄마다 그 작업 · 테스트의 고치기 권한**(`auth.md` — 작업은 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자, 테스트는 테스트 PATCH 와 같이 그 프로젝트 멤버 누구나. 2026-11-12 부터 파트가 달린 것은 그 파트의 수정 권한 — `part.md` '파트 권한'. 연결만 하는 테스트 줄도 같다). 하나라도 없으면 403 `FORBIDDEN`, `detail` 은 `tasks.N` · `tests.N`
 - `impactId` 경로는 `require_scope` 경계 검사에 든다(분석의 프로젝트로 본다). 없음 · 지운 안건의 것 · 못 보는 프로젝트 것은 404 `IMPACT_NOT_FOUND`
 
 ### `apply` 규칙

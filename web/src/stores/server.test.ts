@@ -518,7 +518,10 @@ describe('파트 (서버 갈래)', () => {
     const made = { id: 'srv-pt', projectId: 'p1', name: '디자인', active: true }
     on('POST /api/projects/p1/parts', () => json(made, 201))
     on('PATCH /api/parts/srv-pt', (body) => json({ ...made, ...(body as object) }))
-    on('PUT /api/parts/srv-pt/members/u2', () => json({ partId: 'srv-pt', memberId: 'u2' }))
+    const rights = { canView: true, canCreate: true, canUpdate: true, canDelete: false }
+    on('PUT /api/parts/srv-pt/members/u2', (body) =>
+      json({ partId: 'srv-pt', memberId: 'u2', ...rights, ...(body as object) }),
+    )
     on('DELETE /api/parts/srv-pt/members/u2', () => new Response(null, { status: 204 }))
 
     expect(await part.createPart(' 디자인 ')).toBe(true)
@@ -533,6 +536,14 @@ describe('파트 (서버 갈래)', () => {
     /* 본문 없는 쓰기 — Content-Type 도 싣지 않는다 (Q29) */
     expect(calls.at(-1)).toEqual({ route: 'PUT /api/parts/srv-pt/members/u2', body: undefined })
     expect(part.membersOf('srv-pt')).toEqual(['u2'])
+    expect(part.membershipOf('srv-pt', 'u2')).toMatchObject(rights)
+
+    /* 권한 바꾸기는 넷을 다 실어 보내고 응답으로 갈아끼운다 */
+    const all = { canView: true, canCreate: true, canUpdate: true, canDelete: true }
+    expect(await part.setPartRights('srv-pt', 'u2', all)).toBe(true)
+    expect(calls.at(-1)).toEqual({ route: 'PUT /api/parts/srv-pt/members/u2', body: all })
+    expect(part.membershipOf('srv-pt', 'u2')).toMatchObject(all)
+    expect(data.partMembers.filter((pm) => pm.partId === 'srv-pt')).toHaveLength(1)
     await part.leavePart('srv-pt', 'u2')
     expect(part.membersOf('srv-pt')).toEqual([])
   })

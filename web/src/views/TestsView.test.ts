@@ -71,6 +71,8 @@ vi.mock('dhtmlx-gantt', () => ({
 
 async function mountAt(path: string, email = 'u1@inno-ax.com') {
   await useAuthStore().login(email, MOCK_PASSWORD)
+  /* 업무 화면은 내 파트로 시작한다 — 여기 검사들은 전부를 본다 */
+  usePartStore().setScope('all')
   const router = createRouter({
     history: createWebHistory(),
     routes: [
@@ -262,6 +264,48 @@ describe('테스트 상세', () => {
     await mountAt('/tests/tc2', 'u3@inno-ax.com')
     expect(popupText()).toContain('올바른 계정으로 로그인')
     expect($('[data-test-remove]')).toBeNull()
+  })
+})
+
+describe('테스트 상세 — 파트 권한', () => {
+  /* 박지훈(u2)은 기간계 연동 소속 — 인프라 테스트 T8(담당 정하늘)은 못 고친다. 공통 테스트는 누구나 고친다 */
+  it('고칠 권한이 없으면 칸이 잠기고 안내가 선다 — 조치 내역은 쓴다', async () => {
+    const { w } = await mountAt('/tests/tc8', 'u2@inno-ax.com')
+    expect($('[data-test-readonly]')).not.toBeNull()
+    expect(popupText()).not.toContain('고치면 바로 저장됩니다')
+    expect($('textarea[aria-label="제목"]')!.hasAttribute('readonly')).toBe(true)
+    expect($('textarea[aria-label="테스트 내용"]')!.hasAttribute('readonly')).toBe(true)
+    expect(statusSelect(w, 'tc8').props('disabled')).toBe(true)
+    expect($('input[aria-label="시작 날짜"]')!.hasAttribute('disabled')).toBe(true)
+    expect($('[aria-label="담당자"]')!.hasAttribute('disabled')).toBe(true)
+    /* 태그는 칩만 — 찾기 칸 · 떼기가 없다. 지우기도 없다 */
+    expect($('input[placeholder="작업 번호나 안건 제목으로 찾기"]')).toBeNull()
+    expect($$('button[title="태그 떼기"]')).toHaveLength(0)
+    expect($('[data-test-remove]')).toBeNull()
+    const comment = $('textarea[placeholder="무엇을 해 봤고 무엇을 고쳤는지 남기세요"]')
+    expect(comment).not.toBeNull()
+    expect(comment!.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('공통 테스트는 고친다 — 안내가 없다', async () => {
+    await mountAt('/tests/tc3', 'u2@inno-ax.com')
+    expect($('[data-test-readonly]')).toBeNull()
+    expect($('textarea[aria-label="제목"]')!.hasAttribute('readonly')).toBe(false)
+  })
+
+  it('간트 — 못 고치는 테스트는 readonly 로 넘긴다', async () => {
+    await mountAt('/tests', 'u2@inno-ax.com')
+    const item = (id: string) => chart.parsed.find((t) => t.id === id) as { readonly?: boolean }
+    expect(item('tc8').readonly).toBe(true)
+    expect(item('tc3').readonly).toBeUndefined()
+  })
+
+  it('등록 권한이 없는 파트의 묶음 아래로 추가하면 파트는 공통으로 선다', async () => {
+    await mountAt('/tests/new?parent=tc5', 'u2@inno-ax.com')
+    await type('textarea[aria-label="제목"]', '계정 잠금 풀기')
+    await click(button('만들기'))
+    const made = useTestStore().tests.find((t) => t.title === '계정 잠금 풀기')!
+    expect(made).toMatchObject({ parentId: 'tc5', partId: null })
   })
 })
 

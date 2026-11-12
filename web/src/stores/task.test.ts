@@ -8,16 +8,19 @@ import { toastError } from '@/lib/notify'
 import { useAuthStore } from './auth'
 import { useDataStore } from './data'
 import type { Task } from '@/types/domain'
+import { usePartStore } from './part'
 import { useTaskStore } from './task'
 
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 
-/* 고치기는 작성자 · 담당자 · 관리자만이다 — 계산을 보는 검사들이라 프로젝트 관리자(u1)로 들어온다 */
+/* 고치기는 작성자 · 담당자 · 관리자 · 파트 권한이다 — 계산을 보는 검사들이라 프로젝트 관리자(u1)로 들어온다.
+   업무 화면은 내 파트로 시작하니 전체로 풀어 둔다 */
 beforeEach(async () => {
   vi.mocked(toastError).mockClear()
   setActivePinia(createPinia())
   resetMockAuth()
   await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
+  usePartStore().setScope('all')
 })
 
 describe('작업 목록', () => {
@@ -350,9 +353,9 @@ describe('완료 숨기기 (Q64)', () => {
 })
 
 describe('고치기 · 지우기 권한', () => {
-  const asU2 = async () => {
+  const as = async (email: string) => {
     resetMockAuth()
-    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    await useAuthStore().login(email, MOCK_PASSWORD)
   }
 
   it('목업에서 등록하면 등록한 사람이 찍힌다', async () => {
@@ -372,7 +375,8 @@ describe('고치기 · 지우기 권한', () => {
   })
 
   it('못 고치는 사람이 고치면 목업도 403 FORBIDDEN 으로 알리고 그대로 둔다', async () => {
-    await asU2()
+    /* HW-18 은 기간계 연동 작업 — 등록한 이도현(u3)도 그 파트의 수정 권한이 없어 못 고친다 */
+    await as('u3@inno-ax.com')
     const task = useTaskStore()
     const k18 = useDataStore().allTasks.find((t) => t.id === 'k18')!
     task.setTitle('k18', '바꾼 제목')
@@ -420,9 +424,11 @@ describe('고치기 · 지우기 권한', () => {
   })
 
   it('못 지우는 후손이 있으면 줄기째 못 지운다 — 403 을 던지고 남긴다', async () => {
-    await asU2()
+    /* 이도현(u3)은 인프라의 삭제 권한이 있다 — 하위 HW-22 를 기간계 연동으로 옮겨 두면 그것을 못 지운다 */
+    await as('u3@inno-ax.com')
     const task = useTaskStore()
     const data = useDataStore()
+    data.allTasks.find((t) => t.id === 'k22')!.partId = 'pt3'
     const k4 = data.allTasks.find((t) => t.id === 'k4')!
     expect(task.canDelete(k4)).toBe(true)
     expect(task.canDeleteTree(k4)).toBe(false)
@@ -512,9 +518,9 @@ describe('줄 끌어 옮기기', () => {
 
   it('못 고치는 작업은 403 FORBIDDEN 으로 알리고 그대로 둔다', async () => {
     resetMockAuth()
-    await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
+    await useAuthStore().login('u3@inno-ax.com', MOCK_PASSWORD)
     const task = useTaskStore()
-    /* HW-18: 담당 정하늘(u4) · 등록 이도현(u3) */
+    /* HW-18(기간계 연동): 담당 정하늘(u4) · 등록 이도현(u3) — 이도현은 그 파트의 수정 권한이 없다 */
     expect(task.canMove('k18', null)).toBe(false)
     task.moveTask('k18', null, null)
     expect(lastCode()).toBe('FORBIDDEN')

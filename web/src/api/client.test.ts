@@ -103,7 +103,16 @@ describe('스냅샷', () => {
     tasks: [],
     taskAgendaLinks: [{ taskId: 'k1', agendaId: 't1' }],
     parts: [{ id: 'pt1', projectId: 'p1', name: '인프라', active: true }],
-    partMembers: [{ partId: 'pt1', memberId: 'u3' }],
+    partMembers: [
+      {
+        partId: 'pt1',
+        memberId: 'u3',
+        canView: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      },
+    ],
   }
 
   it('JSON 키를 data 스토어 이름으로 옮긴다', () => {

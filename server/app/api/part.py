@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.deps import ProjectAdmin, Session
-from app.schemas.part import PartCreate, PartMemberOut, PartOut, PartPatch
+from app.schemas.part import PartCreate, PartMemberIn, PartMemberOut, PartOut, PartPatch
 from app.services import part as part_service
 
 # 쓰기는 전부 프로젝트 관리자 · 시스템 관리자. 읽기는 스냅샷 한 방이라 GET 이 없다
@@ -25,9 +25,14 @@ async def patch_part(
 
 @router.put("/parts/{part_id}/members/{member_id}")
 async def add_part_member(
-    part_id: str, member_id: str, _: ProjectAdmin, session: Session
+    part_id: str,
+    member_id: str,
+    _: ProjectAdmin,
+    session: Session,
+    payload: PartMemberIn | None = None,
 ) -> PartMemberOut:
-    return await part_service.add_member(session, part_id, member_id)
+    """넣기 · 권한 바꾸기. 본문 없이 불러도 된다 — 새 소속이면 기본 권한, 있던 소속은 그대로."""
+    return await part_service.add_member(session, part_id, member_id, payload)
 
 
 @router.delete("/parts/{part_id}/members/{member_id}", status_code=204)

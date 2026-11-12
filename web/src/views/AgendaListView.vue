@@ -114,7 +114,7 @@ function resetPage() {
   page.value = 1
 }
 /* 보기 범위를 바꾸면 줄 수가 달라진다 — 없는 쪽에 머물지 않게 첫 쪽으로 */
-watch(() => partStore.scope, resetPage)
+watch(() => partStore.pickedIdsOf('agenda'), resetPage)
 
 /* 파트 관리의 '안건 N건 보기' 로 오면 그 파트로 걸러진 채 연다(?part=). 파트를 받기 전이면 받은 뒤에 맞춘다 */
 watch(
@@ -223,7 +223,7 @@ function onCreated(id: string) {
       <span class="text-xs font-medium text-muted-foreground">안건</span>
       <span class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <div class="grow" />
-      <PartScopeToggle />
+      <PartScopeToggle area="agenda" />
     </div>
 
     <div class="flex min-h-0 grow overflow-y-auto px-6 pt-6">

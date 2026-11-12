@@ -1,4 +1,13 @@
-import type { Me, ProjectRole, Task, TaskComment, Agenda } from '@/types/domain'
+import type {
+  Agenda,
+  Me,
+  PartMember,
+  PartRights,
+  ProjectRole,
+  Task,
+  TaskComment,
+  TestCase,
+} from '@/types/domain'
 
 /*
  * 권한 판단 — 메뉴 숨기기 · 라우터 가드 · 목업 서버가 모두 이 함수들을 쓴다 (docs/api/auth.md '권한 셋').
@@ -33,19 +42,116 @@ export const canDeleteComment = (
   projectId: string,
 ) => canEditComment(me, comment) || canManageProject(me, projectId)
 
-/** 작업 고치기(속성 · 본문 · 체크박스 · 안건 연결)는 등록한 사람 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
-    댓글 · 확인 요청은 이 경계를 따르지 않는다 */
-export const canEditTask = (
+/* 파트 권한 (2026-11-12, docs/api/part.md) — 파트는 보기를 가리지 않는다. 소속마다 붙은 보기 · 등록 · 수정 · 삭제가
+   그 파트의 작업 · 테스트 쓰기만 가른다. 안건은 따르지 않는다. 그 프로젝트 관리자 · 시스템 관리자는 늘 된다 */
+
+export type PartRight = keyof PartRights
+
+/** 내 소속(그 파트)의 그 권한 — 소속이 아니면 없다 */
+export const hasPartRight = (
   me: Me | null,
-  task: Pick<Task, 'creatorId' | 'ownerId'>,
-  projectId: string,
+  partMembers: readonly PartMember[],
+  partId: string,
+  right: PartRight,
 ) =>
   me !== null &&
-  (task.creatorId === me.id || task.ownerId === me.id || canManageProject(me, projectId))
+  partMembers.some((pm) => pm.partId === partId && pm.memberId === me.id && pm[right])
 
-/** 작업 지우기는 등록한 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 담당자는 못 지운다 */
-export const canDeleteTask = (me: Me | null, task: Pick<Task, 'creatorId'>, projectId: string) =>
-  me !== null && (task.creatorId === me.id || canManageProject(me, projectId))
+/** 그 파트에 작업 · 테스트를 새로 둘 수 있나 — 공통(null)은 누구나 */
+export const canCreateInPart = (
+  me: Me | null,
+  partId: string | null,
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  (partId === null ||
+    canManageProject(me, projectId) ||
+    hasPartRight(me, partMembers, partId, 'canCreate'))
+
+/** 작업 · 테스트의 파트를 그 파트로 옮길 수 있나 — 공통(null)으로는 누구나. 원래 레코드를 고칠 권한은 따로 본다 */
+export const canMoveToPart = (
+  me: Me | null,
+  partId: string | null,
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  (partId === null ||
+    canManageProject(me, projectId) ||
+    hasPartRight(me, partMembers, partId, 'canUpdate'))
+
+/** 파트 소속에 다는 권한 — 지우기 ⇒ 수정, 등록 · 수정 ⇒ 보기. 서버도 같은 순서로 맞춘다 */
+export function normalizePartRights(r: PartRights): PartRights {
+  const canDelete = r.canDelete
+  const canUpdate = r.canUpdate || canDelete
+  const canCreate = r.canCreate
+  return { canView: r.canView || canCreate || canUpdate, canCreate, canUpdate, canDelete }
+}
+
+/** 새 소속의 기본 — 보기 · 등록 · 수정, 지우기는 따로 준다 */
+export const DEFAULT_PART_RIGHTS: PartRights = {
+  canView: true,
+  canCreate: true,
+  canUpdate: true,
+  canDelete: false,
+}
+
+/** 작업 고치기(속성 · 본문 · 체크박스 · 안건 연결). 공통 작업은 등록한 사람 · 담당자 · 관리자,
+    파트 작업은 담당자 · 관리자 · 그 파트의 수정 권한. 댓글 · 확인 요청은 이 경계를 따르지 않는다 */
+export const canEditTask = (
+  me: Me | null,
+  task: Pick<Task, 'creatorId' | 'ownerId' | 'partId'>,
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  (task.ownerId === me.id ||
+    canManageProject(me, projectId) ||
+    (task.partId === null
+      ? task.creatorId === me.id
+      : hasPartRight(me, partMembers, task.partId, 'canUpdate')))
+
+/** 작업 지우기. 공통 작업은 등록한 사람 · 관리자(담당자는 못 지운다), 파트 작업은 관리자 · 그 파트의 삭제 권한 */
+export const canDeleteTask = (
+  me: Me | null,
+  task: Pick<Task, 'creatorId' | 'partId'>,
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  (canManageProject(me, projectId) ||
+    (task.partId === null
+      ? task.creatorId === me.id
+      : hasPartRight(me, partMembers, task.partId, 'canDelete')))
+
+/** 테스트 고치기(속성 · 상태 · 태그 · 기준). 공통 테스트는 프로젝트 멤버 누구나,
+    파트 테스트는 담당자 · 관리자 · 그 파트의 수정 권한. 조치 내역(댓글)은 따르지 않는다 */
+export const canEditTest = (
+  me: Me | null,
+  test: Pick<TestCase, 'ownerId' | 'partId'>,
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  canSeeProject(me, projectId) &&
+  (test.partId === null ||
+    test.ownerId === me.id ||
+    canManageProject(me, projectId) ||
+    hasPartRight(me, partMembers, test.partId, 'canUpdate'))
+
+/** 테스트 지우기. 공통 테스트는 만든 사람 · 관리자, 파트 테스트는 관리자 · 그 파트의 삭제 권한 */
+export const canDeleteTest = (
+  me: Me | null,
+  test: Pick<TestCase, 'createdBy' | 'partId'>,
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  (canManageProject(me, projectId) ||
+    (test.partId === null
+      ? test.createdBy === me.id
+      : hasPartRight(me, partMembers, test.partId, 'canDelete')))
 
 /** 안건 고치기(제목 · 설명 · 결정내용 · 상태 · 기한 · 담당자 · 파트)는 등록한 사람 · 담당자 · 그 프로젝트 관리자 ·
     시스템 관리자 — 결정내용 · 상태도 같은 PATCH 라 같은 넷만 바꾼다 (docs/api/agenda.md) */

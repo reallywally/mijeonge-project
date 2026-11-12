@@ -4,7 +4,7 @@
 (403 을 내면 그런 프로젝트가 있다는 것을 알려 준다). 부여는 받았는데 모자라면 403 이다.
 """
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from sqlalchemy import Select, select
@@ -18,6 +18,7 @@ from app.models import (
     Member,
     Minutes,
     Part,
+    PartMember,
     Project,
     ProjectMember,
     RiskAnalysis,
@@ -30,6 +31,19 @@ from app.services.auth import Actor
 
 
 @dataclass(frozen=True)
+class PartRights:
+    """한 파트에서의 내 권한 — `part_member` 의 네 칸 (docs/api/part.md '파트 권한')."""
+
+    view: bool
+    create: bool
+    update: bool
+    delete: bool
+
+
+NO_RIGHTS = PartRights(view=False, create=False, update=False, delete=False)
+
+
+@dataclass(frozen=True)
 class Scope:
     """요청 경로가 가리키는 프로젝트와, 그 안에서의 내 자리."""
 
@@ -37,10 +51,15 @@ class Scope:
     project_id: str
     # 부여받은 역할. 시스템 관리자가 부여 없이 들어왔으면 None
     role: str | None
+    # 그 프로젝트에서 내가 속한 파트 → 권한. 관리자는 다 되니 읽지 않는다(빈 것)
+    part_rights: Mapping[str, PartRights]
 
     @property
     def can_manage(self) -> bool:
         return self.actor.is_admin or self.role == "admin"
+
+    def rights(self, part_id: str) -> PartRights:
+        return self.part_rights.get(part_id, NO_RIGHTS)
 
 
 def forbidden(message: str = "권한이 없습니다.") -> ApiError:
@@ -165,8 +184,27 @@ async def resolve_scope(
         if role is None and not actor.is_admin:
             raise not_found(code, message)
         if scope is None:
-            scope = Scope(actor=actor, project_id=project_id, role=role)
+            manages = actor.is_admin or role == "admin"
+            rights = {} if manages else await part_rights(session, actor.id, project_id)
+            scope = Scope(actor=actor, project_id=project_id, role=role, part_rights=rights)
     return scope
+
+
+async def part_rights(
+    session: AsyncSession, member_id: str, project_id: str
+) -> dict[str, PartRights]:
+    """그 프로젝트에서 내가 속한 파트마다의 권한. 보관한 파트도 같다 — 옛 작업을 계속 고친다."""
+    rows = await session.scalars(
+        select(PartMember)
+        .join(Part, Part.id == PartMember.part_id)
+        .where(PartMember.member_id == member_id, Part.project_id == project_id)
+    )
+    return {
+        row.part_id: PartRights(
+            view=row.can_view, create=row.can_create, update=row.can_update, delete=row.can_delete
+        )
+        for row in rows.all()
+    }
 
 
 async def visible_project_ids(session: AsyncSession, actor: Actor) -> list[str] | None:
@@ -221,25 +259,68 @@ async def guard_cc(
     return unique
 
 
+# --- 작업 · 테스트의 파트 권한 (docs/api/part.md '파트 권한 (2026-11-12)') ---
+# 파트가 없는(공통) 레코드는 예전 규칙 그대로다. 관리자는 파트와 상관없이 다 된다.
+# 안건은 파트 권한을 타지 않는다 — 파트를 넘나드는 협의가 안건의 일이다
+
+
+def can_create_in_part(scope: Scope, part_id: str | None) -> bool:
+    """새 작업 · 테스트를 그 파트에 둘 수 있나. 파트는 상위를 따른 뒤의 값이다."""
+    return part_id is None or scope.can_manage or scope.rights(part_id).create
+
+
+def can_move_to_part(scope: Scope, part_id: str | None) -> bool:
+    """작업 · 테스트를 다른 파트로 옮길 때 **옮겨 갈** 파트의 검사. 공통으로 빼는 것은 막지 않는다
+    — 옮기기 전 레코드의 고치기 권한은 따로 본다."""
+    return part_id is None or scope.can_manage or scope.rights(part_id).update
+
+
 def can_edit_task(scope: Scope, task: Task) -> bool:
-    """작업 하나를 고칠 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
+    """작업 하나를 고칠 수 있나. 공통이면 생성자 · 담당자 · 관리자, 파트가 있으면
+    담당자 · 관리자 · 그 파트의 수정 권한 — 등록만 한 사람은 파트 권한 없이는 못 고친다.
 
     담당자를 바꾸는 수정도 바꾸기 **전** 작업으로 본다 — 부르는 쪽이 고치기 전에 부른다.
     """
     me = scope.actor.id
-    return scope.can_manage or me in (task.creator_id, task.owner_id)
+    if scope.can_manage or task.owner_id == me:
+        return True
+    if task.part_id is None:
+        return task.creator_id == me
+    return scope.rights(task.part_id).update
 
 
 def can_delete_task(scope: Scope, task: Task) -> bool:
-    """지우기는 담당자에게 주지 않는다 — 맡은 일을 맡은 사람이 없앨 수 있으면 기록이 사라진다."""
-    return scope.can_manage or task.creator_id == scope.actor.id
+    """지우기는 담당자에게 주지 않는다 — 맡은 일을 맡은 사람이 없앨 수 있으면 기록이 사라진다.
+    공통이면 생성자 · 관리자, 파트가 있으면 관리자 · 그 파트의 삭제 권한."""
+    if scope.can_manage:
+        return True
+    if task.part_id is None:
+        return task.creator_id == scope.actor.id
+    return scope.rights(task.part_id).delete
+
+
+def can_edit_test(scope: Scope, test: TestCase) -> bool:
+    """테스트 고치기 · 상태 · 태그 · 기준 확인. 공통이면 그 프로젝트 누구나(예전 그대로),
+    파트가 있으면 담당자 · 관리자 · 그 파트의 수정 권한."""
+    if test.part_id is None or scope.can_manage or test.owner_id == scope.actor.id:
+        return True
+    return scope.rights(test.part_id).update
+
+
+def can_delete_test(scope: Scope, test: TestCase) -> bool:
+    """공통이면 만든 사람 · 관리자, 파트가 있으면 관리자 · 그 파트의 삭제 권한."""
+    if scope.can_manage:
+        return True
+    if test.part_id is None:
+        return test.created_by == scope.actor.id
+    return scope.rights(test.part_id).delete
 
 
 def can_edit_agenda(scope: Scope, agenda: Agenda) -> bool:
     """안건 하나를 고치고 **지울** 수 있나 — 생성자 · 담당자 · 그 프로젝트 관리자 · 시스템 관리자.
 
     작업과 달리 담당자도 지운다(2026-11-02 사용자 결정). 담당자를 바꾸는 수정도 바꾸기 **전**
-    안건으로 본다 — 부르는 쪽이 고치기 전에 부른다.
+    안건으로 본다 — 부르는 쪽이 고치기 전에 부른다. 파트 권한은 타지 않는다(2026-11-12).
     """
     me = scope.actor.id
     return scope.can_manage or me in (agenda.creator_id, agenda.owner_id)

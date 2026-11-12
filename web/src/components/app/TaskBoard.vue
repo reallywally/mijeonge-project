@@ -6,7 +6,7 @@ import PartChip from '@/components/app/PartChip.vue'
 import TaskStatusBadge from '@/components/app/TaskStatusBadge.vue'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
-import { READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
+import { TASK_READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import type { TaskStatus } from '@/types/domain'
@@ -137,7 +137,7 @@ const agendaTitles = (taskId: string) =>
               </span>
               <div class="grow" />
               <div class="shrink-0" @click.stop>
-                <!-- 고칠 권한이 없는 카드(작성자 · 담당자 · 관리자가 아님)는 상태를 보기만 한다 -->
+                <!-- 고칠 권한이 없는 카드(lib/access canEditTask)는 상태를 보기만 한다 -->
                 <Select
                   :model-value="row.task.status"
                   :disabled="!taskStore.canEdit(row.task)"
@@ -146,7 +146,7 @@ const agendaTitles = (taskId: string) =>
                   <SelectTrigger
                     class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent enabled:hover:bg-muted focus:ring-[3px] disabled:cursor-default disabled:opacity-100"
                     :aria-label="`상태 ${taskStatusLabel(row.task.status)}`"
-                    :title="taskStore.canEdit(row.task) ? undefined : READONLY_HINT"
+                    :title="taskStore.canEdit(row.task) ? undefined : TASK_READONLY_HINT"
                   >
                     <TaskStatusBadge :status="row.task.status" />
                   </SelectTrigger>

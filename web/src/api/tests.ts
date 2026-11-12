@@ -4,7 +4,13 @@ import { forbidden, later, mockDb, mockWorld, requireMe, requireProject } from '
 import { isMockMode } from '@/api/mode'
 import { agendas, projects } from '@/fixtures'
 import type { MockTestCase } from '@/fixtures'
-import { canDeleteComment, canSeeProject } from '@/lib/access'
+import {
+  canCreateInPart,
+  canDeleteTest,
+  canEditTest,
+  canMoveToPart,
+  canSeeProject,
+} from '@/lib/access'
 import { kstToday, nowIso } from '@/lib/date'
 import { change, diffChanges } from '@/lib/history'
 import { uniqueIds } from '@/lib/member'
@@ -30,6 +36,11 @@ function requireTest(me: Me, testId: string): MockTestCase {
   const row = mockDb().tests.find((t) => t.id === testId)
   if (!row || !canSeeProject(me, row.projectId)) throw notFound()
   return row
+}
+
+/** 고치기(속성 · 상태 · 태그 · 기준) — 공통 테스트는 프로젝트 멤버 누구나, 파트 테스트는 담당자 · 관리자 · 그 파트의 수정 권한 */
+function requireEditable(me: Me, row: MockTestCase) {
+  if (!canEditTest(me, row, row.projectId, mockDb().partMembers)) throw forbidden()
 }
 
 const hasChildren = (testId: string) => mockDb().tests.some((t) => t.parentId === testId)
@@ -251,6 +262,8 @@ const mock = {
     const parent = parentId ? tests.find((t) => t.id === parentId) : undefined
     const partId = input.partId !== undefined ? input.partId : (parent?.partId ?? null)
     checkPart(projectId, partId, null)
+    if (!canCreateInPart(me, partId, projectId, mockDb().partMembers))
+      throw mockError(403, 'FORBIDDEN', '이 파트에 테스트를 등록할 권한이 없습니다.')
     const refs = dedupeRefs(input.refs ?? [])
     if (refs.length > TEST_REF_MAX) throw refLimit()
     for (const r of refs) requireRefTarget(projectId, r)
@@ -289,6 +302,13 @@ const mock = {
   patch(testId: string, patch: TestPatch): TestCase {
     const me = requireMe()
     const row = requireTest(me, testId)
+    requireEditable(me, row)
+    if (
+      patch.partId !== undefined &&
+      patch.partId !== row.partId &&
+      !canMoveToPart(me, patch.partId, row.projectId, mockDb().partMembers)
+    )
+      throw mockError(403, 'FORBIDDEN', '옮길 파트에 테스트를 고칠 권한이 없습니다.')
     const problems = testFieldProblems({
       ...patch,
       start: patch.start !== undefined ? patch.start : row.start,
@@ -322,7 +342,7 @@ const mock = {
   remove(testId: string) {
     const me = requireMe()
     const row = requireTest(me, testId)
-    if (!canDeleteComment(me, { authorId: row.createdBy ?? '' }, row.projectId)) throw forbidden()
+    if (!canDeleteTest(me, row, row.projectId, mockDb().partMembers)) throw forbidden()
     if (hasChildren(row.id))
       throw mockError(409, 'TEST_HAS_CHILDREN', '하위 테스트가 있는 테스트는 지울 수 없습니다.')
     const db = mockDb()
@@ -333,6 +353,7 @@ const mock = {
   status(testId: string, input: TestStatusInput): TestCase {
     const me = requireMe()
     const row = requireTest(me, testId)
+    requireEditable(me, row)
     if (hasChildren(row.id))
       throw mockError(
         400,
@@ -362,6 +383,7 @@ const mock = {
   putRef(testId: string, ref: TestRef): TestCase {
     const me = requireMe()
     const row = requireTest(me, testId)
+    requireEditable(me, row)
     requireRefTarget(row.projectId, ref)
     if (row.refs.some((r) => r.kind === ref.kind && r.id === ref.id)) return toCase(row)
     if (row.refs.length >= TEST_REF_MAX) throw refLimit()
@@ -373,6 +395,7 @@ const mock = {
   deleteRef(testId: string, ref: TestRef) {
     const me = requireMe()
     const row = requireTest(me, testId)
+    requireEditable(me, row)
     const next = row.refs.filter((r) => !(r.kind === ref.kind && r.id === ref.id))
     if (next.length === row.refs.length) return
     row.refs = next
@@ -380,7 +403,9 @@ const mock = {
     recordMockHistory('test', row.id, [change(`${ref.kind}Ref`, ref.id, null)])
   },
   basis(testId: string): TestCase {
-    const row = requireTest(requireMe(), testId)
+    const me = requireMe()
+    const row = requireTest(me, testId)
+    requireEditable(me, row)
     row.basisSeq = latestSeq(row.refs)
     recordMockHistory('test', row.id, [change('basis', null, null)])
     return toCase(row)

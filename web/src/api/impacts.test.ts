@@ -221,10 +221,10 @@ describe('반영 (목업)', () => {
     ])
   })
 
-  it('권한 — 작업은 작성자 · 담당자 · 관리자만(403, detail tasks.N), 결정 바뀜보다 먼저', async () => {
+  it('권한 — 작업 상세와 같은 경계(403, detail tasks.N), 결정 바뀜보다 먼저', async () => {
     resetMockAuth()
-    await login({ email: 'u2@inno-ax.com', password: MOCK_PASSWORD })
-    /* t5 의 연결 작업 k18 — 등록 이도현 · 담당 정하늘이라 박지훈은 못 고친다 */
+    await login({ email: 'u3@inno-ax.com', password: MOCK_PASSWORD })
+    /* t5 의 연결 작업 k18 — 기간계 연동 파트 작업이다. 등록한 이도현이어도 그 파트의 수정 권한이 없어 못 고친다 */
     const impact = impactOf(await streamed('t5'))
     expect(impact.tasks.map((t) => [t.taskId, t.verdict])).toEqual([['k18', 'update']])
     expect(impact.tasks[0].title).toContain('보험료 산출 기간계 API 개발')

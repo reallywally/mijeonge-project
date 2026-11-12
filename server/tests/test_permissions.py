@@ -444,8 +444,18 @@ async def test_task_without_a_creator_is_for_owner_and_admins(as_member: AsMembe
     assert (await (await as_member("u1")).patch("/api/tasks/k17", json={})).status_code == 200
 
 
-async def test_sub_task_needs_no_edit_right_on_the_parent(as_member: AsMember) -> None:
-    """하위 작업 등록은 상위를 고치는 것이 아니다 — k1 을 못 고치는 u2 도 밑에 단다."""
+async def test_sub_task_needs_no_edit_right_on_the_parent(
+    client: httpx.AsyncClient, as_member: AsMember
+) -> None:
+    """하위 작업 등록은 상위를 고치는 것이 아니다 — k21 을 못 고치는 u2 도 밑에 단다.
+
+    k21 은 인프라 파트라 하위도 인프라를 따른다 — 등록 권한만 주고 수정은 안 준다.
+    """
+    granted = await client.put(
+        "/api/parts/pt1/members/u2", json={"canCreate": True, "canUpdate": False}
+    )
+    assert granted.json()["canUpdate"] is False
+    assert (await (await as_member("u2")).patch("/api/tasks/k21", json={})).status_code == 403
     res = await (await as_member("u2")).post(
         "/api/projects/p1/tasks", json={"title": "하위", "parentId": "k21"}
     )
@@ -454,10 +464,13 @@ async def test_sub_task_needs_no_edit_right_on_the_parent(as_member: AsMember) -
 
 
 async def test_who_can_delete_a_task(client: httpx.AsyncClient, as_member: AsMember) -> None:
-    """지우기는 생성자 · 그 프로젝트 관리자 · 시스템 관리자. 담당자는 못 지운다.
+    """공통 작업 지우기는 생성자 · 그 프로젝트 관리자 · 시스템 관리자. 담당자는 못 지운다.
+    파트가 달린 작업은 그 파트의 삭제 권한이다(`test_part_rights.py`).
 
     시드: k18 은 u3 가 만들고 u4 가 맡았다. k3 은 u1(p1 관리자)이 만들고 u2 가 맡았다.
+    k18 은 기간계 연동(u2 소속) 파트라 공통으로 돌려 놓고 본다.
     """
+    assert (await client.patch("/api/tasks/k18", json={"partId": None})).status_code == 200
     for who in ("u4", "u2"):  # 담당자 · 남
         denied = await (await as_member(who)).delete("/api/tasks/k18")
         assert denied.status_code == 403, who

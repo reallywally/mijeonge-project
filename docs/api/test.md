@@ -23,7 +23,7 @@
 | 묶음 | **상위 테스트** `parentId` — 작업의 상위 작업과 같은 규칙(같은 프로젝트 · 고리 금지) | 간트가 계층 트리로 보인다 |
 | 상태 | `draft` 작성 중 · `ready` 준비됨 · `testing` 테스트 중 · `pass` 성공 · `fail` 실패 · `blocked` 막힘. **실행 기록은 없다** — 결과는 덮어쓰고 마지막으로 바뀐 때 · 누가가 남는다 (Q54). 덮어쓴 앞 값은 변경 이력(`docs/api/history.md`, Q59)에 남는다 | 반복해서 돌리지 않는다. 지금이 보이면 된다 |
 | 며칠째 · 신호 | **서버가 센다** — `statusDays` · `signals`. 문턱값은 그 프로젝트의 리스크 기준(`RiskSettings`) | 리스크 · 리포트처럼 집계를 서버가 하는 예외다. 같은 셈을 나중의 챗봇 도구 · AI 가 쓴다 |
-| 쓰는 사람 | 그 프로젝트 멤버 누구나 쓰고 · 고치고 · 상태를 바꾼다. **지우기만** 만든 사람 · 프로젝트 관리자 · 시스템 관리자 (Q53) | 회의록 · 리포트와 같은 경계 |
+| 쓰는 사람 | 그 프로젝트 멤버 누구나 쓰고 · 고치고 · 상태를 바꾼다. **지우기만** 만든 사람 · 프로젝트 관리자 · 시스템 관리자 (Q53). **2026-11-12 — 파트가 달린 테스트는 그 파트의 권한을 탄다**: 등록은 등록 권한, 고치기 · 상태 · 태그 · 기준 확인은 담당자 · 관리자 · 수정 권한, 지우기는 관리자 · 삭제 권한(`part.md` '파트 권한'). 조치 내역은 그대로 누구나 | 회의록 · 리포트와 같은 경계. 파트 리드가 남의 파트 테스트를 지키게 한다 |
 
 ## 테이블
 
@@ -172,7 +172,8 @@ export interface TestStatusInput {
 - 참조(`ccIds`) — **새로 더한** id 가 그 프로젝트의 활성 멤버가 아니면 400 `TEST_CC_NOT_FOUND`(`detail` `{ "ccIds": "<id>" }`). 겹치면 앞의 하나만. 이미 걸린 사람은 그대로 둘 수 있다(Q68). `cc.md`
 - 상태 — 하위가 있는 테스트는 400 `TEST_GROUP_STATUS`(묶음은 직접 돌리지 않는다). `fail` · `blocked` 가 아니면 `resultNote` 를 비운다. **같은 상태로 다시 보내도** `statusChangedAt` · `By` 를 새로 찍는다(덮어쓴다)
 - 태그 — 같은 프로젝트의 작업 · 안건만(아니면 404 `TASK_NOT_FOUND` · `AGENDA_NOT_FOUND`), 20개까지 400 `TEST_REF_LIMIT`
-- 지우기 — 하위가 있으면 409 `TEST_HAS_CHILDREN`, 만든 사람 · 관리자가 아니면 403 `FORBIDDEN`
+- 지우기 — 하위가 있으면 409 `TEST_HAS_CHILDREN`, 만든 사람 · 관리자가 아니면 403 `FORBIDDEN`(파트가 달렸으면 관리자 · 그 파트의 삭제 권한 — 2026-11-12)
+- 파트 권한 (2026-11-12) — 파트가 달린 테스트의 등록 · 고치기 · 상태 · 태그 · 기준 확인 · 지우기는 `part.md` '파트 권한' 표. 걸리면 403 `FORBIDDEN`
 
 ## 며칠째 · 신호 — 서버가 센다
 
@@ -208,7 +209,7 @@ export interface TestStatusInput {
 | POST | `/api/projects/{projectId}/tests` | 추가 | 201 `TestCase` |
 | GET | `/api/tests/{testId}` | 읽기 | `TestCase` |
 | PATCH | `/api/tests/{testId}` | 고치기 | `TestCase` |
-| DELETE | `/api/tests/{testId}` | 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자) | 204 |
+| DELETE | `/api/tests/{testId}` | 지우기(만든 사람 · 프로젝트 관리자 · 시스템 관리자. 파트가 달렸으면 관리자 · 그 파트의 삭제 권한 — 2026-11-12) | 204 |
 | POST | `/api/tests/{testId}/status` | 상태 바꾸기 | `TestCase` |
 | PUT | `/api/tests/{testId}/refs/{kind}/{refId}` | 태그 걸기(멱등). `kind` = `task` \| `agenda` | `TestCase` |
 | DELETE | `/api/tests/{testId}/refs/{kind}/{refId}` | 태그 떼기(멱등 — 없는 태그도 204) | 204 |

@@ -14,6 +14,7 @@ import { toastError } from '@/lib/notify'
 import { DEFAULT_RISK_SETTINGS } from '@/lib/risk'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useRiskStore } from '@/stores/risk'
 import RiskView from './RiskView.vue'
 
@@ -52,8 +53,12 @@ async function click(el: Element | undefined | null) {
 
 const button = (text: string) =>
   [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
+/* 볼 파트 고르기 — 'all' 은 풀기 단추(고른 게 있을 때만 선다), 'mine' 은 고르기 단추 */
 const scopeButton = (key: 'mine' | 'all') =>
-  document.body.querySelector<HTMLButtonElement>(`[aria-label="보기 범위"] [data-scope="${key}"]`)
+  document.body.querySelector<HTMLButtonElement>(
+    key === 'all' ? '[data-part-pick-clear]' : '[data-part-pick]',
+  )
+const pickLabel = () => document.body.querySelector('[data-part-pick-label]')?.textContent?.trim()
 const field = (key: string) =>
   document.body.querySelector<HTMLInputElement>(`input[data-field="${key}"]`)
 const problem = (key: string) => document.body.querySelector(`[data-problem="${key}"]`)
@@ -84,8 +89,9 @@ const cardText = (key: string, part: 'big' | 'sub') =>
   $card(key)!.querySelector(`[data-card-${part}]`)!.textContent!.replace(/\s+/g, ' ').trim()
 
 describe('대시보드', () => {
-  it('프로젝트 관리자(u1)는 전체로 열린다 — 숫자 카드 · 신호 막대 · 섞은 목록', async () => {
+  it('전체로 보면(u1) 숫자 카드 · 신호 막대 · 섞은 목록이 다 선다', async () => {
     await signedIn('u1@inno-ax.com')
+    usePartStore().setScope('all')
     const w = await mountRisks()
 
     /* 카드 — 큰 숫자 = 높음 + 중간 */
@@ -170,7 +176,7 @@ describe('대시보드', () => {
     await signedIn('u3@inno-ax.com')
     await mountRisks()
 
-    expect(scopeButton('mine')!.getAttribute('aria-pressed')).toBe('true')
+    expect(pickLabel()).toBe('인프라')
     expect(listRows()).toHaveLength(2 + 8 + 5)
     expect(cardText('agenda', 'sub')).toBe('높음 0 · 중간 1 · 낮음 1')
 
@@ -180,6 +186,7 @@ describe('대시보드', () => {
 
   it('카드를 누르면 그 종류로 · 다시 누르면 푼다. 지연은 세 신호로', async () => {
     await signedIn('u1@inno-ax.com')
+    usePartStore().setScope('all')
     await mountRisks()
 
     await click($card('test'))
@@ -204,6 +211,7 @@ describe('대시보드', () => {
 
   it('막대를 누르면 그 신호로, 등급은 여럿 · 종류 고르기는 목록 위에서', async () => {
     await signedIn('u1@inno-ax.com')
+    usePartStore().setScope('all')
     await mountRisks()
 
     await click(document.body.querySelector('[data-bar="flaky"]'))
@@ -236,6 +244,7 @@ describe('대시보드', () => {
     ]
     try {
       await signedIn('u1@inno-ax.com')
+      usePartStore().setScope('all')
       await mountRisks()
       expect(listRows()).toHaveLength(30)
       expect(document.body.querySelector('[data-risk-more]')!.textContent).toContain('5')
@@ -271,6 +280,7 @@ describe('줄을 누르면 상세', () => {
 
   it('작업 줄은 작업 상세', async () => {
     await signedIn('u1@inno-ax.com')
+    usePartStore().setScope('all')
     await mountRisks()
     await click(row('k20'))
     expect(dialog()?.textContent).toContain('DB 설치와 초기 스키마 반영')

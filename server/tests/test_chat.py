@@ -703,8 +703,13 @@ async def test_my_work_gathers_what_the_asker_owns(session: AsyncSession) -> Non
     today = today_kst()
     mine[0].due = today - timedelta(days=2)
     agenda = Agenda(
-        id="a-my-work", project_id="p1", title="바뀐 결정", state="decided",
-        decision="새 결정", decision_rev=2, decided_at=datetime.now(UTC),
+        id="a-my-work",
+        project_id="p1",
+        title="바뀐 결정",
+        state="decided",
+        decision="새 결정",
+        decision_rev=2,
+        decided_at=datetime.now(UTC),
         created_at=datetime.now(UTC),
     )
     session.add(agenda)
@@ -714,8 +719,11 @@ async def test_my_work_gathers_what_the_asker_owns(session: AsyncSession) -> Non
     # 도구가 끝에 rollback 해 객체가 만료된다 — 볼 값은 미리 뽑아 둔다
     ids = {t.id for t in mine}
     first = {
-        "id": mine[0].id, "key": mine[0].key, "title": mine[0].title,
-        "status": mine[0].status, "due": (today - timedelta(days=2)).isoformat(),
+        "id": mine[0].id,
+        "key": mine[0].key,
+        "title": mine[0].title,
+        "status": mine[0].status,
+        "due": (today - timedelta(days=2)).isoformat(),
         "daysLeft": -2,
     }
 

@@ -44,7 +44,7 @@ import {
 } from '@/components/ui/table'
 import { ownerQueryOf, parseOwnerQuery, withOwnerQuery } from '@/lib/ownerPick'
 import { partFilterOf } from '@/lib/part'
-import { READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
+import { TASK_READONLY_HINT, TASK_STATUS_OPTIONS, taskStatusLabel } from '@/lib/task'
 import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
@@ -161,7 +161,7 @@ function resetPage() {
   page.value = 1
 }
 /* 보기 범위를 바꾸면 줄 수가 달라진다 — 없는 쪽에 머물지 않게 첫 쪽으로 */
-watch(() => partStore.scope, resetPage)
+watch(() => [partStore.scope, partStore.pickedPartIds], resetPage)
 
 /* 파트 관리의 '작업 N건 보기' 로 오면 그 파트로 걸러진 채 연다(?part=). 파트를 받기 전이면 받은 뒤에 맞춘다 */
 watch(
@@ -257,7 +257,7 @@ const barLegend = [
   },
 ]
 
-/* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다. 고칠 권한이 없는 줄(작성자 · 담당자 · 관리자가 아님)은
+/* 여러 줄을 한 번에 — 담당자나 상태를 몰아서 바꾼다. 고칠 권한이 없는 줄(lib/access canEditTask)은
    고를 수 없다 — 몰아 바꾸다 몇 줄만 403 으로 튕기면 무엇이 바뀌었는지 알기 어렵다 */
 const checked = ref<Set<string>>(new Set())
 const checkedCount = computed(() => checked.value.size)
@@ -420,7 +420,7 @@ function bulkOwner(value: string) {
           {{ taskStore.meInPick ? '등록 · 담당' : '담당' }} {{ taskStore.ownerShownCount }}건
         </span>
       </template>
-      <PartScopeToggle />
+      <PartScopeToggle area="work" />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <template v-else>
         <span v-if="view === 'gantt'" class="text-xs text-muted-foreground">{{ doneLabel }}</span>
@@ -573,7 +573,7 @@ function bulkOwner(value: string) {
                   <Checkbox
                     :model-value="checked.has(row.task.id)"
                     :disabled="!taskStore.canEdit(row.task)"
-                    :title="taskStore.canEdit(row.task) ? undefined : READONLY_HINT"
+                    :title="taskStore.canEdit(row.task) ? undefined : TASK_READONLY_HINT"
                     :aria-label="`${row.task.title} 선택`"
                     @update:model-value="(v) => toggleRow(row.task.id, v === true)"
                   />
@@ -628,7 +628,7 @@ function bulkOwner(value: string) {
                     <SelectTrigger
                       class="h-7 w-auto gap-0.5 rounded-full border-transparent bg-transparent px-0 pr-1 shadow-none hover:border-transparent enabled:hover:bg-muted focus:ring-[3px] disabled:cursor-default disabled:opacity-100"
                       :aria-label="`상태 ${taskStatusLabel(row.task.status)}`"
-                      :title="taskStore.canEdit(row.task) ? undefined : READONLY_HINT"
+                      :title="taskStore.canEdit(row.task) ? undefined : TASK_READONLY_HINT"
                     >
                       <TaskStatusBadge :status="row.task.status" />
                     </SelectTrigger>

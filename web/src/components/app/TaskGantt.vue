@@ -19,7 +19,7 @@ const partStore = usePartStore()
 const data = useDataStore()
 
 /* [내 파트 | 전체] 로 거르고 완료 숨기기를 뺀 것. 둘 다 보이는 작업의 조상은 세워 트리가 끊기지 않는다.
-   4단 작업 줄은 + 를 숨긴다 — 그 밑은 5단이다. 고칠 권한이 없는 작업(작성자 · 담당자 · 관리자가 아님)은
+   4단 작업 줄은 + 를 숨긴다 — 그 밑은 5단이다. 고칠 권한이 없는 작업(lib/access canEditTask)은
    막대를 끌 수 없다 */
 const items = computed(() => {
   const locked = new Set(

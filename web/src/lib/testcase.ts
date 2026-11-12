@@ -4,6 +4,9 @@ import type { TestCase, TestSignal, TestStatus } from '@/types/domain'
 /* 테스트 (docs/api/test.md). 며칠째 · 신호는 서버가 센다 — 여기의 testSignals 는 목업 api 만 쓴다.
    묶음의 상태 · 신호 모으기, '지금' 의 정렬 · 화면 말은 화면이 정할 몫이라 여기 한 벌로 둔다 */
 
+/** 고칠 권한이 없는 테스트에 붙는 안내 — 공통 테스트는 누구나 고치니 파트 테스트에만 선다 */
+export const TEST_READONLY_HINT = '고칠 권한이 없습니다 — 담당자 · 관리자 · 파트 수정 권한'
+
 /* 상태 여섯은 목록 · 상세 · 간트가 같은 순서로 쓴다 */
 export const TEST_STATUS_OPTIONS: { value: TestStatus; label: string }[] = [
   { value: 'draft', label: '작성 중' },

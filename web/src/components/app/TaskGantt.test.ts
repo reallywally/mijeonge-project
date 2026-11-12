@@ -10,6 +10,7 @@ import { resetMockAuth } from '@/api/mockAuth'
 import { MOCK_PASSWORD } from '@/fixtures'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
+import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
 
 /* dhtmlx 는 컨테이너의 실제 높이를 재서 보이는 줄만 그린다. jsdom 은 모든 크기가 0 이라
@@ -251,6 +252,8 @@ describe('간트차트 — 줄 끌어 옮기기', () => {
   async function mountAs(memberId: string | null) {
     resetMockAuth()
     if (memberId) await useAuthStore().login(`${memberId}@inno-ax.com`, MOCK_PASSWORD)
+    /* 업무 화면은 내 파트로 시작한다 — 줄 전부를 놓고 본다 */
+    usePartStore().setScope('all')
     const spy = vi.spyOn(Gantt, 'getGanttInstance')
     const w = await mountGantt()
     const chart = spy.mock.results.at(-1)!.value as GanttStatic
@@ -310,13 +313,13 @@ describe('간트차트 — 줄 끌어 옮기기', () => {
   })
 
   it('잠긴 줄(고칠 권한 없음)은 끌기를 시작하지 못한다', async () => {
-    /* 박지훈(u2)은 HW-18(담당 정하늘 · 등록 이도현)을 못 고친다. HW-3 은 담당이라 고친다 */
-    const { chart } = await mountAs('u2')
+    /* 이도현(u3)은 HW-18(기간계 연동 작업, 등록은 이도현)을 그 파트의 수정 권한이 없어 못 고친다. HW-20 은 담당이라 고친다 */
+    const { chart } = await mountAs('u3')
     expect(chart.callEvent('onRowDragStart', ['k18', document.body, new Event('mousedown')])).toBe(
       false,
     )
     expect(chart.callEvent('onBeforeRowDragEnd', ['k18', '0', 0])).toBe(false)
-    expect(chart.callEvent('onRowDragStart', ['k3', document.body, new Event('mousedown')])).toBe(
+    expect(chart.callEvent('onRowDragStart', ['k20', document.body, new Event('mousedown')])).toBe(
       true,
     )
   })

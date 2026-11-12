@@ -18,7 +18,7 @@ class SnapshotOut(Schema):
     agendas: list[AgendaOut]
     tasks: list[TaskOut]
     task_agenda_links: list[TaskAgendaLinkOut]
-    # 보관한 파트까지 이름 순. 거르는 것은 화면이다 — 파트는 권한이 아니다 (docs/api/part.md)
+    # 보관한 파트까지 이름 순. 거르는 것은 화면이다 — 보기는 열려 있다 (docs/api/part.md)
     parts: list[PartOut]
     # (partId, memberId) 순
     part_members: list[PartMemberOut]

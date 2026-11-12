@@ -20,7 +20,7 @@ import type { ParentChoice, TaskPriority, TaskStatus } from '@/types/domain'
    상세는 올라온 값을 바로 넣고, 추가는 만들 때 한꺼번에 넣는다.
    기간(start · due)은 'YYYY-MM-DD' 또는 빈 문자열이다 — 한쪽만 고른 동안에도 들고 있어야 해서다.
    아래 슬롯에는 상세의 읽기 전용 정보나 추가의 안내를 넣는다.
-   readonly 면 칸을 모두 잠근다 — 고칠 권한이 없는 작업(작성자 · 담당자 · 관리자만 고친다) */
+   readonly 면 칸을 모두 잠근다 — 고칠 권한이 없는 작업(lib/access canEditTask) */
 const props = defineProps<{
   /** 고를 수 있는 상위 작업 — 상세에서는 자기와 자기 아래가 빠진다 */
   parentChoices: ParentChoice[]
@@ -29,6 +29,8 @@ const props = defineProps<{
   /** '진행 중 · 12일째' — 이미 있는 작업에만 */
   statusSince?: string
   readonly?: boolean
+  /** 파트 고르기에 거는 권한 — 추가는 등록(canCreate), 상세는 수정(canUpdate) */
+  partRight: 'canCreate' | 'canUpdate'
 }>()
 const status = defineModel<TaskStatus>('status', { required: true })
 const ownerId = defineModel<string | null>('ownerId', { required: true })
@@ -104,7 +106,7 @@ const ghost = computed(() =>
         </dd>
       </div>
 
-      <PartField v-model="partId" :trigger-class="ghost" :disabled="readonly" />
+      <PartField v-model="partId" :trigger-class="ghost" :right="partRight" :disabled="readonly" />
 
       <div class="flex min-h-9 items-center gap-2">
         <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">시작 날짜</dt>

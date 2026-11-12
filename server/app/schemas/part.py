@@ -23,6 +23,28 @@ class PartOut(Schema):
 class PartMemberOut(Schema):
     part_id: str
     member_id: str
+    # 보기는 목록의 기본 거르기, 등록 · 수정 · 삭제는 그 파트 작업 · 테스트의 권한
+    can_view: bool
+    can_create: bool
+    can_update: bool
+    can_delete: bool
+
+
+class PartMemberIn(Schema):
+    """보낸 것만 바꾼다 — 새 소속이면 안 보낸 것은 보기 · 등록 · 수정 켬, 삭제 끔.
+    서버가 삭제 ⇒ 수정, 등록 · 수정 ⇒ 보기로 맞춘다."""
+
+    can_view: bool | None = None
+    can_create: bool | None = None
+    can_update: bool | None = None
+    can_delete: bool | None = None
+
+    @field_validator("can_view", "can_create", "can_update", "can_delete")
+    @classmethod
+    def _not_null(cls, value: object) -> object:
+        if value is None:
+            raise PydanticCustomError("null_not_allowed", "null 로 비울 수 없는 값입니다.")
+        return value
 
 
 class PartCreate(Schema):

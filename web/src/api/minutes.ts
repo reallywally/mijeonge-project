@@ -13,7 +13,7 @@ import { recordMockHistory } from '@/api/history'
 import { forbidden, later, mockDb, mockWorld, requireMe, requireProject } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import { mockMinutesDraft, mockMinutesTools, projects } from '@/fixtures'
-import { canDeleteComment, canEditComment, canSeeProject } from '@/lib/access'
+import { canCreateInPart, canDeleteComment, canEditComment, canSeeProject } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import { agendaPatchChanges, change } from '@/lib/history'
 import { compareMinutes, minutesApplyProblems, minutesInputProblems } from '@/lib/minutes'
@@ -391,6 +391,23 @@ function mockApply(minutesId: string, input: MinutesApplyInput): MinutesApplyRes
       taskDepths(world.tasks.filter((t) => t.projectId === projectId)),
     ),
   )
+
+  /* 파트 작업 밑에 다는 새 작업은 그 파트의 등록 권한 — 앞 줄을 따라간 줄도 본다 (docs/api/part.md) */
+  const deniedText = '이 파트에 작업을 등록할 권한이 없습니다.'
+  const partByTempId: Record<string, string | null> = {}
+  const denied: Record<string, string> = {}
+  input.tasks.forEach((t, i) => {
+    const partId =
+      t.parentTempId !== null
+        ? (partByTempId[t.parentTempId] ?? null)
+        : t.parentId
+          ? (ownTask(t.parentId)?.partId ?? null)
+          : null
+    partByTempId[t.tempId] = partId
+    if (partId !== null && !canCreateInPart(me, partId, projectId, db.partMembers))
+      denied[`tasks.${i}.partId`] = deniedText
+  })
+  if (Object.keys(denied).length > 0) throw mockError(403, 'FORBIDDEN', deniedText, denied)
 
   const createdAt = nowIso()
   const agendaIdByTempId: Record<string, string> = {}

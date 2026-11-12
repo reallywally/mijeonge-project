@@ -8,6 +8,7 @@ import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import TaskDetailDialog from '@/components/app/TaskDetailDialog.vue'
 import { Select } from '@/components/ui/select'
 import { MOCK_PASSWORD } from '@/fixtures'
+import { TASK_READONLY_HINT } from '@/lib/task'
 import { useAuthStore } from '@/stores/auth'
 import { usePartStore } from '@/stores/part'
 import { useTaskStore } from '@/stores/task'
@@ -179,6 +180,8 @@ beforeEach(async () => {
   chart.destroyed = 0
   resetMockAuth()
   await useAuthStore().login('u1@inno-ax.com', MOCK_PASSWORD)
+  /* 업무 화면은 내 파트로 시작한다 — 여기 검사들은 22건 전부를 본다 */
+  usePartStore().setScope('all')
 })
 
 describe('작업 목록 화면', () => {
@@ -910,8 +913,8 @@ describe('4단 제한 (Q64)', () => {
 })
 
 describe('고치기 권한 — 목록 · 칸반 · 간트', () => {
-  /* 박지훈(u2)은 p1 의 일반 사용자다. HW-3 은 담당, HW-4 는 등록(담당은 이도현)이라 고칠 수 있고,
-     HW-18(담당 정하늘 · 등록 이도현) · HW-21(담당 김서연 · 등록 이도현)은 못 고친다 */
+  /* 박지훈(u2)은 p1 의 일반 사용자 · 기간계 연동 소속이다. HW-3(공통)은 담당, HW-18 은 기간계 연동 작업이라 고치고,
+     HW-4(인프라, 등록은 박지훈) · HW-21(인프라, 담당 김서연 · 등록 이도현)은 못 고친다 */
   beforeEach(async () => {
     resetMockAuth()
     await useAuthStore().login('u2@inno-ax.com', MOCK_PASSWORD)
@@ -928,9 +931,7 @@ describe('고치기 권한 — 목록 · 칸반 · 간트', () => {
     const hw2 = rowOf('HW-2')
     expect(hw3.get('[aria-label^="상태"]').attributes('disabled')).toBeUndefined()
     expect(hw2.get('[aria-label^="상태"]').attributes('disabled')).toBeDefined()
-    expect(hw2.get('[aria-label^="상태"]').attributes('title')).toBe(
-      '작성자 · 담당자 · 관리자만 고칠 수 있습니다',
-    )
+    expect(hw2.get('[aria-label^="상태"]').attributes('title')).toBe(TASK_READONLY_HINT)
     expect(hw2.get('[role="checkbox"]').attributes('disabled')).toBeDefined()
 
     /* 이 쪽 전체 선택은 고칠 수 있는 줄만 고른다 */
@@ -954,10 +955,10 @@ describe('고치기 권한 — 목록 · 칸반 · 간트', () => {
     await mountView('/tasks')
     const item = (key: string) =>
       chart.parsed.find((t) => t.key === key) as { id: string; readonly?: boolean }
-    expect(item('HW-18').readonly).toBe(true)
-    expect(item('HW-4').readonly).toBeUndefined()
-    expect(chart.events.onBeforeTaskDrag('k18')).toBe(false)
-    expect(chart.events.onBeforeTaskDrag('k4')).toBe(true)
+    expect(item('HW-4').readonly).toBe(true)
+    expect(item('HW-18').readonly).toBeUndefined()
+    expect(chart.events.onBeforeTaskDrag('k4')).toBe(false)
+    expect(chart.events.onBeforeTaskDrag('k18')).toBe(true)
   })
 
   it('목업도 서버처럼 403 으로 막는다 — 스토어를 바로 불러도 안 바뀐다', async () => {

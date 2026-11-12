@@ -170,7 +170,18 @@ def parts() -> list[Part]:
 
 
 def part_members() -> list[PartMember]:
-    return [PartMember(part_id=part_id, member_id=member_id) for part_id, member_id in PART_MEMBERS]
+    # 권한은 넷 다 켠다 — 권한이 생기기 전(0040 이행)의 소속과 같다
+    return [
+        PartMember(
+            part_id=part_id,
+            member_id=member_id,
+            can_view=True,
+            can_create=True,
+            can_update=True,
+            can_delete=True,
+        )
+        for part_id, member_id in PART_MEMBERS
+    ]
 
 
 # 결정내용 — 이행(0032, docs/api/agenda.md '이행' 2)이 지난 시드의 이력 줄 · 결정 항목에서 만든 글

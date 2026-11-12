@@ -19,7 +19,7 @@
 | `docs/api/snapshot.md` | `ProjectSnapshot` 응답 · `ProjectInput` 요청 · `task.key` 발번 |
 | `docs/api/chat.md` | AI 챗봇 — 요청 · SSE 스트림 · 근거 표시 · 검색 · 작업 초안 · 한 번에 등록 |
 | `docs/api/auth.md` | 로그인 · 세션 · 권한 셋 · 사용자 관리 · 프로젝트 멤버 |
-| `docs/api/part.md` | 파트 — 보기 범위(권한 아님) · 파트 관리 · 작업 · 안건의 `partId` |
+| `docs/api/part.md` | 파트 — 보기 범위 · 파트 관리 · 작업 · 안건의 `partId` · **파트 권한(보기 · 등록 · 수정 · 삭제 — 작업 · 테스트 쓰기, 2026-11-12)** |
 | `docs/api/risk.md` | 결정 병목 리스크 — 안 정해진 안건이 막는 일 · 신호 · 점수 · 챗봇 도구 `get_decision_risks` · AI 요약 |
 | `docs/api/risk-dashboard.md` | **리스크 — 작업 · 테스트까지 · 대시보드** — 작업 리스크(`TaskRisk`) · 테스트 리스크(`TestRisk`)의 지연 · 흔들림 신호 · 점수, 기준 일곱(흔들림 셋), AI 리스크 분석 · 저장한 분석이 세 종류를 함께, '지금 리스크' 탭을 대시보드로 (2026-11-06) |
 | `docs/api/risk-analysis.md` | **저장한 AI 리스크 분석** — 분석이 끝나면 임시로 남고 [저장] 으로 제목을 붙여 '저장한 분석' 게시판에 · 그때의 리스크 스냅샷 · 지난 저장 분석 대비. 리포트를 걷고 이리로 (2026-11-06) |
@@ -91,7 +91,7 @@
 | 404 | `COMMENT_NOT_FOUND` | 경로의 댓글이 없을 때(수정 · 삭제). 댓글 목록 · 등록에서 작업이 없으면 `TASK_NOT_FOUND` |
 | ~~400~~ | ~~`COMMENT_AUTHOR_NOT_FOUND`~~ | **8단계부터 안 나온다** — 작성자는 로그인한 사람이고 `authorId` 를 받지 않는다(`docs/api/auth.md`). 빈 `body`(앞뒤 공백을 뗀 뒤)는 422 `VALIDATION_ERROR` |
 | ~~409~~ | ~~`TASK_HAS_CHILDREN`~~ | 하위 작업까지 줄기째 지워 안 나온다 (2026-11-05) — 줄기 중 못 지우는 작업이 있으면 403 `FORBIDDEN` |
-| 403 | `FORBIDDEN` | 작업을 고치거나(생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자가 아닐 때) 지우려 할 때(생성자 · 관리자가 아닐 때) — `docs/api/auth.md` '작업' (2026-11-02). 지우기는 안 지운 후손 하나하나도 같이 본다 — 하나라도 못 지우면 아무것도 안 지우고 message 가 `지울 수 없는 하위 작업이 있습니다.` (2026-11-05) |
+| 403 | `FORBIDDEN` | 작업을 고치거나(생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자가 아닐 때) 지우려 할 때(생성자 · 관리자가 아닐 때) — `docs/api/auth.md` '작업' (2026-11-02). 지우기는 안 지운 후손 하나하나도 같이 본다 — 하나라도 못 지우면 아무것도 안 지우고 message 가 `지울 수 없는 하위 작업이 있습니다.` (2026-11-05). 파트가 달린 작업 · 테스트는 그 파트의 등록 · 수정 · 삭제 권한을 탄다 — `docs/api/part.md` '파트 권한' (2026-11-12) |
 | 403 | `FORBIDDEN` | 안건을 고치거나 지우려 할 때(생성자 · 담당자 · 프로젝트 관리자 · 시스템 관리자가 아닐 때) — 결정내용 · 상태를 바꾸는 PATCH 와 회의록 반영의 `updates` 도 같다(`detail` 은 `updates.N.agendaId`) — `docs/api/auth.md` '안건' (2026-11-02, 2026-11-04) |
 | ~~409~~ | ~~`THREAD_HAS_CHILDREN`~~ | 하위 안건을 걷어 안 나온다 (2026-11-04) |
 | ~~404~~ | ~~`ENTRY_NOT_FOUND`~~ | 이력 줄을 걷어 안 나온다 (2026-11-04) |
@@ -178,14 +178,15 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | PATCH | `/api/projects/{projectId}` | 프로젝트 정보 수정 — `name` · `description` · `startDate` · `endDate` · `status`(`planned` · `active` · `closed`), 보낸 필드만. 설명 · 날짜의 null 은 비우기 (프로젝트 관리자 · 시스템 관리자, `docs/api/auth.md` '프로젝트 관리') | `Project` | 구현 (2026-11-02 늘림) |
 | DELETE | `/api/projects/{projectId}` | 프로젝트 삭제 — **소프트 삭제**. 그 뒤로 그 프로젝트를 가리키는 모든 경로가 404 (시스템 관리자만) | 204 | 구현 |
 
-파트(`server/PLAN.md` 9단계 · `web/PLAN.md` 9단계). **보기 범위지 권한이 아니다** — 거르는 것은 화면이다. 모양은 `docs/api/part.md`.
+파트(`server/PLAN.md` 9단계 · `web/PLAN.md` 9단계). **보기는 열려 있다** — 거르는 것은 화면이다. 모양은 `docs/api/part.md`.
+**2026-11-12 — 소속에 권한 넷(보기 · 등록 · 수정 · 삭제)**: 등록 · 수정 · 삭제가 그 파트 작업 · 테스트 쓰기를 가른다. 안건은 타지 않는다(`part.md` '파트 권한').
 **이미 있는 API 도 바뀐다** — 작업 · 안건 등록 · 수정의 `partId`, 스냅샷의 `parts` · `partMembers`.
 
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | POST | `/api/projects/{projectId}/parts` | 파트 만들기 (프로젝트 관리자 · 시스템 관리자) | `Part` · 201 | 구현 |
 | PATCH | `/api/parts/{partId}` | 이름 · 보관 · 되살리기 | `Part` | 구현 |
-| PUT · DELETE | `/api/parts/{partId}/members/{memberId}` | 파트에 넣기 · 빼기 (멱등) | `PartMember` · 204 | 구현 |
+| PUT · DELETE | `/api/parts/{partId}/members/{memberId}` | 파트에 넣기 · 빼기 (멱등). PUT 은 본문(선택) `{ canView?, canCreate?, canUpdate?, canDelete? }` 로 권한도 바꾼다 — 보낸 것만, 새 소속은 삭제만 꺼짐, 서버가 맞춤 (2026-11-12) | `PartMember` · 204 | 구현 (2026-11-12 권한 — 합의 · 사용자 결정) |
 
 결정 병목 리스크(`server/PLAN.md` 10단계 · `web/PLAN.md` 11단계). 모양은 `docs/api/risk.md` 다.
 **집계를 서버가 하는 첫 예외다** — 챗봇이 같은 계산을 써야 해서다 (Q35). 화면은 왼쪽 메뉴 '리스크'(`/risks`, Q34), 기준은 프로젝트마다 바꾼다(Q33).
@@ -231,7 +232,7 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | 메서드 | 경로 | 하는 일 | 응답 | 상태 |
 | --- | --- | --- | --- | --- |
 | GET · POST | `/api/projects/{projectId}/tests` | 목록(`seq` 순, 며칠째 · 신호 · 기준 바뀜까지 서버가 셈) · 추가. `ccIds`(참조, 2026-11-05 `cc.md`) | `TestCase[]` · 201 `TestCase` | 구현 |
-| GET · PATCH · DELETE | `/api/tests/{testId}` | 읽기 · 고치기(단계는 목록째, `ccIds` 는 통째로) · 지우기(만든 사람 · 관리자, 하위 있으면 409) | `TestCase` · 204 | 구현 |
+| GET · PATCH · DELETE | `/api/tests/{testId}` | 읽기 · 고치기(단계는 목록째, `ccIds` 는 통째로) · 지우기(만든 사람 · 관리자, 하위 있으면 409). 파트가 달린 테스트는 그 파트의 수정 · 삭제 권한(2026-11-12, `part.md`) | `TestCase` · 204 | 구현 |
 | POST | `/api/tests/{testId}/status` | 상태 바꾸기(실패 · 막힘의 메모는 선택 — 2026-11-05, 덮어씀) | `TestCase` | 구현 |
 | PUT · DELETE | `/api/tests/{testId}/refs/{kind}/{refId}` | 작업 · 안건 태그 걸기 · 떼기(멱등). `kind` = `task` · `agenda`(2026-11-04 `thread` 에서) | `TestCase` · 204 | 구현 |
 | POST | `/api/tests/{testId}/basis` | "그대로 맞다" — 기준 바뀜을 지운다 | `TestCase` | 구현 |

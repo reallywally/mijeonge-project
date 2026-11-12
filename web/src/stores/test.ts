@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { messageOf } from '@/api'
-import { canDeleteComment } from '@/lib/access'
+import { canDeleteTest, canEditTest } from '@/lib/access'
 import { toastError } from '@/lib/notify'
 import { matchesOwnerPick } from '@/lib/ownerPick'
 import { visibleInMyParts } from '@/lib/part'
@@ -152,7 +152,7 @@ export const useTestStore = defineStore('test', () => {
       agendas: [],
       links: [],
       memberId: data.currentMemberId,
-      myPartIds: partStore.myPartIds,
+      myPartIds: partStore.pickedPartIds,
     })
   })
 
@@ -284,9 +284,11 @@ export const useTestStore = defineStore('test', () => {
       .map((t) => ({ id: t.id, key: t.key, label: fullPath(t) }))
   }
 
-  /** 지우기는 만든 사람 · 그 프로젝트 관리자 · 시스템 관리자 — 회의록 · 저장한 리스크 분석과 같은 경계 */
-  const canRemove = (t: TestCase) =>
-    canDeleteComment(auth.me, { authorId: t.createdBy ?? '' }, t.projectId)
+  /** 고치기(속성 · 상태 · 태그 · 기준) — 공통 테스트는 누구나, 파트 테스트는 담당자 · 관리자 · 그 파트의 수정 권한.
+      상세 · 간트가 같이 본다. 조치 내역은 따르지 않는다 */
+  const canEdit = (t: TestCase) => canEditTest(auth.me, t, t.projectId, data.partMembers)
+  /** 지우기 — 관리자, 공통 테스트는 만든 사람, 파트 테스트는 그 파트의 삭제 권한 */
+  const canRemove = (t: TestCase) => canDeleteTest(auth.me, t, t.projectId, data.partMembers)
 
   /** 고른 프로젝트의 테스트를 받는다. 늦게 온 옛 응답은 버린다 */
   async function load() {
@@ -448,6 +450,7 @@ export const useTestStore = defineStore('test', () => {
     testsTagging,
     refChip,
     parentChoicesFor,
+    canEdit,
     canRemove,
     load,
     ensure,

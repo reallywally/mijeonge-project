@@ -55,9 +55,11 @@ export const useAgendaStore = defineStore('agenda', () => {
     }))
   })
 
-  /** [내 파트 | 전체] 로 거른 행 — 안건 목록이 쓴다. 상세는 거르지 않는다 */
+  /** 볼 파트로 거른 행 — 안건 목록이 쓴다(안건 쪽 고르기). 상세는 거르지 않는다 */
   const visibleRows = computed<AgendaRow[]>(() =>
-    partStore.visible ? rows.value.filter((r) => partStore.showsAgenda(r.agenda.id)) : rows.value,
+    partStore.visibleIn('agenda')
+      ? rows.value.filter((r) => partStore.showsAgenda(r.agenda.id, 'agenda'))
+      : rows.value,
   )
 
   /* 아래 수는 보이는 것만 센다 */

@@ -26,7 +26,7 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 async def create_task(
     project_id: str, payload: TaskCreate, scope: ProjectScope, session: Session
 ) -> TaskOut:
-    return await task_service.create_task(session, project_id, payload, scope.actor.id)
+    return await task_service.create_task(session, project_id, payload, scope)
 
 
 @router.post("/projects/{project_id}/tasks/batch", status_code=201)
@@ -34,7 +34,7 @@ async def create_tasks(
     project_id: str, payload: TaskBatchInput, scope: ProjectScope, session: Session
 ) -> TaskBatchResult:
     """챗봇 초안을 한 번에 등록한다. 한 트랜잭션 — 하나라도 틀리면 아무것도 안 남는다."""
-    return await task_service.create_tasks(session, project_id, payload, scope.actor.id)
+    return await task_service.create_tasks(session, project_id, payload, scope)
 
 
 @router.patch("/tasks/{task_id}")

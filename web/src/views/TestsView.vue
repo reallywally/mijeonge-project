@@ -289,7 +289,7 @@ const STATUS_ORDER: TestStatus[] = ['draft', 'ready', 'testing', 'pass', 'fail',
           담당 · 참조 {{ testStore.ownerShownCount }}건
         </span>
       </template>
-      <PartScopeToggle />
+      <PartScopeToggle area="work" />
       <span v-if="view === 'list'" class="text-xs text-muted-foreground">{{ rangeLabel }}</span>
       <Button v-else size="sm" @click="openCreate()">
         <Plus class="size-4" />

@@ -513,15 +513,27 @@ def _ref_row(test: TestCase, kind: TestRefKind, target_id: str) -> TestRef:
     )
 
 
+CREATE_FORBIDDEN = "이 파트에 테스트를 등록할 권한이 없습니다."
+MOVE_FORBIDDEN = "옮길 파트에 테스트를 고칠 권한이 없습니다."
+
+
+def _guard_edit(scope: Scope, test: TestCase) -> None:
+    if not access.can_edit_test(scope, test):
+        raise access.forbidden()
+
+
 async def create_test(
-    session: AsyncSession, project_id: str, payload: TestCreate, actor_id: str, *, today: date
+    session: AsyncSession, project_id: str, payload: TestCreate, scope: Scope, *, today: date
 ) -> TestCaseOut:
+    actor_id = scope.actor.id
     project = await project_service.load_project(session, project_id)
     _guard_period(payload.start, payload.due)
     await _guard_parent(session, project.id, None, payload.parent_id)
     await _guard_owner(session, project.id, payload.owner_id)
     cc = await access.guard_cc(session, project.id, payload.cc_ids, "TEST_CC_NOT_FOUND")
     part_id = await _part_for_new(session, project.id, payload)
+    if not access.can_create_in_part(scope, part_id):
+        raise access.forbidden(CREATE_FORBIDDEN)
     refs = _unique_refs(payload.refs)
     if len(refs) > REFS_MAX:
         raise _ref_limit()
@@ -588,18 +600,21 @@ def _diff_fields(
 
 
 async def patch_test(
-    session: AsyncSession, test_id: str, payload: TestPatch, actor_id: str, *, today: date
+    session: AsyncSession, test_id: str, payload: TestPatch, scope: Scope, *, today: date
 ) -> TestCaseOut:
-    test = await edit_test(session, test_id, payload, actor_id)
+    test = await edit_test(session, test_id, payload, scope)
     await session.commit()
     return await _one(session, test, today)
 
 
 async def edit_test(
-    session: AsyncSession, test_id: str, payload: TestPatch, actor_id: str
+    session: AsyncSession, test_id: str, payload: TestPatch, scope: Scope
 ) -> TestCase:
     """PATCH 의 몸통 — 커밋하지 않는다. 영향도 반영이 여러 테스트를 한 트랜잭션에 묶는다."""
     test = await load_test(session, test_id)
+    # 고치기 전 테스트로 본다 — 작업과 같다
+    _guard_edit(scope, test)
+    actor_id = scope.actor.id
     texts_before = _text_fields(test)
     plan_before = _plan_fields(test)
     sent = payload.model_fields_set
@@ -613,6 +628,8 @@ async def edit_test(
         await _guard_owner(session, test.project_id, changes["owner_id"])
     if "part_id" in changes and changes["part_id"] != test.part_id:
         await part_service.guard_part(session, test.project_id, changes["part_id"])
+        if not access.can_move_to_part(scope, changes["part_id"]):
+            raise access.forbidden(MOVE_FORBIDDEN)
     if "cc_ids" in sent:
         await _replace_cc(session, test, payload.cc_ids)
     for field, value in changes.items():
@@ -628,9 +645,10 @@ async def edit_test(
 
 
 async def delete_test(session: AsyncSession, test_id: str, scope: Scope) -> None:
-    """만든 사람 · 그 프로젝트 관리자 · 시스템 관리자. 하위가 있으면 못 지운다."""
+    """공통이면 만든 사람 · 관리자, 파트가 있으면 관리자 · 그 파트의 삭제 권한.
+    하위가 있으면 못 지운다."""
     test = await load_test(session, test_id)
-    if test.created_by != scope.actor.id and not scope.can_manage:
+    if not access.can_delete_test(scope, test):
         raise access.forbidden()
     if await _has_children(session, test.id):
         raise ApiError(409, "TEST_HAS_CHILDREN", "하위 테스트가 있어 지울 수 없습니다.")
@@ -639,10 +657,12 @@ async def delete_test(session: AsyncSession, test_id: str, scope: Scope) -> None
 
 
 async def set_status(
-    session: AsyncSession, test_id: str, payload: TestStatusInput, actor_id: str, *, today: date
+    session: AsyncSession, test_id: str, payload: TestStatusInput, scope: Scope, *, today: date
 ) -> TestCaseOut:
     """같은 상태로 다시 보내도 언제 · 누가를 새로 찍는다(덮어쓴다)."""
     test = await load_test(session, test_id)
+    _guard_edit(scope, test)
+    actor_id = scope.actor.id
     if await _has_children(session, test.id):
         raise bad_request("TEST_GROUP_STATUS", "하위가 있는 테스트는 상태를 직접 바꿀 수 없습니다.")
     # 메모는 실패 · 막힘에서도 선택이다 — 까닭은 조치 내역에 적는다 (docs/api/test-comment.md)
@@ -669,13 +689,14 @@ async def put_ref(
     test_id: str,
     kind: TestRefKind,
     target_id: str,
-    actor_id: str,
+    scope: Scope,
     *,
     today: date,
 ) -> TestCaseOut:
     """멱등 — 이미 걸려 있으면 아무것도 바꾸지 않는다(기준도 그대로)."""
     test = await load_test(session, test_id)
-    if await add_ref(session, test, kind, target_id, actor_id):
+    _guard_edit(scope, test)
+    if await add_ref(session, test, kind, target_id, scope.actor.id):
         await session.commit()
     return await _one(session, test, today)
 
@@ -684,7 +705,7 @@ async def add_ref(
     session: AsyncSession, test: TestCase, kind: TestRefKind, target_id: str, actor_id: str
 ) -> bool:
     """PUT 태그의 몸통 — 커밋하지 않는다. 영향도 반영이 여러 태그를 한 트랜잭션에 묶는다.
-    새로 걸었으면 True."""
+    새로 걸었으면 True. 권한은 부르는 쪽이 먼저 본다(`access.can_edit_test`)."""
     await _guard_target(session, test.project_id, kind, target_id)
     column = TestRef.task_id if kind == "task" else TestRef.agenda_id
     exists = await session.scalar(
@@ -705,10 +726,12 @@ async def add_ref(
 
 
 async def delete_ref(
-    session: AsyncSession, test_id: str, kind: TestRefKind, target_id: str, actor_id: str
+    session: AsyncSession, test_id: str, kind: TestRefKind, target_id: str, scope: Scope
 ) -> None:
     """멱등 — 없는 태그도 성공이다. 지운 작업에 건 태그도 없는 것으로 본다."""
     test = await load_test(session, test_id)
+    _guard_edit(scope, test)
+    actor_id = scope.actor.id
     column = TestRef.task_id if kind == "task" else TestRef.agenda_id
     found = await session.scalar(
         select(TestRef).where(TestRef.test_id == test.id, column == target_id, _live_ref())
@@ -725,11 +748,13 @@ async def delete_ref(
 
 
 async def confirm_basis(
-    session: AsyncSession, test_id: str, actor_id: str, *, today: date
+    session: AsyncSession, test_id: str, scope: Scope, *, today: date
 ) -> TestCaseOut:
     """'그대로 맞다' — 지금까지의 결정을 보고 테스트가 맞다고 확인했다.
     기준 값이 그대로여도 확인한 일 자체를 남긴다."""
     test = await load_test(session, test_id)
+    _guard_edit(scope, test)
+    actor_id = scope.actor.id
     test.basis_seq = await _current_basis(session, test.id)
     history_service.record_test(
         session, test, [history_service.change("basis", None, None)], actor_id, now()

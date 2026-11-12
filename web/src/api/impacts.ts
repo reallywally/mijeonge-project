@@ -5,7 +5,7 @@ import { later, mockDb, mockWorld, requireMe } from '@/api/mockAuth'
 import { isMockMode } from '@/api/mode'
 import type { MockTestCase } from '@/fixtures'
 import { mockPatchTest, mockPutTestRef } from '@/api/tests'
-import { canEditTask, canSeeProject } from '@/lib/access'
+import { canEditTask, canEditTest, canSeeProject } from '@/lib/access'
 import { firstLine } from '@/lib/agenda'
 import { nowIso } from '@/lib/date'
 import { bodyChanged, bodyText, change, diffChanges } from '@/lib/history'
@@ -482,13 +482,18 @@ function mockApply(impactId: string, input: ImpactApplyInput): ImpactApplyResult
   })
   if (Object.keys(shape).length > 0) throw invalid(shape)
 
-  /* 작업은 작업 상세가 칸을 잠그는 것과 같은 판단 — 연결도 같다. 테스트는 그 프로젝트 멤버 누구나라 따로 막지 않는다 */
+  /* 작업 · 테스트 상세가 칸을 잠그는 것과 같은 판단(lib/access) — 연결도 같다 */
   const denied: Record<string, string> = {}
   input.tasks.forEach((t, i) => {
     /* 지운 작업은 권한을 보지 않고 '지워짐' 으로 간다 */
     const task = world.tasks.find((x) => x.id === t.taskId)
-    if (task && !canEditTask(me, task, task.projectId))
+    if (task && !canEditTask(me, task, task.projectId, db.partMembers))
       denied[`tasks.${i}`] = '이 작업을 고칠 권한이 없습니다.'
+  })
+  input.tests.forEach((t, i) => {
+    const test = db.tests.find((x) => x.id === t.testId)
+    if (test && !canEditTest(me, test, test.projectId, db.partMembers))
+      denied[`tests.${i}`] = '이 테스트를 고칠 권한이 없습니다.'
   })
   if (Object.keys(denied).length > 0) throw mockError(403, 'FORBIDDEN', '권한이 없습니다.', denied)
 

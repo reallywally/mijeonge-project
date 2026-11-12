@@ -82,7 +82,8 @@ def to_llm_error(exc: OpenAIError, name: str) -> LLMError:
     elif isinstance(exc, APIConnectionError):
         log.warning("%s API 에 닿지 않음: %s", name, type(exc).__name__)
     else:
-        log.warning("%s SDK 오류: %s", name, type(exc).__name__)
+        # 스트림 중간에 실려 온 오류(예: Groq 의 tool_use_failed)는 사유가 message 에만 있다
+        log.warning("%s SDK 오류: %s %s", name, type(exc).__name__, getattr(exc, "message", ""))
     return LLMError("CHAT_UNAVAILABLE", "AI 가 지금 응답하지 않습니다. 잠시 뒤에 다시 물어 주세요.")
 
 

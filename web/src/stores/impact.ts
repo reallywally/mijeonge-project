@@ -223,8 +223,9 @@ export const useImpactStore = defineStore('impact', () => {
     if (row?.appliedAt) return 'applied'
     if (testStore.loaded && !testStore.byId[id]) return 'missing'
     if (review.changed.includes(key)) return 'changed'
-    /* 테스트는 그 프로젝트 멤버 누구나 고친다 — 서버가 막았을 때만 잠근다 */
-    if (review.denied.includes(key)) return 'locked'
+    /* 테스트 상세가 칸을 잠그는 것과 같은 판단 */
+    const test = testStore.byId[id]
+    if ((test && !testStore.canEdit(test)) || review.denied.includes(key)) return 'locked'
     return 'open'
   }
 

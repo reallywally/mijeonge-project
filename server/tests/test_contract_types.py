@@ -179,13 +179,14 @@ AUTH_SHAPES: dict[str, set[str]] = {
     },
     "ProjectMember": {"memberId", "role"},
     "Part": {"id", "projectId", "name", "active"},
-    "PartMember": {"partId", "memberId"},
+    # 파트 권한(2026-11-12) — domain.ts 는 PartRights 를 extends 해서 적는다
+    "PartMember": {"partId", "memberId", "canView", "canCreate", "canUpdate", "canDelete"},
 }
 
 
 def contract_keys(name: str) -> set[str]:
     """서버 응답이 맞춰야 할 키. domain.ts 가 계약에 없는 필드를 들고 있으면 여기서 깨진다."""
-    declared = set(FIELDS.get(name, {}))
+    declared = set(all_fields(name))
     assert declared <= AUTH_SHAPES[name], f"domain.ts 의 {name} 이 계약(docs/api/*.md)과 다르다"
     return AUTH_SHAPES[name]
 

@@ -1,5 +1,4 @@
-import type { Grade } from '@/lib/access'
-import type { Part, Task, TaskAgendaLink, Agenda } from '@/types/domain'
+import type { Agenda, Part, PartRights, Task, TaskAgendaLink } from '@/types/domain'
 
 /*
  * 파트 — 보기 범위지 권한이 아니다 (docs/api/part.md). 서버는 프로젝트 전부를 싣고 화면이 거른다.
@@ -9,6 +8,9 @@ import type { Part, Task, TaskAgendaLink, Agenda } from '@/types/domain'
 
 /** '내 파트' 또는 '전체' */
 export type PartScope = 'mine' | 'all'
+
+/** 볼 파트를 따로 기억하는 메뉴 묶음 — 업무(작업 세 탭 · 테스트 · 리스크) · 안건 목록 */
+export type PartPickArea = 'work' | 'agenda'
 
 export interface PartScopeInput {
   tasks: Pick<Task, 'id' | 'parentId' | 'partId' | 'ownerId'>[]
@@ -81,10 +83,6 @@ export function visibleInMyParts(input: PartScopeInput): PartScopeResult {
   return { taskIds, contextTaskIds, agendaIds }
 }
 
-/** 처음 들어왔을 때의 보기 — 일반 사용자는 내 파트, 프로젝트 관리자 · 시스템 관리자는 전체 */
-export const defaultPartScope = (grade: Grade | null): PartScope =>
-  grade === 'user' ? 'mine' : 'all'
-
 /** 이름 순(보관 포함) — 스냅샷이 내는 순서와 같게 */
 export const sortParts = (parts: Part[]) =>
   [...parts].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
@@ -127,4 +125,35 @@ export function inheritedPartId(
 ): string | null {
   if (sent !== undefined) return sent
   return parent?.partId ?? null
+}
+
+/** 파트 관리의 권한 칸 넷 — 화면에 놓는 순서 */
+export const PART_RIGHT_OPTIONS: { key: keyof PartRights; label: string }[] = [
+  { key: 'canView', label: '보기' },
+  { key: 'canCreate', label: '등록' },
+  { key: 'canUpdate', label: '수정' },
+  { key: 'canDelete', label: '삭제' },
+]
+
+/**
+ * 권한 칸 하나를 켜고 끈 뒤의 넷 — 켜면 앞서야 할 것(등록 · 수정 → 보기, 삭제 → 수정 · 보기)도 켜고,
+ * 보기를 끄면 다 끄고, 수정을 끄면 삭제도 끈다. 서버의 맞추기(lib/access normalizePartRights)와 어긋나지 않는다
+ */
+export function togglePartRight(
+  current: PartRights,
+  right: keyof PartRights,
+  on: boolean,
+): PartRights {
+  const next = { ...current, [right]: on }
+  if (on) {
+    if (right === 'canDelete') next.canUpdate = true
+    if (right !== 'canView') next.canView = true
+  } else if (right === 'canView') {
+    next.canCreate = false
+    next.canUpdate = false
+    next.canDelete = false
+  } else if (right === 'canUpdate') {
+    next.canDelete = false
+  }
+  return next
 }

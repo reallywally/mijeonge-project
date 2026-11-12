@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { login } from '@/api/auth'
 import { ApiError } from '@/api/client'
-import { resetMockAuth } from '@/api/mockAuth'
+import { mockDb, resetMockAuth } from '@/api/mockAuth'
 import {
   confirmTestBasis,
   createTest,
@@ -73,9 +73,13 @@ describe('목업 갈래 — 시드', () => {
   })
 })
 
+const ALL_RIGHTS = { canView: true, canCreate: true, canUpdate: true, canDelete: true }
+
 describe('목업 갈래 — 쓰기', () => {
   beforeEach(async () => {
     await as('u2@inno-ax.com')
+    /* 시드의 파트 테스트는 인프라 것이다 — 파트 권한은 아래에서 따로 보고, 여기는 박지훈을 인프라에도 넣어 둔다 */
+    mockDb().partMembers.push({ partId: 'pt1', memberId: 'u2', ...ALL_RIGHTS })
   })
 
   it('만들면 다음 번호 · 작성 중 · 만든 사람이 찍히고, 파트는 상위를 따른다', async () => {
@@ -227,6 +231,61 @@ describe('목업 갈래 — 쓰기', () => {
     /* 프로젝트 관리자는 남이 만든 것도 지운다 */
     await as('u1@inno-ax.com')
     await deleteTest('tc4')
+  })
+})
+
+describe('목업 갈래 — 파트 권한', () => {
+  /* 인프라(pt1) 테스트: 계정 배포 시나리오(tc5, 만든 사람 · 담당 u3) 아래 tc6(u3) · tc7(u1) · tc8(u4).
+     박지훈(u2)은 기간계 연동 소속이라 인프라에는 권한이 없다 */
+  beforeEach(async () => {
+    await as('u2@inno-ax.com')
+  })
+  const code = async (p: Promise<unknown>) => (await failure(p)).code
+  const rights = (over: Partial<typeof ALL_RIGHTS>) => {
+    const db = mockDb()
+    db.partMembers = db.partMembers.filter((pm) => !(pm.partId === 'pt1' && pm.memberId === 'u2'))
+    db.partMembers.push({ partId: 'pt1', memberId: 'u2', ...ALL_RIGHTS, ...over })
+  }
+
+  it('소속이 아닌 파트의 테스트는 고치기 · 상태 · 태그 · 기준 · 지우기가 403 — 공통 테스트는 누구나 고친다', async () => {
+    expect(await code(patchTest('tc8', { title: '바꿈' }))).toBe('FORBIDDEN')
+    expect(await code(setTestStatus('tc8', { status: 'pass' }))).toBe('FORBIDDEN')
+    expect(await code(putTestRef('tc8', { kind: 'agenda', id: 't1' }))).toBe('FORBIDDEN')
+    expect(await code(deleteTestRef('tc8', { kind: 'agenda', id: 't1' }))).toBe('FORBIDDEN')
+    expect(await code(confirmTestBasis('tc8'))).toBe('FORBIDDEN')
+    expect(await code(deleteTest('tc8'))).toBe('FORBIDDEN')
+    /* 공통 테스트 — 고치기는 누구나, 지우기는 만든 사람 · 관리자만(tc4 는 정하늘이 만들었다) */
+    expect((await patchTest('tc4', { title: '바꿈' })).title).toBe('바꿈')
+    expect(await code(deleteTest('tc4'))).toBe('FORBIDDEN')
+  })
+
+  it('등록 권한이 없는 파트에는 못 만든다 — 상위를 따라와도 같다. 공통은 된다', async () => {
+    expect(await code(createTest('p1', { title: '새', partId: 'pt1' }))).toBe('FORBIDDEN')
+    expect(await code(createTest('p1', { title: '새', parentId: 'tc5' }))).toBe('FORBIDDEN')
+    expect(
+      (await createTest('p1', { title: '새', parentId: 'tc5', partId: null })).partId,
+    ).toBeNull()
+    rights({ canCreate: true, canUpdate: false })
+    expect((await createTest('p1', { title: '새', partId: 'pt1' })).partId).toBe('pt1')
+  })
+
+  it('수정 권한이면 고치고, 삭제 권한이 있어야 지운다. 담당자는 권한 없이도 고친다', async () => {
+    rights({ canDelete: false })
+    expect((await patchTest('tc8', { title: '바꿈' })).title).toBe('바꿈')
+    expect(await code(deleteTest('tc8'))).toBe('FORBIDDEN')
+    rights({ canDelete: true })
+    await expect(deleteTest('tc8')).resolves.toBeUndefined()
+
+    rights({ canView: true, canCreate: false, canUpdate: false })
+    mockDb().tests.find((t) => t.id === 'tc7')!.ownerId = 'u2'
+    expect((await setTestStatus('tc7', { status: 'pass' })).status).toBe('pass')
+  })
+
+  it('다른 파트로 옮기려면 옮겨 갈 파트의 수정 권한 — 공통으로는 된다', async () => {
+    /* tc3(공통) 을 인프라로 — 권한 없음 */
+    expect(await code(patchTest('tc3', { partId: 'pt1' }))).toBe('FORBIDDEN')
+    expect((await patchTest('tc3', { partId: 'pt3' })).partId).toBe('pt3')
+    expect((await patchTest('tc3', { partId: null })).partId).toBeNull()
   })
 })
 
