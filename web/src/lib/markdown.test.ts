@@ -11,7 +11,7 @@ describe('챗봇 답 마크다운 — 블록', () => {
 
   it('제목(#)은 굵은 한 줄 블록이다', () => {
     expect(parseMarkdown('## 결정된 것 ##')).toEqual([
-      { kind: 'heading', inlines: [{ kind: 'text', text: '결정된 것' }] },
+      { kind: 'heading', level: 2, inlines: [{ kind: 'text', text: '결정된 것' }] },
     ])
   })
 
@@ -101,5 +101,33 @@ describe('챗봇 답 마크다운 — 인라인', () => {
 
   it('받는 중 끝에 걸린 덜 온 근거 표시는 비치지 않는다', () => {
     expect(parseInline('다음은 [[thr')).toEqual([{ kind: 'text', text: '다음은 ' }])
+  })
+})
+
+describe('문서 미리보기 — 표', () => {
+  it('tables 를 켜야 표를 푼다 — 머리 줄 칸 수에 맞추고, 구분 줄 없는 | 는 글자 그대로', () => {
+    const md = '| 항목 | 내용 |\n| --- | :---: |\n| OS | **우분투** |\n| CPU |\n\n뒤 문단'
+    expect(parseMarkdown(md, { tables: true })).toEqual([
+      {
+        kind: 'table',
+        header: [[{ kind: 'text', text: '항목' }], [{ kind: 'text', text: '내용' }]],
+        rows: [
+          [
+            [{ kind: 'text', text: 'OS' }],
+            [{ kind: 'strong', children: [{ kind: 'text', text: '우분투' }] }],
+          ],
+          [[{ kind: 'text', text: 'CPU' }], []],
+        ],
+      },
+      { kind: 'p', inlines: [{ kind: 'text', text: '뒤 문단' }] },
+    ])
+    expect(parseMarkdown(md)[0].kind).toBe('p')
+    expect(parseMarkdown('a | b\n---', { tables: true }).map((b) => b.kind)).toEqual(['p', 'hr'])
+  })
+
+  it('제목은 단을 갖는다', () => {
+    expect(parseMarkdown('### 서버 OS', { tables: true })).toEqual([
+      { kind: 'heading', level: 3, inlines: [{ kind: 'text', text: '서버 OS' }] },
+    ])
   })
 })

@@ -15,6 +15,7 @@ from app.models import (
     Agenda,
     AgendaImpact,
     CheckRequest,
+    Document,
     Member,
     Minutes,
     Part,
@@ -79,6 +80,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "test_comment_id": ("TEST_COMMENT_NOT_FOUND", "조치 내역을 찾을 수 없습니다."),
     "analysis_id": ("RISK_ANALYSIS_NOT_FOUND", "저장한 분석을 찾을 수 없습니다."),
     "impact_id": ("IMPACT_NOT_FOUND", "영향도 분석을 찾을 수 없습니다."),
+    "document_id": ("DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
 }
 
 
@@ -145,6 +147,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             stmt = select(AgendaImpact.project_id).where(
                 AgendaImpact.id == value, AgendaImpact.agenda_id.in_(live_agenda_ids())
             )
+        case "document_id":
+            stmt = select(Document.project_id).where(Document.id == value)
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")
     # 레코드마다 프로젝트를 다시 잇지 않고 여기 한 줄로 거른다 — 새 경로 이름이 늘어도 빠지지 않는다
@@ -314,6 +318,21 @@ def can_delete_test(scope: Scope, test: TestCase) -> bool:
     if test.part_id is None:
         return test.created_by == scope.actor.id
     return scope.rights(test.part_id).delete
+
+
+def can_edit_document(scope: Scope, document: Document) -> bool:
+    """문서 고치기 · 연결 · 확인 (docs/api/document.md '권한'). 공통이면 그 프로젝트 누구나,
+    파트가 있으면 관리자 · 만든 사람 · 그 파트의 수정 권한."""
+    if document.part_id is None or scope.can_manage or document.created_by == scope.actor.id:
+        return True
+    return scope.rights(document.part_id).update
+
+
+def can_delete_document(scope: Scope, document: Document) -> bool:
+    """공통이면 만든 사람 · 관리자, 파트가 있으면 거기에 그 파트의 삭제 권한도."""
+    if scope.can_manage or document.created_by == scope.actor.id:
+        return True
+    return document.part_id is not None and scope.rights(document.part_id).delete
 
 
 def can_edit_agenda(scope: Scope, agenda: Agenda) -> bool:

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import * as api from '@/api'
-import { ApiError, messageOf } from '@/api'
+import { ApiError, fieldDetail, messageOf } from '@/api'
 import {
   applyErrorsByKey,
   bareLines,
@@ -403,7 +403,7 @@ export const useImpactStore = defineStore('impact', () => {
         toastError(e)
         return false
       }
-      const keys = applyErrorsByKey(e.detail, input)
+      const keys = applyErrorsByKey(fieldDetail(e.detail), input)
       if (e.code === 'IMPACT_STALE') review.stale = true
       else if (e.code === 'IMPACT_TARGET_CHANGED') {
         for (const key of Object.keys(keys)) {

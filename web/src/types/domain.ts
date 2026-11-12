@@ -457,8 +457,9 @@ export interface ApiErrorBody {
   code: string
   /** 그대로 띄울 수 있는 한국어 한 줄 */
   message: string
-  /** 폼 검증에서 필드별 메시지 */
-  detail?: Record<string, string>
+  /** 폼 검증에서는 필드별 메시지(문자열). 409 DOCUMENT_STALE 처럼 숫자 · null 이 실리는 것도 있다 —
+      필드 메시지로 쓸 때는 client.ts 의 fieldDetail 로 문자열만 뗀다 */
+  detail?: Record<string, unknown>
 }
 
 /* AI 챗봇 — API.md '## AI 챗봇' 의 모양 그대로 */
@@ -1209,4 +1210,96 @@ export interface ImpactApplyResult {
   links: TaskAgendaLink[]
   /** appliedAt 이 찍힌 뒤의 분석 */
   impact: AgendaImpact
+}
+
+/* ── 문서 (docs/api/document.md) — 여러 안건에서 정한 것을 주제 하나로 묶어 적는다. 이름이 Document 가 아닌 것은
+   브라우저 전역 Document 와 겹치지 않게 해서다 ── */
+
+/** text 글 문서(마크다운) · sheet 표 문서(스프레드시트). 만들 때 고르고 바꾸지 않는다 */
+export type DocKind = 'text' | 'sheet'
+
+/** 표 문서 하나 — 시트 탭 여럿. Jspreadsheet CE 의 worksheets 설정에서 저장할 것만 뽑은 꼴 */
+export interface SheetBook {
+  sheets: SheetTab[]
+}
+
+export interface SheetTab {
+  /** 탭 이름 1 ~ 31자, 문서 안에서 겹치지 않음 */
+  name: string
+  /** 열 — 너비 px. 머리는 늘 A · B · C (열 이름은 두지 않는다 — 필요하면 첫 줄 칸에) */
+  columns: { width: number }[]
+  /** 칸 값 — 줄마다 칸 수 ≤ columns.length. 수식은 '=' 로 시작하는 원문 그대로 */
+  data: string[][]
+  /** 병합 — { 'A1': [열 수, 줄 수] } */
+  merges: Record<string, [number, number]>
+  /** 칸 꾸밈 — { 'A1': 'font-weight: bold; background-color: #fff2cc' } (CSS 글) */
+  styles: Record<string, string>
+}
+
+export interface DocAgendaLink {
+  agendaId: string
+  /** 연결 · 확인할 때의 그 안건 decisionRev */
+  seenRev: number
+}
+
+/** 목록 한 줄 — 본문 · 표를 빼고 낸다 */
+export interface ProjectDocSummary {
+  id: string
+  projectId: string
+  title: string
+  kind: DocKind
+  partId: string | null
+  /** 연결 순서. 지운 안건은 빠진다 */
+  agendas: DocAgendaLink[]
+  /** 지금 decisionRev > seenRev 인 연결 안건 — 연결 순서. 없으면 [] */
+  changedAgendaIds: string[]
+  /** 제목 · 본문 · 표의 판. 고칠 때 이 값을 보낸다 */
+  rev: number
+  createdBy: string | null
+  createdAt: string
+  updatedBy: string | null
+  updatedAt: string
+}
+
+/** 문서 하나 — 목록 줄 + 본문 · 표 */
+export interface ProjectDoc extends ProjectDocSummary {
+  /** text 의 본문(마크다운). sheet 는 '' */
+  content: string
+  /** sheet 의 표. text 는 { sheets: [] } */
+  sheet: SheetBook
+}
+
+/** POST /api/projects/{projectId}/documents */
+export interface DocInput {
+  title: string
+  kind: DocKind
+  partId?: string | null
+  /** 안건 상세의 [문서에 담기] · 목록의 [새 문서] 가 미리 채운다. 안 보내면 [] */
+  agendaIds?: string[]
+  /** 안 보내면 '' (text 일 때만 받는다 — sheet 에 보내면 422) */
+  content?: string
+  /** 안 보내면 sheet 는 시트 하나(항목 · 내용 두 열), text 는 { sheets: [] } (text 에 보내면 422) */
+  sheet?: SheetBook
+}
+
+/** PATCH /api/documents/{documentId} — 보낸 키만 바꾼다 */
+export interface DocPatch {
+  /** title · content · sheet 중 하나라도 보내면 꼭 보낸다. 지금 판과 다르면 409 DOCUMENT_STALE */
+  rev?: number
+  title?: string
+  /** text 만 */
+  content?: string
+  /** sheet 만 */
+  sheet?: SheetBook
+  partId?: string | null
+}
+
+/** PUT /api/documents/{documentId}/agendas — 연결을 통째로. 배열 순서 = 연결 순서 */
+export interface DocAgendasInput {
+  agendaIds: string[]
+}
+
+/** POST /api/documents/{documentId}/confirm — 결정 바뀜 지우기. agendaIds 를 안 보내면 연결 안건 전부 */
+export interface DocConfirmInput {
+  agendaIds?: string[]
 }

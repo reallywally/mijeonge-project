@@ -33,6 +33,7 @@ from app.models import (
     AgendaHistory,
     Base,
     CheckRequest,
+    Document,
     Member,
     Minutes,
     Task,
@@ -68,6 +69,7 @@ SEQ_MODELS: tuple[tuple[type[Base], str], ...] = (
             TaskHistory,
             TestHistory,
             AgendaHistory,
+            Document,
         )
     ),
     (Member, "no"),

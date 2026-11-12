@@ -153,6 +153,35 @@ export const canDeleteTest = (
       ? test.createdBy === me.id
       : hasPartRight(me, partMembers, test.partId, 'canDelete')))
 
+/* 문서 (docs/api/document.md '권한') — 작업 · 테스트의 파트 권한을 그대로 쓴다. 공통 문서는 멤버 누구나 고치고,
+   파트 문서는 관리자 · 만든 사람 · 그 파트 수정 권한. 만들기는 등록 권한(canCreateInPart), 옮기기는 canMoveToPart */
+
+/** 문서 고치기(제목 · 본문 · 표 · 연결 · 확인 · 파트) */
+export const canEditDoc = (
+  me: Me | null,
+  doc: { partId: string | null; createdBy: string | null },
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  canSeeProject(me, projectId) &&
+  (doc.partId === null ||
+    doc.createdBy === me.id ||
+    canManageProject(me, projectId) ||
+    hasPartRight(me, partMembers, doc.partId, 'canUpdate'))
+
+/** 문서 지우기 — 관리자 · 만든 사람, 파트 문서는 그 파트 삭제 권한도 */
+export const canDeleteDoc = (
+  me: Me | null,
+  doc: { partId: string | null; createdBy: string | null },
+  projectId: string,
+  partMembers: readonly PartMember[],
+) =>
+  me !== null &&
+  (canManageProject(me, projectId) ||
+    doc.createdBy === me.id ||
+    (doc.partId !== null && hasPartRight(me, partMembers, doc.partId, 'canDelete')))
+
 /** 안건 고치기(제목 · 설명 · 결정내용 · 상태 · 기한 · 담당자 · 파트)는 등록한 사람 · 담당자 · 그 프로젝트 관리자 ·
     시스템 관리자 — 결정내용 · 상태도 같은 PATCH 라 같은 넷만 바꾼다 (docs/api/agenda.md) */
 export const canEditAgenda = (

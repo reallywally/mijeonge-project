@@ -20,6 +20,8 @@ vi.mock('@/views/ProjectPartsView.vue', () => ({ default: { template: '<div />' 
 vi.mock('@/views/RiskView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/RiskAnalysisView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/ChecksView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/DocumentsView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/DocumentView.vue', () => ({ default: { template: '<div />' } }))
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -248,5 +250,15 @@ describe('확인 요청 숨김 (2026-11-09)', () => {
   it('켜면 /checks 가 열린다', async () => {
     await router.push('/checks')
     expect(router.currentRoute.value.name).toBe('checks')
+  })
+})
+
+describe('문서', () => {
+  it('/documents 목록 · /documents/:documentId 하나 — 멤버면 누구나 연다', async () => {
+    await router.push('/documents')
+    expect(router.currentRoute.value.name).toBe('documents')
+    await router.push('/documents/doc1')
+    expect(router.currentRoute.value.name).toBe('document')
+    expect(router.currentRoute.value.params.documentId).toBe('doc1')
   })
 })

@@ -3,7 +3,7 @@ import type { ApiErrorBody } from '@/types/domain'
 /** 화면이 그대로 띄울 수 있는 오류. status 0 은 서버에 닿지도 못한 것이다 */
 export class ApiError extends Error {
   readonly code: string
-  readonly detail?: Record<string, string>
+  readonly detail?: Record<string, unknown>
   readonly status: number
 
   constructor(status: number, body: ApiErrorBody) {
@@ -38,12 +38,20 @@ export function reportIfUnauthenticated(e: ApiError) {
   return e
 }
 
+/** detail 의 문자열 값만 — 폼 검증의 필드별 메시지로 쓰는 자리가 쓴다 */
+export function fieldDetail(detail: Record<string, unknown> | undefined): Record<string, string> {
+  if (!detail) return {}
+  return Object.fromEntries(
+    Object.entries(detail).filter((kv): kv is [string, string] => typeof kv[1] === 'string'),
+  )
+}
+
 /** 목업 갈래가 서버처럼 내는 오류 — 401 이면 같은 자리로 알린다 */
 export const mockError = (
   status: number,
   code: string,
   message: string,
-  detail?: Record<string, string>,
+  detail?: Record<string, unknown>,
 ) =>
   reportIfUnauthenticated(
     new ApiError(status, detail ? { code, message, detail } : { code, message }),

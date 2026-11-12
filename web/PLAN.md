@@ -770,6 +770,46 @@
 - [x] 서버 시드 셈(`risk-dashboard.md` '시드 p1')에 목업 줄 · 흔들림 시연 줄 · 저장 분석 `ra2` 를 맞췄다(2026-11-06) — 처음 넣었던 k16 기한 10/17 · k16 · k17 · tc4 · tc8 시연 줄은 되돌림. 셈 규칙(churnDays 경계 · 줄 수 · +1 · 테스트 시작 안 함 · 성공 테스트 · 사람별 정렬)도 서버 표와 같다
 - [ ] 서버 모드로 대시보드 · 기준 일곱 저장 · 세 종류 AI 분석 · 저장한 분석(옛 분석의 대비가 그대로 읽히는지)을 본다
 
+## 32단계 · 문서 — '문서' 메뉴
+
+여러 안건에서 정한 것을 주제 하나로 묶어 '지금 정해진 모습' 을 한 장으로 적는 문서. 글 문서(마크다운) · 표 문서(머리 줄 + 칸) 둘.
+계약은 `../docs/api/document.md`(2026-11-12, 사용자 결정 — 서버 `구현` 함, 리비전 `0041_document`).
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 자리 | 대메뉴 '문서'(안건 다음, 아이콘 `Files`) · `/documents` 목록 · `/documents/:documentId` 하나. 새 문서는 목록 위 팝업(주소 없음), 만들면 그 문서로 | 계약 '화면'. 회의록처럼 따로 선 화면 |
+| 목록 | 종류 아이콘 · 제목 · 연결 안건 수 · 결정 바뀜 n(`StatusPill` warn) · 파트 · 고친 사람 · 고친 때, 위에 제목 · 종류 거르기 · 볼 파트(`PartScopeToggle area="document"`) | 계약 '화면' |
+| 볼 파트 | `PartPickArea` 에 `document` — 안건처럼 전체로 시작, 메뉴마다 기억(`innoflow.partPick.document.<사람>.<프로젝트>`). 거르기는 파트만(`showsPartIn` — 공통 + 고른 파트) | 문서엔 담당 · 계층이 없다 |
+| 결정 바뀜 | 화면은 들고 있는 안건의 지금 `decisionRev` 로 다시 센다(`lib/document` `changedAgendaIds`, 서버 셈과 같음). 지운 안건 연결도 들고 있는 안건으로 거른다. 스냅샷을 안 받은 프로젝트면 서버 값 | 안건 결정을 고치면 다시 받지 않아도 바로 보이게 |
+| 자동 저장 | `stores/document` — 제목 · 본문 · 표를 `draft` 에 들고, 0.8초 쉬면 서버 값과 다른 칸만 `rev` 를 실어 PATCH. 한 번에 하나, 보내는 사이 고친 것은 이어서. 제목은 앞뒤 공백 뗀 값으로 견주고 비었거나 200자 넘으면 안 싣는다. 늦게 온 옛 판 응답(연결 PUT)은 제목 · 본문 · 표 · rev 를 덮지 않는다. 떠나면 기다리던 것을 바로 보낸다 | 계약 '같이 고치기' |
+| 409 | `DOCUMENT_STALE` → 주황 줄 '다른 사람이 먼저 고쳤습니다(누구 · 언제)' + [다시 불러오기](묻고 서버 것으로), 저장을 멈추고 칸을 잠근다(고른 글은 복사된다) | 계약 '화면' |
+| 글 | [편집 \| 미리보기] · 서식 버튼(굵게 · 제목 · 목록 · 번호 목록 · 표). 미리보기는 `DocMarkdown`(`lib/markdown` 에 `tables` 옵션 · 제목 단 — 챗봇은 그대로) | 새 편집기 없이 |
+| 표 | (2026-11-12 걷음 — 32-1 의 '표 편집기' 줄) `DocSheetEditor` — 칸은 `field-sizing-content` textarea, 줄 위아래 · 지우기, 열 지우기(1열은 남김) · 줄 · 열 더하기, 엑셀 붙여 넣기(`parseGrid` — 따옴표 · "" · 칸 속 줄바꿈, 머리 줄에 붙이면 첫 줄이 열 이름). 500줄 · 30열 · 2,000자 넘는 것은 자르고 알림 | 계약 '표의 모양' |
+| 본문에 넣기 | 글: 마지막 커서 자리(없으면 끝)에 `### 제목\n\n결정\n`, 앞 글과 빈 줄 하나. 표: 끝에 `[제목, 결정, …빈 칸]`(1열이면 '제목 — 결정'). 결정이 비면 '(아직 안 정함)' | 계약 '화면' |
+| 권한 | `lib/access` `canEditDoc` · `canDeleteDoc` + 기존 `canCreateInPart` · `canMoveToPart` — 화면 숨김과 목업 403 이 같은 함수. 못 고치면 칸 잠금 · 버튼 숨김 · 머리에 자물쇠 줄 | 계약 '권한' |
+| 안건 상세 | 오른쪽 칸에 '실린 문서'(`AgendaDocsRow`) — 문서 칩(결정 바뀜이면 주황 테두리) · [문서에 담기](고칠 수 있는 문서를 찾아 연결 · 없으면 그 제목으로 새 문서 · '이 안건을 담은 새 문서') | 계약 '화면' |
+| 오류 detail | `ApiError.detail` 을 `Record<string, unknown>` 으로 넓힘(409 의 `rev` 는 숫자) — 필드 메시지로 쓰는 자리는 `fieldDetail` 로 문자열만 | 서버 detail 모양 |
+
+### 32-1 목업 · 서버 갈래 (계약대로 붙임)
+
+- [x] `domain.ts` — `DocKind` · `SheetData` · `DocAgendaLink` · `ProjectDocSummary` · `ProjectDoc` · `DocInput` · `DocPatch` · `DocAgendasInput` · `DocConfirmInput`
+- [x] `api/documents.ts` — 목록(`?agendaId=`) · 만들기 · 읽기 · 고치기 · 지우기 · 연결 PUT · 확인. 목업은 `mockDb().documents`(연결 줄을 품음) — 422 모양 · 400 `DOCUMENT_AGENDA_NOT_FOUND` · `PART_NOT_FOUND` · `PART_ARCHIVED`(달려 있던 보관 파트는 그대로) · 403 · 409(detail `rev` 숫자) · `DOCUMENT_AGENDA_NOT_LINKED`, rev 는 제목 · 본문 · 표가 실제로 바뀔 때만, 연결은 남는 것 seenRev 유지, 지운 안건은 읽을 때 거름
+- [x] `fixtures/documents.ts` — p1 에 둘(`doc1` 인프라 글 · t1 t2, `doc2` 공통 표 · t6 t1)
+- [x] `lib/document.ts` — 넣기 블록 · 표 줄 · 표 고치기 · 붙여 넣기 · 검사 · 결정 바뀜 · 서식 버튼. `lib/markdown.ts` 표 · 제목 단
+- [x] `stores/document.ts`(+ `session.ts` 비우기), `stores/part.ts` 문서 고르기
+- [x] 화면 — `DocumentsView` · `DocumentView` · `DocCreateDialog` · `DocTextEditor` · `DocSheetEditor` · `DocMarkdown` · `DocAgendaPanel` · `AgendaDocsRow`, `AppShell` 메뉴, 라우트 둘
+- [x] 검사 — `lib/document.test.ts` · `lib/markdown.test.ts`(표 · 단) · `stores/document.test.ts`(목록 순서 · 볼 파트 · 만들기 · 자동 저장 rev · 빈 제목 · 409 · 떠날 때 보냄 · 연결 seenRev 유지 · 확인 · 지운 안건 · 권한 · 파트 오류 · 서버 경로) · `views/DocumentsView.test.ts`(목록 · 새 문서 · 넣기 · 저장 · 미리보기 · 결정 바뀜 · 연결 · 409 · 읽기 전용 · 실린 문서 · 표 붙여 넣기 · 줄 옮기기) · `router/index.test.ts`(경로 둘)
+- [x] 표 편집기 (2026-11-12 고침, 사용자) — `DocSheetEditor` 를 **Jspreadsheet CE 5.0.4** 스프레드시트로(컴포넌트가 DOM 에 직접 띄우고 떠날 때 destroy, `DocumentView` 가 비동기로 받음): 시트 탭(더하기 · 이름 바꾸기 · 지우기, 하나는 남김) · 도구 줄(되돌리기 · 다시 · 굵게 · 기울임 · 글자색 · 배경색 · 정렬 · 병합 · 풀기) · 한국어 우클릭 메뉴 · 수식 · 엑셀 붙여 넣기, 상한(시트 10 · 열 100 · 줄 2,000 · 칸 5,000자)을 넘으면 막고 알림, 편집기 이벤트마다 `lib/document` `tabFromEditor` 로 `SheetBook` 을 뽑아 기존 자동 저장에 태움(수식은 원문, 칸은 문자열, 꾸밈은 도구 줄 속성만, 끝의 빈 줄은 뗌), 잠기면 `editable` 끔. `.xlsx` 가져오기(확인 팝업) · 내려받기(문서 제목.xlsx)는 **SheetJS CE 0.20.3**(CDN 타르볼)을 누를 때 불러옴(`lib/sheetXlsx`). 타입 `SheetData` → `SheetBook` · `SheetTab`, 붙여 넣기 펴기 · 표 고치기 함수 걷음. 검사 — `lib/document.test.ts`(A1 · 변환 · 넣기 · 상한) · `lib/sheetXlsx.test.ts` · `stores/document.test.ts` · `views/DocumentsView.test.ts`(jsdom 에 실제 편집기)
+- [x] 열 머리는 늘 A · B · C (2026-11-12 고침, 사용자 — 열 이름이 머리에 보여 `=A1` 수식이 헷갈렸다) — `SheetTab.columns` 를 `{ width }[]` 로, 편집기는 열 `title` 을 안 줘 기본 머리, '열 이름 바꾸기' 메뉴 · 저장 변환의 title 걷음, 기본 표는 첫 줄 '항목 · 내용' 굵게(`defaultSheetBook`), 새 시트 · .xlsx 가져오기도 너비만, 열에 `title` 이 오면 목업 422(서버 이행 0043 과 같게), 픽스처 `doc2` 는 이름을 첫 줄로. 검사 — `lib/document.test.ts` · `lib/sheetXlsx.test.ts` · `stores/document.test.ts` · `views/DocumentsView.test.ts`(머리 A · B · C)
+- [x] 엑셀처럼 넓게 (2026-11-12 고침, 사용자 — 열이 저장된 2개만 보였다) — 상한을 엑셀과 같게(시트마다 16,384열 A ~ XFD · 1,048,576줄 · 칸 32,767자, 주소 `A1` ~ `XFD1048576`, 직렬화 5MB). 편집기는 열면 적어도 A ~ Z · 100줄을 빈 칸으로 깔고(쓴 범위가 크면 + 10열 · 50줄, `editorSize`), 오른쪽 · 아래 끝 240px 안으로 스크롤하면 열 26 · 줄 100씩 늘림(`insertColumn` · `insertRow`, 이벤트 · 되돌리기 기록을 끄고, 120ms 쓰로틀). `lazyLoading` 은 안 씀 — 줄 DOM 은 다 만들고 tbody 에 붙이는 것만 100줄씩이라 이득이 적고 늘리기 · 고르기와 겹친다. 표 높이는 화면에 맞춤. 저장은 쓴 범위뿐(`trimTab` — 끝의 빈 줄 · 열을 뗌, 열은 값 · 병합 · 꾸밈 · 기본과 다른 너비가 있는 마지막 열까지, 최소 1), 받은 표도 같은 꼴로 견줘 넓혀 그리기만 해서는 저장 · rev 가 안 나감. 새 시트는 빈 1열로 저장. .xlsx 가져오기는 '!ref' 를 다 돌지 않고 있는 칸만 보며 새 상한으로 자르고, 5MB 를 넘으면 가져오지 않고 알림. 검사 — `lib/document.test.ts`(쓴 범위 · 깔 크기 · XFD1048576 · 상한 · 5MB) · `lib/sheetXlsx.test.ts`(자르기 · 5MB) · `views/DocumentsView.test.ts`(머리 A ~ Z · 스크롤로 AA 이후 · 저장 안 나감 · 상한)
+
+### 32-2 서버에 붙이기
+
+- [ ] 서버 모드로 만들기 · 자동 저장 · 두 창 409 · 연결 · 확인 · 파트 옮기기 · 지우기, 다른 계정으로 파트 문서 읽기 전용을 본다
+
+
 ---
 
 ## 진행 상황
@@ -808,6 +848,7 @@
 | 29 저장한 AI 리스크 분석 | 계약 `docs/api/risk-analysis.md` (2026-11-06, 사용자 결정) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-06). 리스크 화면 탭 `[지금 리스크 \| 저장한 분석 N]`(`?tab=saved`) · AI 리스크 분석 카드의 [저장] → 제목 창 → '저장됨 · [보기]' · 게시판(50개씩 [더 보기]) · 상세 `/risks/analyses/:analysisId`(글 · 근거 칩 · 지난 분석 대비 · 그때의 리스크 · 제목 고치기 · 지우기). 리포트(15단계) 걷음. Q70(상세에 `projectId`) 열림 |
 | 30 리스크 대시보드 | 계약 `docs/api/risk-dashboard.md` (2026-11-06, 사용자 요청) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-06). 작업 · 테스트 리스크(지연 · 흔들림)를 더하고 '지금 리스크' 탭을 대시보드로 — 숫자 카드 · 신호별 쌓은 막대 · AI 리스크 분석(세 종류 id) · 섞은 목록(종류 · 등급 · 신호 거르기, 30줄 [더 보기]). 기준 일곱(흔들림 셋). 저장한 분석도 세 종류. 목업은 서버 시드 표에 맞춤(30-2 첫 줄 닫힘) |
 | 31 간트 담당자 고르기 | 화면만 (2026-11-06, 사용자 요청) — 작업 · 테스트 간트의 '내 작업만' · '내 테스트만' 체크박스(`MineOnlyToggle`, 걷음)를 **[담당자 ▾]**(`OwnerPickFilter`, 여럿)로. 맨 위 '나', 활성 멤버(사진 · 찾기), 맨 아래 '담당자 없음'. 버튼은 '김봉석' · '김봉석 외 1' · [×], 옆에 '담당 N건'(나를 고르면 '등록 · 담당', 테스트는 '담당 · 참조'). 고른 값은 주소 `?owner=u2,none`(`lib/ownerPick`) — 주소가 원본, 스토어(`ownerPick`)가 따라감. 탭 · 상세 열고 닫기에도 붙어 다닌다. 거르기는 예전 규칙을 일반화 — 작업은 담당(나는 등록도), 테스트는 담당 · 참조, none 은 담당자 없음, 조상은 흐리게. **목록의 담당자 거르기(단일 Select)도 같은 값 · 같은 부품 · 같은 규칙**(다른 조회 조건과 AND, 초기화가 같이 품). 예전 값은 저장소에 없었다(옮길 것 없음) |
+| 32 문서 | 계약 `docs/api/document.md` (2026-11-12, 사용자 결정 · 서버 `구현`) — **목업으로 끝남 · 서버 갈래 계약대로 붙임** (2026-11-12). 대메뉴 '문서' · 목록 · 새 문서 · 글(마크다운 · 미리보기) / 표(칸 · 엑셀 붙여 넣기) · 자동 저장 0.8초 + rev + 409 줄 · 연결한 안건 칸([본문에 넣기] · 결정 바뀜 · [확인]) · 안건 상세 '실린 문서' |
 
 ## 아직 안 정한 것
 

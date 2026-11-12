@@ -31,6 +31,7 @@
 | `docs/api/test.md` | 테스트 — 작업과 따로 두는 기능 · 시나리오 테스트(단계는 행동 ↔ 기대 결과 짝 · 상위 테스트 묶음 · 작업 · 안건 참조 태그) · 상태와 N일째 · 손쓸 테스트 신호 · 기준 바뀜. 1단계(AI 없이)의 계약, AI 는 테두리만 |
 | `docs/api/test-comment.md` | **테스트 조치 내역** — 테스트 상세의 상태 칸을 걷고 그 자리에 댓글 같은 조치 내역(`test_comment`), 실패 · 막힘 메모는 선택으로 (2026-11-05) |
 | `docs/api/me.md` | **마이페이지 · 프로필 사진** — `/me`(사진 · 내 정보 · 내 프로젝트 · 비밀번호), `member_avatar`, `Member` · `Me` 의 `avatarUrl`, 사람 동그라미를 사진으로 (2026-11-06) |
+| `docs/api/document.md` | **문서** — 여러 안건의 결정을 주제 하나로 묶는 글(`text`) · 표(`sheet`) 문서, 연결 안건 · 결정 바뀜(`seenRev`) · 판 번호(`rev`)로 겹침 막기 · 권한 (2026-11-12) |
 | `docs/api/history.md` | 변경 이력 — 작업 · 테스트 · 안건(2026-11-02)을 누가 언제 무엇을 바꿨나(요청 하나 = 한 줄, 칸마다 전 · 후). 상세에서 보인다. `task_log` 와 따로 |
 | `docs/api/decisions.md` | 닫힌 질문(Q1 ~ ) · 결정 로그. **코드 주석의 `API.md Qn` 은 여기 있다** |
 
@@ -238,6 +239,17 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | POST | `/api/tests/{testId}/basis` | "그대로 맞다" — 기준 바뀜을 지운다 | `TestCase` | 구현 |
 | GET · POST | `/api/tests/{testId}/comments` | 조치 내역 — 등록 순 · 남기기(작성자는 로그인한 사람) (`docs/api/test-comment.md`) | `TestComment[]` · 201 `TestComment` | 연결 |
 | PATCH · DELETE | `/api/test-comments/{testCommentId}` | 조치 내역 고치기(작성자만) · 지우기(작성자 · 관리자) | `TestComment` · 204 | 연결 |
+
+### 문서
+
+'문서' 메뉴(2026-11-12). 모양 · 오류 · 권한은 `docs/api/document.md` 다.
+
+| 메서드 | 경로 | 하는 일 | 응답 | 상태 |
+| --- | --- | --- | --- | --- |
+| GET · POST | `/api/projects/{projectId}/documents` | 목록(`updatedAt` 늦은 순, `?agendaId=`) · 만들기 | `ProjectDocSummary[]` · 201 `ProjectDoc` | 구현 |
+| GET · PATCH · DELETE | `/api/documents/{documentId}` | 읽기 · 고치기(제목 · 본문 · 표는 `rev` 를 실어서, 다르면 409 `DOCUMENT_STALE`) · 지우기 | `ProjectDoc` · 204 | 구현 |
+| PUT | `/api/documents/{documentId}/agendas` | 연결 안건 통째로 — 남는 것은 `seenRev` 그대로 | `ProjectDoc` | 구현 |
+| POST | `/api/documents/{documentId}/confirm` | 결정 바뀜 지우기(고른 것 · 전부) | `ProjectDoc` | 구현 |
 
 ### 변경 이력
 

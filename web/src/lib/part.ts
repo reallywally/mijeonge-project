@@ -9,8 +9,8 @@ import type { Agenda, Part, PartRights, Task, TaskAgendaLink } from '@/types/dom
 /** '내 파트' 또는 '전체' */
 export type PartScope = 'mine' | 'all'
 
-/** 볼 파트를 따로 기억하는 메뉴 묶음 — 업무(작업 세 탭 · 테스트 · 리스크) · 안건 목록 */
-export type PartPickArea = 'work' | 'agenda'
+/** 볼 파트를 따로 기억하는 메뉴 묶음 — 업무(작업 세 탭 · 테스트 · 리스크) · 안건 목록 · 문서 목록 */
+export type PartPickArea = 'work' | 'agenda' | 'document'
 
 export interface PartScopeInput {
   tasks: Pick<Task, 'id' | 'parentId' | 'partId' | 'ownerId'>[]

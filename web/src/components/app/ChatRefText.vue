@@ -141,6 +141,9 @@ function block(b: Block): VNodeChild {
       )
     case 'hr':
       return h('hr', { class: 'border-border' })
+    case 'table':
+      /* 챗봇은 표를 풀지 않는다(tables 를 안 켠다) — 오지 않는 갈래 */
+      return null
   }
 }
 

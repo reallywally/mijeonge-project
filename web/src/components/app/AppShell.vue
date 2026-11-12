@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  Files,
   FlaskConical,
   FolderClosed,
   ListChecks,
@@ -30,7 +31,7 @@ import { useDataStore } from '@/stores/data'
 import { useTaskStore } from '@/stores/task'
 import { useAgendaStore } from '@/stores/agenda'
 
-/* 대메뉴는 작업 · 안건 · 테스트 · 리스크 · 확인 요청 · 회의록이다. 위에서 프로젝트를 고르면 모두 그 프로젝트 안에서만 돈다.
+/* 대메뉴는 작업 · 안건 · 문서 · 테스트 · 리스크 · 확인 요청 · 회의록이다. 위에서 프로젝트를 고르면 모두 그 프로젝트 안에서만 돈다.
    관리 메뉴는 관리자 페이지(AdminShell)로 뺐다 — 여기는 관리 권한이 있는 사람에게만 그리로 가는 링크 하나를 둔다.
    숨기는 것은 편의이고 막는 것은 서버다.
    확인 요청 배지는 지금 프로젝트의 내 대기 수, 프로젝트 고르기에는 다른 프로젝트의 수 — 0 이면 안 그린다 (Q38) */
@@ -169,6 +170,15 @@ const projectOptions = computed(() => orderProjects(data.allProjects))
             <span class="text-xs text-muted-foreground tabular-nums">{{
               agendaStore.visibleRows.length
             }}</span>
+          </RouterLink>
+          <RouterLink
+            to="/documents"
+            class="group flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground [&>svg]:text-muted-foreground"
+            active-class="!bg-card font-semibold !text-foreground shadow-[0_1px_2px_rgb(16_24_40/0.06),0_0_0_1px_var(--border)] [&>svg]:!text-primary"
+            data-nav-documents
+          >
+            <Files class="size-4 shrink-0" />
+            <span class="grow">문서</span>
           </RouterLink>
           <RouterLink
             to="/tests"

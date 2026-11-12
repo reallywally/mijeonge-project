@@ -1,4 +1,10 @@
-export { ApiError, isUnreachable, messageOf, setUnauthenticatedHandler } from './client'
+export {
+  ApiError,
+  fieldDetail,
+  isUnreachable,
+  messageOf,
+  setUnauthenticatedHandler,
+} from './client'
 export { provideMockWorld, resetMockAuth } from './mockAuth'
 export { isMockMode } from './mode'
 export * from './admin'
@@ -16,3 +22,4 @@ export * from './tasks'
 export * from './tests'
 export * from './agendas'
 export * from './impacts'
+export * from './documents'

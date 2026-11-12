@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
-import { ApiError, messageOf } from '@/api'
+import { ApiError, fieldDetail, messageOf } from '@/api'
 import { canDeleteComment, canEditComment } from '@/lib/access'
 import { toastError } from '@/lib/notify'
 import { useAuthStore } from '@/stores/auth'
@@ -194,7 +194,8 @@ function writeProblem(
     if (e.code === 'RISK_ANALYSIS_ALREADY_SAVED')
       return { problem: '이미 저장한 분석입니다.', alreadySaved: true }
     if (e.code === 'RISK_ANALYSIS_NOT_FOUND') return { problem: notFoundText }
-    if (e.status === 422 && e.detail?.title) return { problem: e.detail.title }
+    const title = fieldDetail(e.detail).title
+    if (e.status === 422 && title) return { problem: title }
   }
   return { problem: messageOf(e) }
 }

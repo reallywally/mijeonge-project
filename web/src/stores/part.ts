@@ -62,10 +62,10 @@ export const usePartStore = defineStore('part', () => {
   const canNarrow = computed(() => myPartIds.value.size > 0)
 
   /* 볼 파트 — 담당자 고르기처럼 내 파트 중 여럿을 고르고, 비우면 전체다. 메뉴 묶음(area)마다 따로 기억한다 —
-     업무(작업 세 탭 · 테스트 · 리스크)는 내 파트 전부로, 안건은 전체로 시작한다 (2026-11-12).
+     업무(작업 세 탭 · 테스트 · 리스크)는 내 파트 전부로, 안건 · 문서는 전체로 시작한다 (2026-11-12).
      고른 값은 프로젝트마다 브라우저에 기억한다. 같은 브라우저를 다른 사람이 쓸 수 있어 사람도 키에 넣는다 */
   const pickKeyOf = (area: PartPickArea) =>
-    `innoflow.partPick.${area === 'agenda' ? 'agenda.' : ''}${data.currentMemberId ?? ''}.${data.currentProjectId}`
+    `innoflow.partPick.${area === 'work' ? '' : `${area}.`}${data.currentMemberId ?? ''}.${data.currentProjectId}`
   /* 2026-11-11 전의 [내 파트 | 전체] 값 — 업무 쪽만, 새 값이 없을 때 읽어 옮긴다 */
   const legacyKey = computed(
     () => `innoflow.partScope.${data.currentMemberId ?? ''}.${data.currentProjectId}`,
@@ -93,7 +93,7 @@ export const usePartStore = defineStore('part', () => {
 
   /**
    * 고른 파트 — 고른 순서, 늘 내 파트 안. 비면 전체다.
-   * 처음은 업무 = 내 파트 전부, 안건 = 전체. 고른 파트에서 다 빠졌으면(소속이 바뀜) 내 파트 전부로 돌아간다
+   * 처음은 업무 = 내 파트 전부, 안건 · 문서 = 전체. 고른 파트에서 다 빠졌으면(소속이 바뀜) 내 파트 전부로 돌아간다
    */
   function pickOf(area: PartPickArea): string[] {
     const mine = myPartIds.value
@@ -106,11 +106,13 @@ export const usePartStore = defineStore('part', () => {
   const picked = {
     work: computed(() => pickOf('work')),
     agenda: computed(() => pickOf('agenda')),
+    document: computed(() => pickOf('document')),
   }
   const pickedIdsOf = (area: PartPickArea) => picked[area].value
   const pickedSets = {
     work: computed(() => new Set(picked.work.value)),
     agenda: computed(() => new Set(picked.agenda.value)),
+    document: computed(() => new Set(picked.document.value)),
   }
   const pickedSetOf = (area: PartPickArea) => pickedSets[area].value
 
@@ -158,12 +160,15 @@ export const usePartStore = defineStore('part', () => {
     agenda: computed(() => visibleFor('agenda')),
   }
 
-  /** 고른 파트일 때 보이는 것. 전체면 null — 거르지 않는다 */
-  const visibleIn = (area: PartPickArea) => visibleBy[area].value
+  /** 고른 파트일 때 보이는 것. 전체면 null — 거르지 않는다. 문서는 담당 · 계층이 없어 partIn 으로 본다 */
+  const visibleIn = (area: Exclude<PartPickArea, 'document'>) => visibleBy[area].value
+  /** 파트만으로 가린다 — 공통이거나 고른 파트. 전체면 다 보인다(문서 목록) */
+  const showsPartIn = (partId: string | null, area: PartPickArea) =>
+    scopeOf(area) === 'all' || partId === null || pickedSetOf(area).has(partId)
   const visible = computed(() => visibleBy.work.value)
 
   const showsTask = (taskId: string) => visible.value?.taskIds.has(taskId) ?? true
-  const showsAgenda = (agendaId: string, area: PartPickArea) =>
+  const showsAgenda = (agendaId: string, area: Exclude<PartPickArea, 'document'>) =>
     visibleIn(area)?.agendaIds.has(agendaId) ?? true
   /** 파트 · 담당자만으로 가린다 — 조상으로 끌려 서는 것은 세지 않는다. 리스크 줄처럼 계층 없이 놓는 것이 쓴다 */
   const showsOwned = (r: { partId: string | null; ownerId: string | null }) =>
@@ -285,6 +290,7 @@ export const usePartStore = defineStore('part', () => {
     showsTask,
     showsAgenda,
     showsOwned,
+    showsPartIn,
     isContextTask,
     canCreateIn,
     canMoveTo,

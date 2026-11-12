@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
-import { ApiError, messageOf } from '@/api'
+import { ApiError, fieldDetail, messageOf } from '@/api'
 import {
   minutesErrorsByTempId,
   minutesErrorText,
@@ -235,7 +235,8 @@ export const useMinutesDraftStore = defineStore('minutesDraft', () => {
       return true
     } catch (e) {
       toastError(e)
-      if (e instanceof ApiError) rowErrors.value = minutesErrorsByTempId(e.detail, input)
+      if (e instanceof ApiError)
+        rowErrors.value = minutesErrorsByTempId(fieldDetail(e.detail), input)
       return false
     } finally {
       applying.value = false

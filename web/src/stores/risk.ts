@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import * as api from '@/api'
-import { ApiError, messageOf } from '@/api'
+import { ApiError, fieldDetail, messageOf } from '@/api'
 import { chatErrorText } from '@/lib/chat'
 import {
   agendaRow,
@@ -158,7 +158,7 @@ export const useRiskStore = defineStore('risk', () => {
       await api.putRiskSettings(data.currentProjectId, settings)
     } catch (e) {
       if (e instanceof ApiError && e.status === 422 && e.detail)
-        return { ok: false, detail: e.detail }
+        return { ok: false, detail: fieldDetail(e.detail) }
       toastError(e)
       return { ok: false, detail: {} }
     }

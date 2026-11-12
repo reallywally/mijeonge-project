@@ -430,6 +430,37 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 - [ ] 개발 DB — `alembic upgrade head` 와 시드는 사람이 돌린다
 - [ ] 나중 — 본문 줄 단위 비교(계약 '긴 글'), 챗봇이 이력을 읽는 도구
 
+## 32단계 · 문서 — 여러 안건의 결정을 주제 하나로 묶는 글 · 표
+
+계약은 `../docs/api/document.md`(합의 2026-11-12, 사용자 결정), 화면은 `../web/PLAN.md` 의 '문서' 단계다.
+본문은 서버가 해석하지 않는다 — 서버는 글 · 표를 담고, 연결 안건의 결정 판과 문서의 판만 센다.
+
+### 정해 둔 것
+
+| | 결정 | 왜 |
+| --- | --- | --- |
+| 테이블 | `document`(`sheet` 는 jsonb — sqlite 검사는 JSON, `risk_analysis.JSON_TYPE`) · `document_agenda`(PK `(document_id, agenda_id)`, 문서 · 안건 복합 FK cascade, `sort_order` · `seen_rev`). 리비전 `0041_document` | 안건 연결은 같은 프로젝트에서만 선다 (Q13 과 같은 방식) |
+| 결정 바뀜 | 연결 줄의 `seen_rev` 와 안건의 지금 `decision_rev` 를 읽을 때 비교 — 따로 남기지 않는다 | 테스트의 '기준 바뀜' 과 같은 생각, 판은 `agenda.apply_fields` 한 곳이 올린다 |
+| 지운 안건 | 연결 줄은 두고 읽을 때 거른다(`agendas` · `changedAgendaIds` · `?agendaId=`). PUT 으로 다시 맞추면 그때 빠진다 | 안건 논리 삭제의 다른 줄(링크 · 태그)과 같다 |
+| 겹쳐 쓰기 | `rev` — 제목 · 본문 · 표를 보낼 때만 보고, 값이 실제로 바뀔 때만 + 1. 다르면 409 `DOCUMENT_STALE`(`detail` 에 지금 판 · 고친 사람 · 시각). `ApiError.detail` 이 `dict[str, Any]` 로 넓어졌다 | 자동 저장이 같은 글을 다시 보내도 판이 안 오른다 |
+| 권한 | `access.can_edit_document` · `can_delete_document` + 작업 · 테스트의 `can_create_in_part` · `can_move_to_part` 그대로. 경로 `document_id` 는 `SCOPED_PARAMS` 에 | 파트 권한 판정은 `access.py` 한 곳이다 |
+| 파트 오류 | 작업 · 테스트와 같은 `part.guard_part`(400 `PART_NOT_FOUND` · `PART_ARCHIVED`) | 계약 초안의 `DOCUMENT_PART_NOT_FOUND` 대신 — 계약을 그 값으로 고쳤다 |
+
+### 32-1 체크리스트
+
+- [x] 리비전 `0041_document` — 테이블 둘 · 인덱스 `(project_id, updated_at)` · `(agenda_id)`. sqlite(`test_schema`)와 임시 Postgres DB 에서 올리고 · 내리고 · 다시 올려 확인
+- [x] `models/document.py` · `schemas/document.py`(`SheetInput` 이 표 모양 · 크기를 봄, 안건 50개 · 겹침 422) · `services/document.py` · `api/document.py`(일곱 경로) · `main.py` 등록
+- [x] 목록 — `updated_at` 늦은 순 · `seq` 큰 순, `?agendaId=`
+- [x] 검사 — `tests/test_document.py`(만들기 · 읽기 · 목록 정렬 · 거르기, 판 충돌, kind 와 안 맞는 칸 · 표 모양 · 크기 422, 연결 유지 · 새 연결의 판, 결정 바뀜, 확인 일부 · 전부 · 400, 지운 안건, 지우기 cascade, 권한, 다른 프로젝트 안건 · 파트, 이행, Postgres 한 벌)
+- [x] 시드 — 목업 픽스처에 문서가 없어 넣지 않았다. `clear` 에만 더했다. 검사의 `SEQ_MODELS` 에 `Document`
+- [x] `API.md` '### 문서' 네 줄 `구현`
+- [x] 개발 DB — `alembic upgrade head` 만 (시드는 돌리지 않는다)
+- [x] `test_contract_types.py` — `domain.ts` 의 `ProjectDoc` · `ProjectDocSummary` · `DocAgendaLink` · `SheetBook` · `SheetTab`(2026-11-12 고침, 처음엔 `SheetData`) 필드 · null 자리와 응답을 대조(타입이 없으면 건너뜀)
+- [x] 표 → SheetBook (2026-11-12, 사용자 — 웹 스프레드시트) — `sheet` 를 `{ sheets: SheetTab[] }`(이름 · 열 제목과 너비 · 칸 원문 · 병합 · 꾸밈)로. `schemas/document.py` 의 `SheetBookInput` 이 계약 '표의 모양'(시트 1 ~ 10 · 이름 겹침 · 열 100 · 줄 2,000 · 칸 5,000자 · `A1` 키 · 너비 20 ~ 1,000 · 2MB)을 보고 소수 너비는 반올림, 리비전 `0042_document_sheet_book`(값만 옮김, 두 번 돌아도 같음, 내리면 첫 시트만) — sqlite 검사 · 개발 DB 사본에서 올리기 · `alembic check` · 내리기(원본과 같음) · 다시 올리기, 개발 DB 는 올림(시드 없음), `test_contract_types.py` 는 `SheetBook` · `SheetTab`
+- [x] 열 이름 걷기 (2026-11-12, 사용자 — 엑셀처럼 A · B · C) — `SheetColumn` 은 `{ width }` 만, 열에 `title` 이 오면 422(다른 모르는 키는 지금처럼 버린다 — 옛 화면이 보낸 이름을 조용히 잃지 않게 이 키만 막음), 새 표 기본값은 첫 줄 `['항목', '내용']` · `A1` · `B1` 굵게, 리비전 `0043_document_sheet_header`(이름이 하나라도 있으면 맨 위에 한 줄 끼우고 병합 · 꾸밈 주소를 한 줄 내림, 다 비면 너비만, 두 번 돌아도 같음, 내리면 `title: ''` 만 · 첫 줄은 남김. 줄 2,000 인 시트는 2,001 줄이 되어 다음 저장이 422 — 실제로 없어 막지 않음) — sqlite 검사 · 개발 DB 사본에서 올리기 · `alembic check` · 내리기 · 다시 올리기, 개발 DB 는 올림(시드 없음), `test_contract_types.py` 의 열 키는 `{width}`
+- [x] 엑셀 크기 (2026-11-12, 사용자) — 열 16,384(A ~ XFD) · 줄 1,048,576 · 칸 32,767자, 칸 주소는 `XFD1048576` 까지(넘으면 422), 직렬화 상한 2MB → 5MB. 이행 없음(값 검사만 넓힘). 화면은 쓴 범위만 보낸다
+- [ ] 나중 — 계약 '나중'(AI 정리 초안 · 영향도 분석에 문서 · 챗봇 도구 · 변경 이력 · 내려받기)
+
 ---
 
 ## 진행 상황
@@ -471,6 +502,7 @@ API 계약(SSE 이벤트 · 오류 코드)은 바뀌지 않는다.
 | 29 챗봇 테스트 언급 | **끝남** (2026-11-05) — 계약 `docs/api/chat.md` '테스트 언급 `@HW-T3`'. `MENTION_PATTERN` 이 `-T?\d+`, `find_mentions` 가 작업(`search.tasks_by_key`) · 테스트(`search.tests_by_key`)로 갈라 찾고 줄마다 `kind`. 도구 `get_test`(`search.get_test` → `TestDoc` — 태그 · 하위 · 결과 메모 · 조치 내역 최근 20개, 묶음은 `test.roll_up` 으로 화면과 같이 모음), `ChatRef.kind` · `REF_PATTERN` 에 `test`, 시스템 프롬프트. 리포트 · 리스크 요약은 `[[test:…]]` 를 칩으로 안 냄. `tests/test_chat.py` · 계약 검사에 `ChatRef.kind` · 도구 이름 대조를 더함. 이행 없음 |
 | 30 프로필 사진 | **끝남** (2026-11-06) — 계약 `docs/api/me.md`(사용자 결정). 리비전 `0035_member_avatar`(빈 표, PK = FK `member_id` cascade, `content_type` · `data` bytea · `updated_at`). `services/avatar.py`(data URL 풀기 · 매직 넘버 · 512 KB · 주소 만들기), `PUT · DELETE /api/auth/me/avatar`(→ `Me`), `GET /api/members/{id}/avatar`(project 라우터 — 로그인만, 경로에 프로젝트가 없어 부여는 안 봄), `DELETE /api/admin/members/{id}/avatar`. `Member` · `Me` 의 `avatarUrl` 은 `updated_at` 만 바깥 조인(`project.list_members` · `auth.me`). 시드엔 안 넣음 · `tests/test_avatar.py` · 계약 검사 `AUTH_SHAPES` 에 `avatarUrl` · `AvatarInput`. 개발 DB 는 올림, 시드는 안 다시 돌림 |
 | 31 파트 권한 | **끝남** (2026-11-12) — 계약 `docs/api/part.md` '파트 권한 (2026-11-12)'(사용자 결정). 리비전 `0040_part_rights`(`part_member` 에 `can_view` · `can_create` · `can_update` · `can_delete`, 있던 소속은 넷 다 켬, 열 기본값은 삭제만 끔). `PUT .../members/{memberId}` 가 본문(선택)으로 권한을 받고 서버가 맞춤(`part.normalize_rights`). 판정은 `access.py` 한 곳 — `Scope.part_rights`(요청마다 내 소속을 한 번 읽음, 관리자는 안 읽음) · `can_create_in_part` · `can_move_to_part` · `can_edit_task` · `can_delete_task` · `can_edit_test` · `can_delete_test`. 작업 등록은 `_insert_task`(단건 · 일괄 · 회의록)에서, 일괄은 먼저 줄마다 `tasks.N.partId`. 테스트 쓰기 길 전부 · 영향도 반영의 테스트 줄도. 안건은 안 탄다. `tests/test_part_rights.py` |
+| 32 문서 | **끝남** (2026-11-12) — 계약 `docs/api/document.md`(사용자 결정). 리비전 `0041_document`(`document` · `document_agenda`) · 일곱 경로 · `services/document.py`(결정 바뀜은 `seen_rev` < `decision_rev`, 지운 안건은 읽을 때 거름, `rev` 로 409 `DOCUMENT_STALE`) · 권한은 `access.can_edit_document` · `can_delete_document` + 파트 권한 둘 · `tests/test_document.py`. API.md 네 줄 `구현`. 개발 DB 는 올림(시드 없음) |
 
 ## 아직 안 정한 것
 

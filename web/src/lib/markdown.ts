@@ -7,7 +7,8 @@ import type { ChatRef } from '@/types/domain'
  *
  * 블록: 문단 · 제목(#) · 목록(- * • · 1.) · 코드 블록(```) · 구분선(---)
  * 인라인: **굵게** · *기울임* · `코드` · 근거 [[agenda:ID]] · [[task:ID]]
- * 그 밖(표 · 링크 · 이미지 · HTML)은 글자 그대로 둔다. 받는 중이라 덜 닫힌 ** 는 잠깐 글자로 비치고,
+ * 표(| 칸 | 칸 | + | --- |)는 tables 를 켰을 때만 푼다 — 문서 미리보기. 챗봇은 글자 그대로 둔다.
+ * 그 밖(링크 · 이미지 · HTML)은 글자 그대로 둔다. 받는 중이라 덜 닫힌 ** 는 잠깐 글자로 비치고,
  * 닫는 ``` 가 아직 안 온 코드 블록은 끝까지 코드로 본다 — 조각이 올 때마다 다시 푼다.
  */
 
@@ -25,14 +26,16 @@ export interface ListItem {
 
 export type Block =
   | { kind: 'p'; inlines: Inline[] }
-  | { kind: 'heading'; inlines: Inline[] }
+  | { kind: 'heading'; level: number; inlines: Inline[] }
   | { kind: 'ul'; items: ListItem[] }
   | { kind: 'ol'; start: number; items: ListItem[] }
   | { kind: 'code'; text: string }
   | { kind: 'hr' }
+  /** tables 를 켰을 때만. 줄마다 칸 수는 머리 줄에 맞춘다 */
+  | { kind: 'table'; header: Inline[][]; rows: Inline[][][] }
 
 const FENCE_RE = /^\s*```/
-const HEADING_RE = /^\s{0,3}#{1,6}\s+(.*)$/
+const HEADING_RE = /^\s{0,3}(#{1,6})\s+(.*)$/
 const UL_RE = /^(\s*)[-*•]\s+(.*)$/
 const OL_RE = /^(\s*)(\d{1,3})[.)]\s+(.*)$/
 const HR_RE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/
@@ -40,7 +43,22 @@ const HR_RE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/
 /* 들여쓰기 두 칸(탭은 네 칸)을 한 단으로 */
 const levelOf = (indent: string) => Math.floor(indent.replace(/\t/g, '    ').length / 2)
 
-export function parseMarkdown(text: string): Block[] {
+const TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/
+
+/** '| a | b |' → ['a', 'b']. 앞뒤 | 는 있어도 없어도 된다 */
+function tableCells(line: string): string[] {
+  let s = line.trim()
+  if (s.startsWith('|')) s = s.slice(1)
+  if (s.endsWith('|')) s = s.slice(0, -1)
+  return s.split('|').map((c) => c.trim())
+}
+
+export interface MarkdownOptions {
+  /** 표를 푼다 — 문서 미리보기 */
+  tables?: boolean
+}
+
+export function parseMarkdown(text: string, options: MarkdownOptions = {}): Block[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const blocks: Block[] = []
   let para: string[] = []
@@ -77,7 +95,31 @@ export function parseMarkdown(text: string): Block[] {
     const heading = HEADING_RE.exec(line)
     if (heading) {
       flush()
-      blocks.push({ kind: 'heading', inlines: parseInline(heading[1].replace(/\s+#+\s*$/, '')) })
+      blocks.push({
+        kind: 'heading',
+        level: heading[1].length,
+        inlines: parseInline(heading[2].replace(/\s+#+\s*$/, '')),
+      })
+      continue
+    }
+
+    if (
+      options.tables &&
+      line.includes('|') &&
+      i + 1 < lines.length &&
+      TABLE_SEP_RE.test(lines[i + 1]) &&
+      lines[i + 1].includes('|')
+    ) {
+      flush()
+      const header = tableCells(line)
+      const rows: Inline[][][] = []
+      i += 1
+      while (i + 1 < lines.length && lines[i + 1].includes('|') && lines[i + 1].trim()) {
+        i += 1
+        const cells = tableCells(lines[i])
+        rows.push(header.map((_, c) => parseInline(cells[c] ?? '')))
+      }
+      blocks.push({ kind: 'table', header: header.map((c) => parseInline(c)), rows })
       continue
     }
 

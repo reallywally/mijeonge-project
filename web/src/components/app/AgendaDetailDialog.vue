@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ChevronRight, FolderClosed, Loader2, Lock, Trash2 } from 'lucide-vue-next'
+import AgendaDocsRow from '@/components/app/AgendaDocsRow.vue'
 import AgendaImpactSection from '@/components/app/AgendaImpactSection.vue'
 import CheckRequestSection from '@/components/app/CheckRequestSection.vue'
 import HistorySection from '@/components/app/HistorySection.vue'
@@ -214,6 +215,9 @@ async function remove() {
           @update:cc-ids="setCc"
           @update:part-id="setPart"
         >
+          <div class="h-px bg-border" />
+          <!-- 문서는 안건의 고치기 권한과 따로다 — 담기는 그 문서의 권한으로 본다 -->
+          <AgendaDocsRow :agenda="agenda" />
           <div class="h-px bg-border" />
           <dl class="flex flex-col gap-2 px-0.5 text-xs">
             <div class="flex gap-2">

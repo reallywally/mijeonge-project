@@ -8,6 +8,7 @@ from app.api import (
     chat,
     check,
     comment,
+    document,
     health,
     history,
     impact,
@@ -60,5 +61,6 @@ for scoped in (
     test.router,
     history.router,
     impact.router,
+    document.router,
 ):
     app.include_router(scoped, prefix="/api", dependencies=[Depends(require_scope)])

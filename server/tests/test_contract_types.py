@@ -711,3 +711,61 @@ def test_impact_shapes_do_not_drift_from_domain_ts(name: str) -> None:
 async def test_impact_state_matches_contract(client: AsyncClient) -> None:
     body = (await client.get("/api/agendas/t2/impact")).json()
     assert set(body) == IMPACT_SHAPES["AgendaImpactState"]
+
+
+# 문서 — docs/api/document.md '모양'. null 이 나가는 자리는 partId · createdBy · updatedBy 셋뿐이다
+_DOC_SUMMARY = {
+    "id",
+    "projectId",
+    "title",
+    "kind",
+    "partId",
+    "agendas",
+    "changedAgendaIds",
+    "rev",
+    "createdBy",
+    "createdAt",
+    "updatedBy",
+    "updatedAt",
+}
+DOC_SHAPES: dict[str, set[str]] = {
+    "SheetBook": {"sheets"},
+    "SheetTab": {"name", "columns", "data", "merges", "styles"},
+    "DocAgendaLink": {"agendaId", "seenRev"},
+    "ProjectDocSummary": _DOC_SUMMARY,
+    "ProjectDoc": _DOC_SUMMARY | {"content", "sheet"},
+}
+DOC_NULLABLE: dict[str, set[str]] = {
+    "ProjectDocSummary": {"partId", "createdBy", "updatedBy"},
+    "ProjectDoc": {"partId", "createdBy", "updatedBy"},
+}
+
+
+@pytest.mark.parametrize("name", sorted(DOC_SHAPES))
+def test_document_shapes_do_not_drift_from_domain_ts(name: str) -> None:
+    """domain.ts 에 들어와 있으면 필드 · null 자리가 document.md 와 같아야 한다."""
+    if name not in FIELDS:
+        return
+    declared = all_fields(name)
+    assert set(declared) == DOC_SHAPES[name], f"domain.ts 의 {name} 이 document.md 와 다르다"
+    nullable = {field for field, allowed in declared.items() if allowed}
+    assert nullable == DOC_NULLABLE.get(name, set())
+
+
+async def test_document_responses_match_contract(client: AsyncClient) -> None:
+    created = await client.post(
+        "/api/projects/p1/documents", json={"title": "서버", "kind": "text", "agendaIds": ["t1"]}
+    )
+    doc = created.json()
+    assert set(doc) == DOC_SHAPES["ProjectDoc"]
+    assert set(doc["sheet"]) == DOC_SHAPES["SheetBook"]
+    assert set(doc["agendas"][0]) == DOC_SHAPES["DocAgendaLink"]
+    assert {k for k, v in doc.items() if v is None} == {"partId"}
+    rows = (await client.get("/api/projects/p1/documents")).json()
+    assert set(rows[0]) == DOC_SHAPES["ProjectDocSummary"]
+    sheet = (
+        await client.post("/api/projects/p1/documents", json={"title": "표", "kind": "sheet"})
+    ).json()["sheet"]
+    assert set(sheet) == DOC_SHAPES["SheetBook"]
+    assert set(sheet["sheets"][0]) == DOC_SHAPES["SheetTab"]
+    assert set(sheet["sheets"][0]["columns"][0]) == {"width"}

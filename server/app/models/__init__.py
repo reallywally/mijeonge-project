@@ -2,6 +2,7 @@ from app.models.agenda import Agenda, AgendaCc, AgendaHistory
 from app.models.auth import AuthIdentity, AuthSession
 from app.models.base import Base, new_id
 from app.models.check import CheckRequest
+from app.models.document import Document, DocumentAgenda
 from app.models.impact import AgendaImpact
 from app.models.minutes import Minutes
 from app.models.part import Part, PartMember
@@ -24,6 +25,8 @@ __all__ = [
     "AuthSession",
     "Base",
     "CheckRequest",
+    "Document",
+    "DocumentAgenda",
     "Member",
     "MemberAvatar",
     "Minutes",

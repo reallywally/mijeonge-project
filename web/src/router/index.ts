@@ -149,6 +149,17 @@ const router = createRouter({
       name: 'agenda',
       component: () => import('@/views/AgendaListView.vue'),
     },
+    /* 문서 — 목록 · 하나. 새 문서는 목록 위 팝업이라 주소가 없다 (docs/api/document.md '화면') */
+    {
+      path: '/documents',
+      name: 'documents',
+      component: () => import('@/views/DocumentsView.vue'),
+    },
+    {
+      path: '/documents/:documentId',
+      name: 'document',
+      component: () => import('@/views/DocumentView.vue'),
+    },
     {
       path: '/risks',
       name: 'risks',

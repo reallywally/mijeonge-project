@@ -21,7 +21,8 @@ class ApiError(Exception):
         status_code: int,
         code: str,
         message: str,
-        detail: dict[str, str] | None = None,
+        # 대개 `{ 필드: 메시지 }` 다. 겹쳐 쓰기(409 DOCUMENT_STALE)는 지금 판 · 고친 사람을 싣는다
+        detail: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -38,7 +39,7 @@ def bad_request(code: str, message: str) -> ApiError:
     return ApiError(400, code, message)
 
 
-def _body(code: str, message: str, detail: dict[str, str] | None = None) -> dict[str, Any]:
+def _body(code: str, message: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
     body: dict[str, Any] = {"code": code, "message": message}
     # detail 은 없으면 키째로 뺀다 — 프론트 타입이 `detail?` 다
     if detail:
