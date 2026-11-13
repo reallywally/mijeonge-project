@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  agendaBlock,
   agendaIdsProblem,
+  agendaNodes,
   agendaRow,
   appendAgendaRow,
   cellAddress,
@@ -9,12 +9,12 @@ import {
   cleanStyle,
   columnName,
   defaultSheetBook,
+  DOC_CONTENT_BYTES_MAX,
+  docContentProblem,
   editorSize,
   fitSheetName,
-  insertBlock,
   nextSheetName,
   parseAddress,
-  prefixLines,
   SHEET_BYTES_MAX,
   SHEET_CELL_MAX,
   SHEET_COLUMN_WIDTH,
@@ -29,7 +29,6 @@ import {
   trimBook,
   trimTab,
   worksheetOf,
-  wrapSelection,
 } from './document'
 import type { SheetBook, SheetTab } from '@/types/domain'
 
@@ -37,25 +36,30 @@ const os = { title: '서버 OS 결정', decision: '우분투 최신 버전으로
 const blank = { title: '백업 주기', decision: '  ' }
 
 describe('본문에 넣기 — 글', () => {
-  it('블록은 ### 제목 + 빈 줄 + 결정내용, 결정이 비면 (아직 안 정함)', () => {
-    expect(agendaBlock(os)).toBe('### 서버 OS 결정\n\n우분투 최신 버전으로 한다\n')
-    expect(agendaBlock(blank)).toBe('### 백업 주기\n\n(아직 안 정함)\n')
+  it('블록은 제목(3단) + 결정 문단, 결정이 비면 (아직 안 정함)', () => {
+    expect(agendaNodes(os)).toEqual([
+      { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: '서버 OS 결정' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: '우분투 최신 버전으로 한다' }] },
+    ])
+    expect(agendaNodes(blank)[1]).toEqual({
+      type: 'paragraph',
+      content: [{ type: 'text', text: '(아직 안 정함)' }],
+    })
   })
 
-  it('커서가 없으면 끝에 — 앞 글과 빈 줄 하나로 뗀다', () => {
-    expect(insertBlock('', 'B\n', null)).toEqual({ content: 'B\n', cursor: 2 })
-    expect(insertBlock('앞 글', 'B\n', null)).toEqual({ content: '앞 글\n\nB\n', cursor: 7 })
-    expect(insertBlock('앞 글\n', 'B\n', null).content).toBe('앞 글\n\nB\n')
-    expect(insertBlock('앞 글\n\n', 'B\n', null).content).toBe('앞 글\n\nB\n')
+  it('결정의 줄마다 문단 — 빈 줄은 빼고, 이어진 "- " 줄은 목록 하나로', () => {
+    const nodes = agendaNodes({ title: 'DB', decision: 'mysql 을 쓴다\n\n- 하나\n- 둘\n끝' })
+    expect(nodes.map((n) => n.type)).toEqual(['heading', 'paragraph', 'bulletList', 'paragraph'])
+    expect(nodes[2].content!.map((li) => li.content![0].content![0].text)).toEqual(['하나', '둘'])
   })
+})
 
-  it('커서 자리에 끼우고, 뒤 글이 바로 붙으면 줄을 바꾼다. cursor 는 블록 바로 뒤', () => {
-    const r = insertBlock('첫 줄\n둘째 줄', 'B\n', 4)
-    expect(r.content).toBe('첫 줄\n\nB\n\n둘째 줄')
-    expect(r.content.slice(0, r.cursor)).toBe('첫 줄\n\nB\n')
-    /* 이어 넣으면 차례로 쌓인다 */
-    const again = insertBlock(r.content, 'C\n', r.cursor)
-    expect(again.content).toBe('첫 줄\n\nB\n\nC\n\n둘째 줄')
+describe('글 크기', () => {
+  it('UTF-8 로 5MB 까지 — 한글은 세 바이트', () => {
+    expect(docContentProblem('가'.repeat(DOC_CONTENT_BYTES_MAX / 3 - 1))).toBeNull()
+    expect(docContentProblem('가'.repeat(DOC_CONTENT_BYTES_MAX / 3 + 1))).toBe(
+      '본문이 5MB 를 넘습니다.',
+    )
   })
 })
 
@@ -439,22 +443,5 @@ describe('결정 바뀜', () => {
       { agendaId: 't2', seenRev: 1 },
     ]
     expect(changedAgendaIds(links, (id) => revs[id] ?? null)).toEqual(['t1'])
-  })
-})
-
-describe('서식 버튼', () => {
-  it('굵게 — 고른 글을 감싸고, 없으면 자리 글을 넣어 고른다', () => {
-    expect(wrapSelection('ab cd', 3, 5, '**', '굵게')).toEqual({
-      text: 'ab **cd**',
-      start: 5,
-      end: 7,
-    })
-    expect(wrapSelection('', 0, 0, '**', '굵게')).toEqual({ text: '**굵게**', start: 2, end: 4 })
-  })
-
-  it('제목 · 목록 — 고른 줄마다 달고, 다 달려 있으면 뗀다', () => {
-    expect(prefixLines('하나\n둘\n셋', 0, 4, '- ').text).toBe('- 하나\n- 둘\n셋')
-    expect(prefixLines('- 하나\n- 둘', 0, 8, '- ').text).toBe('하나\n둘')
-    expect(prefixLines('제목', 1, 1, '## ').text).toBe('## 제목')
   })
 })

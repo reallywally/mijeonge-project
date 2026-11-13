@@ -5,15 +5,25 @@ import type { MockDoc } from '@/fixtures'
 import {
   canCreateInPart,
   canDeleteDoc,
+  canDeleteDocFolder,
   canEditDoc,
   canMoveToPart,
   canSeeProject,
 } from '@/lib/access'
 import { nowIso } from '@/lib/date'
 import {
+  FOLDER_MOVE_MESSAGE,
+  FOLDER_NAME_TAKEN,
+  folderDepth,
+  folderMoveProblem,
+  folderNameProblem,
+  folderNameTaken,
+  DOC_FOLDER_DEPTH_MAX,
+} from '@/lib/docFolder'
+import {
   agendaIdsProblem,
   changedAgendaIds,
-  DOC_CONTENT_MAX,
+  docContentProblem,
   defaultSheetBook,
   docTitleProblem,
   emptySheetBook,
@@ -22,6 +32,9 @@ import {
 import type {
   DocAgendasInput,
   DocConfirmInput,
+  DocFolder,
+  DocFolderInput,
+  DocFolderPatch,
   DocInput,
   DocPatch,
   Me,
@@ -29,7 +42,7 @@ import type {
   ProjectDocSummary,
 } from '@/types/domain'
 
-/* 문서 (docs/api/document.md). 게시판 · 하나 읽기 · 고치기(rev 로 겹침을 막는다) · 지우기(진짜 지운다) · 연결 · 확인.
+/* 문서 (docs/api/document.md). 목록 · 하나 읽기 · 고치기(rev 로 겹침을 막는다) · 지우기(진짜 지운다) · 연결 · 확인.
    목업 갈래도 서버와 같은 검사 · 같은 오류 코드로 답한다. 연결 안건의 지금 판은 목업 세계(데이터 스토어의 안건)에서 읽는다 */
 
 const notFound = () => mockError(404, 'DOCUMENT_NOT_FOUND', '문서를 찾을 수 없습니다.')
@@ -54,6 +67,7 @@ function toSummary(row: MockDoc): ProjectDocSummary {
     title: row.title,
     kind: row.kind,
     partId: row.partId,
+    folderId: row.folderId,
     agendas,
     changedAgendaIds: changedAgendaIds(agendas, revOf),
     rev: row.rev,
@@ -112,6 +126,22 @@ function rejectPart(
     })
 }
 
+const folderNotFound = (key: 'folderId' | 'parentId') =>
+  mockError(400, 'DOCUMENT_FOLDER_NOT_FOUND', '폴더를 찾을 수 없습니다.', {
+    [key]: '폴더를 찾을 수 없습니다.',
+  })
+
+/** 몸의 folderId · parentId — 다른 프로젝트 · 없는 폴더면 400 */
+function rejectFolder(
+  projectId: string,
+  folderId: string | null | undefined,
+  key: 'folderId' | 'parentId',
+) {
+  if (folderId == null) return
+  if (!mockDb().docFolders.some((f) => f.id === folderId && f.projectId === projectId))
+    throw folderNotFound(key)
+}
+
 /** 본문 · 표 · 제목의 모양 — kind 와 안 맞는 칸, 크기 */
 function shapeProblems(
   kind: ProjectDoc['kind'],
@@ -124,8 +154,10 @@ function shapeProblems(
   }
   if (input.content !== undefined) {
     if (kind !== 'text') problems.content = '표 문서에는 본문을 보낼 수 없습니다.'
-    else if (input.content.length > DOC_CONTENT_MAX)
-      problems.content = `본문은 ${DOC_CONTENT_MAX.toLocaleString('ko-KR')}자까지입니다.`
+    else {
+      const p = docContentProblem(input.content)
+      if (p) problems.content = p
+    }
   }
   if (input.sheet !== undefined) {
     if (kind !== 'sheet') problems.sheet = '글 문서에는 표를 보낼 수 없습니다.'
@@ -175,6 +207,8 @@ const mock = {
     rejectAgendas(projectId, agendaIds)
     const partId = input.partId ?? null
     rejectPart(projectId, partId)
+    const folderId = input.folderId ?? null
+    rejectFolder(projectId, folderId, 'folderId')
     const db = mockDb()
     if (!canCreateInPart(me, partId, projectId, db.partMembers)) throw forbidden()
 
@@ -192,6 +226,7 @@ const mock = {
           ? structuredClone(input.sheet ?? defaultSheetBook())
           : emptySheetBook(),
       partId,
+      folderId,
       links: agendaIds.map((agendaId) => ({ agendaId, seenRev: revOf(agendaId) ?? 0 })),
       rev: 1,
       createdBy: me.id,
@@ -213,6 +248,7 @@ const mock = {
     if (bodySent && patch.rev === undefined) problems.rev = '판 번호(rev)를 보내 주세요.'
     if (Object.keys(problems).length > 0) throw invalid(problems)
     rejectPart(row.projectId, patch.partId, row.partId)
+    rejectFolder(row.projectId, patch.folderId, 'folderId')
     const db = mockDb()
     if (!canEditDoc(me, row, row.projectId, db.partMembers)) throw forbidden()
     if (
@@ -243,8 +279,11 @@ const mock = {
     }
     const partChanged = patch.partId !== undefined && patch.partId !== row.partId
     if (partChanged) row.partId = patch.partId ?? null
+    /* 폴더도 파트처럼 rev 를 안 올린다 */
+    const folderChanged = patch.folderId !== undefined && patch.folderId !== row.folderId
+    if (folderChanged) row.folderId = patch.folderId ?? null
     if (bodyChanged) row.rev += 1
-    if (bodyChanged || partChanged) {
+    if (bodyChanged || partChanged || folderChanged) {
       row.updatedBy = me.id
       row.updatedAt = nowIso()
     }
@@ -313,6 +352,109 @@ const mock = {
   },
 }
 
+/* ── 폴더 — 만들기 · 이름 바꾸기 · 옮기기는 멤버 누구나, 지우기는 관리자 · 만든 사람(빈 폴더만) ── */
+
+const folderOf = (row: DocFolder): DocFolder => ({ ...row })
+
+/** 경로의 폴더 — 없거나 그 프로젝트 멤버가 아니면 404 */
+function requireFolder(me: Me, folderId: string): DocFolder {
+  const row = mockDb().docFolders.find((f) => f.id === folderId)
+  if (
+    !row ||
+    !canSeeProject(me, row.projectId) ||
+    mockDb().deletedProjectIds.includes(row.projectId)
+  )
+    throw mockError(404, 'DOCUMENT_FOLDER_NOT_FOUND', '폴더를 찾을 수 없습니다.')
+  return row
+}
+
+const nameTaken = () =>
+  mockError(409, 'DOCUMENT_FOLDER_NAME_TAKEN', FOLDER_NAME_TAKEN, { name: FOLDER_NAME_TAKEN })
+
+const folderMock = {
+  list(projectId: string): DocFolder[] {
+    requireProject(requireMe(), projectId)
+    return mockDb()
+      .docFolders.map((row, seq) => ({ row, seq }))
+      .filter(({ row }) => row.projectId === projectId)
+      .sort((a, b) => a.row.name.localeCompare(b.row.name, 'ko') || a.seq - b.seq)
+      .map(({ row }) => folderOf(row))
+  },
+
+  create(projectId: string, input: DocFolderInput): DocFolder {
+    const me = requireMe()
+    requireProject(me, projectId)
+    const problem = folderNameProblem(input.name)
+    if (problem) throw invalid({ name: problem })
+    const parentId = input.parentId ?? null
+    rejectFolder(projectId, parentId, 'parentId')
+    const db = mockDb()
+    const inProject = db.docFolders.filter((f) => f.projectId === projectId)
+    if (folderDepth(inProject, parentId) + 1 > DOC_FOLDER_DEPTH_MAX)
+      throw mockError(400, 'DOCUMENT_FOLDER_TOO_DEEP', FOLDER_MOVE_MESSAGE.deep, {
+        parentId: FOLDER_MOVE_MESSAGE.deep,
+      })
+    const name = input.name.trim()
+    if (folderNameTaken(inProject, parentId, name)) throw nameTaken()
+    db.docFolderSeq += 1
+    const at = nowIso()
+    const row: DocFolder = {
+      id: `df${db.docFolderSeq}`,
+      projectId,
+      parentId,
+      name,
+      createdBy: me.id,
+      createdAt: at,
+      updatedAt: at,
+    }
+    db.docFolders.push(row)
+    return folderOf(row)
+  },
+
+  patch(folderId: string, patch: DocFolderPatch): DocFolder {
+    const me = requireMe()
+    const row = requireFolder(me, folderId)
+    if (patch.name !== undefined) {
+      const problem = folderNameProblem(patch.name)
+      if (problem) throw invalid({ name: problem })
+    }
+    const db = mockDb()
+    const inProject = db.docFolders.filter((f) => f.projectId === row.projectId)
+    const parentId = patch.parentId === undefined ? row.parentId : patch.parentId
+    if (patch.parentId !== undefined && parentId !== row.parentId) {
+      rejectFolder(row.projectId, parentId, 'parentId')
+      const moveProblem = folderMoveProblem(inProject, row.id, parentId)
+      if (moveProblem)
+        throw mockError(
+          400,
+          moveProblem === 'cycle' ? 'DOCUMENT_FOLDER_CYCLE' : 'DOCUMENT_FOLDER_TOO_DEEP',
+          FOLDER_MOVE_MESSAGE[moveProblem],
+          { parentId: FOLDER_MOVE_MESSAGE[moveProblem] },
+        )
+    }
+    const name = patch.name === undefined ? row.name : patch.name.trim()
+    if (name === row.name && parentId === row.parentId) return folderOf(row)
+    if (folderNameTaken(inProject, parentId, name, row.id)) throw nameTaken()
+    row.name = name
+    row.parentId = parentId
+    row.updatedAt = nowIso()
+    return folderOf(row)
+  },
+
+  remove(folderId: string) {
+    const me = requireMe()
+    const row = requireFolder(me, folderId)
+    const db = mockDb()
+    if (!canDeleteDocFolder(me, row, row.projectId)) throw forbidden()
+    if (
+      db.docFolders.some((f) => f.parentId === folderId) ||
+      db.documents.some((d) => d.folderId === folderId)
+    )
+      throw mockError(409, 'DOCUMENT_FOLDER_NOT_EMPTY', '안에 폴더나 문서가 있어 지울 수 없습니다.')
+    db.docFolders = db.docFolders.filter((f) => f.id !== folderId)
+  },
+}
+
 /** 목록 — 고친 때 늦은 순. agendaId 를 주면 그 안건이 연결된 문서만 */
 export const fetchDocuments = (projectId: string, agendaId?: string) =>
   isMockMode()
@@ -356,3 +498,27 @@ export const confirmDocument = (documentId: string, input: DocConfirmInput = {})
   isMockMode()
     ? later(() => mock.confirm(documentId, input))
     : request<ProjectDoc>('POST', `/documents/${id(documentId)}/confirm`, input)
+
+/** 폴더 전부 — 평평한 배열, 이름순. 트리는 화면이 parentId 로 세운다 */
+export const fetchDocFolders = (projectId: string) =>
+  isMockMode()
+    ? later(() => folderMock.list(projectId))
+    : request<DocFolder[]>('GET', `/projects/${id(projectId)}/document-folders`)
+
+/** 폴더 만들기 — 같은 부모 아래 같은 이름이면 409 DOCUMENT_FOLDER_NAME_TAKEN */
+export const createDocFolder = (projectId: string, input: DocFolderInput) =>
+  isMockMode()
+    ? later(() => folderMock.create(projectId, input))
+    : request<DocFolder>('POST', `/projects/${id(projectId)}/document-folders`, input)
+
+/** 이름 바꾸기 · 옮기기 — 자기 하위로는 400 CYCLE, 5단을 넘으면 400 TOO_DEEP */
+export const patchDocFolder = (folderId: string, patch: DocFolderPatch) =>
+  isMockMode()
+    ? later(() => folderMock.patch(folderId, patch))
+    : request<DocFolder>('PATCH', `/document-folders/${id(folderId)}`, patch)
+
+/** 빈 폴더만 지운다 — 안에 무엇이 있으면 409 DOCUMENT_FOLDER_NOT_EMPTY */
+export const deleteDocFolder = (folderId: string) =>
+  isMockMode()
+    ? later(() => folderMock.remove(folderId))
+    : request<void>('DELETE', `/document-folders/${id(folderId)}`)

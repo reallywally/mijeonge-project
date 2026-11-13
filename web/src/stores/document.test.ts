@@ -330,3 +330,141 @@ describe('권한 · 파트', () => {
     })
   })
 })
+
+describe('폴더', () => {
+  it('목록과 같이 받는다 — 이름순 평평한 배열, 문서는 folderId', async () => {
+    const docs = useDocumentStore()
+    await docs.load()
+    expect(docs.folders.map((f) => f.name)).toEqual(['서버', '인프라', '회의 정리'])
+    expect(docs.list.find((d) => d.id === 'doc1')!.folderId).toBe('df1')
+    expect(docs.list.find((d) => d.id === 'doc2')!.folderId).toBeNull()
+  })
+
+  it('만들기 · 이름 바꾸기 — 같은 부모 아래 같은 이름은 그 자리의 말로, 다른 부모면 된다. 서버도 409', async () => {
+    const docs = useDocumentStore()
+    await docs.load()
+    expect(await docs.createFolder('  ', null)).toBe('폴더 이름을 적어 주세요.')
+    expect(await docs.createFolder('인프라', null)).toContain('같은 이름의 폴더')
+    const made = await docs.createFolder(' 인프라 ', 'df3')
+    expect(made).toMatchObject({ name: '인프라', parentId: 'df3', createdBy: 'u1' })
+    expect(docs.folders.some((f) => f.id === (made as { id: string }).id)).toBe(true)
+    /* 대소문자는 그대로 견준다 */
+    expect(await docs.createFolder('Infra', null)).toMatchObject({ name: 'Infra' })
+    expect(await docs.createFolder('infra', null)).toMatchObject({ name: 'infra' })
+
+    expect(await docs.renameFolder('df3', '인프라')).toContain('같은 이름의 폴더')
+    expect(await docs.renameFolder('df3', '회의록')).toMatchObject({ name: '회의록' })
+    await expect(
+      api.createDocFolder('p1', { name: '서버', parentId: 'df1' }),
+    ).rejects.toMatchObject({ status: 409, code: 'DOCUMENT_FOLDER_NAME_TAKEN' })
+    await expect(api.createDocFolder('p1', { name: 'x'.repeat(101) })).rejects.toMatchObject({
+      status: 422,
+    })
+    await expect(api.createDocFolder('p1', { name: '새', parentId: 'nope' })).rejects.toMatchObject(
+      {
+        status: 400,
+        code: 'DOCUMENT_FOLDER_NOT_FOUND',
+      },
+    )
+    await expect(api.patchDocFolder('nope', { name: '새' })).rejects.toMatchObject({
+      status: 404,
+      code: 'DOCUMENT_FOLDER_NOT_FOUND',
+    })
+  })
+
+  it('옮기기 — 자기 하위로는 CYCLE, 5단을 넘으면 TOO_DEEP(딸린 하위까지 센다)', async () => {
+    const docs = useDocumentStore()
+    await docs.load()
+    expect(docs.folderMoveBlock('df1', 'df2')).toContain('자기 안으로')
+    expect(await docs.moveFolder('df1', 'df2')).toBe(false)
+    await expect(api.patchDocFolder('df1', { parentId: 'df2' })).rejects.toMatchObject({
+      status: 400,
+      code: 'DOCUMENT_FOLDER_CYCLE',
+    })
+    await expect(api.patchDocFolder('df1', { parentId: 'df1' })).rejects.toMatchObject({
+      code: 'DOCUMENT_FOLDER_CYCLE',
+    })
+
+    /* df3 아래로 세 단 더 — df3(1) · a(2) · b(3) · c(4). 인프라(2단 높이)를 c 아래로 놓으면 6단 */
+    let parent = 'df3'
+    for (const name of ['a', 'b', 'c']) {
+      const f = await docs.createFolder(name, parent)
+      parent = (f as { id: string }).id
+    }
+    expect(docs.folderMoveBlock('df1', parent)).toContain('5단까지')
+    await expect(api.patchDocFolder('df1', { parentId: parent })).rejects.toMatchObject({
+      status: 400,
+      code: 'DOCUMENT_FOLDER_TOO_DEEP',
+    })
+    const d = await docs.createFolder('d', parent)
+    expect(typeof d).toBe('object')
+    expect(await docs.createFolder('e', (d as { id: string }).id)).toContain('5단까지')
+
+    /* 서버를 맨 위로 — 된다 */
+    expect(await docs.moveFolder('df2', null)).toBe(true)
+    expect(docs.folders.find((f) => f.id === 'df2')!.parentId).toBeNull()
+  })
+
+  it('지우기 — 빈 폴더만(409 NOT_EMPTY), 관리자 · 만든 사람만(403)', async () => {
+    const docs = useDocumentStore()
+    await docs.load()
+    expect(docs.folderEmpty('df1')).toBe(false)
+    expect(await docs.removeFolder('df1')).toBe(false)
+    expect(lastError()).toMatchObject({ status: 409, code: 'DOCUMENT_FOLDER_NOT_EMPTY' })
+
+    useDocumentStore().clear()
+    writeMockSession('u2')
+    await useAuthStore().loadMe()
+    await docs.load()
+    const df3 = docs.folders.find((f) => f.id === 'df3')!
+    expect(docs.canDeleteFolder(df3)).toBe(false)
+    expect(await docs.removeFolder('df3')).toBe(false)
+    expect(lastError()?.status).toBe(403)
+    /* 만들기 · 이름 바꾸기는 멤버 누구나 */
+    const mine = await docs.createFolder('내 폴더', null)
+    expect(docs.canDeleteFolder(mine as never)).toBe(true)
+    expect(await docs.removeFolder((mine as { id: string }).id)).toBe(true)
+    expect(docs.folders.some((f) => f.name === '내 폴더')).toBe(false)
+  })
+
+  it('문서 폴더 옮기기 — rev 를 안 올리고, 없는 폴더는 400, 못 고치는 문서는 403', async () => {
+    const docs = useDocumentStore()
+    await docs.load()
+    const patch = vi.spyOn(api, 'patchDocument')
+    expect(await docs.setFolder('doc2', 'df3')).toBe(true)
+    expect(patch).toHaveBeenCalledWith('doc2', { folderId: 'df3' })
+    expect(docs.list.find((d) => d.id === 'doc2')).toMatchObject({ folderId: 'df3', rev: 2 })
+    /* 같은 자리면 보내지 않는다 */
+    expect(await docs.setFolder('doc2', 'df3')).toBe(true)
+    expect(patch).toHaveBeenCalledTimes(1)
+    expect(await docs.setFolder('doc2', 'nope')).toBe(false)
+    expect(lastError()).toMatchObject({ code: 'DOCUMENT_FOLDER_NOT_FOUND' })
+
+    const id = await docs.create({ title: '새 글', kind: 'text', folderId: 'df2' })
+    expect(docs.byId[id!].folderId).toBe('df2')
+    expect(await docs.create({ title: '없는 곳', kind: 'text', folderId: 'nope' })).toBeNull()
+    expect(lastError()).toMatchObject({ status: 400, code: 'DOCUMENT_FOLDER_NOT_FOUND' })
+
+    writeMockSession('u2')
+    await useAuthStore().loadMe()
+    await expect(api.patchDocument('doc1', { folderId: null })).rejects.toMatchObject({
+      status: 403,
+    })
+  })
+
+  it('서버 갈래 경로', async () => {
+    vi.stubEnv('VITE_USE_MOCK', 'false')
+    const fetch = vi.fn(async () => new Response('[]', { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+    await api.fetchDocFolders('p1')
+    expect(fetch).toHaveBeenCalledWith('/api/projects/p1/document-folders', expect.anything())
+    fetch.mockResolvedValueOnce(new Response(null, { status: 204 }))
+    await api.deleteDocFolder('df1')
+    expect(fetch).toHaveBeenLastCalledWith(
+      '/api/document-folders/df1',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+})

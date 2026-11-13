@@ -14,3 +14,9 @@ declare module '*.vue' {
   const component: DefineComponent<{}, {}, any>
   export default component
 }
+
+/* mammoth 의 브라우저 묶음 — 본 모듈은 node 의 fs · path 를 끌고 와 화면은 이것을 쓴다. 타입은 본 모듈 것 그대로 */
+declare module 'mammoth/mammoth.browser' {
+  import mammoth from 'mammoth'
+  export default mammoth
+}

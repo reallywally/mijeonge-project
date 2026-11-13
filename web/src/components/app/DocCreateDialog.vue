@@ -14,15 +14,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { folderOptions, folderPath } from '@/lib/docFolder'
 import { DOC_AGENDAS_MAX, DOC_TITLE_MAX } from '@/lib/document'
 import { cn } from '@/lib/utils'
 import { useAgendaStore } from '@/stores/agenda'
 import { useDocumentStore } from '@/stores/document'
 import type { Agenda, DocKind } from '@/types/domain'
 
-/* 새 문서 — 제목 · 종류(글 / 표, 만든 뒤 못 바꾼다) · 파트 · 연결할 안건(여럿, 결정된 안건이 위).
-   안건 상세의 [문서에 담기] 가 그 안건을 미리 골라 연다. 만들면 부모가 그 문서로 간다 */
-const props = defineProps<{ initialTitle?: string; initialAgendaIds?: string[] }>()
+/* 새 문서 — 제목 · 종류(글 / 표, 만든 뒤 못 바꾼다) · 파트 · 폴더 · 연결할 안건(여럿, 결정된 안건이 위).
+   안건 상세의 [문서에 담기] 가 그 안건을 미리 골라 연다. 폴더는 연 자리가 정한다(폴더 메뉴면 그 폴더, 보던 문서의 폴더,
+   아니면 맨 위). 만들면 부모가 그 문서로 간다 */
+const props = defineProps<{
+  initialTitle?: string
+  initialAgendaIds?: string[]
+  initialFolderId?: string | null
+}>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ (e: 'created', id: string): void }>()
 
@@ -32,6 +39,7 @@ const docs = useDocumentStore()
 const title = ref('')
 const kind = ref<DocKind>('text')
 const partId = ref<string | null>(null)
+const folderId = ref<string | null>(null)
 const agendaIds = ref<string[]>([])
 const saving = ref(false)
 
@@ -42,10 +50,16 @@ watch(
     title.value = props.initialTitle ?? ''
     kind.value = 'text'
     partId.value = null
+    folderId.value = props.initialFolderId ?? null
     agendaIds.value = [...(props.initialAgendaIds ?? [])]
   },
   { immediate: true },
 )
+
+/* Select 는 빈 값을 못 받는다 — 맨 위는 따로 둔 값으로 */
+const ROOT = 'root'
+const folderChoices = computed(() => folderOptions(docs.folders))
+const folderLabel = computed(() => folderPath(docs.folders, folderId.value))
 
 const byId = computed(() => new Map(agendaStore.agendas.map((a) => [a.id, a] as const)))
 const picked = computed(() =>
@@ -64,7 +78,7 @@ const full = computed(() => agendaIds.value.length >= DOC_AGENDAS_MAX)
 const ready = computed(() => title.value.trim().length > 0 && !saving.value)
 
 const KINDS = [
-  { key: 'text' as const, label: '글 문서', hint: '워드처럼 — 마크다운 글', icon: FileText },
+  { key: 'text' as const, label: '글 문서', hint: '워드처럼 — 서식 · .docx', icon: FileText },
   {
     key: 'sheet' as const,
     label: '표 문서',
@@ -80,6 +94,7 @@ async function submit() {
     title: title.value,
     kind: kind.value,
     partId: partId.value,
+    folderId: folderId.value,
     agendaIds: agendaIds.value,
   })
   saving.value = false
@@ -143,6 +158,27 @@ async function submit() {
 
         <dl>
           <PartField v-model="partId" right="canCreate" trigger-class="h-8 w-full text-xs" />
+          <div class="flex min-h-9 items-center gap-2">
+            <dt class="w-[72px] shrink-0 text-xs text-muted-foreground">폴더</dt>
+            <dd class="min-w-0 grow">
+              <Select
+                :model-value="folderId ?? ROOT"
+                @update:model-value="(v) => (folderId = v === ROOT ? null : String(v))"
+              >
+                <SelectTrigger class="h-8 w-full text-xs" aria-label="폴더" data-doc-create-folder>
+                  <span class="truncate" :class="folderId ? '' : 'text-muted-foreground'">{{
+                    folderLabel
+                  }}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="ROOT">최상위</SelectItem>
+                  <SelectItem v-for="f in folderChoices" :key="f.id" :value="f.id">
+                    <span :style="{ paddingLeft: `${(f.depth - 1) * 12}px` }">{{ f.name }}</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </dd>
+          </div>
         </dl>
 
         <div class="flex flex-col gap-1.5">
@@ -189,7 +225,9 @@ async function submit() {
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" @click="open = false">취소</Button>
+          <Button type="button" variant="outline" data-doc-create-cancel @click="open = false"
+            >취소</Button
+          >
           <Button type="submit" :disabled="!ready" data-doc-create-submit>
             <Loader2 v-if="saving" class="animate-spin" />
             만들기

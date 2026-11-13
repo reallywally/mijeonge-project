@@ -16,6 +16,7 @@ from app.models import (
     AgendaImpact,
     CheckRequest,
     Document,
+    DocumentFolder,
     Member,
     Minutes,
     Part,
@@ -81,6 +82,7 @@ SCOPED_PARAMS: dict[str, tuple[str, str]] = {
     "analysis_id": ("RISK_ANALYSIS_NOT_FOUND", "저장한 분석을 찾을 수 없습니다."),
     "impact_id": ("IMPACT_NOT_FOUND", "영향도 분석을 찾을 수 없습니다."),
     "document_id": ("DOCUMENT_NOT_FOUND", "문서를 찾을 수 없습니다."),
+    "folder_id": ("DOCUMENT_FOLDER_NOT_FOUND", "폴더를 찾을 수 없습니다."),
 }
 
 
@@ -149,6 +151,8 @@ async def _project_of(session: AsyncSession, param: str, value: str) -> str | No
             )
         case "document_id":
             stmt = select(Document.project_id).where(Document.id == value)
+        case "folder_id":
+            stmt = select(DocumentFolder.project_id).where(DocumentFolder.id == value)
         case _:
             raise AssertionError(f"모르는 경로 이름: {param}")
     # 레코드마다 프로젝트를 다시 잇지 않고 여기 한 줄로 거른다 — 새 경로 이름이 늘어도 빠지지 않는다
@@ -333,6 +337,11 @@ def can_delete_document(scope: Scope, document: Document) -> bool:
     if scope.can_manage or document.created_by == scope.actor.id:
         return True
     return document.part_id is not None and scope.rights(document.part_id).delete
+
+
+def can_delete_folder(scope: Scope, folder: DocumentFolder) -> bool:
+    """문서 폴더 지우기 — 관리자 · 만든 사람. 만들기 · 이름 · 옮기기는 멤버 누구나다."""
+    return scope.can_manage or folder.created_by == scope.actor.id
 
 
 def can_edit_agenda(scope: Scope, agenda: Agenda) -> bool:

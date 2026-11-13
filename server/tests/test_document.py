@@ -48,6 +48,7 @@ async def test_create_text_and_read(client: httpx.AsyncClient) -> None:
         "title",
         "kind",
         "partId",
+        "folderId",
         "agendas",
         "changedAgendaIds",
         "rev",
@@ -252,9 +253,17 @@ async def test_same_sheet_keeps_rev(client: httpx.AsyncClient) -> None:
 
 
 async def test_content_limit(client: httpx.AsyncClient) -> None:
-    res = await client.post(DOCS, json={"title": "글", "kind": "text", "content": "가" * 200_001})
+    # 본문은 UTF-8 로 5MB 까지 — 한글은 세 바이트. 편집기가 낸 HTML 을 해석하지 않고 그대로 둔다
+    limit = 5 * 1024 * 1024
+    over = "<p>" + "가" * ((limit - 7) // 3 + 1) + "</p>"
+    res = await client.post(DOCS, json={"title": "글", "kind": "text", "content": over})
     assert res.status_code == 422
-    assert (await new_doc(client, content="가" * 200_000))["content"] == "가" * 200_000
+    assert set(res.json()["detail"]) == {"content"}
+    fits = "<p>" + "가" * ((limit - 7) // 3) + "</p>"
+    doc = await new_doc(client, content=fits)
+    assert doc["content"] == fits
+    res = await client.patch(f"/api/documents/{doc['id']}", json={"rev": 1, "content": over})
+    assert res.status_code == 422
 
 
 async def test_agenda_ids_are_checked(client: httpx.AsyncClient) -> None:
