@@ -5,7 +5,7 @@ import { ApiError, messageOf } from '@/api'
 import { canCreateInPart, canDeleteDoc, canEditDoc, canMoveToPart } from '@/lib/access'
 import {
   changedAgendaIds,
-  DOC_CONTENT_MAX,
+  docContentProblem,
   DOC_SAVE_DELAY_MS,
   docTitleProblem,
   sheetBookProblem,
@@ -310,7 +310,7 @@ export const useDocumentStore = defineStore('document', () => {
     const patch: DocPatch = {}
     const title = d.title.trim()
     if (title !== base.title && docTitleProblem(title) === null) patch.title = title
-    if (base.kind === 'text' && d.content !== base.content && d.content.length <= DOC_CONTENT_MAX)
+    if (base.kind === 'text' && d.content !== base.content && docContentProblem(d.content) === null)
       patch.content = d.content
     if (
       base.kind === 'sheet' &&

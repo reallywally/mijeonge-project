@@ -1,3 +1,4 @@
+import type { JSONContent } from '@tiptap/core'
 import type jspreadsheet from 'jspreadsheet-ce'
 import type { Agenda, DocAgendaLink, DocKind, SheetBook, SheetTab } from '@/types/domain'
 
@@ -7,7 +8,8 @@ import type { Agenda, DocAgendaLink, DocKind, SheetBook, SheetTab } from '@/type
  */
 
 export const DOC_TITLE_MAX = 200
-export const DOC_CONTENT_MAX = 200_000
+/** 글 본문(HTML) — 직렬화 UTF-8 로 5MB. 붙여 넣은 그림이 data URI 로 들어 있어 글자 수가 아니라 크기로 본다 */
+export const DOC_CONTENT_BYTES_MAX = 5 * 1024 * 1024
 export const DOC_AGENDAS_MAX = 50
 /** 고치고 이만큼 쉬면 저장한다 */
 export const DOC_SAVE_DELAY_MS = 800
@@ -21,26 +23,33 @@ export const decisionOf = (agenda: Pick<Agenda, 'decision'>) => agenda.decision.
 
 /* ── 본문에 넣기 ─────────────────────────────────────── */
 
-/** 글 문서에 넣는 블록 — 제목 + 결정내용 */
-export const agendaBlock = (agenda: Pick<Agenda, 'title' | 'decision'>) =>
-  `### ${agenda.title}\n\n${decisionOf(agenda)}\n`
+const textNode = (text: string): JSONContent => ({ type: 'text', text })
+const BULLET_RE = /^\s*[-*•]\s+(.*)$/
 
 /**
- * 글의 at 자리(없으면 끝)에 블록을 끼운다. 앞 글과는 빈 줄 하나로 떼고, 뒤 글이 바로 붙으면 줄을 바꾼다.
- * cursor 는 넣은 블록 바로 뒤 — 이어서 넣으면 차례로 쌓인다
+ * 글 문서에 넣는 블록 — 제목(3단) + 결정내용. 결정의 줄마다 문단 하나, '- ' 로 시작하는 줄이 이어지면 목록 하나.
+ * 빈 줄은 뺀다
  */
-export function insertBlock(
-  content: string,
-  block: string,
-  at: number | null,
-): { content: string; cursor: number } {
-  const pos = at === null ? content.length : Math.max(0, Math.min(at, content.length))
-  const before = content.slice(0, pos)
-  const after = content.slice(pos)
-  const lead = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
-  const tail = after === '' || after.startsWith('\n') ? '' : '\n'
-  const head = before + lead + block
-  return { content: head + tail + after, cursor: head.length }
+export function agendaNodes(agenda: Pick<Agenda, 'title' | 'decision'>): JSONContent[] {
+  const out: JSONContent[] = [
+    { type: 'heading', attrs: { level: 3 }, content: [textNode(agenda.title)] },
+  ]
+  for (const line of decisionOf(agenda).split(/\r?\n/)) {
+    if (!line.trim()) continue
+    const bullet = BULLET_RE.exec(line)
+    if (!bullet) {
+      out.push({ type: 'paragraph', content: [textNode(line.trim())] })
+      continue
+    }
+    const item: JSONContent = {
+      type: 'listItem',
+      content: [{ type: 'paragraph', content: bullet[1] ? [textNode(bullet[1])] : [] }],
+    }
+    const last = out.at(-1)
+    if (last?.type === 'bulletList') last.content!.push(item)
+    else out.push({ type: 'bulletList', content: [item] })
+  }
+  return out
 }
 
 /* ── 표 — 계약 '표의 모양' ───────────────────────────── */
@@ -410,6 +419,13 @@ export function docTitleProblem(title: string): string | null {
   return null
 }
 
+export const docContentBytes = (content: string) => new TextEncoder().encode(content).length
+
+/** 서버의 422 와 같은 검사 — text 문서에 보낼 본문 */
+export function docContentProblem(content: string): string | null {
+  return docContentBytes(content) > DOC_CONTENT_BYTES_MAX ? '본문이 5MB 를 넘습니다.' : null
+}
+
 export function agendaIdsProblem(agendaIds: string[]): string | null {
   if (agendaIds.length > DOC_AGENDAS_MAX) return `안건은 ${DOC_AGENDAS_MAX}개까지 연결합니다.`
   if (new Set(agendaIds).size !== agendaIds.length) return '같은 안건이 두 번 있습니다.'
@@ -433,43 +449,6 @@ export function changedAgendaIds(
     })
     .map((l) => l.agendaId)
 }
-
-/* ── 글 서식 버튼 ────────────────────────────────────── */
-
-export interface TextEdit {
-  text: string
-  /** 고친 뒤 고를 자리 */
-  start: number
-  end: number
-}
-
-/** 고른 글을 mark 로 감싼다(**굵게**). 고른 것이 없으면 placeholder 를 넣고 그것을 고른다 */
-export function wrapSelection(
-  text: string,
-  start: number,
-  end: number,
-  mark: string,
-  placeholder: string,
-): TextEdit {
-  const picked = text.slice(start, end) || placeholder
-  const next = text.slice(0, start) + mark + picked + mark + text.slice(end)
-  return { text: next, start: start + mark.length, end: start + mark.length + picked.length }
-}
-
-/** 고른 줄들 앞에 prefix 를 단다(제목 '## ' · 목록 '- '). 이미 달려 있으면 뗀다 */
-export function prefixLines(text: string, start: number, end: number, prefix: string): TextEdit {
-  const lineStart = text.lastIndexOf('\n', start - 1) + 1
-  const nl = text.indexOf('\n', Math.max(end - (end > start ? 1 : 0), start))
-  const lineEnd = nl === -1 ? text.length : nl
-  const lines = text.slice(lineStart, lineEnd).split('\n')
-  const all = lines.every((l) => l.startsWith(prefix))
-  const changed = lines.map((l) => (all ? l.slice(prefix.length) : prefix + l)).join('\n')
-  const next = text.slice(0, lineStart) + changed + text.slice(lineEnd)
-  return { text: next, start: lineStart, end: lineStart + changed.length }
-}
-
-/** [표] 버튼이 넣는 마크다운 표 */
-export const TABLE_SNIPPET = '| 항목 | 내용 |\n| --- | --- |\n|  |  |\n'
 
 /** 읽기 전용 문서의 머리 말 — 공통 문서는 누구나 고치므로 파트 문서에만 뜬다 */
 export const DOC_READONLY_HINT =

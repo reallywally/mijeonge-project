@@ -16,7 +16,8 @@ from app.schemas.base import Schema, Utc
 
 DocKind = Literal["text", "sheet"]
 
-CONTENT_MAX = 200_000
+# 글 본문(편집기가 낸 HTML) — 그림이 data URI 로 들어 있어 글자 수가 아니라 UTF-8 크기로 본다
+CONTENT_BYTES_MAX = 5 * 1024 * 1024
 AGENDAS_MAX = 50
 # 표의 모양 — 계약 '표의 모양'. 열 · 줄 · 칸은 엑셀과 같다
 SHEETS_MAX = 10
@@ -31,7 +32,6 @@ BOOK_BYTES_MAX = 5 * 1024 * 1024
 TITLE_REFUSED = "열 이름은 받지 않습니다. 첫 줄 칸에 적어 주세요."
 
 DocTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-DocContent = Annotated[str, StringConstraints(max_length=CONTENT_MAX)]
 Cell = Annotated[str, StringConstraints(max_length=CELL_MAX)]
 ADDRESS = re.compile(r"^([A-Z]{1,3})([1-9][0-9]{0,6})$")
 
@@ -54,6 +54,16 @@ def _in_sheet(address: str) -> str:
 CellAddress = Annotated[str, AfterValidator(_in_sheet)]
 MergeSpan = Annotated[StrictInt, Field(gt=0)]
 Style = Annotated[str, StringConstraints(max_length=STYLE_MAX)]
+
+
+def _content_size(content: str) -> str:
+    if len(content.encode("utf-8")) > CONTENT_BYTES_MAX:
+        raise PydanticCustomError("content_size", "본문이 5MB 를 넘습니다.")
+    return content
+
+
+# 서버는 본문을 해석하지 않는다 — 크기만 본다
+DocContent = Annotated[str, AfterValidator(_content_size)]
 
 
 def _whole_px(value: object) -> object:

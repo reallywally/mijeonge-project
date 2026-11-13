@@ -19,7 +19,7 @@ import { useDocumentStore } from '@/stores/document'
 import DocumentView from './DocumentView.vue'
 import DocumentsView from './DocumentsView.vue'
 
-/* 문서 화면 — 목록(결정 바뀜 칩 · 거르기) · 새 문서 · 글 문서([본문에 넣기] · 자동 저장 · 미리보기) ·
+/* 문서 화면 — 목록(결정 바뀜 칩 · 거르기) · 새 문서 · 글 문서(워드처럼 쓰는 편집기 · [본문에 넣기] · 자동 저장 · 예전 마크다운) ·
    표 문서(스프레드시트 · 줄 넣기 · 도구 줄 · 시트 탭 · 상한 · 잠금) · 409 줄 · 읽기 전용 · 안건 상세의 '실린 문서' */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 vi.mock('vue-sonner', async (importOriginal) => {
@@ -138,23 +138,53 @@ describe('목록', () => {
 })
 
 describe('글 문서', () => {
-  it('[본문에 넣기] 는 끝에 제목 + 결정 블록 — 0.8초 뒤 저장되고, 미리보기는 마크다운', async () => {
-    await mountAt('/documents/doc1')
-    const area = () => $('[data-doc-content]') as HTMLTextAreaElement
-    const before = area().value
-    await click($('[data-doc-insert="t2"]'))
-    expect(area().value).toBe(
-      `${before}\n### DB 결정\n\nmysql 을 쓴다\n- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n- supabase 는 비용 때문에 뺀다\n`,
-    )
+  /** 글 편집기는 따로 받아 뜬다 — 본문 칸이 설 때까지 기다린다 */
+  async function openText(path = '/documents/doc1') {
+    const mounted = await mountAt(path)
+    await vi.waitFor(() => expect($('[data-doc-content]')).toBeTruthy())
+    await flushPromises()
+    return mounted
+  }
+
+  it('워드처럼 쓰는 편집기 — [본문에 넣기] 는 끝에 제목 + 결정 블록, 0.8초 뒤 HTML 로 저장', async () => {
+    await openText()
+    const body = () => $('[data-doc-content]')!
+    expect(body().getAttribute('contenteditable')).toBe('true')
+    expect($$('[data-doc-content] h3').map((h) => h.textContent)).toEqual([
+      '서버 OS 결정',
+      'DB 결정',
+    ])
+    await click($('[data-doc-insert="t1"]'))
+    expect($$('[data-doc-content] h3').map((h) => h.textContent)).toEqual([
+      '서버 OS 결정',
+      'DB 결정',
+      '서버 OS 결정',
+    ])
     expect($('[data-doc-save-state]')!.textContent).toContain('저장 중')
     await settle()
     expect($('[data-doc-save-state]')!.textContent).toContain('저장됨')
-    expect(useDocumentStore().byId.doc1.rev).toBe(4)
-
-    await click($('[data-doc-mode="preview"]'))
-    expect($$('[data-doc-preview] [data-md-heading]').map((h) => h.textContent)).toContain(
-      'DB 결정',
+    const saved = useDocumentStore().byId.doc1
+    expect(saved.rev).toBe(4)
+    expect(saved.content.endsWith('<h3>서버 OS 결정</h3><p>우분투 최신 버전으로 한다</p>')).toBe(
+      true,
     )
+    /* 이어 넣으면 넣은 것 뒤에 쌓인다 */
+    await click($('[data-doc-insert="t2"]'))
+    expect(
+      $$('[data-doc-content] h3')
+        .map((h) => h.textContent)
+        .at(-1),
+    ).toBe('DB 결정')
+    expect($$('[data-doc-content] > ul').at(-1)!.textContent).toContain('supabase')
+  })
+
+  it('예전 마크다운 글은 열 때 HTML 로 옮겨 보이고, 고치기 전엔 저장하지 않는다', async () => {
+    mockDb().documents.find((d) => d.id === 'doc1')!.content = '### 옛 제목\n\n- 하나\n- 둘'
+    await openText()
+    expect($('[data-doc-content] h3')!.textContent).toBe('옛 제목')
+    expect($$('[data-doc-content] li').map((li) => li.textContent)).toEqual(['하나', '둘'])
+    await settle()
+    expect(useDocumentStore().byId.doc1.rev).toBe(3)
   })
 
   it('결정이 바뀐 안건은 주황 테두리 · 판 n → m · [확인], [모두 확인] 으로 지운다', async () => {
@@ -178,27 +208,32 @@ describe('글 문서', () => {
   })
 
   it('다른 사람이 먼저 고쳤으면 줄을 띄우고 멈춘다 — [다시 불러오기] 로 서버 것', async () => {
-    await mountAt('/documents/doc1')
-    await api.patchDocument('doc1', { rev: 3, content: '남이 쓴 글' })
-    await type($('[data-doc-content]'), '내 글')
+    await openText()
+    await api.patchDocument('doc1', { rev: 3, content: '<p>남이 쓴 글</p>' })
+    await click($('[data-doc-insert="t1"]'))
     await settle()
     expect($('[data-doc-stale]')!.textContent).toContain('다른 사람이 먼저 고쳤습니다')
-    expect(($('[data-doc-content]') as HTMLTextAreaElement).value).toBe('내 글')
-    expect(($('[data-doc-content]') as HTMLTextAreaElement).readOnly).toBe(true)
+    /* 내 글은 화면에 남는다 */
+    expect($$('[data-doc-content] h3')).toHaveLength(3)
+    expect($('[data-doc-content]')!.getAttribute('contenteditable')).toBe('false')
 
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
     await click($('[data-doc-reload]'))
     expect($('[data-doc-stale]')).toBeNull()
-    expect(($('[data-doc-content]') as HTMLTextAreaElement).value).toBe('남이 쓴 글')
+    expect($('[data-doc-content]')!.textContent).toBe('남이 쓴 글')
+    expect($('[data-doc-content]')!.getAttribute('contenteditable')).toBe('true')
   })
 
-  it('권한이 없으면 읽기 전용 — 칸이 잠기고 버튼이 숨는다', async () => {
+  it('권한이 없으면 읽기 전용 — 칸이 잠기고 버튼이 숨는다, .docx 내려받기만', async () => {
     writeMockSession('u2')
     await useAuthStore().loadMe()
-    await mountAt('/documents/doc1')
+    await openText()
     expect($('[data-doc-readonly]')).toBeTruthy()
     expect(($('[data-doc-title]') as HTMLInputElement).readOnly).toBe(true)
-    expect(($('[data-doc-content]') as HTMLTextAreaElement).readOnly).toBe(true)
+    expect($('[data-doc-content]')!.getAttribute('contenteditable')).toBe('false')
+    expect($('[data-doc-text-bold]')).toBeNull()
+    expect($('[data-doc-text-import]')).toBeNull()
+    expect($('[data-doc-text-download]')).toBeTruthy()
     expect($('[data-doc-link-open]')).toBeNull()
     expect($('[data-doc-insert]')).toBeNull()
     expect($('[data-doc-menu]')).toBeNull()

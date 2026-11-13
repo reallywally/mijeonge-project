@@ -1263,7 +1263,7 @@ export interface ProjectDocSummary {
 
 /** 문서 하나 — 목록 줄 + 본문 · 표 */
 export interface ProjectDoc extends ProjectDocSummary {
-  /** text 의 본문(마크다운). sheet 는 '' */
+  /** text 의 본문(HTML — 글 편집기가 낸 그대로. 예전 글은 마크다운일 수 있다). sheet 는 '' */
   content: string
   /** sheet 의 표. text 는 { sheets: [] } */
   sheet: SheetBook

@@ -772,7 +772,7 @@
 
 ## 32단계 · 문서 — '문서' 메뉴
 
-여러 안건에서 정한 것을 주제 하나로 묶어 '지금 정해진 모습' 을 한 장으로 적는 문서. 글 문서(마크다운) · 표 문서(머리 줄 + 칸) 둘.
+여러 안건에서 정한 것을 주제 하나로 묶어 '지금 정해진 모습' 을 한 장으로 적는 문서. 글 문서(워드처럼 — Tiptap) · 표 문서(엑셀처럼 — Jspreadsheet) 둘.
 계약은 `../docs/api/document.md`(2026-11-12, 사용자 결정 — 서버 `구현` 함, 리비전 `0041_document`).
 
 ### 정해 둔 것
@@ -785,7 +785,7 @@
 | 결정 바뀜 | 화면은 들고 있는 안건의 지금 `decisionRev` 로 다시 센다(`lib/document` `changedAgendaIds`, 서버 셈과 같음). 지운 안건 연결도 들고 있는 안건으로 거른다. 스냅샷을 안 받은 프로젝트면 서버 값 | 안건 결정을 고치면 다시 받지 않아도 바로 보이게 |
 | 자동 저장 | `stores/document` — 제목 · 본문 · 표를 `draft` 에 들고, 0.8초 쉬면 서버 값과 다른 칸만 `rev` 를 실어 PATCH. 한 번에 하나, 보내는 사이 고친 것은 이어서. 제목은 앞뒤 공백 뗀 값으로 견주고 비었거나 200자 넘으면 안 싣는다. 늦게 온 옛 판 응답(연결 PUT)은 제목 · 본문 · 표 · rev 를 덮지 않는다. 떠나면 기다리던 것을 바로 보낸다 | 계약 '같이 고치기' |
 | 409 | `DOCUMENT_STALE` → 주황 줄 '다른 사람이 먼저 고쳤습니다(누구 · 언제)' + [다시 불러오기](묻고 서버 것으로), 저장을 멈추고 칸을 잠근다(고른 글은 복사된다) | 계약 '화면' |
-| 글 | [편집 \| 미리보기] · 서식 버튼(굵게 · 제목 · 목록 · 번호 목록 · 표). 미리보기는 `DocMarkdown`(`lib/markdown` 에 `tables` 옵션 · 제목 단 — 챗봇은 그대로) | 새 편집기 없이 |
+| 글 | (2026-11-13 걷음 — 32-1 의 '글 편집기' 줄) 처음엔 [편집 \| 미리보기] · 마크다운 서식 버튼 · `DocMarkdown` 이었다 | 새 편집기 없이 |
 | 표 | (2026-11-12 걷음 — 32-1 의 '표 편집기' 줄) `DocSheetEditor` — 칸은 `field-sizing-content` textarea, 줄 위아래 · 지우기, 열 지우기(1열은 남김) · 줄 · 열 더하기, 엑셀 붙여 넣기(`parseGrid` — 따옴표 · "" · 칸 속 줄바꿈, 머리 줄에 붙이면 첫 줄이 열 이름). 500줄 · 30열 · 2,000자 넘는 것은 자르고 알림 | 계약 '표의 모양' |
 | 본문에 넣기 | 글: 마지막 커서 자리(없으면 끝)에 `### 제목\n\n결정\n`, 앞 글과 빈 줄 하나. 표: 끝에 `[제목, 결정, …빈 칸]`(1열이면 '제목 — 결정'). 결정이 비면 '(아직 안 정함)' | 계약 '화면' |
 | 권한 | `lib/access` `canEditDoc` · `canDeleteDoc` + 기존 `canCreateInPart` · `canMoveToPart` — 화면 숨김과 목업 403 이 같은 함수. 못 고치면 칸 잠금 · 버튼 숨김 · 머리에 자물쇠 줄 | 계약 '권한' |
@@ -804,6 +804,7 @@
 - [x] 표 편집기 (2026-11-12 고침, 사용자) — `DocSheetEditor` 를 **Jspreadsheet CE 5.0.4** 스프레드시트로(컴포넌트가 DOM 에 직접 띄우고 떠날 때 destroy, `DocumentView` 가 비동기로 받음): 시트 탭(더하기 · 이름 바꾸기 · 지우기, 하나는 남김) · 도구 줄(되돌리기 · 다시 · 굵게 · 기울임 · 글자색 · 배경색 · 정렬 · 병합 · 풀기) · 한국어 우클릭 메뉴 · 수식 · 엑셀 붙여 넣기, 상한(시트 10 · 열 100 · 줄 2,000 · 칸 5,000자)을 넘으면 막고 알림, 편집기 이벤트마다 `lib/document` `tabFromEditor` 로 `SheetBook` 을 뽑아 기존 자동 저장에 태움(수식은 원문, 칸은 문자열, 꾸밈은 도구 줄 속성만, 끝의 빈 줄은 뗌), 잠기면 `editable` 끔. `.xlsx` 가져오기(확인 팝업) · 내려받기(문서 제목.xlsx)는 **SheetJS CE 0.20.3**(CDN 타르볼)을 누를 때 불러옴(`lib/sheetXlsx`). 타입 `SheetData` → `SheetBook` · `SheetTab`, 붙여 넣기 펴기 · 표 고치기 함수 걷음. 검사 — `lib/document.test.ts`(A1 · 변환 · 넣기 · 상한) · `lib/sheetXlsx.test.ts` · `stores/document.test.ts` · `views/DocumentsView.test.ts`(jsdom 에 실제 편집기)
 - [x] 열 머리는 늘 A · B · C (2026-11-12 고침, 사용자 — 열 이름이 머리에 보여 `=A1` 수식이 헷갈렸다) — `SheetTab.columns` 를 `{ width }[]` 로, 편집기는 열 `title` 을 안 줘 기본 머리, '열 이름 바꾸기' 메뉴 · 저장 변환의 title 걷음, 기본 표는 첫 줄 '항목 · 내용' 굵게(`defaultSheetBook`), 새 시트 · .xlsx 가져오기도 너비만, 열에 `title` 이 오면 목업 422(서버 이행 0043 과 같게), 픽스처 `doc2` 는 이름을 첫 줄로. 검사 — `lib/document.test.ts` · `lib/sheetXlsx.test.ts` · `stores/document.test.ts` · `views/DocumentsView.test.ts`(머리 A · B · C)
 - [x] 엑셀처럼 넓게 (2026-11-12 고침, 사용자 — 열이 저장된 2개만 보였다) — 상한을 엑셀과 같게(시트마다 16,384열 A ~ XFD · 1,048,576줄 · 칸 32,767자, 주소 `A1` ~ `XFD1048576`, 직렬화 5MB). 편집기는 열면 적어도 A ~ Z · 100줄을 빈 칸으로 깔고(쓴 범위가 크면 + 10열 · 50줄, `editorSize`), 오른쪽 · 아래 끝 240px 안으로 스크롤하면 열 26 · 줄 100씩 늘림(`insertColumn` · `insertRow`, 이벤트 · 되돌리기 기록을 끄고, 120ms 쓰로틀). `lazyLoading` 은 안 씀 — 줄 DOM 은 다 만들고 tbody 에 붙이는 것만 100줄씩이라 이득이 적고 늘리기 · 고르기와 겹친다. 표 높이는 화면에 맞춤. 저장은 쓴 범위뿐(`trimTab` — 끝의 빈 줄 · 열을 뗌, 열은 값 · 병합 · 꾸밈 · 기본과 다른 너비가 있는 마지막 열까지, 최소 1), 받은 표도 같은 꼴로 견줘 넓혀 그리기만 해서는 저장 · rev 가 안 나감. 새 시트는 빈 1열로 저장. .xlsx 가져오기는 '!ref' 를 다 돌지 않고 있는 칸만 보며 새 상한으로 자르고, 5MB 를 넘으면 가져오지 않고 알림. 검사 — `lib/document.test.ts`(쓴 범위 · 깔 크기 · XFD1048576 · 상한 · 5MB) · `lib/sheetXlsx.test.ts`(자르기 · 5MB) · `views/DocumentsView.test.ts`(머리 A ~ Z · 스크롤로 AA 이후 · 저장 안 나감 · 상한)
+- [x] 글 편집기 (2026-11-13 고침, 사용자 — 표처럼 글도 워드처럼, Word 가져오기 · 내려받기) — `DocTextEditor` 를 **Tiptap 3.33.1**(MIT — `@tiptap/vue-3` · starter-kit · table · text-style · highlight · text-align · image · list · extensions)로. 본문은 편집기가 낸 HTML(빈 글은 ''), 예전 마크다운 글은 열 때 `lib/docHtml` `editorHtml` 로 옮겨 싣고 고치기 전엔 저장하지 않음(이행 없음). 도구 줄(되돌리기 · 글 단 · 굵게 · 기울임 · 밑줄 · 취소선 · 코드 · 글자색 · 형광펜 · 정렬 넷 · 목록 · 번호 목록 · 체크리스트 · 인용 · 구분선 · 링크 · 그림 2MB(붙여 넣기 · 끌어 놓기도) · 표 · 서식 지우기)은 위에 붙어 있고, 표 안이면 줄 · 열 · 병합 · 머리 줄 · 표 지우기 줄이 더 뜸. `.docx` 가져오기는 **mammoth 1.13.0**(BSD-2, 브라우저 묶음 `mammoth/mammoth.browser`), 내려받기는 **docx 9.15.3**(MIT) — 둘 다 `lib/docWord` 를 누를 때 불러옴. 편집기도 `DocumentView` 가 비동기로 받음. [본문에 넣기] 는 `agendaNodes`(제목 3단 + 결정 문단, '- ' 줄은 목록)를 마지막 커서 블록 뒤(없으면 끝)에. 상한 200,000자 → UTF-8 5MB(`docContentProblem` — 목업 422 · 저장 막음 · 경고 줄). `DocMarkdown` · 마크다운 서식 함수(`insertBlock` · `wrapSelection` · `prefixLines` · `TABLE_SNIPPET` · `agendaBlock`) 걷음. 픽스처 `doc1` 은 HTML. 검사 — `lib/document.test.ts`(넣기 블록 · 5MB) · `lib/docHtml.test.ts`(마크다운 옮기기 · 이스케이프) · `lib/docWord.test.ts`(내려받은 .docx 를 mammoth 로 다시 읽어 제목 · 서식 · 링크 · 목록 · 체크리스트 · 표 병합 · 그림) · `views/DocumentsView.test.ts`(jsdom 에 실제 편집기 — 넣기 · HTML 저장 · 예전 글 · 409 잠금 · 읽기 전용)
 
 ### 32-2 서버에 붙이기
 

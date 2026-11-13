@@ -19,7 +19,7 @@ export const documentRows: MockDoc[] = [
     title: '서버 구성',
     kind: 'text',
     content:
-      '개발 · 운영 서버를 무엇으로 세우는지 모은 문서입니다.\n\n### 서버 OS 결정\n\n우분투 최신 버전으로 한다\n\n### DB 결정\n\nmysql 을 쓴다\n- postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다\n- supabase 는 비용 때문에 뺀다\n',
+      '<p>개발 · 운영 서버를 무엇으로 세우는지 모은 문서입니다.</p><h3>서버 OS 결정</h3><p>우분투 최신 버전으로 한다</p><h3>DB 결정</h3><p>mysql 을 쓴다</p><ul><li><p>postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다</p></li><li><p>supabase 는 비용 때문에 뺀다</p></li></ul>',
     sheet: { sheets: [] },
     partId: 'pt1',
     links: [

@@ -17,7 +17,6 @@ import {
 import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import AppShell from '@/components/app/AppShell.vue'
 import DocAgendaPanel from '@/components/app/DocAgendaPanel.vue'
-import DocTextEditor from '@/components/app/DocTextEditor.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
@@ -33,7 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ApiError, messageOf } from '@/api'
 import { dayTime } from '@/lib/date'
 import {
-  agendaBlock,
+  agendaNodes,
   appendAgendaRow,
   DOC_KIND_LABEL,
   DOC_READONLY_HINT,
@@ -44,10 +43,12 @@ import {
 } from '@/lib/document'
 import { useDataStore } from '@/stores/data'
 import { useDocumentStore } from '@/stores/document'
+import type { JSONContent } from '@tiptap/core'
 import type { Agenda, SheetBook } from '@/types/domain'
 
-/* 스프레드시트(Jspreadsheet · 수식 엔진)는 크다 — 표 문서를 열 때만 받는다 */
+/* 스프레드시트(Jspreadsheet · 수식 엔진)와 글 편집기(Tiptap)는 크다 — 그 종류의 문서를 열 때만 받는다 */
 const DocSheetEditor = defineAsyncComponent(() => import('@/components/app/DocSheetEditor.vue'))
+const DocTextEditor = defineAsyncComponent(() => import('@/components/app/DocTextEditor.vue'))
 
 /* 문서 하나 — 왼쪽 넓게 편집, 오른쪽 좁게 '연결한 안건'. 제목 · 본문 · 표는 고치면 0.8초 뒤 저장된다(rev 를 싣는다).
    다른 사람이 먼저 고쳤으면(409) 저장을 멈추고 줄을 띄운다 — 내 글은 화면에 남아 복사할 수 있다.
@@ -120,7 +121,7 @@ const saveLabel = computed(() => {
   }
 })
 
-const textEditor = ref<InstanceType<typeof DocTextEditor> | null>(null)
+const textEditor = ref<{ insert: (nodes: JSONContent[]) => void } | null>(null)
 const sheetEditor = ref<{
   insertAgenda: (agenda: Agenda) => boolean
   activeSheet: () => number
@@ -131,7 +132,7 @@ function insert(agenda: Agenda) {
   const d = draft.value
   if (!d || !doc.value || locked.value) return
   if (doc.value.kind === 'text') {
-    textEditor.value?.insert(agendaBlock(agenda))
+    textEditor.value?.insert(agendaNodes(agenda))
     return
   }
   /* 편집기에 넣으면 되돌리기로 뺄 수 있다. 편집기가 아직 안 떴으면 표에 바로 넣는다 */
@@ -368,6 +369,7 @@ const agendaOpen = computed({
           ref="textEditor"
           v-model="content"
           :readonly="locked"
+          :title="draft.title.trim() || doc.title"
         />
         <DocSheetEditor
           v-else

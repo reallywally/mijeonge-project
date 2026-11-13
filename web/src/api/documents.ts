@@ -13,7 +13,7 @@ import { nowIso } from '@/lib/date'
 import {
   agendaIdsProblem,
   changedAgendaIds,
-  DOC_CONTENT_MAX,
+  docContentProblem,
   defaultSheetBook,
   docTitleProblem,
   emptySheetBook,
@@ -124,8 +124,10 @@ function shapeProblems(
   }
   if (input.content !== undefined) {
     if (kind !== 'text') problems.content = '표 문서에는 본문을 보낼 수 없습니다.'
-    else if (input.content.length > DOC_CONTENT_MAX)
-      problems.content = `본문은 ${DOC_CONTENT_MAX.toLocaleString('ko-KR')}자까지입니다.`
+    else {
+      const p = docContentProblem(input.content)
+      if (p) problems.content = p
+    }
   }
   if (input.sheet !== undefined) {
     if (kind !== 'sheet') problems.sheet = '글 문서에는 표를 보낼 수 없습니다.'
