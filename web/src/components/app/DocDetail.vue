@@ -4,10 +4,12 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vu
 import { toast } from 'vue-sonner'
 import {
   Check,
-  ChevronLeft,
+  ChevronRight,
   Ellipsis,
   FileSpreadsheet,
   FileText,
+  Folder,
+  FolderRoot,
   Loader2,
   Lock,
   RefreshCw,
@@ -15,7 +17,6 @@ import {
   TriangleAlert,
 } from 'lucide-vue-next'
 import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
-import AppShell from '@/components/app/AppShell.vue'
 import DocAgendaPanel from '@/components/app/DocAgendaPanel.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartField from '@/components/app/PartField.vue'
@@ -31,6 +32,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ApiError, messageOf } from '@/api'
 import { dayTime } from '@/lib/date'
+import { folderChain, folderOptions } from '@/lib/docFolder'
 import {
   agendaNodes,
   appendAgendaRow,
@@ -50,15 +52,18 @@ import type { Agenda, SheetBook } from '@/types/domain'
 const DocSheetEditor = defineAsyncComponent(() => import('@/components/app/DocSheetEditor.vue'))
 const DocTextEditor = defineAsyncComponent(() => import('@/components/app/DocTextEditor.vue'))
 
-/* 문서 하나 — 왼쪽 넓게 편집, 오른쪽 좁게 '연결한 안건'. 제목 · 본문 · 표는 고치면 0.8초 뒤 저장된다(rev 를 싣는다).
+/* 문서 하나 — 문서 화면의 트리 오른쪽. 넓게 편집, 맨 오른쪽 좁게 '연결한 안건'. 제목 · 본문 · 표는 고치면 0.8초 뒤 저장된다(rev 를 싣는다).
    다른 사람이 먼저 고쳤으면(409) 저장을 멈추고 줄을 띄운다 — 내 글은 화면에 남아 복사할 수 있다.
    권한이 없으면 칸을 잠그고 버튼을 숨긴다 (docs/api/document.md '화면') */
+const props = defineProps<{ documentId: string }>()
 const route = useRoute()
 const router = useRouter()
 const data = useDataStore()
 const docs = useDocumentStore()
 
-const documentId = computed(() => String(route.params.documentId ?? ''))
+const documentId = computed(() => props.documentId)
+/** 트리로 돌아갈 주소 — ?agendaId= 거르기는 지킨다 */
+const listTo = computed(() => ({ path: '/documents', query: route.query }))
 const loadState = ref<'loading' | 'ready' | 'missing' | 'error'>('loading')
 const loadError = ref('')
 const doc = computed(() => (loadState.value === 'ready' ? docs.byId[documentId.value] : undefined))
@@ -84,7 +89,7 @@ watch(documentId, (id) => void load(id), { immediate: true })
 watch(
   () => data.currentProjectId,
   (projectId) => {
-    if (doc.value && doc.value.projectId !== projectId) void router.replace('/documents')
+    if (doc.value && doc.value.projectId !== projectId) void router.replace(listTo.value)
   },
 )
 
@@ -150,12 +155,25 @@ async function reload() {
   await docs.reloadDraft()
 }
 
-/* 문서 메뉴(…) — 파트 바꾸기 · 지우기 */
+/* 문서 메뉴(…) — 파트 바꾸기 · 폴더 옮기기 · 지우기 */
 const menuOpen = ref(false)
 function setPart(partId: string | null) {
   if (!doc.value || partId === doc.value.partId) return
   void docs.setPart(doc.value.id, partId)
 }
+async function setFolder(folderId: string | null) {
+  if (!doc.value || folderId === doc.value.folderId) return
+  if (await docs.setFolder(doc.value.id, folderId)) menuOpen.value = false
+}
+const folderChoices = computed(() => folderOptions(docs.folders))
+/** 머리의 폴더 경로 — 맨 위부터 */
+const crumbs = computed(() => {
+  const names = new Map(docs.folders.map((f) => [f.id, f.name] as const))
+  return folderChain(docs.folders, doc.value?.folderId ?? null).map((id) => ({
+    id,
+    name: names.get(id) ?? '',
+  }))
+})
 
 const removeOpen = ref(false)
 const removing = ref(false)
@@ -168,7 +186,7 @@ async function remove() {
   if (!ok) return
   removeOpen.value = false
   toast.success(`'${name}' 문서를 지웠습니다.`)
-  await router.replace('/documents')
+  await router.replace(listTo.value)
 }
 
 /* 떠날 때 — 기다리던 저장은 바로 보낸다. 묻지 않는다 */
@@ -206,16 +224,19 @@ const agendaOpen = computed({
 </script>
 
 <template>
-  <AppShell>
+  <div class="flex min-w-0 grow flex-col overflow-hidden">
     <div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border bg-card px-6">
-      <RouterLink
-        to="/documents"
-        class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-        data-doc-back
+      <nav
+        class="flex min-w-0 items-center gap-1 text-xs font-medium text-muted-foreground"
+        aria-label="폴더 경로"
+        data-doc-crumbs
       >
-        <ChevronLeft class="size-3.5" />
-        문서
-      </RouterLink>
+        <span class="shrink-0">문서</span>
+        <template v-for="c in crumbs" :key="c.id">
+          <ChevronRight class="size-3 shrink-0" />
+          <span class="truncate">{{ c.name }}</span>
+        </template>
+      </nav>
       <div class="grow" />
       <span
         v-if="doc && !canEdit"
@@ -316,6 +337,45 @@ const agendaOpen = computed({
                   @update:model-value="setPart"
                 />
               </dl>
+              <div v-if="canEdit" class="flex flex-col gap-1">
+                <span class="text-xs text-muted-foreground">폴더</span>
+                <ul
+                  class="flex max-h-48 flex-col gap-px overflow-y-auto rounded-md border border-border p-1"
+                  role="listbox"
+                  aria-label="폴더"
+                  data-doc-folder-pick
+                >
+                  <li>
+                    <button
+                      type="button"
+                      role="option"
+                      :aria-selected="doc.folderId === null"
+                      class="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-accent"
+                      :class="doc.folderId === null ? 'bg-accent font-medium' : ''"
+                      data-doc-folder-choice="root"
+                      @click="setFolder(null)"
+                    >
+                      <FolderRoot class="size-3.5 shrink-0 text-muted-foreground" />
+                      최상위
+                    </button>
+                  </li>
+                  <li v-for="f in folderChoices" :key="f.id">
+                    <button
+                      type="button"
+                      role="option"
+                      :aria-selected="doc.folderId === f.id"
+                      class="flex w-full items-center gap-1.5 rounded py-1 pr-1.5 text-left text-xs hover:bg-accent"
+                      :class="doc.folderId === f.id ? 'bg-accent font-medium' : ''"
+                      :style="{ paddingLeft: `${6 + (f.depth - 1) * 12}px` }"
+                      :data-doc-folder-choice="f.id"
+                      @click="setFolder(f.id)"
+                    >
+                      <Folder class="size-3.5 shrink-0 text-muted-foreground" />
+                      <span class="truncate">{{ f.name }}</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
               <p class="text-xs text-muted-foreground">
                 {{ DOC_KIND_LABEL[doc.kind] }} 문서 ·
                 {{ data.memberName(doc.createdBy) ?? '알 수 없음' }} 만듦
@@ -413,5 +473,5 @@ const agendaOpen = computed({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </AppShell>
+  </div>
 </template>

@@ -1,4 +1,4 @@
-import type { DocAgendaLink, ProjectDoc } from '@/types/domain'
+import type { DocAgendaLink, DocFolder, ProjectDoc } from '@/types/domain'
 
 /** 목업 저장소의 한 줄 — 서버 테이블 document 처럼 연결 줄(document_agenda)을 품는다.
     changedAgendaIds 는 들지 않는다 — 읽을 때 지금 안건의 판과 견주어 센다. 배열 순서가 seq 순서다 */
@@ -22,6 +22,7 @@ export const documentRows: MockDoc[] = [
       '<p>개발 · 운영 서버를 무엇으로 세우는지 모은 문서입니다.</p><h3>서버 OS 결정</h3><p>우분투 최신 버전으로 한다</p><h3>DB 결정</h3><p>mysql 을 쓴다</p><ul><li><p>postgresql 은 기존 솔루션과 호환성 이슈가 있어 뺀다</p></li><li><p>supabase 는 비용 때문에 뺀다</p></li></ul>',
     sheet: { sheets: [] },
     partId: 'pt1',
+    folderId: 'df1',
     links: [
       { agendaId: 't1', seenRev: 1 },
       { agendaId: 't2', seenRev: 1 },
@@ -64,6 +65,7 @@ export const documentRows: MockDoc[] = [
       ],
     },
     partId: null,
+    folderId: null,
     links: [
       { agendaId: 't6', seenRev: 1 },
       { agendaId: 't1', seenRev: 1 },
@@ -73,5 +75,39 @@ export const documentRows: MockDoc[] = [
     createdAt: '2026-10-22T02:00:00Z',
     updatedBy: 'u1',
     updatedAt: '2026-10-22T02:10:00Z',
+  },
+]
+
+/*
+ * 폴더 셋 — p1 에만. '인프라' 아래 '서버', 맨 위에 '회의 정리'(빈 폴더). doc1 은 '인프라', doc2 는 맨 위.
+ * 배열 순서가 seq 순서다
+ */
+export const docFolderRows: DocFolder[] = [
+  {
+    id: 'df1',
+    projectId: 'p1',
+    parentId: null,
+    name: '인프라',
+    createdBy: 'u3',
+    createdAt: '2026-10-20T00:30:00Z',
+    updatedAt: '2026-10-20T00:30:00Z',
+  },
+  {
+    id: 'df2',
+    projectId: 'p1',
+    parentId: 'df1',
+    name: '서버',
+    createdBy: 'u3',
+    createdAt: '2026-10-20T00:40:00Z',
+    updatedAt: '2026-10-20T00:40:00Z',
+  },
+  {
+    id: 'df3',
+    projectId: 'p1',
+    parentId: null,
+    name: '회의 정리',
+    createdBy: 'u1',
+    createdAt: '2026-10-22T01:00:00Z',
+    updatedAt: '2026-10-22T01:00:00Z',
   },
 ]

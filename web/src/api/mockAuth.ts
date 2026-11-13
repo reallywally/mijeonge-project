@@ -2,6 +2,7 @@ import { mockError } from '@/api/client'
 import {
   accounts,
   checkRequests,
+  docFolderRows,
   documentRows,
   members,
   minutesRows,
@@ -30,6 +31,7 @@ import type {
   AgendaImpact,
   CheckRequest,
   HistoryEntry,
+  DocFolder,
   Me,
   Member,
   MemberAccount,
@@ -96,6 +98,10 @@ interface MockDb {
   documents: MockDoc[]
   /** 마지막으로 준 문서 id 번호 */
   documentSeq: number
+  /** 문서 폴더 — 배열 순서가 seq 순서다 */
+  docFolders: DocFolder[]
+  /** 마지막으로 준 폴더 id 번호 */
+  docFolderSeq: number
 }
 
 const fresh = (): MockDb => ({
@@ -131,6 +137,8 @@ const fresh = (): MockDb => ({
   impactSeq: 0,
   documents: structuredClone(documentRows),
   documentSeq: documentRows.length,
+  docFolders: structuredClone(docFolderRows),
+  docFolderSeq: docFolderRows.length,
 })
 
 let db = fresh()

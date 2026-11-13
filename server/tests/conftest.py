@@ -34,6 +34,7 @@ from app.models import (
     Base,
     CheckRequest,
     Document,
+    DocumentFolder,
     Member,
     Minutes,
     Task,
@@ -70,6 +71,7 @@ SEQ_MODELS: tuple[tuple[type[Base], str], ...] = (
             TestHistory,
             AgendaHistory,
             Document,
+            DocumentFolder,
         )
     ),
     (Member, "no"),

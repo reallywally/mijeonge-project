@@ -2,7 +2,20 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as api from '@/api'
 import { ApiError, messageOf } from '@/api'
-import { canCreateInPart, canDeleteDoc, canEditDoc, canMoveToPart } from '@/lib/access'
+import {
+  canCreateInPart,
+  canDeleteDoc,
+  canDeleteDocFolder,
+  canEditDoc,
+  canMoveToPart,
+} from '@/lib/access'
+import {
+  FOLDER_MOVE_MESSAGE,
+  FOLDER_NAME_TAKEN,
+  folderMoveProblem,
+  folderNameProblem,
+  folderNameTaken,
+} from '@/lib/docFolder'
 import {
   changedAgendaIds,
   docContentProblem,
@@ -16,6 +29,7 @@ import { useDataStore } from '@/stores/data'
 import { usePartStore } from '@/stores/part'
 import type {
   DocAgendaLink,
+  DocFolder,
   DocInput,
   DocPatch,
   ProjectDoc,
@@ -47,6 +61,7 @@ const summaryOf = (d: ProjectDoc): ProjectDocSummary => ({
   title: d.title,
   kind: d.kind,
   partId: d.partId,
+  folderId: d.folderId,
   agendas: d.agendas,
   changedAgendaIds: d.changedAgendaIds,
   rev: d.rev,
@@ -76,7 +91,8 @@ const byUpdated = (a: ProjectDocSummary, b: ProjectDocSummary) =>
  * 문서 (docs/api/document.md). 목록은 고른 프로젝트의 것 전부를 받아 화면이 거른다. 본문 · 표는 문서를 열 때 받는다(byId).
  * 고치기는 자동 저장이다 — 고치고 0.8초 쉬면 바뀐 칸만 rev 를 실어 PATCH, 응답의 rev 를 다음에 쓴다.
  * 409 면 저장을 멈추고 고친 글은 화면에 남긴다. 연결 · 확인 · 파트는 rev 와 무관하다.
- * '결정 바뀜' 은 들고 있는 안건의 지금 판으로 다시 센다 — 안건 결정을 고치면 다시 받지 않아도 바로 보인다
+ * '결정 바뀜' 은 들고 있는 안건의 지금 판으로 다시 센다 — 안건 결정을 고치면 다시 받지 않아도 바로 보인다.
+ * 폴더는 목록과 같이 받아 평평하게 든다 — 트리는 화면이 세운다(lib/docFolder). 문서를 폴더에 넣기는 파트처럼 rev 와 무관하다
  */
 export const useDocumentStore = defineStore('document', () => {
   const data = useDataStore()
@@ -90,12 +106,15 @@ export const useDocumentStore = defineStore('document', () => {
   const error = ref<string | null>(null)
   /** 서버가 돌려준 문서 — 본문 · 표까지. 자동 저장은 이것의 rev 를 싣는다 */
   const byId = ref<Record<string, ProjectDoc>>({})
+  /** 고른 프로젝트의 폴더 — rows 와 같이 받는다 */
+  const folderRows = ref<DocFolder[]>([])
   let ticket = 0
 
   const list = computed(() =>
     rowsProjectId.value !== null && rowsProjectId.value === data.currentProjectId ? rows.value : [],
   )
   const loaded = computed(() => rowsProjectId.value === data.currentProjectId)
+  const folders = computed(() => (loaded.value ? folderRows.value : []))
   /** 볼 파트로 거른 목록 — 문서 쪽 고르기. 문서를 주소로 열 때는 거르지 않는다 */
   const visibleList = computed(() =>
     list.value.filter((d) => partStore.showsPartIn(d.partId, 'document')),
@@ -133,6 +152,12 @@ export const useDocumentStore = defineStore('document', () => {
     canDeleteDoc(auth.me, doc, doc.projectId, data.partMembers)
   const canMoveTo = (doc: ProjectDocSummary, partId: string | null) =>
     partId === doc.partId || canMoveToPart(auth.me, partId, doc.projectId, data.partMembers)
+  const canDeleteFolder = (folder: DocFolder) =>
+    canDeleteDocFolder(auth.me, folder, folder.projectId)
+  /** 빈 폴더인가 — 받아 둔 목록 전부로 본다(볼 파트로 걸러진 문서도 든 것이다) */
+  const folderEmpty = (folderId: string) =>
+    !folderRows.value.some((f) => f.parentId === folderId) &&
+    !rows.value.some((d) => d.folderId === folderId)
 
   /* ── 받기 ── */
 
@@ -148,9 +173,13 @@ export const useDocumentStore = defineStore('document', () => {
     loading.value = true
     error.value = null
     try {
-      const got = await api.fetchDocuments(projectId)
+      const [got, gotFolders] = await Promise.all([
+        api.fetchDocuments(projectId),
+        api.fetchDocFolders(projectId),
+      ])
       if (mine !== ticket) return
       rows.value = got
+      folderRows.value = gotFolders
       rowsProjectId.value = projectId
     } catch (e) {
       if (mine !== ticket) return
@@ -231,6 +260,90 @@ export const useDocumentStore = defineStore('document', () => {
   /** 파트 바꾸기 — rev 없이 보낸다 */
   async function setPart(documentId: string, partId: string | null): Promise<boolean> {
     return run(async () => put(await api.patchDocument(documentId, { partId })))
+  }
+
+  /** 폴더 옮기기 — rev 없이 보낸다(null 은 맨 위) */
+  async function setFolder(documentId: string, folderId: string | null): Promise<boolean> {
+    const held = byId.value[documentId] ?? rows.value.find((d) => d.id === documentId)
+    if (held && held.folderId === folderId) return true
+    return run(async () => put(await api.patchDocument(documentId, { folderId })))
+  }
+
+  /* ── 폴더 ── */
+
+  function putFolder(folder: DocFolder) {
+    if (rowsProjectId.value !== folder.projectId) return
+    const at = folderRows.value.findIndex((f) => f.id === folder.id)
+    if (at >= 0) folderRows.value[at] = folder
+    else folderRows.value.push(folder)
+  }
+
+  /** 그 자리에서 알릴 말 — 이름 겹침 · 깊이 · 검증은 글로, 나머지도 글로 돌려준다 */
+  const problemOf = (e: unknown) =>
+    e instanceof ApiError && e.code === 'DOCUMENT_FOLDER_NAME_TAKEN'
+      ? FOLDER_NAME_TAKEN
+      : e instanceof ApiError && e.code === 'DOCUMENT_FOLDER_TOO_DEEP'
+        ? FOLDER_MOVE_MESSAGE.deep
+        : messageOf(e)
+
+  /** 만든다 — 만든 폴더, 못 만들면 그 자리에 띄울 말 */
+  async function createFolder(name: string, parentId: string | null): Promise<DocFolder | string> {
+    const problem = folderNameProblem(name)
+    if (problem) return problem
+    if (folderNameTaken(folderRows.value, parentId, name)) return FOLDER_NAME_TAKEN
+    try {
+      const folder = await api.createDocFolder(data.currentProjectId, {
+        name: name.trim(),
+        parentId,
+      })
+      putFolder(folder)
+      return folder
+    } catch (e) {
+      return problemOf(e)
+    }
+  }
+
+  /** 이름 바꾸기 — 바꾼 폴더, 못 바꾸면 그 자리에 띄울 말 */
+  async function renameFolder(folderId: string, name: string): Promise<DocFolder | string> {
+    const held = folderRows.value.find((f) => f.id === folderId)
+    const problem = folderNameProblem(name)
+    if (problem) return problem
+    if (!held) return '폴더를 찾을 수 없습니다.'
+    if (held.name === name.trim()) return held
+    if (folderNameTaken(folderRows.value, held.parentId, name, folderId)) return FOLDER_NAME_TAKEN
+    try {
+      const folder = await api.patchDocFolder(folderId, { name: name.trim() })
+      putFolder(folder)
+      return folder
+    } catch (e) {
+      return problemOf(e)
+    }
+  }
+
+  /** 옮길 수 있나 — 고리 · 깊이 · 같은 이름. 걸리면 그 말 */
+  function folderMoveBlock(folderId: string, parentId: string | null): string | null {
+    const held = folderRows.value.find((f) => f.id === folderId)
+    if (!held) return '폴더를 찾을 수 없습니다.'
+    if (held.parentId === parentId) return null
+    const problem = folderMoveProblem(folderRows.value, folderId, parentId)
+    if (problem) return FOLDER_MOVE_MESSAGE[problem]
+    if (folderNameTaken(folderRows.value, parentId, held.name, folderId)) return FOLDER_NAME_TAKEN
+    return null
+  }
+
+  /** 폴더 옮기기 — 걸리는 것은 화면이 folderMoveBlock 으로 먼저 막는다. 여기선 보내지 않고 false */
+  async function moveFolder(folderId: string, parentId: string | null): Promise<boolean> {
+    const held = folderRows.value.find((f) => f.id === folderId)
+    if (held?.parentId === parentId) return true
+    if (folderMoveBlock(folderId, parentId)) return false
+    return run(async () => putFolder(await api.patchDocFolder(folderId, { parentId })))
+  }
+
+  /** 빈 폴더만 지운다 */
+  async function removeFolder(folderId: string): Promise<boolean> {
+    const ok = await run(() => api.deleteDocFolder(folderId))
+    if (ok) folderRows.value = folderRows.value.filter((f) => f.id !== folderId)
+    return ok
   }
 
   async function run(fn: () => Promise<unknown>) {
@@ -421,6 +534,7 @@ export const useDocumentStore = defineStore('document', () => {
     ticket += 1
     clearTimer()
     rows.value = []
+    folderRows.value = []
     rowsProjectId.value = null
     loading.value = false
     error.value = null
@@ -434,6 +548,7 @@ export const useDocumentStore = defineStore('document', () => {
   return {
     list,
     visibleList,
+    folders,
     loaded,
     loading,
     error,
@@ -445,12 +560,20 @@ export const useDocumentStore = defineStore('document', () => {
     canEdit,
     canDelete,
     canMoveTo,
+    canDeleteFolder,
+    folderEmpty,
+    folderMoveBlock,
     load,
     ensureLoaded,
     fetchOne,
     create,
     remove,
     setPart,
+    setFolder,
+    createFolder,
+    renameFolder,
+    moveFolder,
+    removeFolder,
     setAgendas,
     linkAgenda,
     unlinkAgenda,

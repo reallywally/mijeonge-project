@@ -16,10 +16,9 @@ import { useAgendaStore } from '@/stores/agenda'
 import { useAuthStore } from '@/stores/auth'
 import { useDataStore } from '@/stores/data'
 import { useDocumentStore } from '@/stores/document'
-import DocumentView from './DocumentView.vue'
 import DocumentsView from './DocumentsView.vue'
 
-/* 문서 화면 — 목록(결정 바뀜 칩 · 거르기) · 새 문서 · 글 문서(워드처럼 쓰는 편집기 · [본문에 넣기] · 자동 저장 · 예전 마크다운) ·
+/* 문서 화면 — 트리(폴더 · 펼침 기억 · 거르기 · 새 폴더 · 이름 · 지우기 · 끌어 옮기기) · 새 문서 · 글 문서(워드처럼 쓰는 편집기 · [본문에 넣기] · 자동 저장 · 예전 마크다운) ·
    표 문서(스프레드시트 · 줄 넣기 · 도구 줄 · 시트 탭 · 상한 · 잠금) · 409 줄 · 읽기 전용 · 안건 상세의 '실린 문서' */
 vi.mock('@/lib/notify', () => ({ toastError: vi.fn() }))
 vi.mock('vue-sonner', async (importOriginal) => {
@@ -34,7 +33,7 @@ async function mountAt(path: string) {
     history: createMemoryHistory(),
     routes: [
       { path: '/documents', component: DocumentsView },
-      { path: '/documents/:documentId', component: DocumentView },
+      { path: '/documents/:documentId', component: DocumentsView },
       { path: '/:rest(.*)', component: Blank },
     ],
   })
@@ -97,33 +96,184 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('목록', () => {
-  it('종류 · 제목 · 연결 안건 수 · 파트 · 고친 사람, 결정이 바뀌면 주황 칩. 누르면 문서로', async () => {
+/** 끌어 옮기기 — jsdom 엔 DragEvent 가 없어 이름만 같은 이벤트를 보낸다(dataTransfer 없이) */
+async function drag(from: HTMLElement | null, to: HTMLElement | null) {
+  expect(from, '끌 것을 못 찾았다').toBeTruthy()
+  from!.dispatchEvent(new Event('dragstart', { bubbles: true }))
+  await flushPromises()
+  expect(to, '놓을 자리를 못 찾았다').toBeTruthy()
+  to!.dispatchEvent(new Event('dragover', { bubbles: true }))
+  to!.dispatchEvent(new Event('drop', { bubbles: true }))
+  await flushPromises()
+}
+
+const treeOrder = () =>
+  $$('[data-doc-folder], [data-doc-item]').map((el) =>
+    el.dataset.docFolder ? `f:${el.dataset.docFolder}` : `d:${el.dataset.docItem}`,
+  )
+const folderRow = (id: string) => $(`[data-doc-folder="${id}"] > div`)
+const docRow = (id: string) => $(`[data-doc-item="${id}"] > button`)
+
+async function nameFolder(name: string) {
+  await type($('[data-doc-folder-name-input]'), name)
+  $('[data-doc-folder-name-input]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+  await flushPromises()
+}
+
+describe('트리', () => {
+  it('폴더 먼저 이름순, 그다음 문서 제목순 — 펼치면 하위가 보이고 펼침을 기억한다. 결정이 바뀌면 주황 점', async () => {
     useAgendaStore().updateAgenda('t1', { decision: '데비안으로 바꾼다' })
     const { router } = await mountAt('/documents')
-    expect($$('[data-doc-item]').map((r) => r.dataset.docItem)).toEqual(['doc2', 'doc1'])
-    const doc1 = $('[data-doc-item="doc1"]')!
-    expect(doc1.querySelector('[data-doc-kind="text"]')).toBeTruthy()
-    expect(doc1.textContent).toContain('서버 구성')
-    expect(doc1.textContent).toContain('인프라')
-    expect(doc1.textContent).toContain('이도현')
-    expect(doc1.querySelector('[data-doc-agenda-count]')!.textContent?.trim()).toBe('2')
-    expect(doc1.querySelector('[data-doc-changed]')!.textContent).toContain('결정 바뀜 1')
+    expect(treeOrder()).toEqual(['f:df1', 'f:df3', 'd:doc2'])
+    expect($('[data-doc-folder="df1"] [data-doc-folder-count]')!.textContent?.trim()).toBe('1')
+    expect($('[data-doc-folder="df3"] [data-doc-folder-count]')!.textContent?.trim()).toBe('0')
     expect($('[data-doc-item="doc2"] [data-doc-kind="sheet"]')).toBeTruthy()
+    expect($('[data-doc-item="doc2"] [data-doc-changed]')!.textContent?.trim()).toBe('1')
+    /* 오른쪽은 안내 + 최근 고친 문서 */
+    expect($('[data-doc-empty]')).toBeTruthy()
+    expect($$('[data-doc-recent]').map((r) => r.dataset.docRecent)).toEqual(['doc2', 'doc1'])
 
-    await type($('[data-doc-search]'), '모음')
-    $('[data-doc-search]')!.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }))
-    await flushPromises()
-    expect($$('[data-doc-item]').map((r) => r.dataset.docItem)).toEqual(['doc2'])
+    await click($('[data-doc-folder="df1"] [data-doc-folder-toggle]'))
+    expect(treeOrder()).toEqual(['f:df1', 'f:df2', 'd:doc1', 'f:df3', 'd:doc2'])
+    expect($('[data-doc-item="doc1"] [data-doc-kind="text"]')).toBeTruthy()
+    expect(JSON.parse(localStorage.getItem('innoflow.docFolders.u1.p1')!)).toEqual(['df1'])
 
-    await click($('[data-doc-item="doc2"]'))
+    await click(docRow('doc2'))
     expect(router.currentRoute.value.path).toBe('/documents/doc2')
+    expect($('[data-doc-item="doc2"]')!.dataset.selected).toBe('true')
+    expect($('[data-doc-empty]')).toBeNull()
   })
 
-  it('[새 문서] — 제목 · 종류 · 안건을 골라 만들면 그 문서로 간다', async () => {
+  it('문서를 열면 그 위 폴더를 펼치고 강조한다, 머리에 폴더 경로', async () => {
+    mockDb().documents.find((d) => d.id === 'doc1')!.folderId = 'df2'
+    await mountAt('/documents/doc1')
+    expect(treeOrder()).toEqual(['f:df1', 'f:df2', 'd:doc1', 'f:df3', 'd:doc2'])
+    expect($('[data-doc-item="doc1"]')!.dataset.selected).toBe('true')
+    expect($('[data-doc-crumbs]')!.textContent).toContain('인프라')
+    expect($('[data-doc-crumbs]')!.textContent).toContain('서버')
+  })
+
+  it('검색 · ?agendaId= 로 거르면 맞는 문서와 그 위 폴더만 펼쳐 보인다 — 빈 폴더는 숨긴다', async () => {
     const { router } = await mountAt('/documents')
+    await type($('[data-doc-search]'), '구성')
+    expect(treeOrder()).toEqual(['f:df1', 'd:doc1'])
+    expect($('[data-doc-folder="df1"]')!.dataset.open).toBe('true')
+    await type($('[data-doc-search]'), '없는 말')
+    expect(treeOrder()).toEqual([])
+    expect($('[data-doc-tree-empty]')!.textContent).toContain('맞는 문서가 없습니다')
+    await type($('[data-doc-search]'), '')
+    expect(treeOrder()).toEqual(['f:df1', 'f:df3', 'd:doc2'])
+
+    await router.push('/documents?agendaId=t6')
+    await flushPromises()
+    expect(treeOrder()).toEqual(['d:doc2'])
+    expect($('[data-doc-agenda-filter]')!.textContent).toContain('일정 조율')
+    /* 문서를 열어도 거르기는 남는다 */
+    await click(docRow('doc2'))
+    expect(router.currentRoute.value.fullPath).toBe('/documents/doc2?agendaId=t6')
+    await click($('[data-doc-agenda-filter-clear]'))
+    expect(router.currentRoute.value.fullPath).toBe('/documents/doc2')
+    expect(treeOrder()).toEqual(['f:df1', 'f:df3', 'd:doc2'])
+  })
+
+  it('[새 폴더] — 같은 자리에 같은 이름이면 그 자리에서 알리고, 하위 폴더 · 이름 바꾸기도 줄에서 바로', async () => {
+    await mountAt('/documents')
+    await click($('[data-doc-folder-new]'))
+    await nameFolder('인프라')
+    expect($('[data-doc-folder-problem]')!.textContent).toContain('같은 이름의 폴더')
+    await nameFolder('설계')
+    expect($('[data-doc-folder-name-input]')).toBeNull()
+    const made = mockDb().docFolders.find((f) => f.name === '설계')!
+    expect(made.parentId).toBeNull()
+    expect(treeOrder()).toEqual(['f:' + made.id, 'f:df1', 'f:df3', 'd:doc2'])
+
+    /* 하위 폴더 — 그 폴더를 펼치고 안에 칸 */
+    await click($('[data-doc-folder="df3"] [data-doc-folder-menu]'))
+    await click($('[data-doc-folder-new-sub]'))
+    await nameFolder('11월')
+    const sub = mockDb().docFolders.find((f) => f.name === '11월')!
+    expect(sub.parentId).toBe('df3')
+    expect(treeOrder()).toEqual(['f:' + made.id, 'f:df1', 'f:df3', 'f:' + sub.id, 'd:doc2'])
+
+    /* 이름 바꾸기 — 같은 부모 아래 겹치면 알린다 */
+    await click($('[data-doc-folder="df3"] [data-doc-folder-menu]'))
+    await click($('[data-doc-folder-rename]'))
+    await nameFolder('인프라')
+    expect($('[data-doc-folder-problem]')!.textContent).toContain('같은 이름의 폴더')
+    await nameFolder('회의록 정리')
+    expect($('[data-doc-folder="df3"] [data-doc-folder-name]')!.textContent?.trim()).toBe(
+      '회의록 정리',
+    )
+    expect(mockDb().docFolders.find((f) => f.id === 'df3')!.name).toBe('회의록 정리')
+  })
+
+  it('지우기는 빈 폴더만 — 아니면 막힌 채 이유', async () => {
+    await mountAt('/documents')
+    await click($('[data-doc-folder="df1"] [data-doc-folder-menu]'))
+    expect($('[data-doc-folder-remove]')!.hasAttribute('disabled')).toBe(true)
+    expect($('[data-doc-folder-remove-reason]')!.textContent).toContain('안에 폴더나 문서가 있어')
+
+    await click($('[data-doc-folder="df3"] [data-doc-folder-menu]'))
+    expect($('[data-doc-folder-remove]')!.hasAttribute('disabled')).toBe(false)
+    await click($('[data-doc-folder-remove]'))
+    expect(mockDb().docFolders.some((f) => f.id === 'df3')).toBe(false)
+    expect(treeOrder()).toEqual(['f:df1', 'd:doc2'])
+  })
+
+  it('끌어 옮기기 — 문서 · 폴더를 폴더 줄에 놓으면 그 안, 최상위에 놓으면 맨 위. 문서의 rev 는 안 오른다', async () => {
+    await mountAt('/documents')
+    await drag(docRow('doc2'), folderRow('df3'))
+    expect(mockDb().documents.find((d) => d.id === 'doc2')!.folderId).toBe('df3')
+    expect(mockDb().documents.find((d) => d.id === 'doc2')!.rev).toBe(2)
+    expect(treeOrder()).toEqual(['f:df1', 'f:df3', 'd:doc2'])
+    expect($('[data-doc-folder="df3"]')!.dataset.open).toBe('true')
+
+    /* 폴더를 자기 하위로는 안 받는다 */
+    await click($('[data-doc-folder="df1"] [data-doc-folder-toggle]'))
+    await drag(folderRow('df1'), folderRow('df2'))
+    expect(mockDb().docFolders.find((f) => f.id === 'df1')!.parentId).toBeNull()
+
+    await drag(folderRow('df1'), folderRow('df3'))
+    expect(mockDb().docFolders.find((f) => f.id === 'df1')!.parentId).toBe('df3')
+    expect(treeOrder()).toEqual(['f:df3', 'f:df1', 'f:df2', 'd:doc1', 'd:doc2'])
+
+    /* 끄는 동안만 '최상위' 자리가 뜬다 */
+    expect($('[data-doc-tree-root]')).toBeNull()
+    docRow('doc1')!.dispatchEvent(new Event('dragstart', { bubbles: true }))
+    await flushPromises()
+    await drag(docRow('doc1'), $('[data-doc-tree-root]'))
+    expect(mockDb().documents.find((d) => d.id === 'doc1')!.folderId).toBeNull()
+    expect(mockDb().documents.find((d) => d.id === 'doc1')!.rev).toBe(3)
+    expect($('[data-doc-tree-root]')).toBeNull()
+  })
+
+  it('못 고치는 문서는 끌어도 놓을 자리가 없다', async () => {
+    writeMockSession('u2')
+    await useAuthStore().loadMe()
+    await mountAt('/documents')
+    await click($('[data-doc-folder="df1"] [data-doc-folder-toggle]'))
+    expect(docRow('doc1')!.getAttribute('draggable')).toBe('false')
+    await drag(docRow('doc1'), folderRow('df3'))
+    expect(mockDb().documents.find((d) => d.id === 'doc1')!.folderId).toBe('df1')
+  })
+
+  it('문서 메뉴의 폴더 고르기 — rev 는 그대로, 머리 경로가 바뀐다', async () => {
+    await mountAt('/documents/doc1')
+    const patch = vi.spyOn(api, 'patchDocument')
+    await click($('[data-doc-menu]'))
+    await click($('[data-doc-folder-choice="df3"]'))
+    expect(patch).toHaveBeenCalledWith('doc1', { folderId: 'df3' })
+    expect(useDocumentStore().byId.doc1.rev).toBe(3)
+    expect(useDocumentStore().byId.doc1.folderId).toBe('df3')
+    expect($('[data-doc-crumbs]')!.textContent).toContain('회의 정리')
+    expect($('[data-doc-folder="df3"]')!.dataset.open).toBe('true')
+  })
+
+  it('[새 문서] — 제목 · 종류 · 안건을 골라 만들면 그 문서로 간다, 폴더는 보던 문서의 폴더', async () => {
+    const { router } = await mountAt('/documents/doc1')
     await click($('[data-doc-new]'))
     const dialog = $('[data-doc-create]')!
+    expect($('[data-doc-create-folder]')!.textContent).toContain('인프라')
     expect($('[data-doc-create-submit]')!.hasAttribute('disabled')).toBe(true)
     await type($('[data-doc-create-title]'), '결정 모음 표')
     await click($('[data-doc-create-kind="sheet"]'))
@@ -131,9 +281,28 @@ describe('목록', () => {
     expect($$('[data-doc-create-agenda]').map((r) => r.dataset.docCreateAgenda)).toEqual(['t2'])
     await click($('[data-doc-create-submit]'))
     expect(router.currentRoute.value.path).toMatch(/^\/documents\/doc\d+$/)
+    const id = router.currentRoute.value.path.split('/').at(-1)!
+    expect(mockDb().documents.find((d) => d.id === id)!.folderId).toBe('df1')
     expect(($('[data-doc-title]') as HTMLInputElement).value).toBe('결정 모음 표')
     await vi.waitFor(() => expect($('[data-doc-sheet]')).toBeTruthy())
     expect($$('[data-doc-agenda]').map((r) => r.dataset.docAgenda)).toEqual(['t2'])
+    expect($(`[data-doc-item="${id}"]`)!.dataset.selected).toBe('true')
+  })
+
+  it('폴더 메뉴의 [새 문서] 는 그 폴더에, 맨 위의 [새 문서] 는 최상위에', async () => {
+    const { router } = await mountAt('/documents')
+    await click($('[data-doc-new]'))
+    expect($('[data-doc-create-folder]')!.textContent).toContain('최상위')
+    await click($('[data-doc-create-cancel]'))
+
+    await click($('[data-doc-folder="df3"] [data-doc-folder-menu]'))
+    await click($('[data-doc-folder-new-doc]'))
+    expect($('[data-doc-create-folder]')!.textContent).toContain('회의 정리')
+    await type($('[data-doc-create-title]'), '11월 회의')
+    await click($('[data-doc-create-submit]'))
+    const id = router.currentRoute.value.path.split('/').at(-1)!
+    expect(mockDb().documents.find((d) => d.id === id)!.folderId).toBe('df3')
+    expect(treeOrder()).toContain(`d:${id}`)
   })
 })
 

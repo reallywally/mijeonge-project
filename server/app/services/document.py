@@ -28,6 +28,7 @@ from app.schemas.document import (
     sheet_value,
 )
 from app.services import access
+from app.services import document_folder as folder_service
 from app.services import part as part_service
 from app.services import project as project_service
 from app.services.access import Scope
@@ -110,6 +111,7 @@ def _summary_fields(row: Document, links: Sequence[_Link]) -> dict[str, Any]:
         "title": row.title,
         "kind": row.kind,
         "part_id": row.part_id,
+        "folder_id": row.folder_id,
         "agendas": [DocAgendaLink(agenda_id=x.agenda_id, seen_rev=x.seen_rev) for x in links],
         "changed_agenda_ids": [x.agenda_id for x in links if x.decision_rev > x.seen_rev],
         "rev": row.rev,
@@ -206,6 +208,8 @@ async def create_document(
     await part_service.guard_part(session, project.id, payload.part_id)
     if not access.can_create_in_part(scope, payload.part_id):
         raise access.forbidden(CREATE_FORBIDDEN)
+    # 만들 때 고른 폴더는 권한을 따로 보지 않는다 — 이 프로젝트의 것인지만
+    await folder_service.guard_folder(session, project.id, payload.folder_id, "folderId")
     revs = await _current_revs(session, project.id, payload.agenda_ids)
 
     if payload.kind == "text":
@@ -224,6 +228,7 @@ async def create_document(
         content=payload.content if payload.kind == "text" else "",
         sheet=sheet,
         part_id=payload.part_id,
+        folder_id=payload.folder_id,
         rev=1,
         created_by=actor_id,
         created_at=at,
@@ -266,6 +271,12 @@ async def patch_document(
         await part_service.guard_part(session, document.project_id, payload.part_id)
         if not access.can_move_to_part(scope, payload.part_id):
             raise access.forbidden(MOVE_FORBIDDEN)
+    # 폴더 옮기기는 이 문서를 고칠 수 있으면 된다 — 위에서 봤다
+    filing = "folder_id" in sent and payload.folder_id != document.folder_id
+    if filing:
+        await folder_service.guard_folder(
+            session, document.project_id, payload.folder_id, "folderId"
+        )
     if versioned and payload.rev != document.rev:
         raise ApiError(
             409,
@@ -292,7 +303,9 @@ async def patch_document(
         document.rev += 1
     if moving:
         document.part_id = payload.part_id
-    if edited or moving:
+    if filing:
+        document.folder_id = payload.folder_id
+    if edited or moving or filing:
         _touch(document, scope.actor.id)
     await session.commit()
     return await _one(session, document)

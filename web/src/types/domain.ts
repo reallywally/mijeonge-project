@@ -1249,6 +1249,8 @@ export interface ProjectDocSummary {
   title: string
   kind: DocKind
   partId: string | null
+  /** 든 폴더. null 은 맨 위 (2026-11-13) */
+  folderId: string | null
   /** 연결 순서. 지운 안건은 빠진다 */
   agendas: DocAgendaLink[]
   /** 지금 decisionRev > seenRev 인 연결 안건 — 연결 순서. 없으면 [] */
@@ -1269,11 +1271,37 @@ export interface ProjectDoc extends ProjectDocSummary {
   sheet: SheetBook
 }
 
+/** 폴더 하나 (2026-11-13) — 평평하게 받고 트리는 화면이 parentId 로 세운다 */
+export interface DocFolder {
+  id: string
+  projectId: string
+  /** null 은 맨 위 */
+  parentId: string | null
+  name: string
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** POST /api/projects/{projectId}/document-folders */
+export interface DocFolderInput {
+  name: string
+  parentId?: string | null
+}
+
+/** PATCH /api/document-folders/{folderId} — 보낸 키만. 이름 바꾸기 · 옮기기 */
+export interface DocFolderPatch {
+  name?: string
+  parentId?: string | null
+}
+
 /** POST /api/projects/{projectId}/documents */
 export interface DocInput {
   title: string
   kind: DocKind
   partId?: string | null
+  /** 넣을 폴더. 안 보내면 맨 위 (2026-11-13) */
+  folderId?: string | null
   /** 안건 상세의 [문서에 담기] · 목록의 [새 문서] 가 미리 채운다. 안 보내면 [] */
   agendaIds?: string[]
   /** 안 보내면 '' (text 일 때만 받는다 — sheet 에 보내면 422) */
@@ -1292,6 +1320,8 @@ export interface DocPatch {
   /** sheet 만 */
   sheet?: SheetBook
   partId?: string | null
+  /** 폴더 옮기기 — rev 를 안 올린다(파트처럼) */
+  folderId?: string | null
 }
 
 /** PUT /api/documents/{documentId}/agendas — 연결을 통째로. 배열 순서 = 연결 순서 */

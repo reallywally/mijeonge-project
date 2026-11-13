@@ -32,6 +32,7 @@ BOOK_BYTES_MAX = 5 * 1024 * 1024
 TITLE_REFUSED = "열 이름은 받지 않습니다. 첫 줄 칸에 적어 주세요."
 
 DocTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+FolderName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 Cell = Annotated[str, StringConstraints(max_length=CELL_MAX)]
 ADDRESS = re.compile(r"^([A-Z]{1,3})([1-9][0-9]{0,6})$")
 
@@ -165,6 +166,8 @@ class DocSummaryOut(Schema):
     title: str
     kind: DocKind
     part_id: str | None
+    # null 이면 맨 위
+    folder_id: str | None
     # 연결 순서. 지운 안건은 빠진다
     agendas: list[DocAgendaLink]
     # decisionRev > seenRev 인 연결 안건 — 연결 순서
@@ -189,6 +192,7 @@ class DocCreate(Schema):
     title: DocTitle
     kind: DocKind
     part_id: str | None = None
+    folder_id: str | None = None
     agenda_ids: AgendaIds = []
     content: DocContent = ""
     # 안 보내면 sheet 는 기본 시트 하나(서비스), text 는 빈 책. null 은 422
@@ -203,6 +207,8 @@ class DocPatch(Schema):
     content: DocContent = ""
     sheet: SheetBookInput = UNSENT_SHEET
     part_id: str | None = None
+    # 폴더 옮기기 — 판을 안 올린다(파트처럼)
+    folder_id: str | None = None
 
 
 class DocAgendasInput(Schema):
@@ -212,3 +218,30 @@ class DocAgendasInput(Schema):
 class DocConfirmInput(Schema):
     # 안 보내면 연결 안건 전부
     agenda_ids: list[str] | None = None
+
+
+class DocFolderOut(Schema):
+    """`DocFolder` — 평평한 한 줄. 트리는 화면이 `parentId` 로 세운다."""
+
+    id: str
+    project_id: str
+    # null 이면 맨 위
+    parent_id: str | None
+    name: str
+    created_by: str | None
+    created_at: Utc
+    updated_at: Utc
+
+
+class DocFolderCreate(Schema):
+    """`DocFolderInput`."""
+
+    name: FolderName
+    parent_id: str | None = None
+
+
+class DocFolderPatch(Schema):
+    """보낸 키만. 이름의 기본값은 '안 보냄' 표시라 null 은 422 다."""
+
+    name: FolderName = ""
+    parent_id: str | None = None

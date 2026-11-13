@@ -182,6 +182,16 @@ export const canDeleteDoc = (
     doc.createdBy === me.id ||
     (doc.partId !== null && hasPartRight(me, partMembers, doc.partId, 'canDelete')))
 
+/** 문서 폴더 지우기(빈 폴더만) — 관리자 · 만든 사람. 만들기 · 이름 바꾸기 · 옮기기는 프로젝트 멤버 누구나 */
+export const canDeleteDocFolder = (
+  me: Me | null,
+  folder: { createdBy: string | null },
+  projectId: string,
+) =>
+  me !== null &&
+  canSeeProject(me, projectId) &&
+  (canManageProject(me, projectId) || folder.createdBy === me.id)
+
 /** 안건 고치기(제목 · 설명 · 결정내용 · 상태 · 기한 · 담당자 · 파트)는 등록한 사람 · 담당자 · 그 프로젝트 관리자 ·
     시스템 관리자 — 결정내용 · 상태도 같은 PATCH 라 같은 넷만 바꾼다 (docs/api/agenda.md) */
 export const canEditAgenda = (

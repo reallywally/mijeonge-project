@@ -713,13 +713,15 @@ async def test_impact_state_matches_contract(client: AsyncClient) -> None:
     assert set(body) == IMPACT_SHAPES["AgendaImpactState"]
 
 
-# 문서 — docs/api/document.md '모양'. null 이 나가는 자리는 partId · createdBy · updatedBy 셋뿐이다
+# 문서 — docs/api/document.md '모양'. null 이 나가는 자리는 partId · folderId · createdBy ·
+# updatedBy, 폴더의 parentId · createdBy 뿐이다
 _DOC_SUMMARY = {
     "id",
     "projectId",
     "title",
     "kind",
     "partId",
+    "folderId",
     "agendas",
     "changedAgendaIds",
     "rev",
@@ -734,10 +736,17 @@ DOC_SHAPES: dict[str, set[str]] = {
     "DocAgendaLink": {"agendaId", "seenRev"},
     "ProjectDocSummary": _DOC_SUMMARY,
     "ProjectDoc": _DOC_SUMMARY | {"content", "sheet"},
+    "DocFolder": {"id", "projectId", "parentId", "name", "createdBy", "createdAt", "updatedAt"},
 }
 DOC_NULLABLE: dict[str, set[str]] = {
-    "ProjectDocSummary": {"partId", "createdBy", "updatedBy"},
-    "ProjectDoc": {"partId", "createdBy", "updatedBy"},
+    "ProjectDocSummary": {"partId", "folderId", "createdBy", "updatedBy"},
+    "ProjectDoc": {"partId", "folderId", "createdBy", "updatedBy"},
+    "DocFolder": {"parentId", "createdBy"},
+}
+# 폴더가 늘린 필드(2026-11-13) — 프론트가 domain.ts 에 더하는 중이라 아직 없을 수 있다
+DOC_ADDED: dict[str, set[str]] = {
+    "ProjectDocSummary": {"folderId"},
+    "ProjectDoc": {"folderId"},
 }
 
 
@@ -747,8 +756,11 @@ def test_document_shapes_do_not_drift_from_domain_ts(name: str) -> None:
     if name not in FIELDS:
         return
     declared = all_fields(name)
-    assert set(declared) == DOC_SHAPES[name], f"domain.ts 의 {name} 이 document.md 와 다르다"
-    nullable = {field for field, allowed in declared.items() if allowed}
+    added = DOC_ADDED.get(name, set())
+    assert set(declared) | added == DOC_SHAPES[name], (
+        f"domain.ts 의 {name} 이 document.md 와 다르다"
+    )
+    nullable = {field for field, allowed in declared.items() if allowed} | added
     assert nullable == DOC_NULLABLE.get(name, set())
 
 
@@ -760,7 +772,7 @@ async def test_document_responses_match_contract(client: AsyncClient) -> None:
     assert set(doc) == DOC_SHAPES["ProjectDoc"]
     assert set(doc["sheet"]) == DOC_SHAPES["SheetBook"]
     assert set(doc["agendas"][0]) == DOC_SHAPES["DocAgendaLink"]
-    assert {k for k, v in doc.items() if v is None} == {"partId"}
+    assert {k for k, v in doc.items() if v is None} == {"partId", "folderId"}
     rows = (await client.get("/api/projects/p1/documents")).json()
     assert set(rows[0]) == DOC_SHAPES["ProjectDocSummary"]
     sheet = (
@@ -769,3 +781,10 @@ async def test_document_responses_match_contract(client: AsyncClient) -> None:
     assert set(sheet) == DOC_SHAPES["SheetBook"]
     assert set(sheet["sheets"][0]) == DOC_SHAPES["SheetTab"]
     assert set(sheet["sheets"][0]["columns"][0]) == {"width"}
+    folder = (
+        await client.post("/api/projects/p1/document-folders", json={"name": "인프라"})
+    ).json()
+    assert set(folder) == DOC_SHAPES["DocFolder"]
+    assert {k for k, v in folder.items() if v is None} == {"parentId"}
+    rows = (await client.get("/api/projects/p1/document-folders")).json()
+    assert set(rows[0]) == DOC_SHAPES["DocFolder"]

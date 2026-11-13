@@ -250,6 +250,8 @@ AI 챗봇(`server/PLAN.md` 7단계 · `web/PLAN.md` 7단계). 모양은 `docs/ap
 | GET · PATCH · DELETE | `/api/documents/{documentId}` | 읽기 · 고치기(제목 · 본문 · 표는 `rev` 를 실어서, 다르면 409 `DOCUMENT_STALE`) · 지우기 | `ProjectDoc` · 204 | 구현 |
 | PUT | `/api/documents/{documentId}/agendas` | 연결 안건 통째로 — 남는 것은 `seenRev` 그대로 | `ProjectDoc` | 구현 |
 | POST | `/api/documents/{documentId}/confirm` | 결정 바뀜 지우기(고른 것 · 전부) | `ProjectDoc` | 구현 |
+| GET · POST | `/api/projects/{projectId}/document-folders` | 폴더 목록(평평한 배열, 이름순 · 같으면 `seq`) · 만들기 (2026-11-13) | `DocFolder[]` · 201 `DocFolder` | 구현 |
+| PATCH · DELETE | `/api/document-folders/{folderId}` | 이름 바꾸기 · 옮기기(`parentId`, 고리 · 5단 넘음 400) · 지우기(빈 폴더만, 아니면 409 `DOCUMENT_FOLDER_NOT_EMPTY`) | `DocFolder` · 204 | 구현 |
 
 ### 변경 이력
 

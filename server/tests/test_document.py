@@ -48,6 +48,7 @@ async def test_create_text_and_read(client: httpx.AsyncClient) -> None:
         "title",
         "kind",
         "partId",
+        "folderId",
         "agendas",
         "changedAgendaIds",
         "rev",

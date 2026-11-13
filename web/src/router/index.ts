@@ -149,7 +149,7 @@ const router = createRouter({
       name: 'agenda',
       component: () => import('@/views/AgendaListView.vue'),
     },
-    /* 문서 — 목록 · 하나. 새 문서는 목록 위 팝업이라 주소가 없다 (docs/api/document.md '화면') */
+    /* 문서 — 트리 + 상세가 같은 틀이다. 새 문서는 팝업이라 주소가 없다 (docs/api/document.md '화면') */
     {
       path: '/documents',
       name: 'documents',
@@ -158,7 +158,7 @@ const router = createRouter({
     {
       path: '/documents/:documentId',
       name: 'document',
-      component: () => import('@/views/DocumentView.vue'),
+      component: () => import('@/views/DocumentsView.vue'),
     },
     {
       path: '/risks',
