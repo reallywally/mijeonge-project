@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { docFolderRows, documentRows } from '@/fixtures'
 import {
+  docTree,
   docTreeRows,
   folderDepth,
   folderMoveProblem,
@@ -88,6 +89,14 @@ describe('트리 펴기', () => {
       '0f:인프라',
       '1d:서버 구성',
     ])
+  })
+
+  it('중첩 트리 — 키는 f:id · d:id, 폴더는 늘 children 을 든다', () => {
+    const tree = docTree(folders, docs, false)
+    expect(tree.map((n) => n.key)).toEqual(['f:df1', 'f:df3', 'd:doc2'])
+    const infra = tree[0]
+    expect(infra.type === 'folder' && infra.children.map((n) => n.key)).toEqual(['f:df2', 'd:doc1'])
+    expect(tree[1].type === 'folder' && tree[1].children).toEqual([])
   })
 
   it('없는 폴더를 가리키는 문서는 맨 위', () => {

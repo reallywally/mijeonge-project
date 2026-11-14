@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { CheckCheck, CornerDownLeft, Link2, TriangleAlert, X } from 'lucide-vue-next'
+import {
+  CheckCheck,
+  CornerDownLeft,
+  Link2,
+  PanelRightClose,
+  PanelRightOpen,
+  TriangleAlert,
+  X,
+} from 'lucide-vue-next'
 import AgendaStateBadge from '@/components/app/AgendaStateBadge.vue'
 import SearchPicker from '@/components/app/SearchPicker.vue'
 import { Button } from '@/components/ui/button'
@@ -12,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { DOC_AGENDAS_MAX } from '@/lib/document'
+import { recall, remember } from '@/lib/storage'
 import { useAgendaStore } from '@/stores/agenda'
 import { useDataStore } from '@/stores/data'
 import { useDocumentStore } from '@/stores/document'
@@ -19,7 +28,8 @@ import type { Agenda, ProjectDoc } from '@/types/domain'
 
 /* 문서 화면 오른쪽 '연결한 안건' 칸 — 줄마다 상태 · 제목(누르면 안건 상세) · 결정내용 몇 줄 · [본문에 넣기].
    결정이 바뀐 안건은 주황 테두리 + '결정 바뀜 — 판 n → m' + [확인]. 머리에 [모두 확인] · [안건 연결].
-   읽기 전용이면 연결 · 확인 · 넣기를 숨기고 보기만 한다 */
+   읽기 전용이면 연결 · 확인 · 넣기를 숨기고 보기만 한다.
+   칸은 접을 수 있다 — 접으면 좁은 띠에 수 · 결정 바뀜 점만. 접음은 브라우저에 기억하고, 기억이 없으면 좁은 화면(1400px 아래)에서 접고 시작한다 */
 const props = defineProps<{ doc: ProjectDoc; readonly?: boolean }>()
 const emit = defineEmits<{
   (e: 'insert', agenda: Agenda): void
@@ -50,6 +60,15 @@ const choices = computed(() =>
 )
 const full = computed(() => props.doc.agendas.length >= DOC_AGENDAS_MAX)
 
+const COLLAPSE_KEY = 'innoflow.docAgendas.collapsed'
+const narrow = () => window.matchMedia?.('(max-width: 1399px)').matches ?? false
+const stored = recall(COLLAPSE_KEY)
+const collapsed = ref(stored === null ? narrow() : stored === '1')
+function setCollapsed(value: boolean) {
+  collapsed.value = value
+  remember(COLLAPSE_KEY, value ? '1' : '0')
+}
+
 const pickOpen = ref(false)
 const busy = ref(false)
 
@@ -71,6 +90,36 @@ const confirmAll = () => busyWith(() => docs.confirm(props.doc.id))
 
 <template>
   <aside
+    v-if="collapsed"
+    class="flex w-11 shrink-0 flex-col items-center gap-2 border-l border-border bg-muted/50 pt-4"
+    aria-label="연결한 안건"
+    data-doc-agendas-collapsed
+  >
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      title="연결한 안건 펼치기"
+      aria-label="연결한 안건 펼치기"
+      data-doc-agendas-expand
+      @click="setCollapsed(false)"
+    >
+      <PanelRightOpen />
+    </Button>
+    <span
+      class="text-xs text-muted-foreground tabular-nums"
+      :title="`연결한 안건 ${rows.length}건`"
+      >{{ rows.length }}</span
+    >
+    <span
+      v-if="changed.size > 0"
+      class="flex items-center gap-1 text-[11px] font-medium text-status-warn tabular-nums"
+      :title="`결정이 바뀐 안건 ${changed.size}건`"
+    >
+      <span class="size-1.5 rounded-full bg-status-warn" />{{ changed.size }}
+    </span>
+  </aside>
+  <aside
+    v-else
     class="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border bg-muted/50 px-4 pt-4 pb-6"
     aria-label="연결한 안건"
     data-doc-agendas
@@ -101,6 +150,16 @@ const confirmAll = () => busyWith(() => docs.confirm(props.doc.id))
       >
         <Link2 class="size-3.5" />
         안건 연결
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title="연결한 안건 접기"
+        aria-label="연결한 안건 접기"
+        data-doc-agendas-collapse
+        @click="setCollapsed(true)"
+      >
+        <PanelRightClose />
       </Button>
     </div>
 

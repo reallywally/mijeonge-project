@@ -19,7 +19,8 @@ import {
   Baseline,
   Bold,
   Code,
-  Download,
+  FileDown,
+  FileUp,
   Highlighter,
   ImagePlus,
   Italic,
@@ -37,7 +38,6 @@ import {
   TriangleAlert,
   Underline,
   Undo2,
-  Upload,
 } from 'lucide-vue-next'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { DOC_CONTENT_BYTES_MAX, docContentBytes, docContentProblem } from '@/lib/document'
@@ -543,24 +543,26 @@ const ON = 'bg-accent text-foreground'
           />
           <Button
             variant="ghost"
-            size="sm"
+            size="icon-sm"
+            title=".docx 가져오기 — 지금 본문을 바꿉니다"
+            aria-label=".docx 가져오기"
             :disabled="busy || !editor"
             data-doc-text-import
             @click="fileInput?.click()"
           >
-            <Upload class="size-3.5" />
-            .docx 가져오기
+            <FileUp />
           </Button>
         </template>
         <Button
           variant="ghost"
-          size="sm"
+          size="icon-sm"
+          title=".docx 내려받기"
+          aria-label=".docx 내려받기"
           :disabled="busy || !editor"
           data-doc-text-download
           @click="download"
         >
-          <Download class="size-3.5" />
-          .docx 내려받기
+          <FileDown />
         </Button>
       </div>
 

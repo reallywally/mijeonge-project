@@ -80,6 +80,9 @@ async function settle() {
 enableAutoUnmount(afterEach)
 
 beforeEach(async () => {
+  dnd.drags.clear()
+  dnd.drops.clear()
+  dnd.monitors.clear()
   resetMockAuth()
   sessionStorage.clear()
   localStorage.clear()
@@ -96,15 +99,76 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-/** 끌어 옮기기 — jsdom 엔 DragEvent 가 없어 이름만 같은 이벤트를 보낸다(dataTransfer 없이) */
-async function drag(from: HTMLElement | null, to: HTMLElement | null) {
+/* 끌어 옮기기 — jsdom 엔 DragEvent · DataTransfer · elementFromPoint 가 없어 pragmatic-drag-and-drop 이 못 돈다.
+   어댑터를 바꿔 끼워 트리가 등록한 canDrag · getInitialData · canDrop · getData · 모니터를 그대로 부른다 */
+type Fn = (...args: never[]) => unknown
+type Reg = Record<string, Fn | HTMLElement | undefined>
+const dnd = vi.hoisted(() => ({
+  drags: new Map<Element, Record<string, unknown>>(),
+  drops: new Map<Element, Record<string, unknown>>(),
+  monitors: new Set<Record<string, unknown>>(),
+}))
+vi.mock('@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter', () => {
+  const keep = (map: Map<Element, Record<string, unknown>>) => (args: Record<string, unknown>) => {
+    const el = args.element as Element
+    map.set(el, args)
+    return () => {
+      if (map.get(el) === args) map.delete(el)
+    }
+  }
+  return {
+    draggable: keep(dnd.drags),
+    dropTargetForElements: keep(dnd.drops),
+    monitorForElements: (args: Record<string, unknown>) => {
+      dnd.monitors.add(args)
+      return () => dnd.monitors.delete(args)
+    },
+  }
+})
+vi.mock('@atlaskit/pragmatic-drag-and-drop-auto-scroll/element', () => ({
+  autoScrollForElements: () => () => {},
+}))
+
+const call = (reg: Record<string, unknown> | Reg | undefined, name: string, arg?: unknown) =>
+  (reg?.[name] as ((a?: unknown) => unknown) | undefined)?.(arg)
+
+/** 끌기 시작 — 못 끄는 줄이면 null */
+async function startDrag(from: HTMLElement | null) {
   expect(from, '끌 것을 못 찾았다').toBeTruthy()
-  from!.dispatchEvent(new Event('dragstart', { bubbles: true }))
+  const reg = dnd.drags.get(from!)
+  expect(reg, '끌 수 있게 등록되지 않았다').toBeTruthy()
+  if (call(reg, 'canDrag') === false) return null
+  const source = { element: from, data: call(reg, 'getInitialData') as Record<string, unknown> }
+  for (const m of dnd.monitors) call(m, 'onDragStart', { source })
   await flushPromises()
-  expect(to, '놓을 자리를 못 찾았다').toBeTruthy()
-  to!.dispatchEvent(new Event('dragover', { bubbles: true }))
-  to!.dispatchEvent(new Event('drop', { bubbles: true }))
-  await flushPromises()
+  let dropTargets: { element: Element; data: unknown }[] = []
+  const location = () => ({ current: { dropTargets } })
+  return {
+    /** 그 자리 위로 — 안쪽부터 위로 놓을 자리를 모은다 */
+    async over(to: HTMLElement | null) {
+      expect(to, '놓을 자리를 못 찾았다').toBeTruthy()
+      dropTargets = []
+      for (let el: Element | null = to; el; el = el.parentElement) {
+        const t = dnd.drops.get(el)
+        if (t && call(t, 'canDrop', { source, element: el }) !== false)
+          dropTargets.push({ element: el, data: call(t, 'getData', { source, element: el }) })
+      }
+      for (const m of dnd.monitors) call(m, 'onDropTargetChange', { source, location: location() })
+      await flushPromises()
+    },
+    async drop() {
+      for (const m of dnd.monitors) call(m, 'onDrop', { source, location: location() })
+      await flushPromises()
+    },
+  }
+}
+
+async function drag(from: HTMLElement | null, to: () => HTMLElement | null) {
+  const d = await startDrag(from)
+  if (!d) return false
+  await d.over(to())
+  await d.drop()
+  return true
 }
 
 const treeOrder = () =>
@@ -112,7 +176,15 @@ const treeOrder = () =>
     el.dataset.docFolder ? `f:${el.dataset.docFolder}` : `d:${el.dataset.docItem}`,
   )
 const folderRow = (id: string) => $(`[data-doc-folder="${id}"] > div`)
-const docRow = (id: string) => $(`[data-doc-item="${id}"] > button`)
+const docRow = (id: string) => $(`[data-doc-item="${id}"] > div`)
+const selected = (id: string) => $(`[data-doc-item="${id}"]`)!.getAttribute('aria-selected')
+
+/** 오른쪽 클릭 — 트리 메뉴가 뜬다 */
+async function rightClick(el: HTMLElement | null) {
+  expect(el, '누를 줄을 못 찾았다').toBeTruthy()
+  el!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+  await flushPromises()
+}
 
 async function nameFolder(name: string) {
   await type($('[data-doc-folder-name-input]'), name)
@@ -140,7 +212,7 @@ describe('트리', () => {
 
     await click(docRow('doc2'))
     expect(router.currentRoute.value.path).toBe('/documents/doc2')
-    expect($('[data-doc-item="doc2"]')!.dataset.selected).toBe('true')
+    expect(selected('doc2')).toBe('true')
     expect($('[data-doc-empty]')).toBeNull()
   })
 
@@ -148,7 +220,7 @@ describe('트리', () => {
     mockDb().documents.find((d) => d.id === 'doc1')!.folderId = 'df2'
     await mountAt('/documents/doc1')
     expect(treeOrder()).toEqual(['f:df1', 'f:df2', 'd:doc1', 'f:df3', 'd:doc2'])
-    expect($('[data-doc-item="doc1"]')!.dataset.selected).toBe('true')
+    expect(selected('doc1')).toBe('true')
     expect($('[data-doc-crumbs]')!.textContent).toContain('인프라')
     expect($('[data-doc-crumbs]')!.textContent).toContain('서버')
   })
@@ -210,11 +282,11 @@ describe('트리', () => {
   it('지우기는 빈 폴더만 — 아니면 막힌 채 이유', async () => {
     await mountAt('/documents')
     await click($('[data-doc-folder="df1"] [data-doc-folder-menu]'))
-    expect($('[data-doc-folder-remove]')!.hasAttribute('disabled')).toBe(true)
+    expect($('[data-doc-folder-remove]')!.getAttribute('aria-disabled')).toBe('true')
     expect($('[data-doc-folder-remove-reason]')!.textContent).toContain('안에 폴더나 문서가 있어')
 
     await click($('[data-doc-folder="df3"] [data-doc-folder-menu]'))
-    expect($('[data-doc-folder-remove]')!.hasAttribute('disabled')).toBe(false)
+    expect($('[data-doc-folder-remove]')!.hasAttribute('aria-disabled')).toBe(false)
     await click($('[data-doc-folder-remove]'))
     expect(mockDb().docFolders.some((f) => f.id === 'df3')).toBe(false)
     expect(treeOrder()).toEqual(['f:df1', 'd:doc2'])
@@ -222,39 +294,132 @@ describe('트리', () => {
 
   it('끌어 옮기기 — 문서 · 폴더를 폴더 줄에 놓으면 그 안, 최상위에 놓으면 맨 위. 문서의 rev 는 안 오른다', async () => {
     await mountAt('/documents')
-    await drag(docRow('doc2'), folderRow('df3'))
+    await drag(docRow('doc2'), () => folderRow('df3'))
     expect(mockDb().documents.find((d) => d.id === 'doc2')!.folderId).toBe('df3')
     expect(mockDb().documents.find((d) => d.id === 'doc2')!.rev).toBe(2)
     expect(treeOrder()).toEqual(['f:df1', 'f:df3', 'd:doc2'])
     expect($('[data-doc-folder="df3"]')!.dataset.open).toBe('true')
 
-    /* 폴더를 자기 하위로는 안 받는다 */
+    /* 폴더를 자기 하위로는 안 받는다 — 놓을 자리 표시도 안 뜬다 */
     await click($('[data-doc-folder="df1"] [data-doc-folder-toggle]'))
-    await drag(folderRow('df1'), folderRow('df2'))
+    const self = await startDrag(folderRow('df1'))
+    await self!.over(folderRow('df2'))
+    expect($('.ring-primary')).toBeNull()
+    await self!.drop()
     expect(mockDb().docFolders.find((f) => f.id === 'df1')!.parentId).toBeNull()
 
-    await drag(folderRow('df1'), folderRow('df3'))
+    await drag(folderRow('df1'), () => folderRow('df3'))
     expect(mockDb().docFolders.find((f) => f.id === 'df1')!.parentId).toBe('df3')
     expect(treeOrder()).toEqual(['f:df3', 'f:df1', 'f:df2', 'd:doc1', 'd:doc2'])
 
+    /* 문서 줄 위에 놓으면 아무 일도 없다 — 바깥(맨 위)으로 새지 않는다 */
+    await drag(docRow('doc1'), () => docRow('doc2'))
+    expect(mockDb().documents.find((d) => d.id === 'doc1')!.folderId).toBe('df1')
+
     /* 끄는 동안만 '최상위' 자리가 뜬다 */
     expect($('[data-doc-tree-root]')).toBeNull()
-    docRow('doc1')!.dispatchEvent(new Event('dragstart', { bubbles: true }))
-    await flushPromises()
-    await drag(docRow('doc1'), $('[data-doc-tree-root]'))
+    await drag(docRow('doc1'), () => $('[data-doc-tree-root]'))
     expect(mockDb().documents.find((d) => d.id === 'doc1')!.folderId).toBeNull()
     expect(mockDb().documents.find((d) => d.id === 'doc1')!.rev).toBe(3)
     expect($('[data-doc-tree-root]')).toBeNull()
   })
 
-  it('못 고치는 문서는 끌어도 놓을 자리가 없다', async () => {
+  it('끄는 동안 닫힌 폴더 위에 0.6초 머물면 펼친다, 끄는 줄은 흐리다', async () => {
+    await mountAt('/documents')
+    const d = await startDrag(docRow('doc2'))
+    expect(docRow('doc2')!.className).toContain('opacity-40')
+    await d!.over(folderRow('df1'))
+    expect(folderRow('df1')!.className).toContain('ring-primary')
+    await vi.advanceTimersByTimeAsync(500)
+    expect($('[data-doc-folder="df1"]')!.dataset.open).toBe('false')
+    await vi.advanceTimersByTimeAsync(100)
+    expect($('[data-doc-folder="df1"]')!.dataset.open).toBe('true')
+    await d!.over(folderRow('df2'))
+    await d!.drop()
+    expect(mockDb().documents.find((x) => x.id === 'doc2')!.folderId).toBe('df2')
+  })
+
+  it('못 고치는 문서는 끌리지 않는다', async () => {
     writeMockSession('u2')
     await useAuthStore().loadMe()
     await mountAt('/documents')
     await click($('[data-doc-folder="df1"] [data-doc-folder-toggle]'))
-    expect(docRow('doc1')!.getAttribute('draggable')).toBe('false')
-    await drag(docRow('doc1'), folderRow('df3'))
+    expect(await drag(docRow('doc1'), () => folderRow('df3'))).toBe(false)
     expect(mockDb().documents.find((d) => d.id === 'doc1')!.folderId).toBe('df1')
+  })
+
+  it('F2 로 폴더 이름 바꾸기 — Esc 는 그만둔다', async () => {
+    await mountAt('/documents')
+    const li = $('[data-doc-folder="df3"]')!
+    li.focus()
+    li.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))
+    await flushPromises()
+    const input = $('[data-doc-folder-name-input]') as HTMLInputElement
+    expect(input.value).toBe('회의 정리')
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect($('[data-doc-folder-name-input]')).toBeNull()
+
+    li.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))
+    await flushPromises()
+    /* 칸 안의 화살표는 트리로 새지 않는다(접기 · 줄 이동 없음) */
+    $('[data-doc-folder-name-input]')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }),
+    )
+    await nameFolder('회의록')
+    expect(mockDb().docFolders.find((f) => f.id === 'df3')!.name).toBe('회의록')
+    /* 문서 줄의 F2 는 아무것도 안 한다 */
+    $('[data-doc-item="doc2"]')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F2', bubbles: true }),
+    )
+    await flushPromises()
+    expect($('[data-doc-folder-name-input]')).toBeNull()
+  })
+
+  it('오른쪽 클릭 메뉴 — 폴더는 폴더 메뉴, 문서는 열기 · 폴더 옮기기 · 지우기(확인 팝업), 빈 곳은 새 폴더 · 새 문서', async () => {
+    /* 표 문서(Jspreadsheet)는 jsdom 에서 오른쪽 클릭을 가로채다 넘어진다 — 글 문서를 연다 */
+    const { router } = await mountAt('/documents/doc1')
+    await rightClick(folderRow('df3'))
+    expect($('[data-doc-folder-rename]')).toBeTruthy()
+    expect($('[data-doc-folder="df3"]')!.dataset.menu).toBe('open')
+    await click($('[data-doc-folder-rename]'))
+    expect(($('[data-doc-folder-name-input]') as HTMLInputElement).value).toBe('회의 정리')
+    $('[data-doc-folder-name-input]')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    )
+    await flushPromises()
+
+    await rightClick(docRow('doc2'))
+    expect($('[data-doc-folder-rename]')).toBeNull()
+    expect($('[data-doc-item-open]')).toBeTruthy()
+    await click($('[data-doc-item-move]'))
+    await click($('[data-doc-item-move-to="df3"]'))
+    expect(mockDb().documents.find((d) => d.id === 'doc2')!.folderId).toBe('df3')
+    expect(mockDb().documents.find((d) => d.id === 'doc2')!.rev).toBe(2)
+    expect($('[data-doc-folder="df3"]')!.dataset.open).toBe('true')
+
+    await rightClick(docRow('doc1'))
+    await click($('[data-doc-item-remove]'))
+    await click($('[data-doc-remove-confirm]'))
+    expect(mockDb().documents.some((d) => d.id === 'doc1')).toBe(false)
+    expect(treeOrder()).not.toContain('d:doc1')
+    expect(router.currentRoute.value.path).toBe('/documents')
+
+    await rightClick($('[data-doc-tree-area]'))
+    expect($('[data-doc-tree-menu-new-folder]')).toBeTruthy()
+    await click($('[data-doc-tree-menu-new-folder]'))
+    expect($('[data-doc-folder-name-input]')).toBeTruthy()
+  })
+
+  it('남의 문서는 메뉴에 열기만', async () => {
+    writeMockSession('u2')
+    await useAuthStore().loadMe()
+    await mountAt('/documents')
+    await click($('[data-doc-folder="df1"] [data-doc-folder-toggle]'))
+    await click($('[data-doc-item="doc1"] [data-doc-item-menu]'))
+    expect($('[data-doc-item-open]')).toBeTruthy()
+    expect($('[data-doc-item-move]')).toBeNull()
+    expect($('[data-doc-item-remove]')).toBeNull()
   })
 
   it('문서 메뉴의 폴더 고르기 — rev 는 그대로, 머리 경로가 바뀐다', async () => {
@@ -286,7 +451,7 @@ describe('트리', () => {
     expect(($('[data-doc-title]') as HTMLInputElement).value).toBe('결정 모음 표')
     await vi.waitFor(() => expect($('[data-doc-sheet]')).toBeTruthy())
     expect($$('[data-doc-agenda]').map((r) => r.dataset.docAgenda)).toEqual(['t2'])
-    expect($(`[data-doc-item="${id}"]`)!.dataset.selected).toBe('true')
+    expect(selected(id)).toBe('true')
   })
 
   it('폴더 메뉴의 [새 문서] 는 그 폴더에, 맨 위의 [새 문서] 는 최상위에', async () => {
@@ -354,6 +519,20 @@ describe('글 문서', () => {
     expect($$('[data-doc-content] li').map((li) => li.textContent)).toEqual(['하나', '둘'])
     await settle()
     expect(useDocumentStore().byId.doc1.rev).toBe(3)
+  })
+
+  it('연결한 안건 칸은 접을 수 있다 — 좁은 띠에 수 · 결정 바뀜, 접음은 기억한다', async () => {
+    useAgendaStore().updateAgenda('t1', { decision: '데비안' })
+    await mountAt('/documents/doc1')
+    await click($('[data-doc-agendas-collapse]'))
+    expect($('[data-doc-agendas]')).toBeNull()
+    const strip = $('[data-doc-agendas-collapsed]')!
+    expect(strip.textContent).toContain('2')
+    expect(strip.querySelector('[title="결정이 바뀐 안건 1건"]')).toBeTruthy()
+    expect(localStorage.getItem('innoflow.docAgendas.collapsed')).toBe('1')
+    await click($('[data-doc-agendas-expand]'))
+    expect($('[data-doc-agendas]')).toBeTruthy()
+    expect(localStorage.getItem('innoflow.docAgendas.collapsed')).toBe('0')
   })
 
   it('결정이 바뀐 안건은 주황 테두리 · 판 n → m · [확인], [모두 확인] 으로 지운다', async () => {

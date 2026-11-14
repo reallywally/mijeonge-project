@@ -11,7 +11,6 @@ import {
   AlignRight,
   Baseline,
   Bold,
-  Download,
   Ellipsis,
   Italic,
   Loader2,
@@ -22,7 +21,8 @@ import {
   TableCellsSplit,
   TriangleAlert,
   Undo2,
-  Upload,
+  FileDown,
+  FileUp,
 } from 'lucide-vue-next'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -778,24 +778,26 @@ const TOOL = cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'relative
         />
         <Button
           variant="ghost"
-          size="sm"
+          size="icon-sm"
+          title=".xlsx 가져오기 — 지금 시트들을 바꿉니다"
+          aria-label=".xlsx 가져오기"
           :disabled="busy || !ready"
           data-doc-sheet-import
           @click="fileInput?.click()"
         >
-          <Upload class="size-3.5" />
-          .xlsx 가져오기
+          <FileUp />
         </Button>
       </template>
       <Button
         variant="ghost"
-        size="sm"
+        size="icon-sm"
+        title=".xlsx 내려받기"
+        aria-label=".xlsx 내려받기"
         :disabled="busy || !ready"
         data-doc-sheet-download
         @click="download"
       >
-        <Download class="size-3.5" />
-        .xlsx 내려받기
+        <FileDown />
       </Button>
     </div>
 

@@ -18,17 +18,10 @@ import {
 } from 'lucide-vue-next'
 import AgendaDetailDialog from '@/components/app/AgendaDetailDialog.vue'
 import DocAgendaPanel from '@/components/app/DocAgendaPanel.vue'
+import DocRemoveDialog from '@/components/app/DocRemoveDialog.vue'
 import PartChip from '@/components/app/PartChip.vue'
 import PartField from '@/components/app/PartField.vue'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ApiError, messageOf } from '@/api'
 import { dayTime } from '@/lib/date'
@@ -176,18 +169,6 @@ const crumbs = computed(() => {
 })
 
 const removeOpen = ref(false)
-const removing = ref(false)
-async function remove() {
-  if (!doc.value || removing.value) return
-  removing.value = true
-  const name = doc.value.title
-  const ok = await docs.remove(doc.value.id)
-  removing.value = false
-  if (!ok) return
-  removeOpen.value = false
-  toast.success(`'${name}' 문서를 지웠습니다.`)
-  await router.replace(listTo.value)
-}
 
 /* 떠날 때 — 기다리던 저장은 바로 보낸다. 묻지 않는다 */
 onBeforeRouteLeave(() => {
@@ -450,28 +431,10 @@ const agendaOpen = computed({
 
     <AgendaDetailDialog v-model:open="agendaOpen" :agenda-id="agendaDetailId" />
 
-    <Dialog v-model:open="removeOpen">
-      <DialogContent class="sm:max-w-[440px]">
-        <DialogHeader>
-          <DialogTitle class="text-pretty">'{{ doc?.title }}' 문서를 지울까요?</DialogTitle>
-          <DialogDescription class="text-pretty"
-            >본문과 안건 연결이 함께 지워지고 되돌릴 수 없습니다. 안건은 그대로
-            남습니다.</DialogDescription
-          >
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" @click="removeOpen = false">취소</Button>
-          <Button
-            variant="destructive"
-            :disabled="removing"
-            data-doc-remove-confirm
-            @click="remove"
-          >
-            <Loader2 v-if="removing" class="animate-spin" />
-            지우기
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <DocRemoveDialog
+      v-model:open="removeOpen"
+      :document-id="documentId"
+      @removed="router.replace(listTo)"
+    />
   </div>
 </template>

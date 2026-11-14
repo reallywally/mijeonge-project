@@ -101,34 +101,32 @@ export function folderOptions(
 
 /* ── 트리 ─────────────────────────────────────────────── */
 
-export interface DocTreeFolderRow {
+export interface DocTreeFolderNode {
   type: 'folder'
+  key: string
   folder: DocFolder
-  depth: number
   /** 든 문서 수 — 하위까지, 보이는 문서로 센다 */
   count: number
-  open: boolean
+  children: DocTreeNode[]
 }
 
-export interface DocTreeDocRow {
+export interface DocTreeDocNode {
   type: 'doc'
+  key: string
   doc: ProjectDocSummary
-  depth: number
 }
 
-export type DocTreeRow = DocTreeFolderRow | DocTreeDocRow
+export type DocTreeNode = DocTreeFolderNode | DocTreeDocNode
 
 /**
- * 트리를 줄로 편다 — 폴더 먼저 이름순, 그다음 문서 제목순(한국어 정렬). 맨 위 줄이 depth 0.
- * filtering 이면 맞는 문서가 없는 폴더는 숨기고, 남은 폴더는 다 펼친다. 아니면 opened 에 든 폴더만 펼친다.
- * 없는 폴더를 가리키는 문서는 맨 위에 둔다
+ * 트리를 세운다 — 폴더 먼저 이름순, 그다음 문서 제목순(한국어 정렬). 키는 폴더 `f:id` · 문서 `d:id`.
+ * filtering 이면 맞는 문서가 없는 폴더는 뺀다. 없는 폴더를 가리키는 문서 · 폴더는 맨 위에 둔다
  */
-export function docTreeRows(
+export function docTree(
   folders: readonly DocFolder[],
   docs: readonly ProjectDocSummary[],
-  opened: ReadonlySet<string>,
   filtering: boolean,
-): DocTreeRow[] {
+): DocTreeNode[] {
   const known = new Set(folders.map((f) => f.id))
   const docsIn = new Map<string | null, ProjectDocSummary[]>()
   for (const d of docs) {
@@ -153,21 +151,66 @@ export function docTreeRows(
     return n
   }
 
-  const out: DocTreeRow[] = []
   const walked = new Set<string>()
-  const walk = (parentId: string | null, depth: number) => {
+  const build = (parentId: string | null): DocTreeNode[] => {
+    const out: DocTreeNode[] = []
     const kids = [...(kidsOf.get(parentId) ?? [])]
       .filter((f) => !walked.has(f.id) && (!filtering || countOf(f.id) > 0))
       .sort((a, b) => koCompare(a.name, b.name))
     for (const f of kids) {
       walked.add(f.id)
-      const open = filtering || opened.has(f.id)
-      out.push({ type: 'folder', folder: f, depth, count: countOf(f.id), open })
-      if (open) walk(f.id, depth + 1)
+      out.push({
+        type: 'folder',
+        key: `f:${f.id}`,
+        folder: f,
+        count: countOf(f.id),
+        children: build(f.id),
+      })
     }
     const mine = [...(docsIn.get(parentId) ?? [])].sort((a, b) => koCompare(a.title, b.title))
-    for (const d of mine) out.push({ type: 'doc', doc: d, depth })
+    for (const d of mine) out.push({ type: 'doc', key: `d:${d.id}`, doc: d })
+    return out
   }
-  walk(null, 0)
+  return build(null)
+}
+
+export interface DocTreeFolderRow {
+  type: 'folder'
+  folder: DocFolder
+  depth: number
+  count: number
+  open: boolean
+}
+
+export interface DocTreeDocRow {
+  type: 'doc'
+  doc: ProjectDocSummary
+  depth: number
+}
+
+export type DocTreeRow = DocTreeFolderRow | DocTreeDocRow
+
+/**
+ * 트리를 줄로 편다 — 맨 위 줄이 depth 0. filtering 이면 남은 폴더는 다 펼친다. 아니면 opened 에 든 폴더만 펼친다
+ */
+export function docTreeRows(
+  folders: readonly DocFolder[],
+  docs: readonly ProjectDocSummary[],
+  opened: ReadonlySet<string>,
+  filtering: boolean,
+): DocTreeRow[] {
+  const out: DocTreeRow[] = []
+  const walk = (nodes: DocTreeNode[], depth: number) => {
+    for (const n of nodes) {
+      if (n.type === 'doc') {
+        out.push({ type: 'doc', doc: n.doc, depth })
+        continue
+      }
+      const open = filtering || opened.has(n.folder.id)
+      out.push({ type: 'folder', folder: n.folder, depth, count: n.count, open })
+      if (open) walk(n.children, depth + 1)
+    }
+  }
+  walk(docTree(folders, docs, filtering), 0)
   return out
 }

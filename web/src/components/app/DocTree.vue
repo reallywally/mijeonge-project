@@ -1,41 +1,53 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Directive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import {
+  dropTargetForElements,
+  draggable,
+  monitorForElements,
+} from '@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter'
+import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element'
+import { TreeItem, TreeRoot, type TreeItemSelectEvent, type TreeItemToggleEvent } from 'reka-ui'
+import {
   ChevronRight,
   Ellipsis,
+  ExternalLink,
   FilePlus,
   FileSpreadsheet,
   FileText,
+  Files,
   Folder,
+  FolderInput,
   FolderOpen,
   FolderPlus,
   FolderRoot,
   Loader2,
   Pencil,
-  Plus,
   Search,
   Trash2,
   X,
 } from 'lucide-vue-next'
+import DocRemoveDialog from '@/components/app/DocRemoveDialog.vue'
 import PartScopeToggle from '@/components/app/PartScopeToggle.vue'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import {
   DOC_FOLDER_DEPTH_MAX,
   DOC_FOLDER_NAME_MAX,
-  docTreeRows,
+  docTree,
   folderChain,
-  type DocTreeRow,
+  folderOptions,
+  type DocTreeNode,
 } from '@/lib/docFolder'
 import { DOC_KIND_LABEL } from '@/lib/document'
 import { recall, remember } from '@/lib/storage'
@@ -43,7 +55,7 @@ import { cn } from '@/lib/utils'
 import { useAgendaStore } from '@/stores/agenda'
 import { useDataStore } from '@/stores/data'
 import { useDocumentStore } from '@/stores/document'
-import type { DocFolder, DocKind } from '@/types/domain'
+import type { DocFolder, DocKind, ProjectDocSummary } from '@/types/domain'
 
 /* 문서 트리 — 문서 화면 왼쪽. 폴더 먼저 이름순, 그다음 문서 제목순. 검색 · 종류 · ?agendaId= 로 거르는 중이면
    맞는 문서와 그 위 폴더만 펼쳐 보인다. 볼 파트는 문서만 거르고 폴더는 그대로 둔다(빈 폴더도 만들 자리라서).
@@ -59,6 +71,11 @@ const agendaStore = useAgendaStore()
 
 const query = ref('')
 const kindFilter = ref<'all' | DocKind>('all')
+const KIND_FILTERS = [
+  { value: 'all', label: '모든 종류', icon: Files },
+  { value: 'text', label: DOC_KIND_LABEL.text, icon: FileText },
+  { value: 'sheet', label: DOC_KIND_LABEL.sheet, icon: FileSpreadsheet },
+] as const
 const agendaId = computed(() =>
   typeof route.query.agendaId === 'string' && route.query.agendaId ? route.query.agendaId : null,
 )
@@ -128,8 +145,13 @@ watch(
 )
 
 const KIND_ICON = { text: FileText, sheet: FileSpreadsheet }
+/* 글은 작업 색(파랑), 표는 완료 색(초록) — 다크 모드는 토큰이 맞춘다 */
+const KIND_COLOR = { text: 'text-kind-task', sheet: 'text-status-done' }
 
-/* ── 줄 — 트리 + 새 폴더 · 이름 칸 ── */
+/* ── 노드 — reka Tree 가 펼친 것만 줄로 편다. 새 폴더 칸도 노드 하나 ── */
+
+type NewNode = { type: 'new'; key: 'new' }
+type Node = DocTreeNode | NewNode
 
 type Editing = { mode: 'new'; parentId: string | null } | { mode: 'rename'; folderId: string }
 const editing = ref<Editing | null>(null)
@@ -142,41 +164,115 @@ const setNameInput = (el: unknown) => {
   nameInput.value = el instanceof HTMLInputElement ? el : null
 }
 
-type Row = DocTreeRow | { type: 'new'; depth: number }
+function findFolderNode(nodes: Node[], folderId: string): DocTreeNode | undefined {
+  for (const n of nodes) {
+    if (n.type !== 'folder') continue
+    if (n.folder.id === folderId) return n
+    const inner = findFolderNode(n.children, folderId)
+    if (inner) return inner
+  }
+  return undefined
+}
 
-const rows = computed<Row[]>(() => {
-  const tree: Row[] = docTreeRows(docs.folders, shownDocs.value, opened.value, filtering.value)
+const nodes = computed<Node[]>(() => {
+  const tree: Node[] = docTree(docs.folders, shownDocs.value, filtering.value)
   const e = editing.value
   if (e?.mode !== 'new') return tree
-  if (e.parentId === null) return [{ type: 'new', depth: 0 }, ...tree]
-  const at = tree.findIndex((r) => r.type === 'folder' && r.folder.id === e.parentId)
-  if (at < 0) return [{ type: 'new', depth: 0 }, ...tree]
-  return [
-    ...tree.slice(0, at + 1),
-    { type: 'new', depth: tree[at].depth + 1 },
-    ...tree.slice(at + 1),
-  ]
+  const blank: NewNode = { type: 'new', key: 'new' }
+  const parent = e.parentId ? findFolderNode(tree, e.parentId) : undefined
+  if (parent?.type === 'folder') (parent.children as Node[]).unshift(blank)
+  else tree.unshift(blank)
+  return tree
 })
 
-const rowKey = (r: Row) =>
-  r.type === 'folder' ? `f:${r.folder.id}` : r.type === 'doc' ? `d:${r.doc.id}` : 'new'
+const getKey = (n: Node) => n?.key ?? ''
+/* 빈 폴더는 잎으로 — 펼침 화살표를 안 그린다 */
+const getChildren = (n: Node) =>
+  n?.type === 'folder' && n.children.length ? (n.children as Node[]) : undefined
 
-const indent = (depth: number) => ({ paddingLeft: `${8 + depth * 16}px` })
+/** 펼친 폴더 — 거르는 중이면 남은 폴더 전부 */
+const expandedKeys = computed(() => {
+  if (!filtering.value) return [...opened.value].map((id) => `f:${id}`)
+  const keys: string[] = []
+  const walk = (list: Node[]) => {
+    for (const n of list) {
+      if (n.type !== 'folder') continue
+      keys.push(n.key)
+      walk(n.children)
+    }
+  }
+  walk(nodes.value)
+  return keys
+})
+
+const selectedNode = computed<Node | undefined>(() => {
+  const key = `d:${props.selectedId}`
+  const walk = (list: Node[]): Node | undefined => {
+    for (const n of list) {
+      if (n.key === key) return n
+      if (n.type === 'folder') {
+        const inner = walk(n.children)
+        if (inner) return inner
+      }
+    }
+    return undefined
+  }
+  return props.selectedId ? walk(nodes.value) : undefined
+})
+
+const visibleCount = computed(() => nodes.value.filter((n) => n.type !== 'new').length)
+
+/* 줄 — 단계마다 14px. 세로 안내선은 위 단계의 화살표 가운데에 */
+const INDENT = 14
+const PAD = 6
+const rowPad = (level: number) => ({ paddingLeft: `${PAD + (level - 1) * INDENT}px` })
+const guideAt = (i: number) => ({ left: `${PAD + (i - 1) * INDENT + 7.5}px` })
+
+/* reka 의 고르기 · 펼치기는 막고 우리가 한다 — 문서는 연다, 폴더는 펼침(기억 · 거르는 중이면 고정) */
+function onSelect(ev: TreeItemSelectEvent<Node>, node: Node) {
+  ev.preventDefault()
+  if (node.type === 'doc') openDoc(node.doc.id)
+  else if (node.type === 'folder' && ev.detail.originalEvent.type === 'keydown')
+    toggle(node.folder.id)
+}
+function onToggle(ev: TreeItemToggleEvent<Node>, node: Node) {
+  ev.preventDefault()
+  if (node.type === 'folder') toggle(node.folder.id)
+}
+
+function onItemKeydown(e: KeyboardEvent, node: Node) {
+  if (e.target !== e.currentTarget) return
+  if (e.key === 'F2' && node.type === 'folder') {
+    e.preventDefault()
+    void startEdit({ mode: 'rename', folderId: node.folder.id }, node.folder.name)
+  }
+}
+
+/* ── 새 폴더 · 이름 칸 ── */
 
 async function startEdit(next: Editing, name = '') {
-  menuFor.value = null
+  menuOpen.value = false
   editing.value = next
   nameDraft.value = name
   nameProblem.value = null
   if (next.mode === 'new' && next.parentId) setOpen([next.parentId], true)
+  /* 메뉴가 닫히며 포커스 가두기를 풀 때까지 한 번 더 기다린다 */
+  await nextTick()
   await nextTick()
   nameInput.value?.focus()
   nameInput.value?.select()
 }
 
 function cancelEdit() {
+  const e = editing.value
   editing.value = null
   nameProblem.value = null
+  if (e?.mode === 'rename') void focusRow(`f:${e.folderId}`)
+}
+
+async function focusRow(key: string) {
+  await nextTick()
+  scrollEl.value?.querySelector<HTMLElement>(`[data-tree-key="${key}"]`)?.focus()
 }
 
 async function submitName() {
@@ -195,6 +291,20 @@ async function submitName() {
   }
   editing.value = null
   nameProblem.value = null
+  void focusRow(`f:${got.id}`)
+}
+
+/* 칸 안의 키는 트리로 올리지 않는다 — 화살표 · 글자가 줄 이동 · 접기로 새지 않게 */
+function onNameKeydown(e: KeyboardEvent) {
+  e.stopPropagation()
+  if (e.isComposing) return
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    void submitName()
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    cancelEdit()
+  }
 }
 
 function onNameBlur() {
@@ -204,14 +314,79 @@ function onNameBlur() {
   else void submitName()
 }
 
-/* ── 폴더 메뉴(…) ── */
+const renaming = (node: Node) =>
+  node.type === 'folder' &&
+  editing.value?.mode === 'rename' &&
+  editing.value.folderId === node.folder.id
 
-const menuFor = ref<string | null>(null)
-/* 다른 폴더의 메뉴를 열면 앞 메뉴의 닫힘이 뒤에 온다 — 제 것일 때만 비운다 */
-function setMenu(folderId: string, open: boolean) {
-  if (open) menuFor.value = folderId
-  else if (menuFor.value === folderId) menuFor.value = null
+/* ── 메뉴 — 오른쪽 클릭과 (…) 이 같은 메뉴 하나를 띄운다 ── */
+
+type MenuTarget = { type: 'folder'; folder: DocFolder } | { type: 'doc'; doc: ProjectDocSummary }
+const menuOpen = ref(false)
+const menuTarget = ref<MenuTarget | null>(null)
+const menuKey = computed(() => {
+  const t = menuTarget.value
+  if (!menuOpen.value || !t) return null
+  return t.type === 'folder' ? `f:${t.folder.id}` : `d:${t.doc.id}`
+})
+
+/* 줄의 contextmenu 가 트리 전체의 트리거보다 먼저 온다 — 무엇에 띄울지 여기서 정한다 */
+function aimMenu(node: Node | null) {
+  if (node?.type === 'folder') menuTarget.value = { type: 'folder', folder: node.folder }
+  else if (node?.type === 'doc') menuTarget.value = { type: 'doc', doc: node.doc }
+  else menuTarget.value = null
 }
+
+/** 줄 밖(빈 곳)이면 트리 메뉴 — 새 폴더 · 새 문서 */
+function onAreaContextmenu(e: MouseEvent) {
+  if (!(e.target instanceof Element) || !e.target.closest('[data-tree-key]')) aimMenu(null)
+}
+
+const menuFolder = computed(() =>
+  menuTarget.value?.type === 'folder' ? menuTarget.value.folder : null,
+)
+const menuDoc = computed(() => (menuTarget.value?.type === 'doc' ? menuTarget.value.doc : null))
+
+/* 메뉴 항목 — 템플릿 핸들러 안에선 좁힌 타입이 풀려서 여기서 다시 본다 */
+const menuAct = {
+  newDoc() {
+    if (menuFolder.value) emit('new-doc', menuFolder.value.id)
+  },
+  newSub() {
+    if (menuFolder.value) void startEdit({ mode: 'new', parentId: menuFolder.value.id })
+  },
+  rename() {
+    const f = menuFolder.value
+    if (f) void startEdit({ mode: 'rename', folderId: f.id }, f.name)
+  },
+  removeFolder() {
+    if (menuFolder.value) void removeFolder(menuFolder.value)
+  },
+  open() {
+    if (menuDoc.value) openDoc(menuDoc.value.id)
+  },
+  move(folderId: string | null) {
+    if (menuDoc.value) void moveDoc(menuDoc.value, folderId)
+  },
+  removeDoc() {
+    if (menuDoc.value) askRemoveDoc(menuDoc.value)
+  },
+}
+
+/** (…) — 단추 아래에 같은 메뉴를 띄운다 */
+function openMenuAt(e: MouseEvent) {
+  const btn = e.currentTarget as HTMLElement
+  const r = btn.getBoundingClientRect()
+  btn.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: r.left,
+      clientY: r.bottom + 4,
+    }),
+  )
+}
+
 const depthOf = (folderId: string) => folderChain(docs.folders, folderId).length
 
 function removeBlock(folder: DocFolder): string | null {
@@ -222,70 +397,185 @@ function removeBlock(folder: DocFolder): string | null {
 
 async function removeFolder(folder: DocFolder) {
   if (removeBlock(folder)) return
-  menuFor.value = null
   if (await docs.removeFolder(folder.id)) {
     setOpen([folder.id], false)
     toast.success(`'${folder.name}' 폴더를 지웠습니다.`)
   }
 }
 
-function newDocIn(folderId: string) {
-  menuFor.value = null
-  emit('new-doc', folderId)
+const folderChoices = computed(() => folderOptions(docs.folders))
+
+async function moveDoc(doc: ProjectDocSummary, folderId: string | null) {
+  if (doc.folderId === folderId) return
+  if ((await docs.setFolder(doc.id, folderId)) && folderId) setOpen([folderId], true)
 }
 
-/* ── 끌어 옮기기 — 문서 · 폴더를 폴더 줄이나 '최상위' 에 놓는다. 못 옮기는 곳은 놓을 자리로 안 받는다 ── */
+const removeDocId = ref<string | null>(null)
+const removeDocOpen = ref(false)
+function askRemoveDoc(doc: ProjectDocSummary) {
+  removeDocId.value = doc.id
+  removeDocOpen.value = true
+}
+function onDocRemoved(id: string) {
+  if (id === props.selectedId) void router.replace({ path: '/documents', query: route.query })
+}
 
-type Dragging = { type: 'doc' | 'folder'; id: string }
-const dragging = ref<Dragging | null>(null)
-const dropAt = ref<string | null>(null)
+/* ── 끌어 옮기기 (pragmatic-drag-and-drop) — 폴더 줄에 놓으면 그 안, 빈 곳 · '최상위' 는 맨 위.
+   문서 줄 · 새 폴더 칸도 놓을 자리로 등록해 둔다 — 안 그러면 그 위에서 놓은 것이 바깥(맨 위)으로 샌다 ── */
+
+type DragItem = { type: 'doc' | 'folder'; id: string }
+const DRAG_KEY = 'docTreeItem'
+const TARGET_KEY = 'docTreeTarget'
 const ROOT = 'root'
 
-function canDrop(target: string | null): boolean {
-  const d = dragging.value
-  if (!d) return false
-  if (d.type === 'doc') {
-    const doc = docs.list.find((x) => x.id === d.id)
+const dragging = ref<DragItem | null>(null)
+const dropAt = ref<string | null>(null)
+
+function dragItemOf(data: Record<string | symbol, unknown>): DragItem | null {
+  const v = data[DRAG_KEY] as Partial<DragItem> | undefined
+  return v && (v.type === 'doc' || v.type === 'folder') && typeof v.id === 'string'
+    ? { type: v.type, id: v.id }
+    : null
+}
+/** 놓을 자리 — 폴더 id, 맨 위는 null, 놓을 자리가 아니면 undefined */
+function targetOf(data: Record<string | symbol, unknown>): string | null | undefined {
+  if (!(TARGET_KEY in data)) return undefined
+  const v = data[TARGET_KEY]
+  return typeof v === 'string' ? v : null
+}
+
+function canDrop(item: DragItem, target: string | null): boolean {
+  if (item.type === 'doc') {
+    const doc = docs.list.find((x) => x.id === item.id)
     return !!doc && doc.folderId !== target && docs.canEdit(doc)
   }
-  const folder = docs.folders.find((f) => f.id === d.id)
-  return !!folder && folder.parentId !== target && docs.folderMoveBlock(d.id, target) === null
+  const folder = docs.folders.find((f) => f.id === item.id)
+  return !!folder && folder.parentId !== target && docs.folderMoveBlock(item.id, target) === null
 }
 
-function onDragStart(e: DragEvent, item: Dragging) {
-  dragging.value = item
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', item.id)
-  }
+function canDrag(node: Node | undefined): boolean {
+  if (!node || renaming(node)) return false
+  if (node.type === 'doc') return docs.canEdit(node.doc)
+  return node.type === 'folder'
 }
 
-function onDragOver(e: DragEvent, target: string | null) {
-  if (!canDrop(target)) return
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  dropAt.value = target ?? ROOT
+function dragItemFor(node: Node): DragItem | null {
+  if (node.type === 'doc') return { type: 'doc', id: node.doc.id }
+  if (node.type === 'folder') return { type: 'folder', id: node.folder.id }
+  return null
 }
 
-function onDragLeave(target: string | null) {
-  if (dropAt.value === (target ?? ROOT)) dropAt.value = null
+/* 끄는 동안 닫힌 폴더 위에 머물면 펼친다 */
+const HOVER_OPEN_MS = 600
+let hoverTimer: ReturnType<typeof setTimeout> | undefined
+let hoverFolder: string | null = null
+function hoverOpen(folderId: string | null) {
+  if (hoverFolder === folderId) return
+  clearTimeout(hoverTimer)
+  hoverFolder = folderId
+  if (!folderId || filtering.value || opened.value.has(folderId)) return
+  hoverTimer = setTimeout(() => setOpen([folderId], true), HOVER_OPEN_MS)
 }
 
-function onDragEnd() {
-  dragging.value = null
-  dropAt.value = null
-}
-
-async function onDrop(e: DragEvent, target: string | null) {
-  const d = dragging.value
-  const ok = canDrop(target)
-  onDragEnd()
-  if (!d || !ok) return
-  e.preventDefault()
-  if (d.type === 'doc') await docs.setFolder(d.id, target)
-  else await docs.moveFolder(d.id, target)
+async function drop(item: DragItem, target: string | null) {
+  if (!canDrop(item, target)) return
+  if (item.type === 'doc') await docs.setFolder(item.id, target)
+  else await docs.moveFolder(item.id, target)
   if (target) setOpen([target], true)
 }
+
+/* 줄마다 붙인다 — 붙인 뒤엔 줄의 지금 노드를 읽는다(노드는 그릴 때마다 새로 생긴다) */
+const rowNode = new WeakMap<HTMLElement, Node>()
+const rowCleanup = new WeakMap<HTMLElement, () => void>()
+const vTreeDnd: Directive<HTMLElement, Node> = {
+  mounted(el, binding) {
+    rowNode.set(el, binding.value)
+    const offDrag = draggable({
+      element: el,
+      canDrag: () => canDrag(rowNode.get(el)),
+      getInitialData: () => {
+        const node = rowNode.get(el)
+        const item = node ? dragItemFor(node) : null
+        return item ? { [DRAG_KEY]: item } : {}
+      },
+    })
+    const offDrop = dropTargetForElements({
+      element: el,
+      getData: () => {
+        const node = rowNode.get(el)
+        return node?.type === 'folder' ? { [TARGET_KEY]: node.folder.id } : {}
+      },
+      canDrop: ({ source }) => dragItemOf(source.data) !== null,
+    })
+    /* 못 끄는 줄(남의 문서 · 이름 칸)은 draggable 을 끈다 — 칸 안의 글자 고르기가 끌기로 바뀌지 않게 */
+    el.draggable = canDrag(binding.value)
+    rowCleanup.set(el, () => {
+      offDrag()
+      offDrop()
+    })
+  },
+  updated(el, binding) {
+    rowNode.set(el, binding.value)
+    el.draggable = canDrag(binding.value)
+  },
+  unmounted(el) {
+    rowCleanup.get(el)?.()
+    rowCleanup.delete(el)
+  },
+}
+
+const scrollEl = ref<HTMLElement | null>(null)
+let offArea: (() => void) | null = null
+onMounted(() => {
+  const el = scrollEl.value
+  if (!el) return
+  const offs = [
+    dropTargetForElements({
+      element: el,
+      getData: () => ({ [TARGET_KEY]: null }),
+      canDrop: ({ source }) => dragItemOf(source.data) !== null,
+    }),
+    autoScrollForElements({
+      element: el,
+      canScroll: ({ source }) => dragItemOf(source.data) !== null,
+    }),
+    monitorForElements({
+      canMonitor: ({ source }) => dragItemOf(source.data) !== null,
+      onDragStart: ({ source }) => {
+        dragging.value = dragItemOf(source.data)
+      },
+      onDropTargetChange: ({ source, location }) => {
+        const item = dragItemOf(source.data)
+        const top = location.current.dropTargets[0]
+        const target = top ? targetOf(top.data) : undefined
+        dropAt.value =
+          item && target !== undefined && canDrop(item, target) ? (target ?? ROOT) : null
+        hoverOpen(typeof target === 'string' && target !== item?.id ? target : null)
+      },
+      onDrop: ({ source, location }) => {
+        const item = dragItemOf(source.data)
+        const top = location.current.dropTargets[0]
+        const target = top ? targetOf(top.data) : undefined
+        dragging.value = null
+        dropAt.value = null
+        hoverOpen(null)
+        if (item && target !== undefined) void drop(item, target)
+      },
+    }),
+  ]
+  offArea = () => offs.forEach((off) => off())
+})
+onBeforeUnmount(() => {
+  offArea?.()
+  clearTimeout(hoverTimer)
+})
+
+const isDragged = (node: Node) =>
+  !!dragging.value &&
+  ((node.type === 'doc' && dragging.value.type === 'doc' && dragging.value.id === node.doc.id) ||
+    (node.type === 'folder' &&
+      dragging.value.type === 'folder' &&
+      dragging.value.id === node.folder.id))
 
 function openDoc(id: string) {
   void router.push({ path: `/documents/${id}`, query: route.query })
@@ -304,51 +594,72 @@ function clearAgenda() {
     aria-label="문서 트리"
     data-doc-tree
   >
-    <div class="flex flex-col gap-2 border-b border-border px-3 py-3">
-      <div class="flex items-center gap-1.5">
-        <span class="text-sm font-semibold">문서</span>
+    <div class="flex flex-col gap-1.5 px-2 pt-2.5 pb-2">
+      <div class="flex h-7 items-center gap-1 pl-1.5">
+        <span class="text-[13px] font-semibold">문서</span>
         <span class="text-xs text-muted-foreground tabular-nums">{{ shownDocs.length }}</span>
         <div class="grow" />
-        <Button
-          variant="ghost"
-          size="icon"
-          class="size-7"
+        <button
+          type="button"
+          class="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
           aria-label="새 폴더"
           title="새 폴더"
           data-doc-folder-new
           @click="startEdit({ mode: 'new', parentId: null })"
         >
           <FolderPlus class="size-4" />
-        </Button>
-        <Button size="sm" class="h-7" data-doc-new @click="emit('new-doc', null)">
-          <Plus class="size-3.5" />
-          새 문서
-        </Button>
+        </button>
+        <button
+          type="button"
+          class="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
+          aria-label="새 문서"
+          title="새 문서"
+          data-doc-new
+          @click="emit('new-doc', null)"
+        >
+          <FilePlus class="size-4" />
+        </button>
       </div>
       <label class="relative block">
         <Search
-          class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+          class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
         />
-        <Input
+        <input
           v-model="query"
+          type="search"
           placeholder="문서 제목 찾기"
-          class="pl-8"
           aria-label="문서 제목 찾기"
+          class="h-7 w-full rounded-md border border-input bg-card pr-2 pl-7 text-[13px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:outline-none"
           data-doc-search
         />
       </label>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
         <PartScopeToggle area="document" />
-        <Select v-model="kindFilter">
-          <SelectTrigger class="h-7 w-[96px] shrink-0 text-xs" aria-label="종류 거르기">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">모든 종류</SelectItem>
-            <SelectItem value="text">{{ DOC_KIND_LABEL.text }}</SelectItem>
-            <SelectItem value="sheet">{{ DOC_KIND_LABEL.sheet }}</SelectItem>
-          </SelectContent>
-        </Select>
+        <div class="grow" />
+        <div
+          class="flex h-7 items-center gap-px rounded-md border border-input bg-card p-0.5"
+          role="group"
+          aria-label="종류 거르기"
+        >
+          <button
+            v-for="k in KIND_FILTERS"
+            :key="k.value"
+            type="button"
+            :aria-pressed="kindFilter === k.value"
+            :aria-label="k.label"
+            :title="k.label"
+            :data-doc-kind-filter="k.value"
+            :class="
+              cn(
+                'flex h-full w-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none',
+                kindFilter === k.value && 'bg-accent text-foreground',
+              )
+            "
+            @click="kindFilter = k.value"
+          >
+            <component :is="k.icon" class="size-3.5" />
+          </button>
+        </div>
       </div>
       <p
         v-if="agendaId"
@@ -368,278 +679,364 @@ function clearAgenda() {
       </p>
     </div>
 
-    <div class="min-h-0 grow overflow-y-auto px-2 py-2">
-      <p v-if="docs.error" class="px-2 py-3 text-sm text-destructive" role="alert">
-        {{ docs.error }}
-      </p>
-      <div
-        v-else-if="!docs.loaded && docs.loading"
-        class="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground"
-      >
-        <Loader2 class="size-4 animate-spin" />
-        문서를 받는 중입니다.
-      </div>
-
-      <template v-else>
+    <ContextMenu v-model:open="menuOpen">
+      <ContextMenuTrigger as-child>
         <div
-          v-if="dragging"
-          class="mb-1 flex h-8 items-center gap-1.5 rounded-md border border-dashed px-2 text-xs text-muted-foreground"
-          :class="dropAt === ROOT ? 'border-primary bg-brand-soft text-primary' : 'border-border'"
-          data-doc-tree-root
-          @dragover="onDragOver($event, null)"
-          @dragleave="onDragLeave(null)"
-          @drop="onDrop($event, null)"
+          ref="scrollEl"
+          class="min-h-0 grow overflow-y-auto border-t border-border px-1.5 pt-1.5 pb-6"
+          data-doc-tree-area
+          @contextmenu="onAreaContextmenu"
         >
-          <FolderRoot class="size-3.5" />
-          최상위로 옮기기
-        </div>
+          <p v-if="docs.error" class="px-2 py-3 text-[13px] text-destructive" role="alert">
+            {{ docs.error }}
+          </p>
+          <div
+            v-else-if="!docs.loaded && docs.loading"
+            class="flex items-center gap-2 px-2 py-3 text-[13px] text-muted-foreground"
+          >
+            <Loader2 class="size-4 animate-spin" />
+            문서를 받는 중입니다.
+          </div>
 
-        <ul role="tree" aria-label="폴더 · 문서" class="flex flex-col gap-px">
-          <template v-for="r in rows" :key="rowKey(r)">
-            <li v-if="r.type === 'new'" role="none" class="flex flex-col gap-1 py-0.5">
-              <div class="flex items-center gap-1.5 pr-1" :style="indent(r.depth)">
-                <span class="size-4 shrink-0" />
-                <Folder class="size-4 shrink-0 text-muted-foreground" />
-                <input
-                  :ref="setNameInput"
-                  v-model="nameDraft"
-                  :maxlength="DOC_FOLDER_NAME_MAX"
-                  placeholder="새 폴더 이름"
-                  aria-label="새 폴더 이름"
-                  class="h-7 min-w-0 grow rounded-md border border-input bg-card px-2 text-[13px] outline-none focus-visible:border-ring"
-                  data-doc-folder-name-input
-                  @input="nameProblem = null"
-                  @keydown.enter.prevent="submitName"
-                  @keydown.esc.prevent="cancelEdit"
-                  @blur="onNameBlur"
-                />
-              </div>
-              <p
-                v-if="nameProblem"
-                class="pr-1 text-xs text-destructive"
-                :style="indent(r.depth + 2)"
-                role="alert"
-                data-doc-folder-problem
-              >
-                {{ nameProblem }}
-              </p>
-            </li>
-
-            <li
-              v-else-if="r.type === 'folder'"
-              role="treeitem"
-              :aria-level="r.depth + 1"
-              :aria-expanded="r.open"
-              :data-doc-folder="r.folder.id"
-              :data-open="r.open"
-              class="flex flex-col gap-1"
+          <template v-else>
+            <div
+              v-if="dragging"
+              :class="
+                cn(
+                  'mb-1 flex h-7 items-center gap-1.5 rounded-md border border-dashed border-border px-2 text-xs text-muted-foreground',
+                  dropAt === ROOT && 'border-primary bg-brand-soft text-primary',
+                )
+              "
+              data-doc-tree-root
             >
-              <div
-                :class="
-                  cn(
-                    'group flex h-8 items-center gap-1 rounded-md pr-1 text-sm hover:bg-accent',
-                    dropAt === r.folder.id && 'bg-brand-soft ring-1 ring-primary/50',
-                  )
-                "
-                :style="indent(r.depth)"
-                :draggable="editing?.mode !== 'rename' || editing.folderId !== r.folder.id"
-                @dragstart="onDragStart($event, { type: 'folder', id: r.folder.id })"
-                @dragend="onDragEnd"
-                @dragover="onDragOver($event, r.folder.id)"
-                @dragleave="onDragLeave(r.folder.id)"
-                @drop="onDrop($event, r.folder.id)"
-              >
-                <button
-                  type="button"
-                  class="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground"
-                  :aria-label="r.open ? `${r.folder.name} 접기` : `${r.folder.name} 펼치기`"
-                  data-doc-folder-toggle
-                  @click="toggle(r.folder.id)"
-                >
-                  <ChevronRight
-                    class="size-3.5 transition-transform"
-                    :class="r.open && 'rotate-90'"
-                  />
-                </button>
-                <component
-                  :is="r.open ? FolderOpen : Folder"
-                  class="size-4 shrink-0 text-muted-foreground"
-                />
-                <input
-                  v-if="editing?.mode === 'rename' && editing.folderId === r.folder.id"
-                  :ref="setNameInput"
-                  v-model="nameDraft"
-                  :maxlength="DOC_FOLDER_NAME_MAX"
-                  aria-label="폴더 이름"
-                  class="h-7 min-w-0 grow rounded-md border border-input bg-card px-2 text-[13px] outline-none focus-visible:border-ring"
-                  data-doc-folder-name-input
-                  @input="nameProblem = null"
-                  @keydown.enter.prevent="submitName"
-                  @keydown.esc.prevent="cancelEdit"
-                  @blur="onNameBlur"
-                />
-                <template v-else>
-                  <button
-                    type="button"
-                    class="min-w-0 grow truncate text-left"
-                    data-doc-folder-name
-                    @click="toggle(r.folder.id)"
-                  >
-                    {{ r.folder.name }}
-                  </button>
-                  <span
-                    class="shrink-0 text-xs text-muted-foreground tabular-nums"
-                    data-doc-folder-count
-                    >{{ r.count }}</span
-                  >
-                  <Popover
-                    :open="menuFor === r.folder.id"
-                    @update:open="(v: boolean) => setMenu(r.folder.id, v)"
-                  >
-                    <PopoverTrigger as-child>
-                      <button
-                        type="button"
-                        class="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100"
-                        :aria-label="`${r.folder.name} 메뉴`"
-                        data-doc-folder-menu
-                      >
-                        <Ellipsis class="size-3.5" />
-                      </button>
-                    </PopoverTrigger>
-                    <!-- 닫힐 때 트리거로 포커스를 돌리면 막 띄운 이름 칸이 blur 로 닫힌다 -->
-                    <PopoverContent
-                      align="start"
-                      class="flex w-56 flex-col gap-px p-1"
-                      data-doc-folder-menu-list
-                      @close-auto-focus="(e: Event) => e.preventDefault()"
-                    >
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="justify-start"
-                        data-doc-folder-new-doc
-                        @click="newDocIn(r.folder.id)"
-                      >
-                        <FilePlus class="size-3.5" />
-                        새 문서
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="justify-start"
-                        :disabled="depthOf(r.folder.id) >= DOC_FOLDER_DEPTH_MAX"
-                        :title="
-                          depthOf(r.folder.id) >= DOC_FOLDER_DEPTH_MAX
-                            ? `폴더는 ${DOC_FOLDER_DEPTH_MAX}단까지입니다.`
-                            : undefined
-                        "
-                        data-doc-folder-new-sub
-                        @click="startEdit({ mode: 'new', parentId: r.folder.id })"
-                      >
-                        <FolderPlus class="size-3.5" />
-                        하위 폴더
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="justify-start"
-                        data-doc-folder-rename
-                        @click="startEdit({ mode: 'rename', folderId: r.folder.id }, r.folder.name)"
-                      >
-                        <Pencil class="size-3.5" />
-                        이름 바꾸기
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="justify-start text-destructive hover:text-destructive"
-                        :disabled="removeBlock(r.folder) !== null"
-                        data-doc-folder-remove
-                        @click="removeFolder(r.folder)"
-                      >
-                        <Trash2 class="size-3.5" />
-                        지우기
-                      </Button>
-                      <p
-                        v-if="removeBlock(r.folder)"
-                        class="px-2 pb-1 text-xs text-muted-foreground text-pretty"
-                        data-doc-folder-remove-reason
-                      >
-                        {{ removeBlock(r.folder) }}
-                      </p>
-                    </PopoverContent>
-                  </Popover>
-                </template>
-              </div>
-              <p
-                v-if="nameProblem && editing?.mode === 'rename' && editing.folderId === r.folder.id"
-                class="pr-1 text-xs text-destructive"
-                :style="indent(r.depth + 2)"
-                role="alert"
-                data-doc-folder-problem
-              >
-                {{ nameProblem }}
-              </p>
-            </li>
+              <FolderRoot class="size-3.5" />
+              최상위로 옮기기
+            </div>
 
-            <li
-              v-else
-              role="treeitem"
-              :aria-level="r.depth + 1"
-              :aria-selected="r.doc.id === selectedId"
-              :data-doc-item="r.doc.id"
-              :data-selected="r.doc.id === selectedId"
+            <TreeRoot
+              v-slot="{ flattenItems }"
+              :items="nodes"
+              :get-key="getKey"
+              :get-children="getChildren"
+              :expanded="expandedKeys"
+              :model-value="selectedNode"
+              aria-label="폴더 · 문서"
+              class="flex flex-col"
             >
-              <button
-                type="button"
-                :class="
-                  cn(
-                    'flex h-8 w-full items-center gap-1.5 rounded-md pr-2 text-left text-sm hover:bg-accent',
-                    r.doc.id === selectedId && 'bg-accent font-medium text-foreground',
-                  )
+              <TreeItem
+                v-for="item in flattenItems"
+                :key="item._id"
+                v-slot="{ isExpanded, isSelected }"
+                v-bind="item.bind"
+                :data-tree-key="item._id"
+                :data-doc-folder="item.value.type === 'folder' ? item.value.folder.id : undefined"
+                :data-open="
+                  item.value.type === 'folder' ? expandedKeys.includes(item._id) : undefined
                 "
-                :style="indent(r.depth)"
-                :draggable="docs.canEdit(r.doc)"
-                @dragstart="onDragStart($event, { type: 'doc', id: r.doc.id })"
-                @dragend="onDragEnd"
-                @click="openDoc(r.doc.id)"
+                :data-doc-item="item.value.type === 'doc' ? item.value.doc.id : undefined"
+                :data-menu="menuKey === item._id ? 'open' : undefined"
+                class="group relative outline-none"
+                @select="(ev: TreeItemSelectEvent<Node>) => onSelect(ev, item.value)"
+                @toggle="(ev: TreeItemToggleEvent<Node>) => onToggle(ev, item.value)"
+                @keydown="(ev: KeyboardEvent) => onItemKeydown(ev, item.value)"
+                @contextmenu="aimMenu(item.value)"
               >
-                <span class="size-4 shrink-0" />
-                <component
-                  :is="KIND_ICON[r.doc.kind]"
-                  class="size-4 shrink-0 text-muted-foreground"
-                  :aria-label="DOC_KIND_LABEL[r.doc.kind]"
-                  :data-doc-kind="r.doc.kind"
-                />
-                <span class="min-w-0 grow truncate">{{ r.doc.title }}</span>
+                <!-- 단계 안내선 -->
                 <span
-                  v-if="docs.changedOf(r.doc).length > 0"
-                  class="flex shrink-0 items-center gap-1 text-xs text-status-warn tabular-nums"
-                  :title="`결정 바뀜 ${docs.changedOf(r.doc).length}`"
-                  data-doc-changed
-                >
-                  <span class="size-1.5 rounded-full bg-status-warn" />
-                  {{ docs.changedOf(r.doc).length }}
-                </span>
-              </button>
-            </li>
-          </template>
-        </ul>
+                  v-for="i in item.level - 1"
+                  :key="i"
+                  aria-hidden="true"
+                  class="pointer-events-none absolute inset-y-0 w-px bg-border"
+                  :style="guideAt(i)"
+                />
 
-        <p
-          v-if="rows.length === 0"
-          class="px-2 py-6 text-center text-sm text-muted-foreground"
-          data-doc-tree-empty
-        >
-          {{
-            filtering
-              ? '맞는 문서가 없습니다.'
-              : docs.list.length === 0
-                ? '아직 만든 문서가 없습니다.'
-                : '볼 파트의 문서가 없습니다.'
-          }}
-        </p>
-      </template>
-    </div>
+                <!-- 새 폴더 칸 -->
+                <template v-if="item.value.type === 'new'">
+                  <div
+                    v-tree-dnd="item.value"
+                    class="flex h-7 items-center gap-1.5 pr-1"
+                    :style="rowPad(item.level)"
+                  >
+                    <span class="size-4 shrink-0" />
+                    <Folder class="size-4 shrink-0 text-muted-foreground" />
+                    <input
+                      :ref="setNameInput"
+                      v-model="nameDraft"
+                      :maxlength="DOC_FOLDER_NAME_MAX"
+                      placeholder="새 폴더 이름"
+                      aria-label="새 폴더 이름"
+                      class="h-6 min-w-0 grow rounded border border-ring bg-card px-1.5 text-[13px] ring-2 ring-ring/20 outline-none"
+                      data-doc-folder-name-input
+                      @input="nameProblem = null"
+                      @keydown="onNameKeydown"
+                      @click.stop
+                      @contextmenu.stop
+                      @blur="onNameBlur"
+                    />
+                  </div>
+                  <p
+                    v-if="nameProblem"
+                    class="pt-0.5 pr-1 pb-1 text-xs text-destructive"
+                    :style="rowPad(item.level + 2)"
+                    role="alert"
+                    data-doc-folder-problem
+                  >
+                    {{ nameProblem }}
+                  </p>
+                </template>
+
+                <!-- 폴더 -->
+                <template v-else-if="item.value.type === 'folder'">
+                  <div
+                    v-tree-dnd="item.value"
+                    :class="
+                      cn(
+                        'relative flex h-7 cursor-pointer items-center gap-1.5 rounded-md pr-1 text-[13px] select-none group-hover:bg-accent group-focus-visible:ring-1 group-focus-visible:ring-ring/60 group-focus-visible:ring-inset group-data-[menu]:bg-accent',
+                        dropAt === item.value.folder.id &&
+                          'bg-brand-soft ring-1 ring-primary ring-inset group-hover:bg-brand-soft',
+                        isDragged(item.value) && 'opacity-40',
+                      )
+                    "
+                    :style="rowPad(item.level)"
+                  >
+                    <span
+                      class="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+                      aria-hidden="true"
+                      data-doc-folder-toggle
+                    >
+                      <ChevronRight
+                        v-if="item.hasChildren"
+                        class="size-3 transition-transform duration-150"
+                        :class="isExpanded && 'rotate-90'"
+                      />
+                    </span>
+                    <component
+                      :is="isExpanded ? FolderOpen : Folder"
+                      class="size-4 shrink-0 text-muted-foreground"
+                    />
+                    <input
+                      v-if="renaming(item.value)"
+                      :ref="setNameInput"
+                      v-model="nameDraft"
+                      :maxlength="DOC_FOLDER_NAME_MAX"
+                      aria-label="폴더 이름"
+                      class="h-6 min-w-0 grow rounded border border-ring bg-card px-1.5 text-[13px] ring-2 ring-ring/20 outline-none"
+                      data-doc-folder-name-input
+                      @input="nameProblem = null"
+                      @keydown="onNameKeydown"
+                      @click.stop
+                      @contextmenu.stop
+                      @blur="onNameBlur"
+                    />
+                    <template v-else>
+                      <span class="min-w-0 grow truncate" data-doc-folder-name>{{
+                        item.value.folder.name
+                      }}</span>
+                      <span class="grid shrink-0 place-items-center">
+                        <span
+                          class="col-start-1 row-start-1 min-w-5 pr-1 text-right text-xs text-muted-foreground tabular-nums group-hover:invisible group-focus-visible:invisible group-data-[menu]:invisible"
+                          data-doc-folder-count
+                          >{{ item.value.count }}</span
+                        >
+                        <button
+                          type="button"
+                          tabindex="-1"
+                          aria-haspopup="menu"
+                          class="invisible col-start-1 row-start-1 flex size-5 items-center justify-center rounded text-muted-foreground group-hover:visible group-focus-visible:visible group-data-[menu]:visible hover:bg-background hover:text-foreground"
+                          :aria-label="`${item.value.folder.name} 메뉴`"
+                          data-doc-folder-menu
+                          @click.stop="openMenuAt"
+                        >
+                          <Ellipsis class="size-3.5" />
+                        </button>
+                      </span>
+                    </template>
+                  </div>
+                  <p
+                    v-if="nameProblem && renaming(item.value)"
+                    class="pt-0.5 pr-1 pb-1 text-xs text-destructive"
+                    :style="rowPad(item.level + 2)"
+                    role="alert"
+                    data-doc-folder-problem
+                  >
+                    {{ nameProblem }}
+                  </p>
+                </template>
+
+                <!-- 문서 -->
+                <div
+                  v-else
+                  v-tree-dnd="item.value"
+                  :class="
+                    cn(
+                      'relative flex h-7 cursor-pointer items-center gap-1.5 rounded-md pr-1 text-[13px] select-none group-hover:bg-accent group-focus-visible:ring-1 group-focus-visible:ring-ring/60 group-focus-visible:ring-inset group-data-[menu]:bg-accent',
+                      isSelected &&
+                        'bg-brand-soft font-medium text-foreground group-hover:bg-brand-soft',
+                      isDragged(item.value) && 'opacity-40',
+                    )
+                  "
+                  :style="rowPad(item.level)"
+                >
+                  <span class="size-4 shrink-0" />
+                  <component
+                    :is="KIND_ICON[item.value.doc.kind]"
+                    :class="cn('size-4 shrink-0', KIND_COLOR[item.value.doc.kind])"
+                    :aria-label="DOC_KIND_LABEL[item.value.doc.kind]"
+                    :data-doc-kind="item.value.doc.kind"
+                  />
+                  <span class="min-w-0 grow truncate">{{ item.value.doc.title }}</span>
+                  <span class="grid shrink-0 place-items-center">
+                    <span
+                      v-if="docs.changedOf(item.value.doc).length > 0"
+                      class="col-start-1 row-start-1 flex items-center gap-1 pr-1 text-xs text-status-warn tabular-nums group-hover:invisible group-focus-visible:invisible group-data-[menu]:invisible"
+                      :title="`결정 바뀜 ${docs.changedOf(item.value.doc).length}`"
+                      data-doc-changed
+                    >
+                      <span class="size-1.5 rounded-full bg-status-warn" />
+                      {{ docs.changedOf(item.value.doc).length }}
+                    </span>
+                    <button
+                      type="button"
+                      tabindex="-1"
+                      aria-haspopup="menu"
+                      class="invisible col-start-1 row-start-1 flex size-5 items-center justify-center rounded text-muted-foreground group-hover:visible group-focus-visible:visible group-data-[menu]:visible hover:bg-background hover:text-foreground"
+                      :aria-label="`${item.value.doc.title} 메뉴`"
+                      data-doc-item-menu
+                      @click.stop="openMenuAt"
+                    >
+                      <Ellipsis class="size-3.5" />
+                    </button>
+                  </span>
+                </div>
+              </TreeItem>
+            </TreeRoot>
+
+            <p
+              v-if="visibleCount === 0 && !editing"
+              class="px-2 py-6 text-center text-[13px] text-muted-foreground"
+              data-doc-tree-empty
+            >
+              {{
+                filtering
+                  ? '맞는 문서가 없습니다.'
+                  : docs.list.length === 0
+                    ? '아직 만든 문서가 없습니다.'
+                    : '볼 파트의 문서가 없습니다.'
+              }}
+            </p>
+          </template>
+        </div>
+      </ContextMenuTrigger>
+
+      <!-- 닫힐 때 트리로 포커스를 돌리면 막 띄운 이름 칸이 blur 로 닫힌다 -->
+      <ContextMenuContent class="w-56" @close-auto-focus="(e: Event) => e.preventDefault()">
+        <template v-if="menuFolder">
+          <ContextMenuItem data-doc-folder-new-doc @select="menuAct.newDoc">
+            <FilePlus />
+            새 문서
+          </ContextMenuItem>
+          <ContextMenuItem
+            :disabled="depthOf(menuFolder.id) >= DOC_FOLDER_DEPTH_MAX"
+            :title="
+              depthOf(menuFolder.id) >= DOC_FOLDER_DEPTH_MAX
+                ? `폴더는 ${DOC_FOLDER_DEPTH_MAX}단까지입니다.`
+                : undefined
+            "
+            data-doc-folder-new-sub
+            @select="menuAct.newSub"
+          >
+            <FolderPlus />
+            하위 폴더
+          </ContextMenuItem>
+          <ContextMenuItem data-doc-folder-rename @select="menuAct.rename">
+            <Pencil />
+            이름 바꾸기
+            <ContextMenuShortcut>F2</ContextMenuShortcut>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            class="text-destructive focus:text-destructive"
+            :disabled="removeBlock(menuFolder) !== null"
+            data-doc-folder-remove
+            @select="menuAct.removeFolder"
+          >
+            <Trash2 />
+            지우기
+          </ContextMenuItem>
+          <p
+            v-if="removeBlock(menuFolder)"
+            class="px-2 pb-1 text-xs text-muted-foreground text-pretty"
+            data-doc-folder-remove-reason
+          >
+            {{ removeBlock(menuFolder) }}
+          </p>
+        </template>
+
+        <template v-else-if="menuDoc">
+          <ContextMenuItem data-doc-item-open @select="menuAct.open">
+            <ExternalLink />
+            열기
+          </ContextMenuItem>
+          <ContextMenuSub v-if="docs.canEdit(menuDoc)">
+            <ContextMenuSubTrigger data-doc-item-move>
+              <FolderInput />
+              폴더 옮기기
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent class="max-h-72 w-52 overflow-y-auto">
+              <ContextMenuItem
+                :disabled="menuDoc.folderId === null"
+                data-doc-item-move-to="root"
+                @select="menuAct.move(null)"
+              >
+                <FolderRoot class="text-muted-foreground" />
+                최상위
+              </ContextMenuItem>
+              <ContextMenuItem
+                v-for="f in folderChoices"
+                :key="f.id"
+                :disabled="menuDoc.folderId === f.id"
+                :style="{ paddingLeft: `${8 + (f.depth - 1) * 12}px` }"
+                :data-doc-item-move-to="f.id"
+                @select="menuAct.move(f.id)"
+              >
+                <Folder class="text-muted-foreground" />
+                <span class="truncate">{{ f.name }}</span>
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <template v-if="docs.canDelete(menuDoc)">
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              class="text-destructive focus:text-destructive"
+              data-doc-item-remove
+              @select="menuAct.removeDoc"
+            >
+              <Trash2 />
+              지우기
+            </ContextMenuItem>
+          </template>
+        </template>
+
+        <template v-else>
+          <ContextMenuItem
+            data-doc-tree-menu-new-folder
+            @select="startEdit({ mode: 'new', parentId: null })"
+          >
+            <FolderPlus />
+            새 폴더
+          </ContextMenuItem>
+          <ContextMenuItem data-doc-tree-menu-new-doc @select="emit('new-doc', null)">
+            <FilePlus />
+            새 문서
+          </ContextMenuItem>
+        </template>
+      </ContextMenuContent>
+    </ContextMenu>
+
+    <DocRemoveDialog
+      v-model:open="removeDocOpen"
+      :document-id="removeDocId"
+      @removed="onDocRemoved"
+    />
   </aside>
 </template>
